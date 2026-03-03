@@ -1,0 +1,20 @@
+# AI Sports Betting Models - TODO
+
+- [x] Initialize project scaffold
+- [x] Upgrade to full-stack (web-db-user)
+- [x] Add model_files and games tables to schema
+- [x] Run db:push to sync schema
+- [x] Build storage helpers for CSV file upload
+- [x] Add tRPC router: files.upload, files.list, files.delete
+- [x] Add tRPC router: games.list (reads from DB)
+- [x] Build XLSX/CSV parser on server to ingest uploaded files into games table
+- [x] Build Login page (Manus OAuth sign-in)
+- [x] Build Dashboard page (MODEL PROJECTIONS with game cards, sport tabs, date grouping)
+- [x] Build File Manager page (upload CSV/XLSX, list files with status, delete)
+- [x] Wire App.tsx routes: /, /login, /files
+- [x] Dark theme CSS tokens (matching reference site)
+- [x] Upload 62 NCAAM team logos to S3 with original filenames (NCAAM/teamname.png)
+- [x] Build TeamLogo component (CDN logos + colored badge fallback)
+- [x] Write vitest tests for fileParser (13 tests passing)
+- [x] Re-upload logos with original filenames (no hash suffix)
+- [ ] Save checkpoint and deliver
