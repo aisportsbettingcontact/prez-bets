@@ -23,3 +23,4 @@
 - [x] Add tRPC procedures: sheets.syncLatest (public) and sheets.syncAll (protected)
 - [x] Add auto-sync on dashboard load + manual refresh button with status indicator
 - [x] Save checkpoint with Sheets integration
+- [x] Remove NFL and NCAAF tabs from dashboard sport selector

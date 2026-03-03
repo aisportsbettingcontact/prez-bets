@@ -103,7 +103,7 @@ export default function Dashboard() {
     }
   }
 
-  const sports = ["NCAAM", "NBA", "NFL", "NCAAF", "MLB", "NHL"];
+  const sports = ["NCAAM", "NBA", "MLB", "NHL"];
   const isLoading = gamesLoading || syncStatus === "syncing";
 
   return (
