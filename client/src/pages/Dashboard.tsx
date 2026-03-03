@@ -126,8 +126,8 @@ export default function Dashboard() {
 
       {/* Sticky Header */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="flex items-center justify-between px-4 py-3 max-w-3xl mx-auto">
-          {/* Logo */}
+        <div className="relative flex items-center px-4 py-3 max-w-3xl mx-auto">
+          {/* Logo — left */}
           <div className="flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-primary" />
             <span
@@ -138,15 +138,16 @@ export default function Dashboard() {
             </span>
           </div>
 
-          {/* Title */}
+          {/* Title — absolutely centered */}
           <h1
-            className="text-sm font-bold tracking-[0.18em] uppercase text-foreground"
+            className="absolute left-1/2 -translate-x-1/2 text-sm font-bold tracking-[0.18em] uppercase text-foreground pointer-events-none"
             style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
           >
             Model Projections
           </h1>
 
-          {/* Right actions */}
+          {/* Right actions — pushed to the right */}
+          <div className="ml-auto" />
           <div className="flex items-center gap-2">
             <div className="relative">
               <button
