@@ -134,7 +134,7 @@ export default function Dashboard() {
               className="text-xs font-semibold text-muted-foreground tracking-widest uppercase"
               style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
             >
-              AI Models
+              PREZ BETS AI
             </span>
           </div>
 
