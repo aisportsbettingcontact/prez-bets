@@ -115,7 +115,7 @@ export default function Dashboard() {
     }
   }
 
-  const sports = ["NCAAM", "NBA", "MLB", "NHL"];
+  const sports = ["NCAAM"];
   const isLoading = gamesLoading || syncStatus === "syncing";
 
   return (
@@ -168,6 +168,28 @@ export default function Dashboard() {
 
           {/* User menu — right */}
           <div className="flex-shrink-0 flex items-center gap-2">
+            {/* Sync status */}
+            {syncStatus === "syncing" && (
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Syncing
+              </span>
+            )}
+            {syncStatus === "done" && (
+              <span className="text-[11px] text-green-400 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" />
+                Updated
+              </span>
+            )}
+            {/* Refresh button */}
+            <button
+              onClick={handleManualRefresh}
+              disabled={syncStatus === "syncing"}
+              className="w-6 h-6 rounded flex items-center justify-center hover:bg-secondary transition-colors disabled:opacity-40"
+              title="Refresh from Google Sheets"
+            >
+              <RefreshCw className={`w-3 h-3 text-muted-foreground ${syncStatus === "syncing" ? "animate-spin" : ""}`} />
+            </button>
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
@@ -210,49 +232,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Bottom row: sport tabs left · sync status right */}
-        <div className="flex items-center gap-1.5 px-4 pb-2.5 max-w-3xl mx-auto border-t border-border/40">
-          <div className="flex items-center gap-1 overflow-x-auto flex-1 pt-2">
-            {sports.map((sport) => (
-              <button
-                key={sport}
-                onClick={() => setSelectedSport(sport)}
-                className={`px-3 py-1 rounded text-[11px] font-bold tracking-wider transition-all whitespace-nowrap ${
-                  selectedSport === sport
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
-                }`}
-                style={{ fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: "0.1em" }}
-              >
-                {sport}
-              </button>
-            ))}
-          </div>
 
-          {/* Sync status + refresh */}
-          <div className="flex items-center gap-1.5 flex-shrink-0 pt-2">
-            {syncStatus === "syncing" && (
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Syncing
-              </span>
-            )}
-            {syncStatus === "done" && (
-              <span className="text-[11px] text-green-400 flex items-center gap-1">
-                <CheckCircle className="w-3 h-3" />
-                Updated
-              </span>
-            )}
-            <button
-              onClick={handleManualRefresh}
-              disabled={syncStatus === "syncing"}
-              className="w-6 h-6 rounded flex items-center justify-center hover:bg-secondary transition-colors disabled:opacity-40"
-              title="Refresh from Google Sheets"
-            >
-              <RefreshCw className={`w-3 h-3 text-muted-foreground ${syncStatus === "syncing" ? "animate-spin" : ""}`} />
-            </button>
-          </div>
-        </div>
       </header>
 
       {/* Main Content */}

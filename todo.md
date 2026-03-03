@@ -52,3 +52,4 @@
 - [x] Redesign header to be more organized and professional
 - [x] Ensure header displays correctly on mobile (no overflow, proper spacing, centered title)
 - [x] Header: single centered line with chart icon + "PREZ BETS" (bold white) + "AI MODEL PROJECTIONS" (light gray), user icon right, larger font on desktop
+- [x] Remove NBA, MLB, NHL tabs — keep only NCAAM
