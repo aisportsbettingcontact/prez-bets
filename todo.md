@@ -28,7 +28,7 @@
 - [x] Re-upload any missing logos (none missing)
 - [x] Ensure teamLogos.ts has all 62 entries in A-Z order
 - [x] Rebuild GameCard to match reference screenshot (date header, BOOKS/MODEL LINE/MODEL O/U columns, team rows with logo+spread+O/U pills, edge footer)
-- [ ] Rewrite GameCard to match reference implementation (edge color scale, consensus column, dark pills, formatTeamName, framer-motion) with Google Sheets data
+- [x] Rewrite GameCard to match reference implementation (edge color scale, consensus column, dark pills, formatTeamName, framer-motion) with Google Sheets data
 - [x] Scrape ESPN NCAAM teams page and build slug→ESPN logo URL map
 - [x] Update GameCard to use ESPN CDN logo URLs instead of local PNGs
 - [x] Add espn_teams table to DB schema (slug, espn_id, display_name, conference, sport)
@@ -39,3 +39,8 @@
 - [x] Delete local PNG files from webdev-static-assets (S3 delete API not available)
 - [x] Remove bottom footer from dashboard
 - [x] Change sync toast to "ALL NCAAM Games Updated"
+- [x] Fix logo visibility on dark background (changed mix-blend-mode from multiply to screen)
+- [x] Create hardcoded static ESPN team ID map (espnTeamIds.ts) for all 62 NCAAM teams
+- [x] Fix incorrect ESPN IDs (portland_state: 2502, sacramento_state: 16, and 12 others)
+- [x] Update GameCard to use static ESPN ID map as primary logo source (no DB/API needed)
+- [x] All 16 team logos loading correctly across 8 game cards

@@ -30,6 +30,18 @@ export default function Dashboard() {
     { refetchOnWindowFocus: false }
   );
 
+  // ─── ESPN teams batch query (one call for all logos) ─────────────────────
+  const { data: espnTeams } = trpc.teams.list.useQuery(
+    { sport: selectedSport },
+    { refetchOnWindowFocus: false, staleTime: 1000 * 60 * 60 }
+  );
+
+  // Build slug → logoUrl map
+  const logoMap = (espnTeams ?? []).reduce<Record<string, string>>((acc, t) => {
+    acc[t.slug] = t.logoUrl;
+    return acc;
+  }, {});
+
   // ─── Sheets sync mutation ─────────────────────────────────────────────────
   const syncMutation = trpc.sheets.syncLatest.useMutation({
     onSuccess: (data) => {
@@ -280,7 +292,7 @@ export default function Dashboard() {
               {/* Game Cards */}
               <div className="bg-card border-x border-border mx-0">
                 {gamesByDate[date]!.map((game) => (
-                  <GameCard key={game!.id} game={game!} />
+                  <GameCard key={game!.id} game={game!} logoMap={logoMap} />
                 ))}
               </div>
             </div>

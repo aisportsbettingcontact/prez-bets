@@ -58,6 +58,7 @@ export default function TeamLogo({ name, size = 36 }: TeamLogoProps) {
           minWidth: size,
           objectFit: "contain",
           borderRadius: "4px",
+          mixBlendMode: "multiply",
         }}
         onError={(e) => {
           (e.target as HTMLImageElement).style.display = "none";

@@ -21,16 +21,10 @@ import { Download, Link, ImageDown } from "lucide-react";
 import { toast } from "sonner";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/lib/trpc";
+import { getEspnLogoUrl } from "@/lib/espnTeamIds";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
-
-// ── CDN base for team logos ───────────────────────────────────────────────────
-const CDN = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/NCAAM";
-
-function getLogoUrl(slug: string): string {
-  return `${CDN}/${slug}.png`;
-}
 
 // ── Team name formatting (matches reference formatTeamName) ───────────────────
 function formatTeamName(slug: string): string {
@@ -112,9 +106,9 @@ function normalizeEdgeLabel(label: string): string {
 }
 
 // ── TeamLogo ──────────────────────────────────────────────────────────────────
-function TeamLogo({ slug, name }: { slug: string; name: string }) {
+function TeamLogo({ slug, name, logoUrl }: { slug: string; name: string; logoUrl?: string }) {
   const [error, setError] = useState(false);
-  if (error) {
+  if (!logoUrl || error) {
     return (
       <div
         className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
@@ -126,9 +120,10 @@ function TeamLogo({ slug, name }: { slug: string; name: string }) {
   }
   return (
     <img
-      src={getLogoUrl(slug)}
+      src={logoUrl}
       alt={name}
       className="w-9 h-9 object-contain flex-shrink-0"
+      style={{ mixBlendMode: "screen" }}
       onError={() => setError(true)}
     />
   );
@@ -136,16 +131,17 @@ function TeamLogo({ slug, name }: { slug: string; name: string }) {
 
 // ── TeamRow ───────────────────────────────────────────────────────────────────
 function TeamRow({
-  slug, name, consensus, modelSpread, modelTotal,
+  slug, name, consensus, modelSpread, modelTotal, logoUrl,
 }: {
   slug: string; name: string;
   consensus: string; modelSpread: string; modelTotal: string;
+  logoUrl?: string;
 }) {
   return (
     <div className="flex items-center gap-1.5 py-1.5 min-w-0">
       {/* Logo */}
       <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center">
-        <TeamLogo slug={slug} name={name} />
+        <TeamLogo slug={slug} name={name} logoUrl={logoUrl} />
       </div>
 
       {/* Team name */}
@@ -370,9 +366,10 @@ function ShareSheet({
 
 interface GameCardProps {
   game: GameRow;
+  logoMap?: Record<string, string>;
 }
 
-export function GameCard({ game }: GameCardProps) {
+export function GameCard({ game, logoMap = {} }: GameCardProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const awayBookSpread = toNum(game.awayBookSpread);
@@ -386,6 +383,10 @@ export function GameCard({ game }: GameCardProps) {
 
   const awayName = formatTeamName(game.awayTeam);
   const homeName = formatTeamName(game.homeTeam);
+
+  // Resolve ESPN logo URLs: static ID map first, then DB logoMap as fallback
+  const awayLogoUrl = getEspnLogoUrl(game.awayTeam) ?? logoMap[game.awayTeam];
+  const homeLogoUrl = getEspnLogoUrl(game.homeTeam) ?? logoMap[game.homeTeam];
   const time = formatMilitaryTime(game.startTimeEst);
   const dateLabel = formatDate(game.gameDate);
 
@@ -469,7 +470,7 @@ export function GameCard({ game }: GameCardProps) {
           <div style="height:1px;background:${c.border};margin:0;"></div>
           <div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
             <div style="width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-              <img src="${getLogoUrl(game.awayTeam)}" width="36" height="36" style="object-fit:contain;" crossorigin="anonymous"/>
+              <img src="${awayLogoUrl ?? ''}" width="36" height="36" style="object-fit:contain;" crossorigin="anonymous"/>
             </div>
             <div style="width:90px;flex-shrink:0;overflow:hidden;">
               <div style="font-size:13px;font-weight:700;color:${c.fg};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${awayName}</div>
@@ -489,7 +490,7 @@ export function GameCard({ game }: GameCardProps) {
           <div style="height:1px;background:${c.border};margin:0;"></div>
           <div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
             <div style="width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-              <img src="${getLogoUrl(game.homeTeam)}" width="36" height="36" style="object-fit:contain;" crossorigin="anonymous"/>
+              <img src="${homeLogoUrl ?? ''}" width="36" height="36" style="object-fit:contain;" crossorigin="anonymous"/>
             </div>
             <div style="width:90px;flex-shrink:0;overflow:hidden;">
               <div style="font-size:13px;font-weight:700;color:${c.fg};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${homeName}</div>
@@ -609,6 +610,7 @@ export function GameCard({ game }: GameCardProps) {
             consensus={awayConsensus}
             modelSpread={spreadSign(awayModelSpread)}
             modelTotal={`O ${modelTotal}`}
+            logoUrl={awayLogoUrl}
           />
 
           <div className="my-0.5" style={{ height: 1, background: "hsl(var(--border))" }} />
@@ -620,6 +622,7 @@ export function GameCard({ game }: GameCardProps) {
             consensus={homeConsensus}
             modelSpread={spreadSign(homeModelSpread)}
             modelTotal={`U ${modelTotal}`}
+            logoUrl={homeLogoUrl}
           />
 
           {/* Edge verdict */}
