@@ -83,6 +83,7 @@ export const appUsersRouter = router({
     .input(z.object({
       emailOrUsername: z.string().min(1),
       password: z.string().min(1),
+      stayLoggedIn: z.boolean().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
       // Try email first, then username
@@ -108,12 +109,22 @@ export const appUsersRouter = router({
 
       await updateAppUserLastSignedIn(user.id);
 
+      // stayLoggedIn = 90 days; otherwise session cookie (expires on browser close)
+      const sessionDays = input.stayLoggedIn ? 90 : 1;
       const token = await signAppUserToken(user.id, user.role);
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(APP_USER_COOKIE, token, {
-        ...cookieOptions,
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      });
+      if (input.stayLoggedIn) {
+        ctx.res.cookie(APP_USER_COOKIE, token, {
+          ...cookieOptions,
+          maxAge: sessionDays * 24 * 60 * 60 * 1000,
+        });
+      } else {
+        // Session cookie — no maxAge, expires when browser closes
+        ctx.res.cookie(APP_USER_COOKIE, token, {
+          ...cookieOptions,
+          maxAge: undefined,
+        });
+      }
 
       return {
         success: true,

@@ -132,7 +132,7 @@ export default function UserManagement() {
 
   // Redirect if not owner
   if (!loading && (!appUser || appUser.role !== "owner")) {
-    navigate("/");
+    navigate("/dashboard");
     return null;
   }
 
@@ -199,7 +199,7 @@ export default function UserManagement() {
       <div className="sticky top-0 z-40 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/8">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/dashboard")}
             className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-sm"
           >
             <ArrowLeft className="w-4 h-4" />

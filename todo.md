@@ -81,3 +81,7 @@
 - [x] Update Dashboard: show Age modal only if termsAccepted is false/null (DB-backed, not sessionStorage)
 - [x] Call acceptTerms mutation when user clicks "I Understand & Accept"
 - [x] Add TERMS column to User Management dashboard table showing accepted/pending status
+- [x] Redesign Home page as paywall landing (feature highlights + inline login panel, no redirect)
+- [x] Remove Manus OAuth sign-in button and all Manus branding from public-facing pages
+- [x] Add Stay Logged In checkbox to login form (extends session to 90 days vs 1 day)
+- [x] Gate dashboard behind app_session cookie check; redirect unauthenticated users to home

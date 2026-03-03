@@ -22,10 +22,10 @@ export default function Dashboard() {
   const { user, isAuthenticated } = useAuth();
   const { appUser, isOwner, loading: appAuthLoading, refetch: refetchAppUser } = useAppAuth();
 
-  // Redirect to login if not authenticated as app user
+  // Redirect to home (paywall) if not authenticated as app user
   useEffect(() => {
     if (!appAuthLoading && !appUser) {
-      setLocation("/login");
+      setLocation("/");
     }
   }, [appUser, appAuthLoading, setLocation]);
 
@@ -45,7 +45,7 @@ export default function Dashboard() {
 
   const appLogoutMutation = trpc.appUsers.logout.useMutation({
     onSuccess: () => {
-      setLocation("/login");
+      setLocation("/");
       toast.success("Signed out");
     },
   });
