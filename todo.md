@@ -63,3 +63,4 @@
 - [x] Fix fileParser to be header-name-driven (handles any column order)
 - [x] Add teamNormalizer to convert display names to snake_case slugs
 - [x] Expand ESPN ID map and team nicknames map to cover all NCAAM teams (200+ teams)
+- [x] Remove March 2nd game data from database (only March 3rd data remains, 44 games)
