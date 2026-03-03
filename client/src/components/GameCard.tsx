@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/lib/trpc";
 import { getEspnLogoUrl } from "@/lib/espnTeamIds";
+import { getTeamName } from "@/lib/teamNicknames";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
@@ -131,9 +132,9 @@ function TeamLogo({ slug, name, logoUrl }: { slug: string; name: string; logoUrl
 
 // ── TeamRow ───────────────────────────────────────────────────────────────────
 function TeamRow({
-  slug, name, consensus, modelSpread, modelTotal, logoUrl,
+  slug, name, nickname, consensus, modelSpread, modelTotal, logoUrl,
 }: {
-  slug: string; name: string;
+  slug: string; name: string; nickname: string;
   consensus: string; modelSpread: string; modelTotal: string;
   logoUrl?: string;
 }) {
@@ -144,14 +145,22 @@ function TeamRow({
         <TeamLogo slug={slug} name={name} logoUrl={logoUrl} />
       </div>
 
-      {/* Team name */}
-      <div className="flex-shrink-0" style={{ width: "clamp(64px, 16vw, 88px)" }}>
+      {/* Team name — school on top, nickname on bottom */}
+      <div className="flex-shrink-0 flex flex-col justify-center" style={{ width: "clamp(64px, 16vw, 88px)" }}>
         <div
-          className="font-semibold"
-          style={{ fontSize: "clamp(11px, 2.8vw, 13px)", color: "hsl(var(--foreground))", lineHeight: 1.2 }}
+          className="font-bold leading-none"
+          style={{ fontSize: "clamp(11px, 2.8vw, 13px)", color: "hsl(var(--foreground))" }}
         >
           {name}
         </div>
+        {nickname && (
+          <div
+            className="font-medium leading-none mt-0.5"
+            style={{ fontSize: "clamp(9px, 2.2vw, 11px)", color: "hsl(var(--muted-foreground))" }}
+          >
+            {nickname}
+          </div>
+        )}
       </div>
 
       {/* 3 data columns: BOOKS | MODEL LINE | MODEL O/U */}
@@ -381,8 +390,12 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
   const spreadDiff = toNum(game.spreadDiff);
   const totalDiff = toNum(game.totalDiff);
 
-  const awayName = formatTeamName(game.awayTeam);
-  const homeName = formatTeamName(game.homeTeam);
+  const awayTeamName = getTeamName(game.awayTeam);
+  const homeTeamName = getTeamName(game.homeTeam);
+  const awayName = awayTeamName.school || formatTeamName(game.awayTeam);
+  const homeName = homeTeamName.school || formatTeamName(game.homeTeam);
+  const awayNickname = awayTeamName.nickname;
+  const homeNickname = homeTeamName.nickname;
 
   // Resolve ESPN logo URLs: static ID map first, then DB logoMap as fallback
   const awayLogoUrl = getEspnLogoUrl(game.awayTeam) ?? logoMap[game.awayTeam];
@@ -607,6 +620,7 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
           <TeamRow
             slug={game.awayTeam}
             name={awayName}
+            nickname={awayNickname}
             consensus={awayConsensus}
             modelSpread={spreadSign(awayModelSpread)}
             modelTotal={`O ${modelTotal}`}
@@ -619,6 +633,7 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
           <TeamRow
             slug={game.homeTeam}
             name={homeName}
+            nickname={homeNickname}
             consensus={homeConsensus}
             modelSpread={spreadSign(homeModelSpread)}
             modelTotal={`U ${modelTotal}`}
