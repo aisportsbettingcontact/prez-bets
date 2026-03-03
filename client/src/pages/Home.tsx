@@ -238,7 +238,7 @@ export default function Home() {
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-muted-foreground">Stay logged in for 90 days</span>
+                <span className="text-xs text-muted-foreground">Stay logged in</span>
               </label>
 
               <button
