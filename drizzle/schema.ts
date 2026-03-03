@@ -1,4 +1,6 @@
 import {
+  bigint,
+  boolean,
   decimal,
   int,
   mysqlEnum,
@@ -32,6 +34,25 @@ export const users = mysqlTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+// ─── App Users (custom accounts managed by owner) ────────────────────────────
+
+export const appUsers = mysqlTable("app_users", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  username: varchar("username", { length: 64 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  role: mysqlEnum("role", ["owner", "admin", "user"]).default("user").notNull(),
+  hasAccess: boolean("hasAccess").default(true).notNull(),
+  /** NULL means lifetime access; otherwise a UTC timestamp in ms */
+  expiryDate: bigint("expiryDate", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn"),
+});
+
+export type AppUser = typeof appUsers.$inferSelect;
+export type InsertAppUser = typeof appUsers.$inferInsert;
 
 // ─── Model files (uploaded CSVs) ────────────────────────────────────────────
 

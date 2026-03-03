@@ -3,12 +3,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { User, LogOut, BarChart3, Loader2, RefreshCw, CheckCircle } from "lucide-react";
+import { User, LogOut, BarChart3, Loader2, RefreshCw, CheckCircle, Crown } from "lucide-react";
 import { GameCard } from "@/components/GameCard";
 import { AgeModal } from "@/components/AgeModal";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useAppAuth } from "@/_core/hooks/useAppAuth";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -16,8 +17,24 @@ export default function Dashboard() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [selectedSport, setSelectedSport] = useState("NCAAM");
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const hasSynced = useRef(false);
   const { user, isAuthenticated } = useAuth();
+  const { appUser, isOwner, loading: appAuthLoading } = useAppAuth();
+
+  // Redirect to login if not authenticated as app user
+  useEffect(() => {
+    if (!appAuthLoading && !appUser) {
+      setLocation("/login");
+    }
+  }, [appUser, appAuthLoading, setLocation]);
+  const appLogoutMutation = trpc.appUsers.logout.useMutation({
+    onSuccess: () => {
+      setLocation("/login");
+      toast.success("Signed out");
+    },
+  });
+  const appLogout = () => appLogoutMutation.mutate();
 
   useEffect(() => {
     const accepted = sessionStorage.getItem("age-accepted");
@@ -46,6 +63,7 @@ export default function Dashboard() {
   const syncMutation = trpc.sheets.syncLatest.useMutation({
     onSuccess: (data) => {
       setSyncStatus("done");
+      setLastUpdated(new Date());
       refetchGames();
       if (data.gamesUpserted > 0) {
         toast.success("ALL NCAAM Games Updated");
@@ -180,7 +198,33 @@ export default function Dashboard() {
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
                   <div className="absolute right-0 top-9 z-50 w-48 bg-card border border-border rounded-lg shadow-xl overflow-hidden">
-                    {user ? (
+                    {appUser ? (
+                      <>
+                        <div className="px-3 py-2.5 border-b border-border">
+                          <div className="flex items-center gap-1.5">
+                            {appUser.role === "owner" && <Crown className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
+                            <p className="text-xs font-semibold text-foreground truncate">@{appUser.username}</p>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground truncate">{appUser.email}</p>
+                        </div>
+                        {isOwner && (
+                          <button
+                            onClick={() => { setShowUserMenu(false); setLocation("/admin/users"); }}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                          >
+                            <Crown className="w-3.5 h-3.5 text-yellow-400" />
+                            User Management
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setShowUserMenu(false); appLogout(); }}
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          Sign out
+                        </button>
+                      </>
+                    ) : user ? (
                       <>
                         <div className="px-3 py-2.5 border-b border-border">
                           <p className="text-xs font-semibold text-foreground truncate">{user.name ?? "User"}</p>
@@ -275,6 +319,11 @@ export default function Dashboard() {
                     <span className="text-[11px] text-green-400 flex items-center gap-1">
                       <CheckCircle className="w-3 h-3" />
                       <span className="hidden sm:inline">Updated</span>
+                    </span>
+                  )}
+                  {syncStatus === "idle" && lastUpdated && (
+                    <span className="text-[10px] text-muted-foreground hidden sm:inline" title={`Last synced: ${lastUpdated.toLocaleString()}`}>
+                      {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   )}
                   <button

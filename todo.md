@@ -64,3 +64,14 @@
 - [x] Add teamNormalizer to convert display names to snake_case slugs
 - [x] Expand ESPN ID map and team nicknames map to cover all NCAAM teams (200+ teams)
 - [x] Remove March 2nd game data from database (only March 3rd data remains, 44 games)
+- [x] Update DB schema: add username, passwordHash, role (owner/admin/user), hasAccess, expiryDate to users table
+- [x] Backend: custom login (email+password), register, and owner-only user CRUD procedures
+- [x] Frontend: Owner-only User Management panel (create/edit/delete accounts)
+- [x] Add "User Management" to profile dropdown for owner role only
+- [x] Create @prez owner account (aisportbettingcontact@gmail.com, Tailered101$, lifetime access)
+- [x] Replace Manus OAuth with custom email/password authentication on Login page
+- [x] Add auth guards to Dashboard and UserManagement pages
+- [x] Test login flow end-to-end with @prez credentials
+- [x] Test User Management CRUD (create, delete)
+- [x] Fix AgeModal text: replace "EdgeGuide" with "Prez Bets AI"
+- [x] Add "Last Updated" timestamp next to refresh button in date row

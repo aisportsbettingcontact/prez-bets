@@ -1,99 +1,143 @@
-// LoginPage — Manus OAuth sign-in
-import { useEffect } from "react";
+// LoginPage — Custom email/password sign-in for app users
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { BarChart3, LogIn, TrendingUp, Shield, Zap } from "lucide-react";
-import { getLoginUrl } from "@/const";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { BarChart3, LogIn, Eye, EyeOff, Loader2 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { useAppAuth } from "@/_core/hooks/useAppAuth";
+import { toast } from "sonner";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
-  const { isAuthenticated, loading } = useAuth();
+  const { appUser, loading: authLoading, refetch } = useAppAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
+  // Redirect if already logged in
   useEffect(() => {
-    if (!loading && isAuthenticated) {
+    if (!authLoading && appUser) {
       setLocation("/");
     }
-  }, [isAuthenticated, loading, setLocation]);
+  }, [appUser, authLoading, setLocation]);
 
-  const handleLogin = () => {
-    window.location.href = getLoginUrl();
+  const loginMutation = trpc.appUsers.login.useMutation({
+    onSuccess: () => {
+      refetch();
+      toast.success("Welcome back!");
+      setLocation("/");
+    },
+    onError: (e) => {
+      toast.error(e.message);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password.trim()) {
+      toast.error("Please enter your email and password.");
+      return;
+    }
+    loginMutation.mutate({ emailOrUsername: email.trim(), password });
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{ backgroundColor: "#080810" }}
-    >
+    <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-white/8">
+      <header className="flex items-center justify-center px-6 py-4 border-b border-border">
         <div className="flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-violet-400" />
-          <span
-            className="text-sm font-bold tracking-widest uppercase text-white"
-          >
-            AI Sports Betting Models
+          <BarChart3 className="w-5 h-5 text-primary" />
+          <span className="text-sm font-black tracking-widest uppercase text-white">
+            PREZ BETS
+          </span>
+          <span className="text-border text-sm">|</span>
+          <span className="text-sm font-medium tracking-widest uppercase text-muted-foreground">
+            AI MODEL PROJECTIONS
           </span>
         </div>
       </header>
 
       {/* Main */}
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-12">
-        <div className="w-full max-w-sm space-y-8">
+        <div className="w-full max-w-sm space-y-6">
           {/* Hero */}
-          <div className="text-center space-y-3">
-            <div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto"
-              style={{ background: "rgba(108,99,255,0.15)", border: "1px solid rgba(108,99,255,0.3)" }}
-            >
-              <BarChart3 className="w-8 h-8 text-violet-400" />
+          <div className="text-center space-y-2">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto bg-primary/10 border border-primary/20">
+              <BarChart3 className="w-7 h-7 text-primary" />
             </div>
-            <h1
-              className="text-2xl font-bold tracking-tight text-white"
-              style={{ letterSpacing: "0.05em" }}
-            >
-              Model Projections
+            <h1 className="text-xl font-black tracking-widest uppercase text-white">
+              Sign In
             </h1>
-            <p className="text-sm text-gray-400 leading-relaxed">
-              AI-powered sports betting model projections — spreads, totals, and edges.
+            <p className="text-xs text-muted-foreground">
+              Access your AI model projections dashboard.
             </p>
           </div>
 
-          {/* Features */}
-          <div className="space-y-3">
-            {[
-              { icon: TrendingUp, label: "Spread & total projections" },
-              { icon: Zap, label: "Real-time model edges" },
-              { icon: Shield, label: "Upload your own model files" },
-            ].map(({ icon: Icon, label }) => (
-              <div
-                key={label}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl"
-                style={{ background: "#0f0f1a", border: "1px solid rgba(255,255,255,0.07)" }}
-              >
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: "rgba(108,99,255,0.15)" }}
+          {/* Login form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+                className="w-full px-3 py-2.5 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-colors"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  required
+                  className="w-full px-3 py-2.5 pr-10 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
                 >
-                  <Icon className="w-4 h-4 text-violet-400" />
-                </div>
-                <span className="text-sm text-gray-200">{label}</span>
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
 
-          {/* Sign in button */}
-          <button
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90 active:scale-[0.98]"
-            style={{ background: "linear-gradient(135deg, #6c63ff 0%, #5a52e0 100%)" }}
-          >
-            <LogIn className="w-4 h-4" />
-            Sign in to continue
-          </button>
+            <button
+              type="submit"
+              disabled={loginMutation.isPending}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white bg-primary hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loginMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <LogIn className="w-4 h-4" />
+              )}
+              {loginMutation.isPending ? "Signing in…" : "Sign In"}
+            </button>
+          </form>
 
-          <p className="text-center text-xs text-gray-500">
-            By signing in you agree to gamble responsibly.
-            This tool is for informational purposes only.
+          <p className="text-center text-xs text-muted-foreground/60">
+            This tool is for informational purposes only. Gamble responsibly.
           </p>
         </div>
       </main>

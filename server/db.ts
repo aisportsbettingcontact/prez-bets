@@ -209,3 +209,58 @@ export async function upsertSheetGames(rows: InsertGame[]) {
   // Insert fresh rows
   await db.insert(games).values(rows);
 }
+
+// ─── App Users (custom accounts) ─────────────────────────────────────────────
+
+import { appUsers, type InsertAppUser } from "../drizzle/schema";
+
+export async function createAppUser(data: InsertAppUser) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(appUsers).values(data);
+}
+
+export async function listAppUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(appUsers).orderBy(appUsers.createdAt);
+}
+
+export async function getAppUserById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appUsers).where(eq(appUsers.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getAppUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appUsers).where(eq(appUsers.email, email)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getAppUserByUsername(username: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appUsers).where(eq(appUsers.username, username)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateAppUser(id: number, data: Partial<InsertAppUser>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(appUsers).set({ ...data, updatedAt: new Date() }).where(eq(appUsers.id, id));
+}
+
+export async function deleteAppUser(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(appUsers).where(eq(appUsers.id, id));
+}
+
+export async function updateAppUserLastSignedIn(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(appUsers).set({ lastSignedIn: new Date() }).where(eq(appUsers.id, id));
+}

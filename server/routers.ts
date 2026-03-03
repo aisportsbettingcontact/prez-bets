@@ -20,9 +20,11 @@ import { fetchLatestSheetGames, fetchAllSheetsGames, SHEETS_FILE_ID } from "./sh
 import { syncEspnTeams, buildEspnLogoUrl } from "./espnScraper";
 import { listEspnTeams, getEspnTeamBySlug } from "./db";
 import { nanoid } from "nanoid";
+import { appUsersRouter } from "./routers/appUsers";
 
 export const appRouter = router({
   system: systemRouter,
+  appUsers: appUsersRouter,
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
   auth: router({
