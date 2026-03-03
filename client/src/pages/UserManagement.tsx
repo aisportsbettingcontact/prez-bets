@@ -40,6 +40,8 @@ type AppUserRow = {
   expiryDate: number | null;
   createdAt: Date;
   lastSignedIn: Date | null;
+  termsAccepted: boolean;
+  termsAcceptedAt: number | null;
 };
 
 const ROLE_ICONS = {
@@ -242,6 +244,7 @@ export default function UserManagement() {
                 <TableHead className="text-zinc-400 font-semibold tracking-wider text-xs">ROLE</TableHead>
                 <TableHead className="text-zinc-400 font-semibold tracking-wider text-xs">ACCESS</TableHead>
                 <TableHead className="text-zinc-400 font-semibold tracking-wider text-xs">EXPIRY</TableHead>
+                <TableHead className="text-zinc-400 font-semibold tracking-wider text-xs">TERMS</TableHead>
                 <TableHead className="text-zinc-400 font-semibold tracking-wider text-xs">LAST SIGN IN</TableHead>
                 <TableHead className="text-zinc-400 font-semibold tracking-wider text-xs text-right">ACTIONS</TableHead>
               </TableRow>
@@ -281,6 +284,17 @@ export default function UserManagement() {
                       </span>
                     </TableCell>
                     <TableCell className="text-zinc-400 text-sm">{formatExpiry(user.expiryDate)}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${
+                        user.termsAccepted
+                          ? "bg-green-500/15 text-green-400 border-green-500/30"
+                          : "bg-zinc-500/15 text-zinc-500 border-zinc-500/20"
+                      }`}
+                        title={user.termsAccepted && user.termsAcceptedAt ? `Accepted: ${new Date(user.termsAcceptedAt).toLocaleString()}` : "Not yet accepted"}
+                      >
+                        {user.termsAccepted ? "ACCEPTED" : "PENDING"}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-zinc-400 text-sm">{formatDate(user.lastSignedIn)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">

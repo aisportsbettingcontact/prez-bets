@@ -149,7 +149,18 @@ export const appUsersRouter = router({
       role: user.role,
       hasAccess: user.hasAccess,
       expiryDate: user.expiryDate,
+      termsAccepted: user.termsAccepted,
     };
+  }),
+
+  // ─── Terms acceptance ──────────────────────────────────────────────────────
+
+  acceptTerms: appUserProcedure.mutation(async ({ ctx }) => {
+    await updateAppUser(ctx.appUser.id, {
+      termsAccepted: true,
+      termsAcceptedAt: Date.now(),
+    } as Parameters<typeof updateAppUser>[1]);
+    return { success: true };
   }),
 
   // ─── Owner-only User Management ────────────────────────────────────────────
@@ -165,6 +176,8 @@ export const appUsersRouter = router({
       expiryDate: u.expiryDate,
       createdAt: u.createdAt,
       lastSignedIn: u.lastSignedIn,
+      termsAccepted: u.termsAccepted,
+      termsAcceptedAt: u.termsAcceptedAt,
     }));
   }),
 

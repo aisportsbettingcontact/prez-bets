@@ -29,6 +29,13 @@
       "when": 1772578415185,
       "tag": "0003_simple_ben_urich",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1772580297345,
+      "tag": "0004_sticky_exodus",
+      "breakpoints": true
     }
   ]
 }

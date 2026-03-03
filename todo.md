@@ -76,3 +76,8 @@
 - [x] Fix AgeModal text: replace "EdgeGuide" with "Prez Bets AI"
 - [x] Add "Last Updated" timestamp next to refresh button in date row
 - [x] Add show/hide password toggle to UserManagement create/edit account modal
+- [x] Add termsAccepted (boolean) and termsAcceptedAt (timestamp) to app_users DB schema
+- [x] Add tRPC procedure: appUsers.acceptTerms (sets termsAccepted=true, termsAcceptedAt=now)
+- [x] Update Dashboard: show Age modal only if termsAccepted is false/null (DB-backed, not sessionStorage)
+- [x] Call acceptTerms mutation when user clicks "I Understand & Accept"
+- [x] Add TERMS column to User Management dashboard table showing accepted/pending status

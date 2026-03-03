@@ -20,7 +20,7 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const hasSynced = useRef(false);
   const { user, isAuthenticated } = useAuth();
-  const { appUser, isOwner, loading: appAuthLoading } = useAppAuth();
+  const { appUser, isOwner, loading: appAuthLoading, refetch: refetchAppUser } = useAppAuth();
 
   // Redirect to login if not authenticated as app user
   useEffect(() => {
@@ -28,6 +28,21 @@ export default function Dashboard() {
       setLocation("/login");
     }
   }, [appUser, appAuthLoading, setLocation]);
+
+  // Show Age modal if user has not yet accepted terms (DB-backed)
+  useEffect(() => {
+    if (!appAuthLoading && appUser && !appUser.termsAccepted) {
+      setShowAgeModal(true);
+    }
+  }, [appAuthLoading, appUser]);
+
+  const acceptTermsMutation = trpc.appUsers.acceptTerms.useMutation({
+    onSuccess: () => {
+      refetchAppUser();
+      setShowAgeModal(false);
+    },
+  });
+
   const appLogoutMutation = trpc.appUsers.logout.useMutation({
     onSuccess: () => {
       setLocation("/login");
@@ -35,11 +50,6 @@ export default function Dashboard() {
     },
   });
   const appLogout = () => appLogoutMutation.mutate();
-
-  useEffect(() => {
-    const accepted = sessionStorage.getItem("age-accepted");
-    if (!accepted) setShowAgeModal(true);
-  }, []);
 
   // ─── Games query ──────────────────────────────────────────────────────────
   const { data: games, isLoading: gamesLoading, refetch: refetchGames } = trpc.games.list.useQuery(
@@ -94,19 +104,16 @@ export default function Dashboard() {
   };
 
   const handleAccept = () => {
-    sessionStorage.setItem("age-accepted", "true");
-    setShowAgeModal(false);
+    acceptTermsMutation.mutate();
   };
 
   const handleCloseModal = () => {
-    setShowAgeModal(false);
-    setLocation("/");
+    // Closing without accepting logs the user out (they must accept to use the app)
+    appLogout();
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem("age-accepted");
-    setLocation("/");
-    toast.success("Logged out successfully");
+    appLogout();
   };
 
   // Group games by date

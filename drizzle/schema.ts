@@ -46,6 +46,10 @@ export const appUsers = mysqlTable("app_users", {
   hasAccess: boolean("hasAccess").default(true).notNull(),
   /** NULL means lifetime access; otherwise a UTC timestamp in ms */
   expiryDate: bigint("expiryDate", { mode: "number" }),
+  /** Whether the user has accepted the Age & Responsibility notice */
+  termsAccepted: boolean("termsAccepted").default(false).notNull(),
+  /** UTC timestamp (ms) when the user accepted the terms; NULL if not yet accepted */
+  termsAcceptedAt: bigint("termsAcceptedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn"),
