@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Pencil, Trash2, Shield, User, Crown, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Shield, User, Crown, RefreshCw, Eye, EyeOff } from "lucide-react";
 
 type AppUserRow = {
   id: number;
@@ -92,6 +92,7 @@ export default function UserManagement() {
   const [editUser, setEditUser] = useState<AppUserRow | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<AppUserRow | null>(null);
   const [form, setForm] = useState<FormState>(defaultForm);
+  const [showPassword, setShowPassword] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: users = [], isLoading } = trpc.appUsers.listUsers.useQuery(undefined, {
@@ -342,13 +343,24 @@ export default function UserManagement() {
               <Label className="text-zinc-400 text-xs tracking-wider">
                 {editUser ? "NEW PASSWORD (leave blank to keep current)" : "PASSWORD"}
               </Label>
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                placeholder={editUser ? "••••••••" : "Min 8 characters"}
-                className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600"
-              />
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder={editUser ? "••••••••" : "Min 8 characters"}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

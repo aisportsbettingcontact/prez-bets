@@ -75,3 +75,4 @@
 - [x] Test User Management CRUD (create, delete)
 - [x] Fix AgeModal text: replace "EdgeGuide" with "Prez Bets AI"
 - [x] Add "Last Updated" timestamp next to refresh button in date row
+- [x] Add show/hide password toggle to UserManagement create/edit account modal
