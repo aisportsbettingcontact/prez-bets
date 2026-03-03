@@ -168,28 +168,7 @@ export default function Dashboard() {
 
           {/* User menu — right */}
           <div className="flex-shrink-0 flex items-center gap-2">
-            {/* Sync status */}
-            {syncStatus === "syncing" && (
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Syncing
-              </span>
-            )}
-            {syncStatus === "done" && (
-              <span className="text-[11px] text-green-400 flex items-center gap-1">
-                <CheckCircle className="w-3 h-3" />
-                Updated
-              </span>
-            )}
-            {/* Refresh button */}
-            <button
-              onClick={handleManualRefresh}
-              disabled={syncStatus === "syncing"}
-              className="w-6 h-6 rounded flex items-center justify-center hover:bg-secondary transition-colors disabled:opacity-40"
-              title="Refresh from Google Sheets"
-            >
-              <RefreshCw className={`w-3 h-3 text-muted-foreground ${syncStatus === "syncing" ? "animate-spin" : ""}`} />
-            </button>
+
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
@@ -266,18 +245,44 @@ export default function Dashboard() {
             <div key={date}>
               {/* Date section header */}
               <div className="flex items-center justify-between px-4 py-2 border-b border-border sticky top-[45px] bg-background/95 backdrop-blur-sm z-10">
-                <span
-                  className="text-xs font-bold text-foreground tracking-widest uppercase"
-                  style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
-                >
-                  {formatDateHeader(date)}
-                </span>
-                <span
-                  className="text-xs font-semibold"
-                  style={{ color: '#a3a3a3', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '0.06em' }}
-                >
-                  Men's College Basketball
-                </span>
+                {/* Left: date + sport label */}
+                <div className="flex items-center gap-3">
+                  <span
+                    className="text-xs font-bold text-foreground tracking-widest uppercase"
+                    style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+                  >
+                    {formatDateHeader(date)}
+                  </span>
+                  <span
+                    className="text-xs font-semibold"
+                    style={{ color: '#a3a3a3', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '0.06em' }}
+                  >
+                    Men's College Basketball
+                  </span>
+                </div>
+                {/* Right: sync status + refresh */}
+                <div className="flex items-center gap-1.5">
+                  {syncStatus === "syncing" && (
+                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Syncing
+                    </span>
+                  )}
+                  {syncStatus === "done" && (
+                    <span className="text-[11px] text-green-400 flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" />
+                      Updated
+                    </span>
+                  )}
+                  <button
+                    onClick={handleManualRefresh}
+                    disabled={syncStatus === "syncing"}
+                    className="w-6 h-6 rounded flex items-center justify-center hover:bg-secondary transition-colors disabled:opacity-40"
+                    title="Refresh from Google Sheets"
+                  >
+                    <RefreshCw className={`w-3 h-3 text-muted-foreground ${syncStatus === "syncing" ? "animate-spin" : ""}`} />
+                  </button>
+                </div>
               </div>
 
               {/* Game Cards */}
