@@ -127,7 +127,7 @@ export default function Dashboard() {
       {/* Sticky Header */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
         {/* Top row: centered brand group | user icon right */}
-        <div className="relative flex items-center px-4 py-3 max-w-3xl mx-auto">
+        <div className="relative flex items-center px-4 py-2 max-w-3xl mx-auto">
 
           {/* Centered brand group: icon + PREZ BETS + AI MODEL PROJECTIONS */}
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
@@ -236,7 +236,7 @@ export default function Dashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-3xl mx-auto pb-12">
+      <main className="max-w-3xl mx-auto pb-8">
         {isLoading && sortedDates.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
@@ -265,7 +265,7 @@ export default function Dashboard() {
           sortedDates.map((date) => (
             <div key={date}>
               {/* Date section header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border sticky top-[97px] bg-background/95 backdrop-blur-sm z-10">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-border sticky top-[53px] bg-background/95 backdrop-blur-sm z-10">
                 <span
                   className="text-xs font-bold text-foreground tracking-widest uppercase"
                   style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
