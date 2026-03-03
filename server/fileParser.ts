@@ -1,50 +1,21 @@
 /**
  * fileParser.ts
  *
- * Parses XLSX and CSV model files using the canonical 03-02-2026 column format:
+ * Parses XLSX and CSV model files using header-name-driven column mapping.
+ * Supports any column order as long as the required headers are present.
  *
- * Col A: date            – "MMDDYYYY" string, e.g. "03022026"
- * Col B: start_time_est  – 4-digit 24h string, e.g. "1900"
- * Col C: away_team       – snake_case team name, e.g. "duke"
- * Col D: away_book_spread
- * Col E: away_model_spread
- * Col F: home_team
- * Col G: home_book_spread
- * Col H: book_total
- * Col I: home_model_spread
- * Col J: model_total
- * Col K: spread_edge     – computed label, e.g. "duke (-9.5)" or "PASS"
- * Col L: spread_diff     – numeric
- * Col M: total_edge      – computed label, e.g. "UNDER 150.5" or "PASS"
- * Col N: total_diff      – numeric
- *
- * For XLSX files the parser reads every sheet that matches this header layout.
- * For CSV files the parser reads the single sheet.
+ * Required headers (case-insensitive):
+ *   date, start_time_est, away_team, away_book_spread, away_model_spread,
+ *   home_team, home_book_spread, home_model_spread, book_total, model_total,
+ *   spread_edge, spread_diff, total_edge, total_diff
  */
 
 import * as XLSX from "xlsx";
 import type { InsertGame } from "../drizzle/schema";
+import { normalizeTeamSlug } from "./teamNormalizer";
 
-// ─── Column indices (0-based) for the canonical format ────────────────────────
-const COL = {
-  date: 0,
-  start_time_est: 1,
-  away_team: 2,
-  away_book_spread: 3,
-  away_model_spread: 4,
-  home_team: 5,
-  home_book_spread: 6,
-  book_total: 7,
-  home_model_spread: 8,
-  model_total: 9,
-  spread_edge: 10,
-  spread_diff: 11,
-  total_edge: 12,
-  total_diff: 13,
-} as const;
-
-// Expected header values (lowercase, trimmed) for validation
-const EXPECTED_HEADERS = [
+// Required column names (all must be present, order doesn't matter)
+const REQUIRED_HEADERS = new Set([
   "date",
   "start_time_est",
   "away_team",
@@ -52,14 +23,14 @@ const EXPECTED_HEADERS = [
   "away_model_spread",
   "home_team",
   "home_book_spread",
-  "book_total",
   "home_model_spread",
+  "book_total",
   "model_total",
   "spread_edge",
   "spread_diff",
   "total_edge",
   "total_diff",
-];
+]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -126,49 +97,64 @@ export function formatTeamName(raw: string): string {
     .join(" ");
 }
 
-// ─── Header validation ────────────────────────────────────────────────────────
+// ─── Header mapping ───────────────────────────────────────────────────────────
 
-function isCanonicalHeader(row: unknown[]): boolean {
-  if (row.length < EXPECTED_HEADERS.length) return false;
-  return EXPECTED_HEADERS.every(
-    (expected, i) => toStr(row[i]).toLowerCase() === expected
-  );
+type ColMap = Record<string, number>;
+
+/**
+ * Build a column name → index map from a header row.
+ * Returns null if any required header is missing.
+ */
+function buildColMap(headerRow: unknown[]): ColMap | null {
+  const map: ColMap = {};
+  for (let i = 0; i < headerRow.length; i++) {
+    const name = toStr(headerRow[i]).toLowerCase();
+    if (name) map[name] = i;
+  }
+  // Check all required headers are present
+  for (const required of Array.from(REQUIRED_HEADERS)) {
+    if (!(required in map)) {
+      return null;
+    }
+  }
+  return map;
 }
 
 // ─── Row parser ───────────────────────────────────────────────────────────────
 
 function parseDataRow(
   row: unknown[],
+  colMap: ColMap,
   fileId: number,
   sport: string
 ): InsertGame | null {
-  const awayTeam = toStr(row[COL.away_team]);
-  const homeTeam = toStr(row[COL.home_team]);
+  const awayTeam = normalizeTeamSlug(toStr(row[colMap.away_team]));
+  const homeTeam = normalizeTeamSlug(toStr(row[colMap.home_team]));
 
   // Skip empty or header-like rows
   if (!awayTeam || !homeTeam) return null;
   if (awayTeam.toLowerCase() === "away_team") return null;
 
-  const gameDate = parseDate(row[COL.date]);
+  const gameDate = parseDate(row[colMap.date]);
   if (!gameDate) return null;
 
   return {
     fileId,
     sport,
     gameDate,
-    startTimeEst: parseTime(row[COL.start_time_est]),
+    startTimeEst: parseTime(row[colMap.start_time_est]),
     awayTeam,
-    awayBookSpread: toNum(row[COL.away_book_spread]),
-    awayModelSpread: toNum(row[COL.away_model_spread]),
+    awayBookSpread: toNum(row[colMap.away_book_spread]),
+    awayModelSpread: toNum(row[colMap.away_model_spread]),
     homeTeam,
-    homeBookSpread: toNum(row[COL.home_book_spread]),
-    homeModelSpread: toNum(row[COL.home_model_spread]),
-    bookTotal: toNum(row[COL.book_total]),
-    modelTotal: toNum(row[COL.model_total]),
-    spreadEdge: toStr(row[COL.spread_edge]) || "PASS",
-    spreadDiff: toNum(row[COL.spread_diff]),
-    totalEdge: toStr(row[COL.total_edge]) || "PASS",
-    totalDiff: toNum(row[COL.total_diff]),
+    homeBookSpread: toNum(row[colMap.home_book_spread]),
+    homeModelSpread: toNum(row[colMap.home_model_spread]),
+    bookTotal: toNum(row[colMap.book_total]),
+    modelTotal: toNum(row[colMap.model_total]),
+    spreadEdge: toStr(row[colMap.spread_edge]) || "PASS",
+    spreadDiff: toNum(row[colMap.spread_diff]),
+    totalEdge: toStr(row[colMap.total_edge]) || "PASS",
+    totalDiff: toNum(row[colMap.total_diff]),
   };
 }
 
@@ -193,10 +179,10 @@ export function parseXlsxBuffer(
     if (rawRows.length < 2) continue;
 
     const headerRow = rawRows[0] as unknown[];
+    const colMap = buildColMap(headerRow);
 
-    // Only process sheets that match the canonical 03-02-2026 format
-    if (!isCanonicalHeader(headerRow)) {
-      console.log(`[XLSX Parser] Skipping sheet "${sheetName}" — does not match canonical format`);
+    if (!colMap) {
+      console.log(`[XLSX Parser] Skipping sheet "${sheetName}" — missing required headers`);
       continue;
     }
 
@@ -206,7 +192,7 @@ export function parseXlsxBuffer(
       const row = rawRows[i] as unknown[];
       if (!row || row.every((v) => v === null || v === "")) continue;
 
-      const game = parseDataRow(row, fileId, sport);
+      const game = parseDataRow(row, colMap, fileId, sport);
       if (game) allGames.push(game);
     }
   }
@@ -249,10 +235,11 @@ export function parseCsvBuffer(
   if (lines.length < 2) return [];
 
   const headerRow = parseCsvLine(lines[0]);
+  const colMap = buildColMap(headerRow);
 
-  if (!isCanonicalHeader(headerRow)) {
+  if (!colMap) {
     throw new Error(
-      `CSV does not match the expected format. Expected headers: ${EXPECTED_HEADERS.join(", ")}`
+      `CSV does not match the expected format. Missing one or more required headers: ${Array.from(REQUIRED_HEADERS).join(", ")}`
     );
   }
 
@@ -260,9 +247,9 @@ export function parseCsvBuffer(
 
   for (let i = 1; i < lines.length; i++) {
     const vals = parseCsvLine(lines[i]);
-    if (vals.length < EXPECTED_HEADERS.length) continue;
+    if (vals.length < 2) continue;
 
-    const game = parseDataRow(vals, fileId, sport);
+    const game = parseDataRow(vals, colMap, fileId, sport);
     if (game) rows.push(game);
   }
 

@@ -59,3 +59,7 @@
 - [x] Show two-line team names in GameCard: school name on top, nickname on bottom
 - [x] Enforce strict single-line per row for school name and nickname (no wrapping, truncate with ellipsis)
 - [x] Widen name column so no school names are ever truncated
+- [x] Update Google Sheets sync to pull from 03-03-2026 tab
+- [x] Fix fileParser to be header-name-driven (handles any column order)
+- [x] Add teamNormalizer to convert display names to snake_case slugs
+- [x] Expand ESPN ID map and team nicknames map to cover all NCAAM teams (200+ teams)
