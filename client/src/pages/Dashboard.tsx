@@ -273,8 +273,8 @@ export default function Dashboard() {
                   {formatDateHeader(date)}
                 </span>
                 <span
-                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/15 border border-primary/20"
-                  style={{ color: '#a3a3a3', fontFamily: '"Barlow Condensed", sans-serif' }}
+                  className="text-xs font-semibold"
+                  style={{ color: '#a3a3a3', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '0.06em' }}
                 >
                   Men's College Basketball
                 </span>
