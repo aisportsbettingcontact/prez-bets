@@ -182,17 +182,15 @@ function EditablePill({
 // ─── EditableTeamRow — identical layout to GameCard TeamRow ──────────────────
 
 function EditableTeamRow({
-  slug, name, nickname, consensus, modelSpread, modelTotal,
-  logoUrl, isAway, onSpreadChange, onTotalChange, spreadInputRef,
+  slug, name, nickname, consensus, modelSpread,
+  logoUrl, onSpreadChange, spreadInputRef,
 }: {
   slug: string; name: string; nickname: string;
-  consensus: string; modelSpread: string; modelTotal: string;
-  logoUrl?: string; isAway: boolean;
+  consensus: string; modelSpread: string;
+  logoUrl?: string;
   onSpreadChange: (v: string) => void;
-  onTotalChange: (v: string) => void;
   spreadInputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
-  const ouPrefix = isAway ? "O" : "U";
 
   return (
     <div className="flex items-center gap-1.5 py-1.5 min-w-0">
@@ -255,21 +253,6 @@ function EditableTeamRow({
             placeholder="—"
             inputRef={spreadInputRef}
           />
-        </div>
-
-        {/* MODEL O/U — single number; away row is editable, home row mirrors read-only */}
-        <div className="flex items-center justify-center">
-          {isAway ? (
-            // Away row: single editable number pill
-            <EditablePill
-              value={modelTotal}
-              onChange={onTotalChange}
-              placeholder="—"
-            />
-          ) : (
-            // Home row: empty — total is shown once on the away row only
-            <div />
-          )}
         </div>
 
       </div>
@@ -592,7 +575,7 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
         )}
       </div>
 
-      {/* Team rows — identical structure to GameCard */}
+      {/* Team rows — restructured so O/U pill spans both rows */}
       <div className="px-3 pt-1 pb-3">
 
         {/* Column labels — BOOKS | MODEL LINE | MODEL O/U */}
@@ -609,36 +592,48 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
           </div>
         </div>
 
-        {/* Away row */}
-        <EditableTeamRow
-          slug={game.awayTeam}
-          name={awayName}
-          nickname={awayNickname}
-          consensus={awayConsensus}
-          modelSpread={awaySpread}
-          modelTotal={modelTotal}
-          logoUrl={awayLogoUrl}
-          isAway={true}
-          onSpreadChange={handleAwaySpreadChange}
-          onTotalChange={handleTotalChange}
-          spreadInputRef={awaySpreadRef}
-        />
+        {/* Two-row layout: left side has away+home rows, right side has a single O/U pill spanning both */}
+        <div className="flex gap-1.5 min-w-0">
 
-        <div className="my-0.5" style={{ height: 1, background: "hsl(var(--border))" }} />
+          {/* Left side: away row + divider + home row */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            {/* Away row */}
+            <EditableTeamRow
+              slug={game.awayTeam}
+              name={awayName}
+              nickname={awayNickname}
+              consensus={awayConsensus}
+              modelSpread={awaySpread}
+              logoUrl={awayLogoUrl}
+              onSpreadChange={handleAwaySpreadChange}
+              spreadInputRef={awaySpreadRef}
+            />
+            <div className="my-0.5" style={{ height: 1, background: "hsl(var(--border))" }} />
+            {/* Home row */}
+            <EditableTeamRow
+              slug={game.homeTeam}
+              name={homeName}
+              nickname={homeNickname}
+              consensus={homeConsensus}
+              modelSpread={homeSpread}
+              logoUrl={homeLogoUrl}
+              onSpreadChange={handleHomeSpreadChange}
+            />
+          </div>
 
-        {/* Home row */}
-        <EditableTeamRow
-          slug={game.homeTeam}
-          name={homeName}
-          nickname={homeNickname}
-          consensus={homeConsensus}
-          modelSpread={homeSpread}
-          modelTotal={modelTotal}
-          logoUrl={homeLogoUrl}
-          isAway={false}
-          onSpreadChange={handleHomeSpreadChange}
-          onTotalChange={() => {}} // total is only editable on away row
-        />
+          {/* Right side: single O/U pill centered between both rows */}
+          <div
+            className="flex-shrink-0 flex items-center justify-center"
+            style={{ width: "clamp(52px, 14vw, 80px)" }}
+          >
+            <EditablePill
+              value={modelTotal}
+              onChange={handleTotalChange}
+              placeholder="—"
+            />
+          </div>
+
+        </div>
 
         {/* Save button — appears only when dirty */}
         {dirty && (
