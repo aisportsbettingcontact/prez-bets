@@ -169,3 +169,4 @@
 - [x] GameCard: show model projections (MODEL LINE/O/U/edge) only when publishedToFeed=true, otherwise show dashes
 - [x] Fix missing team logos in PublishProjections EditableGameCard (logos show on feed but not admin page)
 - [x] Feed: replace search icon button with always-visible search input bar between header and first date group; dropdown results ordered by start time EST
+- [x] Feed search: move bar into sticky header, placeholder "Search for Games", 3-at-a-time dropdown with scroll, team logo+name layout, solid bg overlay, highlight animation on select
