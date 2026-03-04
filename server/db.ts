@@ -144,12 +144,34 @@ export async function insertGames(rows: InsertGame[]) {
   await db.insert(games).values(rows);
 }
 
+/** Returns today's date in MM-DD-YYYY format using Eastern Time. */
+function todayEst(): string {
+  const now = new Date();
+  const estStr = now.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  }); // "03/03/2026"
+  const [mm, dd, yyyy] = estStr.split("/");
+  return `${mm}-${dd}-${yyyy}`;
+}
+
 export async function listGames(opts?: { sport?: string; gameDate?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  let query = db.select().from(games).$dynamic();
-  if (opts?.sport) query = query.where(eq(games.sport, opts.sport));
-  return query.orderBy(games.gameDate, games.startTimeEst);
+
+  // Default to today in EST — never show stale previous-day games
+  const targetDate = opts?.gameDate ?? todayEst();
+
+  const conditions = [eq(games.gameDate, targetDate)];
+  if (opts?.sport) conditions.push(eq(games.sport, opts.sport));
+
+  return db
+    .select()
+    .from(games)
+    .where(and(...conditions))
+    .orderBy(games.gameDate, games.startTimeEst);
 }
 
 export async function deleteGamesByFileId(fileId: number) {

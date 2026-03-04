@@ -278,7 +278,7 @@ export default function Dashboard() {
             <div>
               <p className="text-sm font-semibold text-foreground mb-1">No projections available</p>
               <p className="text-xs text-muted-foreground">
-                No games found for {selectedSport}. Try refreshing or selecting another sport.
+                No {selectedSport} games found for today. The sheet may not have been updated yet — try refreshing.
               </p>
             </div>
             <button
