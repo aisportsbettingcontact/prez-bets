@@ -143,3 +143,16 @@
 - [x] Fix Georgia Southern opponent: TBD → old_dominion
 - [x] Audit and correct all March 4 start times in EST
 - [x] Audit and verify edge calculation math in GameCard.tsx for all scenarios
+- [ ] Verify every March 4 game's book spread/total in DB against live VSiN page
+- [ ] Fix Georgia Southern book spread to match current VSiN line (+2.5/-2.5)
+- [ ] Import 9 missing VSiN games as unpublished stubs (UW-Milwaukee, Cleveland ST, Stonehill, Wagner, Chicago ST, N Florida, Florida ST, Ark-Little Rock, Colorado ST)
+- [ ] Fix alias maps in vsinScraper.ts and ncaaScoreboard.ts for the 9 new teams
+- [x] Fix duplicate game entries in DB (Rutgers vs Michigan State, lemoyne, c_conn_st, w_georgia)
+- [x] Add michigan-st, c-conn-st, and other missing aliases to HREF_SLUG_MAP in vsinScraper.ts
+- [x] Add slugsMatch() fuzzy fallback to vsinAutoRefresh to prevent future duplicate inserts
+- [x] Purge 4 duplicate wrong-slug rows from DB (lemoyne, c_conn_st, w_georgia, michigan_st)
+- [x] Fix PublishProjections gameDate to be dynamic (today PST, not hardcoded 2026-03-04)
+- [x] Add VSiN odds status indicator (green/red dot) on EditableGameCard header
+- [x] Fix formatMilitaryTime in PublishProjections to handle TBD gracefully (returns "TBD" not "12:BD AM EST")
+- [x] Add withOddsCount / missingOddsCount stats row to PublishProjections header
+- [x] Verify games display in VSiN page order (sortOrder) on Dashboard and PublishProjections

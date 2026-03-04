@@ -57,12 +57,14 @@ function formatTeamName(slug: string): string {
 
 // ── Time formatting ───────────────────────────────────────────────────────────
 function formatMilitaryTime(time: string): string {
-  const t = time.replace(":", "").padStart(4, "0");
-  let hours = parseInt(t.slice(0, 2));
-  const minutes = t.slice(2);
+  if (!time || time.toUpperCase() === "TBD" || !time.includes(":")) return "TBD";
+  const parts = time.split(":");
+  let hours = parseInt(parts[0], 10);
+  const minutes = parts[1]?.slice(0, 2) ?? "00";
+  if (isNaN(hours)) return "TBD";
   const ampm = hours >= 12 ? "PM" : "AM";
   hours = hours % 12 || 12;
-  return `${hours}:${minutes} ${ampm} EST`;
+  return `${hours}:${minutes} ${ampm} ET`;
 }
 
 // ── Date formatting ───────────────────────────────────────────────────────────

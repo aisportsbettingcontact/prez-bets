@@ -3,37 +3,80 @@
  *
  * Schedules a background job that runs every 30 minutes from 6am–midnight PST.
  *
- * On each tick it scrapes the VSiN CBB betting splits page and handles each
- * scraped game based on its date relative to today (PST):
+ * On each tick it scrapes the VSiN CBB betting splits page and performs a
+ * FULLY IDEMPOTENT upsert for every game on the page:
  *
- *   PAST games    → ignored entirely
- *   TODAY games   → update book odds + sortOrder in DB for matching staging games
- *   FUTURE games  → auto-import as unpublished stubs if not already in DB
- *                   (model fields null, book odds null until VSiN has them)
+ *   PAST games    → ignored entirely (before today PST)
+ *   TODAY games   → upsert: update book odds + sortOrder if exists, INSERT if missing
+ *   FUTURE games  → upsert: update odds + sortOrder if exists, INSERT stub if missing
+ *
+ * This guarantees that every game on VSiN is always in the DB, regardless of
+ * how the game was originally imported or whether it was missed before.
  *
  * The last refresh result is stored in memory and exposed via
- * `trpc.books.lastRefresh` so the UI can show "Last updated HH:MM".
+ * `trpc.games.lastRefresh` so the UI can show "Last updated HH:MM".
  */
 
 import { listGamesByDate, updateBookOdds, insertGames } from "./db";
-import { scrapeVsinOdds, matchTeam, normalizeTeamName } from "./vsinScraper";
+import { scrapeVsinOdds } from "./vsinScraper";
 import { fetchNcaaGames, buildStartTimeMap } from "./ncaaScoreboard";
 import type { InsertGame } from "../drizzle/schema";
 
 const INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 export interface RefreshResult {
-  refreshedAt: string;  // ISO timestamp
-  todayUpdated: number; // today's games matched + written
-  todayTotal: number;   // today's games on VSiN
-  futureImported: number; // new future games inserted
-  gameDate: string;     // today YYYY-MM-DD (PST)
+  refreshedAt: string;    // ISO timestamp
+  updated: number;        // games matched + updated
+  inserted: number;       // new games inserted
+  total: number;          // total VSiN games processed (today + future)
+  gameDate: string;       // today YYYY-MM-DD (PST)
 }
 
 let lastRefreshResult: RefreshResult | null = null;
 
 export function getLastRefreshResult(): RefreshResult | null {
   return lastRefreshResult;
+}
+
+/**
+ * Returns true if two team slugs refer to the same team.
+ * Handles common suffix variations: _state/_st, _connecticut/_conn_st, etc.
+ * Used as a fallback when exact slug match fails (e.g. legacy rows with old slugs).
+ */
+function slugsMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  // Normalize both: lowercase, strip non-alphanumeric except underscore
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+  const na = norm(a);
+  const nb = norm(b);
+  if (na === nb) return true;
+  // Common suffix aliases
+  const aliases: Record<string, string> = {
+    michigan_st: "michigan_state",
+    ohio_st: "ohio_state",
+    penn_st: "penn_state",
+    florida_st: "florida_state",
+    colorado_st: "colorado_state",
+    cleveland_st: "cleveland_state",
+    chicago_st: "chicago_state",
+    georgia_st: "georgia_state",
+    youngstown_st: "youngstown_state",
+    wright_st: "wright_state",
+    iowa_st: "iowa_state",
+    c_conn_st: "central_connecticut",
+    lemoyne: "le_moyne",
+    w_georgia: "west_georgia",
+    liu_brooklyn: "liu",
+    n_alabama: "north_alabama",
+    fl_gulf_coast: "florida_gulf_coast",
+    e_kentucky: "eastern_kentucky",
+    n_florida: "north_florida",
+    n_kentucky: "northern_kentucky",
+    sc_upstate: "south_carolina_upstate",
+    e_illinois: "eastern_illinois",
+  };
+  const resolve = (s: string) => aliases[s] ?? s;
+  return resolve(na) === resolve(nb);
 }
 
 /** Returns true if the current moment is inside 6am–midnight Pacific Time. */
@@ -67,105 +110,101 @@ function yyyymmddToIso(s: string): string {
 }
 
 /**
- * Core refresh logic.
+ * Core refresh logic — fully idempotent upsert of all VSiN games.
  * Safe to call at any time; errors are caught and logged.
  */
 export async function runVsinRefresh(): Promise<RefreshResult | null> {
-  const todayStr = datePst();          // e.g. "2026-03-04"
-  const tomorrowStr = datePst(1);      // e.g. "2026-03-05"
-  // Any date before today is "past"
-  const todayLabel = todayStr.replace(/-/g, "");   // "20260304"
+  const todayStr = datePst(); // e.g. "2026-03-04"
 
   console.log(`[VSiNAutoRefresh] Starting refresh — today: ${todayStr}`);
 
   try {
-    // Scrape ALL games currently on VSiN (no date filter — we get everything)
+    // Scrape ALL games currently on VSiN (no date filter)
     const allScraped = await scrapeVsinOdds("ALL");
-
-    // Fetch NCAA start times for today and tomorrow (best-effort, non-fatal)
-    let startTimeMaps: Map<string, Map<string, string>> = new Map();
-    try {
-      for (const dateStr of [todayStr, datePst(1)]) {
-        const yyyymmdd = dateStr.replace(/-/g, "");
-        const ncaaGames = await fetchNcaaGames(yyyymmdd);
-        startTimeMaps.set(dateStr, buildStartTimeMap(ncaaGames));
-        console.log(`[VSiNAutoRefresh] NCAA start times fetched for ${dateStr}: ${ncaaGames.length} games`);
-      }
-    } catch (ncaaErr) {
-      console.warn("[VSiNAutoRefresh] NCAA start time fetch failed (non-fatal):", ncaaErr);
-    }
 
     if (allScraped.length === 0) {
       console.log("[VSiNAutoRefresh] No games returned from VSiN — skipping.");
       return null;
     }
 
-    // Partition scraped games by date
-    const todayGames   = allScraped.filter(g => yyyymmddToIso(String(g.gameDate ?? "")) === todayStr);
-    const futureGames  = allScraped.filter(g => {
+    // Partition scraped games by date — ignore past dates
+    const relevantGames = allScraped.filter(g => {
       const d = yyyymmddToIso(String(g.gameDate ?? ""));
-      return d > todayStr;
+      return d >= todayStr; // today or future
     });
-    // Past games are simply ignored
 
     console.log(
       `[VSiNAutoRefresh] Scraped: ${allScraped.length} total | ` +
-      `${todayGames.length} today | ${futureGames.length} future`
+      `${relevantGames.length} relevant (today + future) | ` +
+      `${allScraped.length - relevantGames.length} past (ignored)`
     );
 
-    // ── 1. Update today's book odds ──────────────────────────────────────────
-    let todayUpdated = 0;
-    if (todayGames.length > 0) {
-      const dbGames = await listGamesByDate(todayStr);
-      for (const game of dbGames) {
-        const match = todayGames.find(
-          s => matchTeam(s.awayTeam, game.awayTeam) && matchTeam(s.homeTeam, game.homeTeam)
-        );
-        if (match) {
-          const startTimeMap = startTimeMaps.get(todayStr);
-          const startTimeKey = `${game.awayTeam}@${game.homeTeam}`;
-          const startTimeEst = startTimeMap?.get(startTimeKey);
-          await updateBookOdds(game.id, {
-            awayBookSpread: match.awaySpread,
-            homeBookSpread: match.homeSpread,
-            bookTotal: match.total,
-            sortOrder: match.vsinRowIndex,
-            ...(startTimeEst ? { startTimeEst } : {}),
-          });
-          todayUpdated++;
-        }
+    // Group relevant games by date
+    const dateSet = Array.from(new Set(relevantGames.map(g => yyyymmddToIso(String(g.gameDate ?? "")))));
+
+    // Fetch NCAA start times for each relevant date (best-effort, non-fatal)
+    const startTimeMaps = new Map<string, Map<string, string>>();
+    for (const dateStr of dateSet) {
+      try {
+        const yyyymmdd = dateStr.replace(/-/g, "");
+        const ncaaGames = await fetchNcaaGames(yyyymmdd);
+        startTimeMaps.set(dateStr, buildStartTimeMap(ncaaGames));
+        console.log(`[VSiNAutoRefresh] NCAA start times: ${ncaaGames.length} games for ${dateStr}`);
+      } catch (ncaaErr) {
+        console.warn(`[VSiNAutoRefresh] NCAA fetch failed for ${dateStr} (non-fatal):`, ncaaErr);
       }
     }
 
-    // ── 2. Auto-import future games not yet in DB ────────────────────────────
-    let futureImported = 0;
-    // Group future games by date
-    const futureDates = Array.from(new Set(futureGames.map(g => yyyymmddToIso(String(g.gameDate ?? "")))));
+    let totalUpdated = 0;
+    let totalInserted = 0;
 
-    for (const futureDate of futureDates) {
-      const gamesForDate = futureGames.filter(
-        g => yyyymmddToIso(String(g.gameDate ?? "")) === futureDate
+    // Process each date group
+    for (const dateStr of dateSet) {
+      const gamesForDate = relevantGames.filter(
+        g => yyyymmddToIso(String(g.gameDate ?? "")) === dateStr
       );
-      const existing = await listGamesByDate(futureDate);
+
+      // Load existing DB games for this date
+      const existing = await listGamesByDate(dateStr);
+      const startTimeMap = startTimeMaps.get(dateStr);
 
       for (const scraped of gamesForDate) {
-        // Check if this matchup is already in DB
-        const alreadyExists = existing.some(
-          e => matchTeam(scraped.awayTeam, e.awayTeam) && matchTeam(scraped.homeTeam, e.homeTeam)
+        // Use href-derived slugs (deterministic) instead of fuzzy name matching
+        const awaySlug = scraped.awaySlug;
+        const homeSlug = scraped.homeSlug;
+
+        // Look for a matching existing game by slug.
+        // Primary: exact slug match.
+        // Fallback: fuzzy match by normalizing both sides (handles legacy rows with old slugs).
+        // This prevents duplicate inserts when slug aliases are updated.
+        const existingGame = existing.find(
+          e => e.awayTeam === awaySlug && e.homeTeam === homeSlug
+        ) ?? existing.find(
+          e => slugsMatch(e.awayTeam, awaySlug) && slugsMatch(e.homeTeam, homeSlug)
         );
 
-        if (!alreadyExists) {
-          // Insert as unpublished stub
-          const futureStartTimeMap = startTimeMaps.get(futureDate);
-          const futureStartKey = `${normalizeTeamName(scraped.awayTeam)}@${normalizeTeamName(scraped.homeTeam)}`;
-          const futureStartTime = futureStartTimeMap?.get(futureStartKey) ?? "TBD";
+        // Resolve start time from NCAA data
+        const startTimeKey = `${awaySlug}@${homeSlug}`;
+        const startTimeEst = startTimeMap?.get(startTimeKey);
 
+        if (existingGame) {
+          // UPDATE: game already in DB — update book odds, sortOrder, and start time
+          await updateBookOdds(existingGame.id, {
+            awayBookSpread: scraped.awaySpread,
+            homeBookSpread: scraped.homeSpread,
+            bookTotal: scraped.total,
+            sortOrder: scraped.vsinRowIndex,
+            ...(startTimeEst ? { startTimeEst } : {}),
+          });
+          totalUpdated++;
+        } else {
+          // INSERT: game not in DB — create as unpublished stub
           const row: InsertGame = {
             fileId: 0,
-            gameDate: futureDate,
-            startTimeEst: futureStartTime,
-            awayTeam: normalizeTeamName(scraped.awayTeam),
-            homeTeam: normalizeTeamName(scraped.homeTeam),
+            gameDate: dateStr,
+            startTimeEst: startTimeEst ?? "TBD",
+            awayTeam: awaySlug,
+            homeTeam: homeSlug,
             awayBookSpread: scraped.awaySpread !== null ? String(scraped.awaySpread) : null,
             homeBookSpread: scraped.homeSpread !== null ? String(scraped.homeSpread) : null,
             bookTotal: scraped.total !== null ? String(scraped.total) : null,
@@ -184,39 +223,32 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
             sortOrder: scraped.vsinRowIndex,
           };
           await insertGames([row]);
-          futureImported++;
+          totalInserted++;
           console.log(
-            `[VSiNAutoRefresh] Imported future game: ${scraped.awayTeam} @ ${scraped.homeTeam} (${futureDate})`
+            `[VSiNAutoRefresh] Inserted: ${scraped.awayTeam} @ ${scraped.homeTeam} (${dateStr}) [slugs: ${awaySlug}@${homeSlug}]`
           );
-        } else {
-          // Update odds for existing future game if VSiN now has them
-          const existing_game = existing.find(
-            e => matchTeam(scraped.awayTeam, e.awayTeam) && matchTeam(scraped.homeTeam, e.homeTeam)
-          );
-          if (existing_game && (scraped.awaySpread !== null || scraped.total !== null)) {
-            await updateBookOdds(existing_game.id, {
-              awayBookSpread: scraped.awaySpread,
-              homeBookSpread: scraped.homeSpread,
-              bookTotal: scraped.total,
-              sortOrder: scraped.vsinRowIndex,
-            });
-          }
         }
       }
+
+      console.log(
+        `[VSiNAutoRefresh] ${dateStr}: ${gamesForDate.length} VSiN games → ` +
+        `${gamesForDate.filter(g => existing.some(e => e.awayTeam === g.awaySlug && e.homeTeam === g.homeSlug)).length} updated, ` +
+        `${gamesForDate.filter(g => !existing.some(e => e.awayTeam === g.awaySlug && e.homeTeam === g.homeSlug)).length} inserted`
+      );
     }
 
     const result: RefreshResult = {
       refreshedAt: new Date().toISOString(),
-      todayUpdated,
-      todayTotal: todayGames.length,
-      futureImported,
+      updated: totalUpdated,
+      inserted: totalInserted,
+      total: relevantGames.length,
       gameDate: todayStr,
     };
 
     lastRefreshResult = result;
     console.log(
-      `[VSiNAutoRefresh] Done — today: ${todayUpdated}/${todayGames.length} updated, ` +
-      `future: ${futureImported} new games imported.`
+      `[VSiNAutoRefresh] Done — ${totalUpdated} updated, ${totalInserted} inserted, ` +
+      `${relevantGames.length} total VSiN games processed.`
     );
     return result;
   } catch (err) {

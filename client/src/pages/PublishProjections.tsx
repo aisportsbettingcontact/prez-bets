@@ -50,12 +50,14 @@ function formatTeamName(slug: string): string {
 }
 
 function formatMilitaryTime(time: string): string {
-  const t = time.replace(":", "").padStart(4, "0");
-  let hours = parseInt(t.slice(0, 2));
-  const minutes = t.slice(2);
+  if (!time || time.toUpperCase() === "TBD" || !time.includes(":")) return "TBD";
+  const parts = time.split(":");
+  let hours = parseInt(parts[0], 10);
+  const minutes = parts[1]?.slice(0, 2) ?? "00";
+  if (isNaN(hours)) return "TBD";
   const ampm = hours >= 12 ? "PM" : "AM";
   hours = hours % 12 || 12;
-  return `${hours}:${minutes} ${ampm} EST`;
+  return `${hours}:${minutes} ${ampm} ET`;
 }
 
 function formatDate(dateStr: string): string {
@@ -521,6 +523,7 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
   const dateLabel = formatDate(game.gameDate);
 
   const hasAnyModel = awaySpread !== "" || modelTotal !== "";
+  const hasOdds = !isNaN(awayBookSpread) || !isNaN(bookTotal);
 
   return (
     <motion.div
@@ -564,6 +567,12 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
         <span className="text-xs font-medium" style={{ color: "hsl(var(--muted-foreground))" }}>
           {time}
         </span>
+        {/* VSiN odds status indicator */}
+        <span
+          title={hasOdds ? "VSiN odds loaded" : "No VSiN odds yet"}
+          className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
+          style={{ background: hasOdds ? "#39FF14" : "#FF3131", marginLeft: 2 }}
+        />
         {game.gameType === "conference_tournament" && game.conference && (
           <>
             <span className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>·</span>
@@ -681,7 +690,18 @@ export default function PublishProjections() {
   const [, setLocation] = useLocation();
   const { appUser, isOwner, loading: authLoading } = useAppAuth();
   const [filter, setFilter] = useState<"all" | "regular_season" | "conference_tournament">("all");
-  const [gameDate] = useState("2026-03-04");
+  // Default to today in PST
+  const [gameDate, setGameDate] = useState(() => {
+    const now = new Date();
+    const pst = now.toLocaleDateString("en-US", {
+      timeZone: "America/Los_Angeles",
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+    });
+    const [mm, dd, yyyy] = pst.split("/");
+    return `${yyyy}-${mm}-${dd}`;
+  });
 
   // ── Strict owner-only guard ─────────────────────────────────────────────────
   useEffect(() => {
@@ -732,6 +752,8 @@ export default function PublishProjections() {
   const publishedCount  = (games ?? []).filter((g) => g.publishedToFeed).length;
   const totalCount      = games?.length ?? 0;
   const withModelCount  = (games ?? []).filter((g) => g.awayModelSpread || g.modelTotal).length;
+  const withOddsCount   = (games ?? []).filter((g) => g.awayBookSpread !== null || g.bookTotal !== null).length;
+  const missingOddsCount = totalCount - withOddsCount;
 
   // Show loading spinner while auth resolves
   if (authLoading) {
@@ -805,6 +827,10 @@ export default function PublishProjections() {
             <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>·</span>
             <span className="text-[11px]" style={{ color: "#FFB800" }}>
               {withModelCount} with model data
+            </span>
+            <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>·</span>
+            <span className="text-[11px]" style={{ color: withOddsCount === totalCount ? "#39FF14" : missingOddsCount > 0 ? "#FF6B00" : "hsl(var(--muted-foreground))" }}>
+              {withOddsCount}/{totalCount} w/ odds{missingOddsCount > 0 ? ` (${missingOddsCount} missing)` : ""}
             </span>
             {lastRefresh?.refreshedAt && (
               <>
