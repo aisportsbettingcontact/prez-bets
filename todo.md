@@ -167,3 +167,4 @@
 - [x] Publish All: only publish games that have live VSiN odds
 - [x] Feed: show ALL games with live VSiN odds (remove publishedToFeed filter from listGames)
 - [x] GameCard: show model projections (MODEL LINE/O/U/edge) only when publishedToFeed=true, otherwise show dashes
+- [x] Fix missing team logos in PublishProjections EditableGameCard (logos show on feed but not admin page)
