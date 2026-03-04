@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startEspnSyncSchedule } from "../espnScraper";
 import { startDailyPurgeSchedule } from "../dailyPurge";
+import { registerRefreshBooksRoute } from "../refreshBooksRoute";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,6 +38,8 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  // SSE: live book odds refresh
+  registerRefreshBooksRoute(app);
   // tRPC API
   app.use(
     "/api/trpc",
