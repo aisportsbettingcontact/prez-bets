@@ -110,6 +110,8 @@ export const games = mysqlTable("games", {
   rotNums: varchar("rotNums", { length: 32 }),
   /** WagerTalk display order — lower number appears first */
   sortOrder: int("sortOrder").notNull().default(9999),
+  /** NCAA contest ID (unique per game) — used to dedup NCAA-only games (e.g. TBA vs TBA) */
+  ncaaContestId: varchar("ncaaContestId", { length: 20 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

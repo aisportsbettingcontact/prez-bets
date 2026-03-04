@@ -3,31 +3,36 @@
  *
  * Schedules a background job that runs every 30 minutes from 6am–midnight PST.
  *
- * On each tick it scrapes the VSiN CBB betting splits page and performs a
- * FULLY IDEMPOTENT upsert for every game on the page:
+ * On each tick it:
+ *   1. Scrapes the VSiN CBB betting splits page and upserts every game on the page
+ *      (book odds + sortOrder + start time from NCAA).
+ *   2. Fetches ALL NCAA DI MBB games for 03/04–03/10 and inserts any that are not
+ *      already in the DB (including TBA vs TBA games), using ncaaContestId as the
+ *      dedup key. VSiN-matched games are skipped (already handled in step 1).
  *
- *   PAST games    → ignored entirely (before today PST)
- *   TODAY games   → upsert: update book odds + sortOrder if exists, INSERT if missing
- *   FUTURE games  → upsert: update odds + sortOrder if exists, INSERT stub if missing
- *
- * This guarantees that every game on VSiN is always in the DB, regardless of
- * how the game was originally imported or whether it was missed before.
+ * This guarantees that every game on NCAA.com is always in the DB, regardless of
+ * whether VSiN has odds for it.
  *
  * The last refresh result is stored in memory and exposed via
  * `trpc.games.lastRefresh` so the UI can show "Last updated HH:MM".
  */
 
-import { listGamesByDate, updateBookOdds, insertGames } from "./db";
+import { listGamesByDate, updateBookOdds, insertGames, getGameByNcaaContestId, updateNcaaStartTime } from "./db";
 import { scrapeVsinOdds } from "./vsinScraper";
 import { fetchNcaaGames, buildStartTimeMap } from "./ncaaScoreboard";
 import type { InsertGame } from "../drizzle/schema";
 
 const INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
+// Date range to populate from NCAA (inclusive)
+const NCAA_RANGE_START = "2026-03-04";
+const NCAA_RANGE_END   = "2026-03-10";
+
 export interface RefreshResult {
   refreshedAt: string;    // ISO timestamp
-  updated: number;        // games matched + updated
-  inserted: number;       // new games inserted
+  updated: number;        // games matched + updated (VSiN)
+  inserted: number;       // new games inserted (VSiN stubs)
+  ncaaInserted: number;   // new NCAA-only games inserted
   total: number;          // total VSiN games processed (today + future)
   gameDate: string;       // today YYYY-MM-DD (PST)
 }
@@ -109,8 +114,24 @@ function yyyymmddToIso(s: string): string {
   return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
 }
 
+/** Generate all dates in a range [start, end] inclusive as YYYY-MM-DD strings */
+function dateRange(start: string, end: string): string[] {
+  const dates: string[] = [];
+  const cur = new Date(start + "T00:00:00Z");
+  const endDate = new Date(end + "T00:00:00Z");
+  while (cur <= endDate) {
+    const y = cur.getUTCFullYear();
+    const m = String(cur.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(cur.getUTCDate()).padStart(2, "0");
+    dates.push(`${y}-${m}-${d}`);
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return dates;
+}
+
 /**
- * Core refresh logic — fully idempotent upsert of all VSiN games.
+ * Core refresh logic — fully idempotent upsert of all VSiN games,
+ * plus insertion of all NCAA games for 03/04–03/10.
  * Safe to call at any time; errors are caught and logged.
  */
 export async function runVsinRefresh(): Promise<RefreshResult | null> {
@@ -119,12 +140,13 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
   console.log(`[VSiNAutoRefresh] Starting refresh — today: ${todayStr}`);
 
   try {
+    // ── STEP 1: VSiN odds upsert ──────────────────────────────────────────────
+
     // Scrape ALL games currently on VSiN (no date filter)
     const allScraped = await scrapeVsinOdds("ALL");
 
     if (allScraped.length === 0) {
-      console.log("[VSiNAutoRefresh] No games returned from VSiN — skipping.");
-      return null;
+      console.log("[VSiNAutoRefresh] No games returned from VSiN — skipping VSiN step.");
     }
 
     // Partition scraped games by date — ignore past dates
@@ -134,22 +156,27 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     });
 
     console.log(
-      `[VSiNAutoRefresh] Scraped: ${allScraped.length} total | ` +
+      `[VSiNAutoRefresh] VSiN scraped: ${allScraped.length} total | ` +
       `${relevantGames.length} relevant (today + future) | ` +
       `${allScraped.length - relevantGames.length} past (ignored)`
     );
 
     // Group relevant games by date
-    const dateSet = Array.from(new Set(relevantGames.map(g => yyyymmddToIso(String(g.gameDate ?? "")))));
+    const vsinDateSet = Array.from(new Set(relevantGames.map(g => yyyymmddToIso(String(g.gameDate ?? "")))));
 
-    // Fetch NCAA start times for each relevant date (best-effort, non-fatal)
+    // Fetch NCAA start times for each relevant VSiN date (best-effort, non-fatal)
     const startTimeMaps = new Map<string, Map<string, string>>();
-    for (const dateStr of dateSet) {
+    const ncaaGamesByDate = new Map<string, Awaited<ReturnType<typeof fetchNcaaGames>>>();
+
+    // Fetch NCAA data for all dates in the full range (03/04–03/10)
+    const allDates = dateRange(NCAA_RANGE_START, NCAA_RANGE_END);
+    for (const dateStr of allDates) {
       try {
         const yyyymmdd = dateStr.replace(/-/g, "");
         const ncaaGames = await fetchNcaaGames(yyyymmdd);
         startTimeMaps.set(dateStr, buildStartTimeMap(ncaaGames));
-        console.log(`[VSiNAutoRefresh] NCAA start times: ${ncaaGames.length} games for ${dateStr}`);
+        ncaaGamesByDate.set(dateStr, ncaaGames);
+        console.log(`[VSiNAutoRefresh] NCAA: ${ncaaGames.length} games for ${dateStr}`);
       } catch (ncaaErr) {
         console.warn(`[VSiNAutoRefresh] NCAA fetch failed for ${dateStr} (non-fatal):`, ncaaErr);
       }
@@ -158,8 +185,8 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     let totalUpdated = 0;
     let totalInserted = 0;
 
-    // Process each date group
-    for (const dateStr of dateSet) {
+    // Process each VSiN date group
+    for (const dateStr of vsinDateSet) {
       const gamesForDate = relevantGames.filter(
         g => yyyymmddToIso(String(g.gameDate ?? "")) === dateStr
       );
@@ -187,8 +214,14 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
         const startTimeKey = `${awaySlug}@${homeSlug}`;
         const startTimeEst = startTimeMap?.get(startTimeKey);
 
+        // Find the NCAA contestId for this matchup (to store for dedup)
+        const ncaaGame = ncaaGamesByDate.get(dateStr)?.find(
+          g => g.awaySeoname === awaySlug && g.homeSeoname === homeSlug
+        );
+        const ncaaContestId = ncaaGame?.contestId ?? null;
+
         if (existingGame) {
-          // UPDATE: game already in DB — update book odds, sortOrder, and start time
+          // UPDATE: game already in DB — update book odds, sortOrder, start time, and contestId
           await updateBookOdds(existingGame.id, {
             awayBookSpread: scraped.awaySpread,
             homeBookSpread: scraped.homeSpread,
@@ -196,6 +229,13 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
             sortOrder: scraped.vsinRowIndex,
             ...(startTimeEst ? { startTimeEst } : {}),
           });
+          // Also update ncaaContestId if we found one and it's not set yet
+          if (ncaaContestId && !existingGame.ncaaContestId) {
+            await updateNcaaStartTime(existingGame.id, {
+              startTimeEst: startTimeEst ?? existingGame.startTimeEst,
+              ncaaContestId,
+            });
+          }
           totalUpdated++;
         } else {
           // INSERT: game not in DB — create as unpublished stub
@@ -221,11 +261,12 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
             publishedToFeed: false,
             rotNums: null,
             sortOrder: scraped.vsinRowIndex,
+            ncaaContestId: ncaaContestId ?? null,
           };
           await insertGames([row]);
           totalInserted++;
           console.log(
-            `[VSiNAutoRefresh] Inserted: ${scraped.awayTeam} @ ${scraped.homeTeam} (${dateStr}) [slugs: ${awaySlug}@${homeSlug}]`
+            `[VSiNAutoRefresh] Inserted VSiN: ${scraped.awayTeam} @ ${scraped.homeTeam} (${dateStr}) [slugs: ${awaySlug}@${homeSlug}]`
           );
         }
       }
@@ -237,18 +278,90 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
       );
     }
 
+    // ── STEP 2: NCAA-only game insertion (all games for 03/04–03/10) ──────────
+    // Insert any NCAA game that isn't already in the DB (by contestId or slug match).
+    // This covers games that VSiN doesn't have odds for (including TBA vs TBA).
+
+    let ncaaInserted = 0;
+
+    for (const dateStr of allDates) {
+      // Only process today and future dates
+      if (dateStr < todayStr) continue;
+
+      const ncaaGames = ncaaGamesByDate.get(dateStr) ?? [];
+      if (ncaaGames.length === 0) continue;
+
+      // Load existing DB games for this date (fresh after VSiN step)
+      const existing = await listGamesByDate(dateStr);
+
+      for (const ncaaGame of ncaaGames) {
+        const { contestId, awaySeoname, homeSeoname, startTimeEst } = ncaaGame;
+
+        // Skip if already in DB by contestId
+        const byContestId = await getGameByNcaaContestId(contestId);
+        if (byContestId) continue;
+
+        // Skip if already in DB by slug match (VSiN inserted it without contestId)
+        const bySlug = existing.find(
+          e => slugsMatch(e.awayTeam, awaySeoname) && slugsMatch(e.homeTeam, homeSeoname)
+        );
+        if (bySlug) {
+          // Update the contestId on the existing row so future lookups are fast
+          if (!bySlug.ncaaContestId) {
+            await updateNcaaStartTime(bySlug.id, {
+              startTimeEst: startTimeEst !== "TBD" ? startTimeEst : bySlug.startTimeEst,
+              ncaaContestId: contestId,
+            });
+          }
+          continue;
+        }
+
+        // Insert as NCAA-only stub (no VSiN odds, sortOrder = 9999 so it sorts after VSiN games)
+        const row: InsertGame = {
+          fileId: 0,
+          gameDate: dateStr,
+          startTimeEst: startTimeEst ?? "TBD",
+          awayTeam: awaySeoname,
+          homeTeam: homeSeoname,
+          awayBookSpread: null,
+          homeBookSpread: null,
+          bookTotal: null,
+          awayModelSpread: null,
+          homeModelSpread: null,
+          modelTotal: null,
+          spreadEdge: null,
+          spreadDiff: null,
+          totalEdge: null,
+          totalDiff: null,
+          sport: "NCAAM",
+          gameType: "regular_season",
+          conference: null,
+          publishedToFeed: false,
+          rotNums: null,
+          sortOrder: 9999,
+          ncaaContestId: contestId,
+        };
+        await insertGames([row]);
+        ncaaInserted++;
+        console.log(
+          `[VSiNAutoRefresh] Inserted NCAA-only: ${awaySeoname} @ ${homeSeoname} (${dateStr}) [contestId: ${contestId}]`
+        );
+      }
+    }
+
     const result: RefreshResult = {
       refreshedAt: new Date().toISOString(),
       updated: totalUpdated,
       inserted: totalInserted,
+      ncaaInserted,
       total: relevantGames.length,
       gameDate: todayStr,
     };
 
     lastRefreshResult = result;
     console.log(
-      `[VSiNAutoRefresh] Done — ${totalUpdated} updated, ${totalInserted} inserted, ` +
-      `${relevantGames.length} total VSiN games processed.`
+      `[VSiNAutoRefresh] Done — ${totalUpdated} VSiN updated, ${totalInserted} VSiN inserted, ` +
+      `${ncaaInserted} NCAA-only inserted.`
     );
     return result;
   } catch (err) {

@@ -13,9 +13,11 @@ const GET_CONTESTS_SHA =
   "7287cda610a9326931931080cb3a604828febe6fe3c9016a7e4a36db99efdb7c";
 
 export interface NcaaGame {
-  /** DB-style slug for away team, e.g. "ohio_state" */
+  /** NCAA contest ID — unique per game, used as dedup key */
+  contestId: string;
+  /** DB-style slug for away team, e.g. "ohio_state" ("tba" if unknown) */
   awaySeoname: string;
-  /** DB-style slug for home team, e.g. "penn_state" */
+  /** DB-style slug for home team, e.g. "penn_state" ("tba" if unknown) */
   homeSeoname: string;
   /** Start time in EST as "HH:MM", e.g. "19:30" */
   startTimeEst: string;
@@ -177,9 +179,14 @@ export async function fetchNcaaGames(dateYYYYMMDD: string): Promise<NcaaGame[]> 
       startTimeEst = "TBD";
     }
 
+    // Handle TBA teams — keep as "tba" slug
+    const awaySeoname = away.seoname === "tba" ? "tba" : ncaaSlugToDb(away.seoname);
+    const homeSeoname = home.seoname === "tba" ? "tba" : ncaaSlugToDb(home.seoname);
+
     games.push({
-      awaySeoname: ncaaSlugToDb(away.seoname),
-      homeSeoname: ncaaSlugToDb(home.seoname),
+      contestId: String(c.contestId),
+      awaySeoname,
+      homeSeoname,
       startTimeEst,
       hasStartTime: c.hasStartTime ?? false,
       startTimeEpoch: c.startTimeEpoch,

@@ -377,6 +377,28 @@ export async function listStagingGamesRange(fromDate: string, toDate: string) {
     .orderBy(games.gameDate, games.sortOrder, games.startTimeEst);
 }
 
+/** Look up a game by its NCAA contest ID (for dedup during NCAA-only insert) */
+export async function getGameByNcaaContestId(contestId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(games)
+    .where(eq(games.ncaaContestId, contestId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Update start time and ncaaContestId for a game (used when NCAA data arrives after VSiN insert) */
+export async function updateNcaaStartTime(
+  id: number,
+  data: { startTimeEst: string; ncaaContestId: string }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(games).set(data).where(eq(games.id, id));
+}
+
 /** Bulk publish all staging games for a date */
 export async function publishAllStagingGames(gameDate: string) {
   const db = await getDb();
