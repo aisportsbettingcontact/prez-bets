@@ -100,6 +100,12 @@ function toNum(v: string | number | null | undefined): number {
   return typeof v === "number" ? v : parseFloat(v);
 }
 
+// ── Safe display helper: returns "-" for NaN/null/undefined ───────────────────
+function dash(v: number, prefix = ""): string {
+  if (isNaN(v)) return "-";
+  return prefix ? `${prefix} ${v}` : `${v}`;
+}
+
 // ── Normalize edge label (matches reference normalizeEdgeLabel) ───────────────
 function normalizeEdgeLabel(label: string | null | undefined): string {
   if (!label || label.toUpperCase() === "PASS") return "PASS";
@@ -513,7 +519,7 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
                 <span style="font-size:15px;font-weight:700;color:#FFFFFF;">${spreadSign(awayModelSpread)}</span>
               </div>
               <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:4px 6px;display:flex;align-items:center;justify-content:center;">
-                <span style="font-size:15px;font-weight:700;color:#FFFFFF;">O ${modelTotal}</span>
+                <span style="font-size:15px;font-weight:700;color:#FFFFFF;">${isNaN(modelTotal) ? "-" : `O ${modelTotal}`}</span>
               </div>
             </div>
           </div>
@@ -533,7 +539,7 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
                 <span style="font-size:15px;font-weight:700;color:#FFFFFF;">${spreadSign(homeModelSpread)}</span>
               </div>
               <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:4px 6px;display:flex;align-items:center;justify-content:center;">
-                <span style="font-size:15px;font-weight:700;color:#FFFFFF;">U ${modelTotal}</span>
+                <span style="font-size:15px;font-weight:700;color:#FFFFFF;">${isNaN(modelTotal) ? "-" : `U ${modelTotal}`}</span>
               </div>
             </div>
           </div>
