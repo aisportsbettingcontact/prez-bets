@@ -680,8 +680,8 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
             name={awayName}
             nickname={awayNickname}
             consensus={awayConsensus}
-            modelSpread={spreadSign(awayModelSpread)}
-            modelTotal={isNaN(modelTotal) ? "—" : `O ${modelTotal}`}
+            modelSpread={game.publishedToFeed ? spreadSign(awayModelSpread) : "—"}
+            modelTotal={game.publishedToFeed ? (isNaN(modelTotal) ? "—" : `O ${modelTotal}`) : "—"}
             logoUrl={awayLogoUrl}
           />
 
@@ -693,13 +693,13 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
             name={homeName}
             nickname={homeNickname}
             consensus={homeConsensus}
-            modelSpread={spreadSign(homeModelSpread)}
-            modelTotal={isNaN(modelTotal) ? "—" : `U ${modelTotal}`}
+            modelSpread={game.publishedToFeed ? spreadSign(homeModelSpread) : "—"}
+            modelTotal={game.publishedToFeed ? (isNaN(modelTotal) ? "—" : `U ${modelTotal}`) : "—"}
             logoUrl={homeLogoUrl}
           />
 
-          {/* Edge verdict — only shown when model projections are available */}
-          {(!isNaN(spreadDiff) || !isNaN(totalDiff)) && (
+          {/* Edge verdict — only shown when model projections are published */}
+          {game.publishedToFeed && (!isNaN(spreadDiff) || !isNaN(totalDiff)) && (
             <EdgeVerdict
               spreadDiff={isNaN(spreadDiff) ? null : spreadDiff}
               spreadEdge={computedSpreadEdge}

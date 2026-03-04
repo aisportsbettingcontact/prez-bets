@@ -174,8 +174,7 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }) {
 
   if (opts?.sport) conditions.push(eq(games.sport, opts.sport));
 
-  // Public feed: only show published games that have live VSiN odds
-  conditions.push(eq(games.publishedToFeed, true));
+  // Public feed: show all games that have live VSiN odds (regardless of publishedToFeed)
   conditions.push(or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!);
 
   return db

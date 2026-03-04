@@ -165,3 +165,5 @@
 - [x] Feed: only show games with live VSiN odds (awayBookSpread or bookTotal not null)
 - [x] Publish Projections: block publish toggle for games without live VSiN odds
 - [x] Publish All: only publish games that have live VSiN odds
+- [x] Feed: show ALL games with live VSiN odds (remove publishedToFeed filter from listGames)
+- [x] GameCard: show model projections (MODEL LINE/O/U/edge) only when publishedToFeed=true, otherwise show dashes
