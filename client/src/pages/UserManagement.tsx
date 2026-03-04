@@ -242,6 +242,24 @@ function ColFilterDropdown({
   );
 }
 
+// ── Sort helpers ─────────────────────────────────────────────────────────────
+const ROLE_ORDER: Record<string, number> = { owner: 0, admin: 1, user: 2 };
+
+function getSortValue(u: AppUserRow, key: ColKey): string | number {
+  switch (key) {
+    case "username": return `@${u.username}`.toLowerCase();
+    case "email": return u.email.toLowerCase();
+    case "role": return ROLE_ORDER[u.role] ?? 99;
+    case "access": return u.hasAccess ? 0 : 1;
+    case "expiry":
+      // null = Lifetime → treated as Infinity so it sorts last on asc
+      return u.expiryDate === null ? Infinity : u.expiryDate;
+    case "terms": return u.termsAccepted ? 0 : 1;
+    case "lastSignIn":
+      return u.lastSignedIn ? new Date(u.lastSignedIn).getTime() : 0;
+  }
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function UserManagement() {
   const { appUser, loading } = useAppAuth();
@@ -251,6 +269,7 @@ export default function UserManagement() {
   const [deleteConfirm, setDeleteConfirm] = useState<AppUserRow | null>(null);
   const [form, setForm] = useState<FormState>(defaultForm);
   const [showPassword, setShowPassword] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Per-column filter/sort state
   const defaultColState = (): ColState => ({ sort: null, selected: new Set() });
@@ -369,7 +388,7 @@ export default function UserManagement() {
   };
 
   // ── Apply filters + sort ──────────────────────────────────────────────────
-  function getVal(u: AppUserRow, key: ColKey): string {
+  function getDisplayVal(u: AppUserRow, key: ColKey): string {
     switch (key) {
       case "username": return `@${u.username}`;
       case "email": return u.email;
@@ -383,15 +402,23 @@ export default function UserManagement() {
 
   let users = [...rawUsers];
 
-  // Apply filters
+  // Apply search
+  if (searchQuery.trim()) {
+    const q = searchQuery.trim().toLowerCase().replace(/^@/, "");
+    users = users.filter(
+      (u) => u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    );
+  }
+
+  // Apply column filters
   (Object.keys(cols) as ColKey[]).forEach((key) => {
     const { selected } = cols[key];
     if (selected.size > 0) {
-      users = users.filter((u) => selected.has(getVal(u, key)));
+      users = users.filter((u) => selected.has(getDisplayVal(u, key)));
     }
   });
 
-  // Apply sorts — last active sort wins
+  // Apply sorts — last active sort wins, using typed sort values
   const activeSorts = (Object.keys(cols) as ColKey[])
     .filter((k) => cols[k].sort !== null)
     .map((k) => ({ key: k, dir: cols[k].sort! }));
@@ -399,8 +426,8 @@ export default function UserManagement() {
   if (activeSorts.length > 0) {
     const { key, dir } = activeSorts[activeSorts.length - 1];
     users.sort((a, b) => {
-      const av = getVal(a, key).toLowerCase();
-      const bv = getVal(b, key).toLowerCase();
+      const av = getSortValue(a, key);
+      const bv = getSortValue(b, key);
       if (av < bv) return dir === "asc" ? -1 : 1;
       if (av > bv) return dir === "asc" ? 1 : -1;
       return 0;
@@ -456,16 +483,41 @@ export default function UserManagement() {
           ))}
         </div>
 
+        {/* Search bar */}
+        <div className="mb-4 relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by username or email…"
+            className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-9 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-white/25 transition-colors"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
         {/* Filtered count indicator */}
         {users.length !== rawUsers.length && (
           <div className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
             <span>Showing <span className="text-white font-semibold">{users.length}</span> of <span className="text-white font-semibold">{rawUsers.length}</span> accounts</span>
             <button
-              onClick={() => setCols({
-                username: defaultColState(), email: defaultColState(), role: defaultColState(),
-                access: defaultColState(), expiry: defaultColState(), terms: defaultColState(),
-                lastSignIn: defaultColState(),
-              })}
+              onClick={() => {
+                setSearchQuery("");
+                setCols({
+                  username: defaultColState(), email: defaultColState(), role: defaultColState(),
+                  access: defaultColState(), expiry: defaultColState(), terms: defaultColState(),
+                  lastSignIn: defaultColState(),
+                });
+              }}
               className="text-red-400 hover:text-red-300 flex items-center gap-1"
             >
               <X className="w-3 h-3" /> Clear all filters

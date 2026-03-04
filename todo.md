@@ -86,3 +86,6 @@
 - [x] Add Stay Logged In checkbox to login form (extends session to 90 days vs 1 day)
 - [x] Gate dashboard behind app_session cookie check; redirect unauthenticated users to home
 - [x] Add per-column filter/sort dropdowns to User Management table (sort asc/desc + multi-select filter per column)
+- [x] Add search field to User Management (filter by username or email)
+- [x] Fix Role sort hierarchy: Owner→Admin→User (asc), User→Admin→Owner (desc)
+- [x] Fix Expiry sort: ascending = soonest first, Lifetime at bottom; descending = Lifetime at top
