@@ -73,9 +73,19 @@ export function registerRefreshBooksRoute(app: Express) {
 
       send({ type: "start", total: gamesWithRot.length });
 
-      // 2. Scrape WagerTalk
-      send({ type: "scraping", message: "Loading WagerTalk odds page…" });
-      const scraped = await scrapeWagerTalkNcaam();
+      // 2. Scrape WagerTalk — keep SSE alive with a heartbeat while Puppeteer loads
+      send({ type: "scraping", message: "Loading WagerTalk odds page… (up to 60s)" });
+      // Send periodic heartbeats so the browser doesn't close the SSE connection
+      const heartbeat = setInterval(() => {
+        res.write(": heartbeat\n\n");
+        if (typeof (res as any).flush === "function") (res as any).flush();
+      }, 10000);
+      let scraped;
+      try {
+        scraped = await scrapeWagerTalkNcaam();
+      } finally {
+        clearInterval(heartbeat);
+      }
       const byRotAway = new Map(scraped.map((s) => [s.rotAway, s]));
 
       // 3. Update each game and stream progress
