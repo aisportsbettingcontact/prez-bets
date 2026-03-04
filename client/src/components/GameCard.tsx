@@ -423,12 +423,16 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
   // Consensus column logic (matches reference):
   // Away row: show away book spread if away is the favorite (negative), else show book total
   // Home row: show home book spread if home is the favorite (negative), else show book total
-  const awayConsensus = awayBookSpread < 0
+  const awayConsensus = isNaN(awayBookSpread) && isNaN(bookTotal)
+    ? "—"
+    : awayBookSpread < 0
     ? spreadSign(awayBookSpread)
-    : `${bookTotal}`;
-  const homeConsensus = homeBookSpread < 0
+    : isNaN(bookTotal) ? "—" : `${bookTotal}`;
+  const homeConsensus = isNaN(homeBookSpread) && isNaN(bookTotal)
+    ? "—"
+    : homeBookSpread < 0
     ? spreadSign(homeBookSpread)
-    : `${bookTotal}`;
+    : isNaN(bookTotal) ? "—" : `${bookTotal}`;
 
   const handleCopyLink = async () => {
     try {
