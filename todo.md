@@ -142,3 +142,4 @@
 - [x] Pull James Madison game spread from VSiN
 - [x] Fix Georgia Southern opponent: TBD → old_dominion
 - [x] Audit and correct all March 4 start times in EST
+- [x] Audit and verify edge calculation math in GameCard.tsx for all scenarios

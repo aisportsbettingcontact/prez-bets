@@ -406,8 +406,14 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
   const homeModelSpread = toNum(game.homeModelSpread);
   const bookTotal = toNum(game.bookTotal);
   const modelTotal = toNum(game.modelTotal);
-  const spreadDiff = toNum(game.spreadDiff);
-  const totalDiff = toNum(game.totalDiff);
+  // Compute diffs client-side from live numbers — DB values may be stale
+  // if book odds were updated after the model file was uploaded.
+  const spreadDiff = (!isNaN(awayModelSpread) && !isNaN(awayBookSpread))
+    ? Math.abs(awayModelSpread - awayBookSpread)
+    : toNum(game.spreadDiff);
+  const totalDiff = (!isNaN(modelTotal) && !isNaN(bookTotal))
+    ? Math.abs(modelTotal - bookTotal)
+    : toNum(game.totalDiff);
 
   const awayTeamName = getTeamName(game.awayTeam);
   const homeTeamName = getTeamName(game.homeTeam);
