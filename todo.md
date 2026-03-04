@@ -111,3 +111,4 @@
 - [x] Debug: March 4 games not showing on feed — fixed by using gte(today) instead of eq(today)
 - [x] Show March 3 and March 4 games on feed grouped by date (March 4 below March 3)
 - [x] Populate ESPN team logos for all 40 March 4 WagerTalk games
+- [x] Add team nicknames for all 40 March 4 WagerTalk schools to teamNicknames.ts
