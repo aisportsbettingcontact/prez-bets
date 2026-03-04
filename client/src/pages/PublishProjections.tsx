@@ -257,22 +257,22 @@ function EditableTeamRow({
           />
         </div>
 
-        {/* MODEL O/U — editable pill on away row; mirrored read-only on home row */}
+        {/* MODEL O/U — single number; away row is editable, home row mirrors read-only */}
         <div className="flex items-center justify-center">
           {isAway ? (
+            // Away row: plain number input, no O/U prefix
             <EditablePill
               value={modelTotal}
               onChange={onTotalChange}
               placeholder="—"
-              prefix={ouPrefix}
             />
           ) : (
-            // Home row: show U + same total value (read-only mirror)
+            // Home row: show same number read-only (no prefix)
             <div
               className="flex items-center justify-center rounded-lg"
               style={{
                 background: "rgba(255,255,255,0.08)",
-                minWidth: "64px",
+                minWidth: "48px",
                 width: "100%",
                 maxWidth: "90px",
                 height: "36px",
@@ -286,7 +286,7 @@ function EditableTeamRow({
                 }}
               >
                 {modelTotal !== "" && !isNaN(parseFloat(modelTotal))
-                  ? `${ouPrefix} ${modelTotal}`
+                  ? modelTotal
                   : "—"
                 }
               </span>
