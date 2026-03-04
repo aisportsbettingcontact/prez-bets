@@ -144,17 +144,18 @@ export async function insertGames(rows: InsertGame[]) {
   await db.insert(games).values(rows);
 }
 
-/** Returns today's date in MM-DD-YYYY format using Eastern Time. */
+/** Returns today's date in YYYY-MM-DD format using Eastern Time (matches DB storage format). */
 function todayEst(): string {
   const now = new Date();
+  // toLocaleDateString gives MM/DD/YYYY in en-US locale
   const estStr = now.toLocaleDateString("en-US", {
     timeZone: "America/New_York",
     month: "2-digit",
     day: "2-digit",
     year: "numeric",
-  }); // "03/03/2026"
+  }); // e.g. "03/03/2026"
   const [mm, dd, yyyy] = estStr.split("/");
-  return `${mm}-${dd}-${yyyy}`;
+  return `${yyyy}-${mm}-${dd}`; // YYYY-MM-DD to match parseDate() output
 }
 
 export async function listGames(opts?: { sport?: string; gameDate?: string }) {

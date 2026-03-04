@@ -96,3 +96,4 @@
 - [x] Show expiry dates with full precision and EST label in User Management table
 - [x] Add 3 hours to all existing non-lifetime expiry dates in the database
 - [x] Fix game feed: only show games for today's date (EST), remove previous days' games automatically
+- [x] Fix todayEst() date format mismatch: was MM-DD-YYYY, now YYYY-MM-DD to match DB storage (parseDate output)
