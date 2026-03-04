@@ -375,6 +375,7 @@ export function matchTeam(scrapedName: string, storedSlug: string): boolean {
     uab: "uab",
     usc: "usc",
     saint_louis: "saint_louis",
+    saint_louis_25: "saint_louis",
     new_mexico: "new_mexico",
     north_texas: "north_texas",
     oral_roberts: "oral_roberts",
