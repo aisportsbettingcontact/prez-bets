@@ -398,6 +398,9 @@ const DB_SLUG_ALIASES: Record<string, string> = {
   umkc: "140",                  // DB: umkc → ESPN: kansas_city
   liu: "112358",                // DB: liu → ESPN: long_island
   st_josephs: "2603",           // DB: st_josephs → ESPN: saint_josephs
+  pittsburgh: "221",           // DB: pittsburgh → ESPN: pitt
+  cleveland_state: "325",       // DB: cleveland_state → ESPN: cleveland_st
+  florida_gulf_coast: "526",    // DB: florida_gulf_coast → ESPN: fgcu
   // No ESPN entry (new programs) — no logo available
   // lindenwood: not in ESPN
 };

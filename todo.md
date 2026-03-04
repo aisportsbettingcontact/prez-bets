@@ -115,3 +115,4 @@
 - [x] Fix Oral Roberts ESPN ID (was 2497, now 198)
 - [x] Replace NaN with '-' for games without book lines on GameCard
 - [x] Replace partial ESPN ID map with complete mapping of all NCAAM teams from ESPN (362 teams)
+- [x] Regenerate teamNicknames.ts with correct school names and mascot nicknames for all 362 NCAAM teams
