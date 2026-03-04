@@ -644,21 +644,22 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
 
         </div>
 
-        {/* Save button — appears only when dirty */}
-        {dirty && (
-          <div className="mt-2 flex justify-end">
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={saving}
-              className="h-7 px-4 text-xs gap-1.5 font-bold"
-              style={{ background: "#39FF14", color: "#000" }}
-            >
-              {saving && <Loader2 size={10} className="animate-spin" />}
-              Save
-            </Button>
-          </div>
-        )}
+        {/* Save button — always visible; bright green when dirty, dimmed when saved */}
+        <div className="mt-2 flex justify-end">
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className="h-7 px-4 text-xs gap-1.5 font-bold transition-all"
+            style={dirty
+              ? { background: "#39FF14", color: "#000" }
+              : { background: "rgba(57,255,20,0.12)", color: "rgba(57,255,20,0.45)", border: "1px solid rgba(57,255,20,0.2)" }
+            }
+          >
+            {saving && <Loader2 size={10} className="animate-spin" />}
+            {saving ? "Saving…" : dirty ? "Save" : "Saved"}
+          </Button>
+        </div>
 
         {/* Edge verdict — live preview as @prez types */}
         {hasAnyModel && (
