@@ -232,8 +232,8 @@ function EditableTeamRow({
         )}
       </div>
 
-      {/* 3 data columns: BOOKS | MODEL LINE | MODEL O/U */}
-      <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: "4px" }}>
+      {/* 2 data columns: BOOKS | MODEL LINE */}
+      <div className="flex-1 grid min-w-0" style={{ gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
 
         {/* BOOKS — plain consensus number, same as GameCard */}
         <div className="flex items-center justify-center">
@@ -578,17 +578,26 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
       {/* Team rows — restructured so O/U pill spans both rows */}
       <div className="px-3 pt-1 pb-3">
 
-        {/* Column labels — BOOKS | MODEL LINE | MODEL O/U */}
+        {/* Column labels — mirrors body layout exactly */}
         <div
           className="flex items-center gap-1.5 pb-1.5"
           style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}
         >
-          <div className="flex-shrink-0" style={{ width: "clamp(80px, 22vw, 120px)" }} />
+          {/* Logo spacer */}
           <div className="w-8 flex-shrink-0" />
-          <div className="flex-1 grid text-center" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+          {/* Team name spacer */}
+          <div className="flex-shrink-0" style={{ width: "clamp(80px, 22vw, 120px)" }} />
+          {/* Books + Model Line headers — same flex-1 + 1fr 1fr grid as the row */}
+          <div className="flex-1 grid text-center" style={{ gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
             <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>Books</span>
             <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>Model Line</span>
-            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>Model O/U</span>
+          </div>
+          {/* Model O/U header — same fixed width as the pill column */}
+          <div
+            className="flex-shrink-0 text-center"
+            style={{ width: "clamp(52px, 14vw, 80px)" }}
+          >
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>O/U</span>
           </div>
         </div>
 
