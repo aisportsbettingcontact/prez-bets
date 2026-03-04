@@ -13,6 +13,7 @@
  */
 
 import puppeteer from "puppeteer";
+import { ENV } from "./_core/env";
 
 export interface ScrapedOdds {
   awayTeam: string;
@@ -79,6 +80,40 @@ export async function scrapeVsinOdds(dateLabel: string): Promise<ScrapedOdds[]> 
       waitUntil: "domcontentloaded",
       timeout: 60000,
     });
+
+    // Check if we need to log in (page shows subscribe/login prompt)
+    const needsLogin = await page.evaluate(() => {
+      return !!document.querySelector("#login-link-mob, a[href*='login'], .piano-offer-wrapper");
+    });
+
+    if (needsLogin && ENV.vsinEmail && ENV.vsinPassword) {
+      console.log("[VSiN] Session expired — logging in with stored credentials");
+      try {
+        // Navigate to the auth iframe URL
+        await page.goto(
+          `https://auth.vsin.com/id/?client_id=N1owYIiApu&sender=piano-id-tQAy3&origin=https%3A%2F%2Fvsin.com&site=https%3A%2F%2Fvsin.com%2Flogin%2F&display_mode=inline&screen=login`,
+          { waitUntil: "domcontentloaded", timeout: 30000 }
+        );
+        await page.waitForSelector("input[type='email'], input[name='email']", { timeout: 10000 });
+        await page.type("input[type='email'], input[name='email']", ENV.vsinEmail, { delay: 50 });
+        // Click Next if it exists
+        const nextBtn = await page.$("button[type='submit'], button.next-btn, button");
+        if (nextBtn) await nextBtn.click();
+        await new Promise((r) => setTimeout(r, 1000));
+        await page.waitForSelector("input[type='password']", { timeout: 10000 });
+        await page.type("input[type='password']", ENV.vsinPassword, { delay: 50 });
+        const loginBtn = await page.$("button[type='submit']");
+        if (loginBtn) await loginBtn.click();
+        await new Promise((r) => setTimeout(r, 2000));
+        // Navigate back to the splits page
+        await page.goto("https://data.vsin.com/college-basketball/betting-splits/", {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        });
+      } catch (loginErr) {
+        console.warn("[VSiN] Auto-login failed:", loginErr);
+      }
+    }
 
     // Wait for the freeze table
     await page.waitForSelector("table.freezetable", { timeout: 30000 });
