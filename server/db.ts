@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { and, desc, eq, gte, lte, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { games, modelFiles, users, espnTeams, type InsertGame, type InsertModelFile, type InsertUser, type InsertEspnTeam } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -360,6 +360,21 @@ export async function setGamePublished(id: number, published: boolean) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(games).set({ publishedToFeed: published }).where(eq(games.id, id));
+}
+
+/** List all staging games for a date range (inclusive). Owner-only. */
+export async function listStagingGamesRange(fromDate: string, toDate: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db
+    .select()
+    .from(games)
+    .where(and(
+      eq(games.fileId, 0),
+      gte(games.gameDate, fromDate),
+      lte(games.gameDate, toDate)
+    ))
+    .orderBy(games.gameDate, games.sortOrder, games.startTimeEst);
 }
 
 /** Bulk publish all staging games for a date */

@@ -57,7 +57,8 @@ function formatTeamName(slug: string): string {
 
 // ── Time formatting ───────────────────────────────────────────────────────────
 function formatMilitaryTime(time: string): string {
-  if (!time || time.toUpperCase() === "TBD" || !time.includes(":")) return "TBD";
+  const upper = time?.toUpperCase() ?? "";
+  if (!time || upper === "TBD" || upper === "TBA" || !time.includes(":")) return "TBD";
   const parts = time.split(":");
   let hours = parseInt(parts[0], 10);
   const minutes = parts[1]?.slice(0, 2) ?? "00";

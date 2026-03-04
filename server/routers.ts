@@ -13,6 +13,7 @@ import {
   listModelFiles,
   updateModelFileStatus,
   listStagingGames,
+  listStagingGamesRange,
   updateGameProjections,
   setGamePublished,
   publishAllStagingGames,
@@ -25,7 +26,7 @@ import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure } from "./routers/appUsers";
 import { scrapeVsinOdds, matchTeam } from "./vsinScraper";
 import { updateBookOdds } from "./db";
-import { getLastRefreshResult } from "./vsinAutoRefresh";
+import { getLastRefreshResult, runVsinRefresh } from "./vsinAutoRefresh";
 
 export const appRouter = router({
   system: systemRouter,
@@ -244,9 +245,28 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    /**
+     * List all staging games for a date range (inclusive).
+     * Owner-only — used by Publish Projections for multi-day view.
+     */
+    listStagingRange: ownerProcedure
+      .input(z.object({ fromDate: z.string(), toDate: z.string() }))
+      .query(async ({ input }) => {
+        return listStagingGamesRange(input.fromDate, input.toDate);
+      }),
+
     /** Returns the result of the last auto-refresh run (null if never run). */
     lastRefresh: publicProcedure.query(() => {
       return getLastRefreshResult();
+    }),
+
+    /**
+     * Manually trigger an immediate VSiN + NCAA refresh.
+     * Owner-only.
+     */
+    triggerRefresh: ownerProcedure.mutation(async () => {
+      const result = await runVsinRefresh();
+      return result ?? { refreshedAt: new Date().toISOString(), updated: 0, inserted: 0, total: 0, gameDate: "" };
     }),
   }),
 });

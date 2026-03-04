@@ -1,20 +1,21 @@
-// Dashboard — MODEL PROJECTIONS main page
-
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
-import { User, LogOut, BarChart3, Loader2, Crown, Send } from "lucide-react";
+import { User, LogOut, BarChart3, Loader2, Crown, Send, Search, X } from "lucide-react";
 import { GameCard } from "@/components/GameCard";
 import { AgeModal } from "@/components/AgeModal";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
+import { TEAM_NAMES } from "@/lib/teamNicknames";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [selectedSport] = useState("NCAAM");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const { user } = useAuth();
   const { appUser, isOwner, loading: appAuthLoading, refetch: refetchAppUser } = useAppAuth();
 
@@ -70,7 +71,6 @@ export default function Dashboard() {
   };
 
   const handleCloseModal = () => {
-    // Closing without accepting logs the user out (they must accept to use the app)
     appLogout();
   };
 
@@ -78,8 +78,37 @@ export default function Dashboard() {
     appLogout();
   };
 
-  // Group games by date
-  const gamesByDate = (games ?? []).reduce<Record<string, typeof games>>((acc, game) => {
+  // ─── Search filtering ─────────────────────────────────────────────────────
+  const filteredGames = useMemo(() => {
+    if (!games) return [];
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return games;
+
+    return games.filter((game) => {
+      if (!game) return false;
+      const awayNames = TEAM_NAMES[game.awayTeam];
+      const homeNames = TEAM_NAMES[game.homeTeam];
+
+      const awaySchool = (awayNames?.school ?? game.awayTeam).toLowerCase();
+      const awayNick = (awayNames?.nickname ?? "").toLowerCase();
+      const homeSchool = (homeNames?.school ?? game.homeTeam).toLowerCase();
+      const homeNick = (homeNames?.nickname ?? "").toLowerCase();
+      const awaySlug = game.awayTeam.toLowerCase().replace(/_/g, " ");
+      const homeSlug = game.homeTeam.toLowerCase().replace(/_/g, " ");
+
+      return (
+        awaySchool.includes(q) ||
+        awayNick.includes(q) ||
+        awaySlug.includes(q) ||
+        homeSchool.includes(q) ||
+        homeNick.includes(q) ||
+        homeSlug.includes(q)
+      );
+    });
+  }, [games, searchQuery]);
+
+  // Group filtered games by date
+  const gamesByDate = filteredGames.reduce<Record<string, typeof filteredGames>>((acc, game) => {
     const date = game!.gameDate;
     if (!acc[date]) acc[date] = [];
     acc[date]!.push(game!);
@@ -110,46 +139,81 @@ export default function Dashboard() {
 
       {/* Sticky Header */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
-        {/* Top row: centered brand group | user icon right */}
+        {/* Top row: centered brand group | search + user icon right */}
         <div className="relative flex items-center px-4 py-2 max-w-3xl mx-auto">
 
           {/* Centered brand group: icon + PREZ BETS + AI MODEL PROJECTIONS */}
-          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
-            {/* Chart icon */}
-            <BarChart3
-              className="flex-shrink-0 text-primary"
-              style={{ width: "clamp(14px, 2.5vw, 24px)", height: "clamp(14px, 2.5vw, 24px)" }}
-            />
-            {/* PREZ BETS — bold white */}
-            <span
-              className="font-black text-white whitespace-nowrap"
-              style={{
-                fontSize: "clamp(14px, 3.2vw, 26px)",
-                letterSpacing: "0.08em",
-              }}
-            >
-              PREZ BETS
-            </span>
-            {/* Divider dot */}
-            <span className="text-border" style={{ fontSize: "clamp(10px, 2vw, 14px)" }}>|</span>
-            {/* AI MODEL PROJECTIONS — light gray */}
-            <span
-              className="font-medium whitespace-nowrap"
-              style={{
-                fontSize: "clamp(12px, 2.6vw, 21px)",
-                letterSpacing: "0.1em",
-                color: "#9CA3AF",
-              }}
-            >
-              AI MODEL PROJECTIONS
-            </span>
-          </div>
+          {!searchOpen && (
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
+              <BarChart3
+                className="flex-shrink-0 text-primary"
+                style={{ width: "clamp(14px, 2.5vw, 24px)", height: "clamp(14px, 2.5vw, 24px)" }}
+              />
+              <span
+                className="font-black text-white whitespace-nowrap"
+                style={{ fontSize: "clamp(14px, 3.2vw, 26px)", letterSpacing: "0.08em" }}
+              >
+                PREZ BETS
+              </span>
+              <span className="text-border" style={{ fontSize: "clamp(10px, 2vw, 14px)" }}>|</span>
+              <span
+                className="font-medium whitespace-nowrap"
+                style={{ fontSize: "clamp(12px, 2.6vw, 21px)", letterSpacing: "0.1em", color: "#9CA3AF" }}
+              >
+                AI MODEL PROJECTIONS
+              </span>
+            </div>
+          )}
 
-          {/* Invisible spacer to push user icon to the right */}
-          <div className="flex-1" />
+          {/* Search input (expands when open) */}
+          {searchOpen && (
+            <div className="flex-1 flex items-center gap-2">
+              <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <input
+                autoFocus
+                type="text"
+                placeholder="Search teams, schools, nicknames…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
 
-          {/* User menu — right */}
+          {/* Invisible spacer to push icons to the right */}
+          {!searchOpen && <div className="flex-1" />}
+
+          {/* Right icons: search toggle + user menu */}
           <div className="flex-shrink-0 flex items-center gap-2">
+            {/* Search toggle */}
+            <button
+              onClick={() => {
+                if (searchOpen) {
+                  setSearchOpen(false);
+                  setSearchQuery("");
+                } else {
+                  setSearchOpen(true);
+                }
+              }}
+              className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center hover:bg-accent transition-colors"
+              title="Search games"
+            >
+              {searchOpen ? (
+                <X className="w-3.5 h-3.5 text-muted-foreground" />
+              ) : (
+                <Search className="w-3.5 h-3.5 text-muted-foreground" />
+              )}
+            </button>
+
+            {/* User menu */}
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
@@ -226,6 +290,17 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Search results count bar (shown when search is active) */}
+        {searchOpen && searchQuery && (
+          <div className="px-4 pb-1.5 max-w-3xl mx-auto">
+            <p className="text-[11px] text-muted-foreground">
+              {filteredGames.length === 0
+                ? "No games found"
+                : `${filteredGames.length} game${filteredGames.length === 1 ? "" : "s"} found`}
+            </p>
+          </div>
+        )}
       </header>
 
       {/* Main Content */}
@@ -234,6 +309,16 @@ export default function Dashboard() {
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
             <p className="text-sm text-muted-foreground">Loading projections…</p>
+          </div>
+        ) : searchOpen && searchQuery && filteredGames.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-4">
+            <Search className="w-10 h-10 text-muted-foreground/40" />
+            <div>
+              <p className="text-sm font-semibold text-foreground mb-1">No games found</p>
+              <p className="text-xs text-muted-foreground">
+                Try searching by school name, city, or team nickname.
+              </p>
+            </div>
           </div>
         ) : sortedDates.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-4">
@@ -250,10 +335,7 @@ export default function Dashboard() {
             <div key={date}>
               {/* Date section header */}
               <div className="flex items-center px-4 py-2 border-b border-border sticky top-[45px] bg-background/95 backdrop-blur-sm z-10">
-                {/* Left spacer */}
                 <div className="flex-1" />
-
-                {/* Center: date + separator + sport label */}
                 <div className="flex items-center gap-2 whitespace-nowrap">
                   <span
                     className="font-bold text-foreground tracking-widest uppercase"
@@ -269,8 +351,6 @@ export default function Dashboard() {
                     Men's College Basketball
                   </span>
                 </div>
-
-                {/* Right spacer */}
                 <div className="flex-1" />
               </div>
 

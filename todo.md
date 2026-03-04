@@ -156,3 +156,9 @@
 - [x] Fix formatMilitaryTime in PublishProjections to handle TBD gracefully (returns "TBD" not "12:BD AM EST")
 - [x] Add withOddsCount / missingOddsCount stats row to PublishProjections header
 - [x] Verify games display in VSiN page order (sortOrder) on Dashboard and PublishProjections
+- [ ] Add search bar to public feed (Dashboard) filtering by school name and nickname
+- [ ] Add date picker to Publish Projections page (default today PST, navigate to future dates)
+- [ ] Add Refresh Now button to Publish Projections to manually trigger VSiN + NCAA re-scrape
+- [ ] Load all NCAA games for 03/04-03/10 on Publish Projections (not just VSiN games)
+- [ ] Fix TBA -> TBD for teams without confirmed start times
+- [ ] Ensure all times display in EST on both Feed and Publish Projections

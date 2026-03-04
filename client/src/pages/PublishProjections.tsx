@@ -16,7 +16,7 @@ import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, ChevronLeft, Eye, EyeOff, Trophy } from "lucide-react";
+import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw } from "lucide-react";
 import { getEspnLogoUrl } from "@/lib/espnTeamIds";
 import { getTeamName } from "@/lib/teamNicknames";
 
@@ -50,7 +50,8 @@ function formatTeamName(slug: string): string {
 }
 
 function formatMilitaryTime(time: string): string {
-  if (!time || time.toUpperCase() === "TBD" || !time.includes(":")) return "TBD";
+  const upper = time?.toUpperCase() ?? "";
+  if (!time || upper === "TBD" || upper === "TBA" || !time.includes(":")) return "TBD";
   const parts = time.split(":");
   let hours = parseInt(parts[0], 10);
   const minutes = parts[1]?.slice(0, 2) ?? "00";
@@ -684,24 +685,45 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
   );
 }
 
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+
+function todayPst(): string {
+  const now = new Date();
+  const pst = now.toLocaleDateString("en-US", {
+    timeZone: "America/Los_Angeles",
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  });
+  const [mm, dd, yyyy] = pst.split("/");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+function formatDateNav(dateStr: string): string {
+  try {
+    const d = new Date(dateStr + "T00:00:00");
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PublishProjections() {
   const [, setLocation] = useLocation();
   const { appUser, isOwner, loading: authLoading } = useAppAuth();
   const [filter, setFilter] = useState<"all" | "regular_season" | "conference_tournament">("all");
-  // Default to today in PST
-  const [gameDate, setGameDate] = useState(() => {
-    const now = new Date();
-    const pst = now.toLocaleDateString("en-US", {
-      timeZone: "America/Los_Angeles",
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-    });
-    const [mm, dd, yyyy] = pst.split("/");
-    return `${yyyy}-${mm}-${dd}`;
-  });
+  const [gameDate, setGameDate] = useState(() => todayPst());
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // ── Strict owner-only guard ─────────────────────────────────────────────────
   useEffect(() => {
@@ -709,6 +731,8 @@ export default function PublishProjections() {
       setLocation("/dashboard");
     }
   }, [authLoading, appUser, isOwner, setLocation]);
+
+  const utils = trpc.useUtils();
 
   const {
     data: games,
@@ -727,9 +751,24 @@ export default function PublishProjections() {
     onError: () => toast.error("Failed to publish all games"),
   });
 
+  const triggerRefreshMutation = trpc.games.triggerRefresh.useMutation({
+    onMutate: () => setIsRefreshing(true),
+    onSuccess: (result) => {
+      setIsRefreshing(false);
+      toast.success(`Refreshed — ${result.updated} updated, ${result.inserted} inserted`);
+      // Invalidate all staging queries so all dates refresh
+      utils.games.listStaging.invalidate();
+      refetch();
+    },
+    onError: () => {
+      setIsRefreshing(false);
+      toast.error("Refresh failed");
+    },
+  });
+
   // ── Auto-refresh status (server-driven, every 30 min) ──────────────────────
   const { data: lastRefresh } = trpc.games.lastRefresh.useQuery(undefined, {
-    refetchInterval: 60_000, // poll every 60s so timestamp stays fresh
+    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   });
 
@@ -772,6 +811,7 @@ export default function PublishProjections() {
 
       {/* Sticky header — mirrors Dashboard header style */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
+        {/* Top row: back + brand + publish all */}
         <div className="relative flex items-center px-4 py-2 max-w-3xl mx-auto">
 
           {/* Back button */}
@@ -782,7 +822,7 @@ export default function PublishProjections() {
             <ChevronLeft size={18} style={{ color: "hsl(var(--muted-foreground))" }} />
           </button>
 
-          {/* Centered brand — mirrors Dashboard header */}
+          {/* Centered brand */}
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
             <span
               className="font-black text-white whitespace-nowrap"
@@ -799,7 +839,7 @@ export default function PublishProjections() {
             </span>
           </div>
 
-          {/* Spacer + action buttons — right */}
+          {/* Right: Publish All */}
           <div className="flex-1" />
           <div className="flex items-center gap-2 flex-shrink-0">
             <Button
@@ -816,6 +856,58 @@ export default function PublishProjections() {
               Publish All
             </Button>
           </div>
+        </div>
+
+        {/* Date navigation row */}
+        <div className="px-4 pb-1.5 max-w-3xl mx-auto flex items-center gap-2">
+          {/* Prev day */}
+          <button
+            onClick={() => setGameDate(d => addDays(d, -1))}
+            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10 flex-shrink-0"
+          >
+            <ChevronLeft size={14} style={{ color: "hsl(var(--muted-foreground))" }} />
+          </button>
+
+          {/* Date display — centered */}
+          <div className="flex-1 flex items-center justify-center gap-2">
+            <span className="text-xs font-bold text-foreground tracking-wide">
+              {formatDateNav(gameDate)}
+            </span>
+            {gameDate === todayPst() && (
+              <span
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                style={{ background: "rgba(57,255,20,0.15)", color: "#39FF14" }}
+              >
+                TODAY
+              </span>
+            )}
+          </div>
+
+          {/* Next day */}
+          <button
+            onClick={() => setGameDate(d => addDays(d, 1))}
+            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10 flex-shrink-0"
+          >
+            <ChevronRight size={14} style={{ color: "hsl(var(--muted-foreground))" }} />
+          </button>
+
+          {/* Refresh Now button */}
+          <button
+            onClick={() => triggerRefreshMutation.mutate()}
+            disabled={isRefreshing || triggerRefreshMutation.isPending}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all flex-shrink-0"
+            style={isRefreshing || triggerRefreshMutation.isPending
+              ? { background: "rgba(57,255,20,0.08)", color: "rgba(57,255,20,0.4)", border: "1px solid rgba(57,255,20,0.15)" }
+              : { background: "rgba(57,255,20,0.12)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.3)" }
+            }
+            title="Trigger immediate VSiN + NCAA refresh"
+          >
+            <RefreshCw
+              size={11}
+              className={isRefreshing || triggerRefreshMutation.isPending ? "animate-spin" : ""}
+            />
+            {isRefreshing || triggerRefreshMutation.isPending ? "Refreshing…" : "Refresh Now"}
+          </button>
         </div>
 
         {/* Stats row + filter tabs */}
@@ -836,7 +928,7 @@ export default function PublishProjections() {
               <>
                 <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>·</span>
                 <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                  Books updated {new Date(lastRefresh.refreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  Books {new Date(lastRefresh.refreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </span>
               </>
             )}
