@@ -707,61 +707,21 @@ export default function PublishProjections() {
     onError: () => toast.error("Failed to publish all games"),
   });
 
-  // ── Refresh Books: SSE-based live progress ────────────────────────────────
-  type GameProgress = {
-    index: number;
-    total: number;
-    awayTeam: string;
-    homeTeam: string;
-    awaySpread: number | null;
-    homeSpread: number | null;
-    bookTotal: number | null;
-    status: "ok" | "no_match";
-  };
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshProgress, setRefreshProgress] = useState<GameProgress[]>([]);
-  const [refreshTotal, setRefreshTotal] = useState(0);
-  const [refreshDone, setRefreshDone] = useState(false);
-  const [showProgressPanel, setShowProgressPanel] = useState(false);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  // ── Auto-refresh status (server-driven, every 30 min) ──────────────────────
+  const { data: lastRefresh } = trpc.games.lastRefresh.useQuery(undefined, {
+    refetchInterval: 60_000, // poll every 60s so timestamp stays fresh
+    refetchOnWindowFocus: true,
+  });
 
-  const handleRefreshBooks = useCallback(() => {
-    setRefreshing(true);
-    setRefreshProgress([]);
-    setRefreshTotal(0);
-    setRefreshDone(false);
-    setShowProgressPanel(true);
-
-    const url = `/api/refresh-books?gameDate=${encodeURIComponent(gameDate)}`;
-    const es = new EventSource(url, { withCredentials: true });
-
-    es.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type === "start") {
-          setRefreshTotal(msg.total);
-        } else if (msg.type === "game") {
-          setRefreshProgress((prev) => [...prev, msg as GameProgress]);
-        } else if (msg.type === "done") {
-          setRefreshDone(true);
-          setRefreshing(false);
-          if (msg.refreshedAt) setLastRefreshedAt(msg.refreshedAt as string);
-          refetch();
-          es.close();
-        } else if (msg.type === "error") {
-          toast.error(msg.message ?? "Refresh failed");
-          setRefreshing(false);
-          es.close();
-        }
-      } catch {}
-    };
-
-    es.onerror = () => {
-      toast.error("Connection lost during refresh");
-      setRefreshing(false);
-      es.close();
-    };
-  }, [gameDate, refetch]);
+  // Re-fetch game list whenever the server completes a new refresh
+  const lastRefreshKey = lastRefresh?.refreshedAt ?? null;
+  const prevRefreshKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastRefreshKey && lastRefreshKey !== prevRefreshKey.current) {
+      prevRefreshKey.current = lastRefreshKey;
+      refetch();
+    }
+  }, [lastRefreshKey, refetch]);
 
   const handleRefetch = useCallback(() => { refetch(); }, [refetch]);
 
@@ -822,20 +782,6 @@ export default function PublishProjections() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <Button
               size="sm"
-              variant="outline"
-              onClick={handleRefreshBooks}
-              disabled={refreshing || totalCount === 0}
-              className="gap-1.5 text-xs h-8 font-semibold border-border"
-              style={{ color: "#FFB800" }}
-            >
-              {refreshing
-                ? <Loader2 size={12} className="animate-spin" />
-                : <span style={{ fontSize: 12 }}>↻</span>
-              }
-              {refreshing ? "Refreshing…" : "Refresh Books"}
-            </Button>
-            <Button
-              size="sm"
               onClick={() => publishAllMutation.mutate({ gameDate })}
               disabled={publishAllMutation.isPending || totalCount === 0}
               className="gap-1.5 text-xs h-8 font-bold"
@@ -860,11 +806,11 @@ export default function PublishProjections() {
             <span className="text-[11px]" style={{ color: "#FFB800" }}>
               {withModelCount} with model data
             </span>
-            {lastRefreshedAt && (
+            {lastRefresh?.refreshedAt && (
               <>
                 <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>·</span>
                 <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                  Books updated {new Date(lastRefreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  Books updated {new Date(lastRefresh.refreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </span>
               </>
             )}
@@ -890,104 +836,6 @@ export default function PublishProjections() {
           </div>
         </div>
       </header>
-
-      {/* ── Refresh Books progress panel ────────────────────────────────────────── */}
-      {showProgressPanel && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
-          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
-          onClick={(e) => {
-            // Close only when clicking the backdrop (not the panel itself)
-            if (e.target === e.currentTarget && !refreshing) setShowProgressPanel(false);
-          }}
-        >
-          <div
-            className="w-full max-w-lg rounded-t-2xl overflow-hidden flex flex-col"
-            style={{ background: "#111", border: "1px solid #222", maxHeight: "70vh" }}
-          >
-            {/* Panel header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "#222" }}>
-              <div className="flex items-center gap-2">
-                {refreshing
-                  ? <Loader2 size={14} className="animate-spin" style={{ color: "#FFB800" }} />
-                  : <span style={{ color: refreshDone ? "#39FF14" : "#FFB800", fontSize: 14 }}>{refreshDone ? "✓" : "↻"}</span>
-                }
-                <span className="text-sm font-semibold" style={{ color: "#fff" }}>
-                  {refreshing
-                    ? `Refreshing Books… ${refreshProgress.length}/${refreshTotal}`
-                    : refreshDone
-                    ? `Done — ${refreshProgress.filter((g) => g.status === "ok").length}/${refreshTotal} updated`
-                    : "Refresh Books"}
-                </span>
-              </div>
-              {!refreshing && (
-                <button
-                  onClick={() => setShowProgressPanel(false)}
-                  className="text-xs px-2 py-1 rounded"
-                  style={{ color: "#9CA3AF", background: "#1a1a1a" }}
-                >
-                  Close
-                </button>
-              )}
-            </div>
-
-            {/* Progress bar */}
-            {refreshTotal > 0 && (
-              <div className="h-1 w-full" style={{ background: "#222" }}>
-                <div
-                  className="h-1 transition-all duration-300"
-                  style={{
-                    width: `${Math.round((refreshProgress.length / refreshTotal) * 100)}%`,
-                    background: refreshDone ? "#39FF14" : "#FFB800",
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Game list */}
-            <div className="overflow-y-auto flex-1 px-2 py-2 space-y-1">
-              {refreshProgress.map((g) => (
-                <div
-                  key={g.index}
-                  className="flex items-center justify-between px-3 py-2 rounded-lg"
-                  style={{ background: g.status === "ok" ? "rgba(57,255,20,0.06)" : "rgba(255,255,255,0.03)" }}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className="text-xs font-bold w-5 text-right flex-shrink-0"
-                      style={{ color: "#9CA3AF" }}
-                    >{g.index}</span>
-                    <span className="text-xs font-medium truncate" style={{ color: "#fff" }}>
-                      {g.awayTeam} <span style={{ color: "#9CA3AF" }}>vs</span> {g.homeTeam}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0 ml-2">
-                    {g.status === "ok" ? (
-                      <>
-                        <span className="text-xs font-mono" style={{ color: "#39FF14" }}>
-                          {g.awaySpread != null ? (g.awaySpread > 0 ? `+${g.awaySpread}` : `${g.awaySpread}`) : "—"}
-                        </span>
-                        <span className="text-xs font-mono" style={{ color: "#FFB800" }}>
-                          {g.bookTotal != null ? `O/U ${g.bookTotal}` : "—"}
-                        </span>
-                        <span style={{ color: "#39FF14", fontSize: 12 }}>✓</span>
-                      </>
-                    ) : (
-                      <span className="text-xs" style={{ color: "#9CA3AF" }}>no match</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {refreshing && refreshProgress.length < refreshTotal && (
-                <div className="flex items-center gap-2 px-3 py-2">
-                  <Loader2 size={12} className="animate-spin" style={{ color: "#FFB800" }} />
-                  <span className="text-xs" style={{ color: "#9CA3AF" }}>Fetching next game…</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Game cards — same max-width and padding as Dashboard */}
       <main className="max-w-3xl mx-auto px-4 pb-8 pt-3 space-y-3">

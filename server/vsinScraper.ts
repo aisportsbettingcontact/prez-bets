@@ -26,6 +26,10 @@ export interface ScrapedOdds {
   awaySpread: number | null;
   homeSpread: number | null;
   total: number | null;
+  /** 0-based position of this game on the VSiN page (used for sortOrder) */
+  vsinRowIndex: number;
+  /** Date of the game as YYYYMMDD string, e.g. "20260304" */
+  gameDate: string;
 }
 
 // Cache the access token so we don't re-login on every scrape
@@ -243,8 +247,8 @@ function parseGames(
     const gameDate = extractGameDate(gameId);
     if (!gameDate) return;
 
-    // Filter by requested date
-    if (gameDate !== dateLabel) return;
+    // Filter by requested date — pass "ALL" to return every date
+    if (dateLabel !== "ALL" && gameDate !== dateLabel) return;
 
     // Extract team names from anchor text
     const awayTeam = $(teamAnchors[0]).text().trim();
@@ -267,6 +271,8 @@ function parseGames(
       awaySpread,
       homeSpread,
       total,
+      vsinRowIndex: results.length, // 0-based position on VSiN page
+      gameDate,                      // YYYYMMDD string, e.g. "20260304"
     });
   });
 

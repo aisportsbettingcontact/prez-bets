@@ -126,3 +126,11 @@
 - [ ] Store VSIN_EMAIL and VSIN_PASSWORD as app secrets
 - [ ] Update vsinScraper to auto-login with stored credentials
 - [ ] Test Refresh Books end-to-end
+- [x] Fix refresh progress count to use VSiN game count (not DB game count)
+- [x] Add vsinRowIndex to ScrapedOdds and write it as sortOrder to DB during refresh
+- [x] Display games in VSiN order on Publish Projections page and public feed
+- [x] Build smart auto-refresh cron: update today's odds, auto-import tomorrow's games as unpublished stubs, ignore past dates
+- [x] Expose last-refresh result via tRPC games.lastRefresh query
+- [x] Remove manual Refresh Books button from Publish Projections UI
+- [x] Show last-auto-refreshed timestamp on Publish Projections page
+- [x] Sort Publish Projections and public feed by VSiN sortOrder

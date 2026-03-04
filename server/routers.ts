@@ -25,6 +25,7 @@ import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure } from "./routers/appUsers";
 import { scrapeVsinOdds, matchTeam } from "./vsinScraper";
 import { updateBookOdds } from "./db";
+import { getLastRefreshResult } from "./vsinAutoRefresh";
 
 export const appRouter = router({
   system: systemRouter,
@@ -243,45 +244,10 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    /**
-     * Scrape live VSiN CBB betting splits and update the Books column for all
-     * games on the given date. Matches by team name.
-     * Owner-only. Takes ~15-30 seconds.
-     */
-    refreshBooks: ownerProcedure
-      .input(z.object({ gameDate: z.string() }))
-      .mutation(async ({ input }) => {
-        // 1. Fetch all games for the date
-        const allGames = await listStagingGames(input.gameDate);
-
-        if (allGames.length === 0) {
-          return { updated: 0, message: "No games found for " + input.gameDate };
-        }
-
-        // 2. Scrape VSiN
-        const d = new Date(input.gameDate + "T12:00:00Z");
-        const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-        const dateLabel = `${monthNames[d.getUTCMonth()]} ${d.getUTCDate()}`;
-        const scraped = await scrapeVsinOdds(dateLabel);
-
-        // 3. Match each game by team name and update
-        let updated = 0;
-        for (const game of allGames) {
-          const odds = scraped.find(
-            (s) => matchTeam(s.awayTeam, game.awayTeam) && matchTeam(s.homeTeam, game.homeTeam)
-          );
-          if (!odds) continue;
-
-          await updateBookOdds(game.id, {
-            awayBookSpread: odds.awaySpread,
-            homeBookSpread: odds.homeSpread,
-            bookTotal: odds.total,
-          });
-          updated++;
-        }
-
-        return { updated, total: allGames.length };
-      }),
+    /** Returns the result of the last auto-refresh run (null if never run). */
+    lastRefresh: publicProcedure.query(() => {
+      return getLastRefreshResult();
+    }),
   }),
 });
 

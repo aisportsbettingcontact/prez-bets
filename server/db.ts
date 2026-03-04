@@ -294,6 +294,17 @@ export async function updateAppUserLastSignedIn(id: number) {
 
 // ─── Publish / Model Projection helpers ──────────────────────────────────────
 
+/** List all games for a given date regardless of fileId (used by auto-refresh to check what already exists) */
+export async function listGamesByDate(gameDate: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db
+    .select()
+    .from(games)
+    .where(eq(games.gameDate, gameDate))
+    .orderBy(games.sortOrder, games.startTimeEst);
+}
+
 /** List all staging games for a given date (fileId = 0, unpublished) */
 export async function listStagingGames(gameDate: string) {
   const db = await getDb();
@@ -330,19 +341,18 @@ export async function updateGameProjections(
  */
 export async function updateBookOdds(
   id: number,
-  data: { awayBookSpread: number | null; homeBookSpread: number | null; bookTotal: number | null }
+  data: { awayBookSpread: number | null; homeBookSpread: number | null; bookTotal: number | null; sortOrder?: number }
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;
   const { eq } = await import("drizzle-orm");
-  await db
-    .update(games)
-    .set({
-      awayBookSpread: data.awayBookSpread !== null ? String(data.awayBookSpread) : null,
-      homeBookSpread: data.homeBookSpread !== null ? String(data.homeBookSpread) : null,
-      bookTotal: data.bookTotal !== null ? String(data.bookTotal) : null,
-    })
-    .where(eq(games.id, id));
+  const updateData: Record<string, unknown> = {
+    awayBookSpread: data.awayBookSpread !== null ? String(data.awayBookSpread) : null,
+    homeBookSpread: data.homeBookSpread !== null ? String(data.homeBookSpread) : null,
+    bookTotal: data.bookTotal !== null ? String(data.bookTotal) : null,
+  };
+  if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
+  await db.update(games).set(updateData).where(eq(games.id, id));
 }
 
 export async function setGamePublished(id: number, published: boolean) {
