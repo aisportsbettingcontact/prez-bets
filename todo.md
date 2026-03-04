@@ -162,3 +162,6 @@
 - [ ] Load all NCAA games for 03/04-03/10 on Publish Projections (not just VSiN games)
 - [ ] Fix TBA -> TBD for teams without confirmed start times
 - [ ] Ensure all times display in EST on both Feed and Publish Projections
+- [x] Feed: only show games with live VSiN odds (awayBookSpread or bookTotal not null)
+- [x] Publish Projections: block publish toggle for games without live VSiN odds
+- [x] Publish All: only publish games that have live VSiN odds

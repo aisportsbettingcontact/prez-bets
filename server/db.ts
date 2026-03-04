@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, lt } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, lte, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { games, modelFiles, users, espnTeams, type InsertGame, type InsertModelFile, type InsertUser, type InsertEspnTeam } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -162,7 +162,7 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const conditions: ReturnType<typeof eq>[] = [];
+  const conditions = [];
 
   if (opts?.gameDate) {
     // Specific date requested — return only that date
@@ -173,6 +173,10 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }) {
   }
 
   if (opts?.sport) conditions.push(eq(games.sport, opts.sport));
+
+  // Public feed: only show published games that have live VSiN odds
+  conditions.push(eq(games.publishedToFeed, true));
+  conditions.push(or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!);
 
   return db
     .select()
@@ -359,6 +363,17 @@ export async function updateBookOdds(
 export async function setGamePublished(id: number, published: boolean) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+
+  // When publishing, verify the game has live VSiN odds
+  if (published) {
+    const [game] = await db.select().from(games).where(eq(games.id, id)).limit(1);
+    if (!game) throw new Error("Game not found");
+    const hasOdds = game.awayBookSpread !== null || game.bookTotal !== null;
+    if (!hasOdds) {
+      throw new Error("Cannot publish: game has no live VSiN odds yet");
+    }
+  }
+
   await db.update(games).set({ publishedToFeed: published }).where(eq(games.id, id));
 }
 
@@ -399,12 +414,17 @@ export async function updateNcaaStartTime(
   await db.update(games).set(data).where(eq(games.id, id));
 }
 
-/** Bulk publish all staging games for a date */
+/** Bulk publish all staging games for a date — only publishes games with live VSiN odds */
 export async function publishAllStagingGames(gameDate: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db
     .update(games)
     .set({ publishedToFeed: true })
-    .where(and(eq(games.gameDate, gameDate), eq(games.fileId, 0)));
+    .where(and(
+      eq(games.gameDate, gameDate),
+      eq(games.fileId, 0),
+      // Only publish games that have live VSiN odds
+      or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!
+    ));
 }

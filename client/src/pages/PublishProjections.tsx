@@ -485,8 +485,9 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
       await publishMutation.mutateAsync({ id: game.id, published: !game.publishedToFeed });
       toast.success(game.publishedToFeed ? "Removed from feed" : "Published to feed ✓");
       onSaved();
-    } catch {
-      toast.error("Failed to update publish status");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to update publish status";
+      toast.error(msg.includes("no live VSiN odds") ? "No VSiN odds yet — cannot publish" : "Failed to update publish status");
     }
   };
 
@@ -540,19 +541,23 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
       {/* Publish toggle — top right (mirrors the download button position in GameCard) */}
       <button
         onClick={handleTogglePublish}
-        disabled={publishMutation.isPending || saving}
+        disabled={publishMutation.isPending || saving || (!game.publishedToFeed && !hasOdds)}
         className="absolute top-1.5 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all"
         style={game.publishedToFeed
           ? { background: "rgba(57,255,20,0.15)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.35)" }
-          : { background: "rgba(255,255,255,0.06)", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+          : !hasOdds
+            ? { background: "rgba(255,255,255,0.03)", color: "rgba(156,163,175,0.4)", border: "1px solid rgba(255,255,255,0.06)", cursor: "not-allowed" }
+            : { background: "rgba(255,255,255,0.06)", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
         }
-        title={game.publishedToFeed ? "Remove from feed" : "Publish to feed"}
+        title={game.publishedToFeed ? "Remove from feed" : !hasOdds ? "No VSiN odds yet — cannot publish" : "Publish to feed"}
       >
         {publishMutation.isPending || saving
           ? <Loader2 size={9} className="animate-spin" />
           : game.publishedToFeed
             ? <><Eye size={9} /> Live</>
-            : <><EyeOff size={9} /> Off</>
+            : !hasOdds
+              ? <><EyeOff size={9} /> No Odds</>
+              : <><EyeOff size={9} /> Off</>
         }
       </button>
 
