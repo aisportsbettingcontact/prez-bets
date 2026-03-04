@@ -1,9 +1,8 @@
 // Dashboard — MODEL PROJECTIONS main page
-// Auto-syncs from Model Database on load, then shows live game data from DB
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { User, LogOut, BarChart3, Loader2, RefreshCw, CheckCircle, Crown, Send } from "lucide-react";
+import { User, LogOut, BarChart3, Loader2, Crown, Send } from "lucide-react";
 import { GameCard } from "@/components/GameCard";
 import { AgeModal } from "@/components/AgeModal";
 import { toast } from "sonner";
@@ -15,11 +14,8 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [selectedSport, setSelectedSport] = useState("NCAAM");
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const hasSynced = useRef(false);
-  const { user, isAuthenticated } = useAuth();
+  const [selectedSport] = useState("NCAAM");
+  const { user } = useAuth();
   const { appUser, isOwner, loading: appAuthLoading, refetch: refetchAppUser } = useAppAuth();
 
   // Redirect to home (paywall) if not authenticated as app user
@@ -52,7 +48,7 @@ export default function Dashboard() {
   const appLogout = () => appLogoutMutation.mutate();
 
   // ─── Games query ──────────────────────────────────────────────────────────
-  const { data: games, isLoading: gamesLoading, refetch: refetchGames } = trpc.games.list.useQuery(
+  const { data: games, isLoading: gamesLoading } = trpc.games.list.useQuery(
     { sport: selectedSport },
     { refetchOnWindowFocus: false }
   );
@@ -68,40 +64,6 @@ export default function Dashboard() {
     acc[t.slug] = t.logoUrl;
     return acc;
   }, {});
-
-  // ─── Sheets sync mutation ─────────────────────────────────────────────────
-  const syncMutation = trpc.sheets.syncLatest.useMutation({
-    onSuccess: (data) => {
-      setSyncStatus("done");
-      setLastUpdated(new Date());
-      refetchGames();
-      if (data.gamesUpserted > 0) {
-        toast.success("ALL NCAAM Games Updated");
-      }
-      // Reset status indicator after 3s
-      setTimeout(() => setSyncStatus("idle"), 3000);
-    },
-    onError: (err) => {
-      setSyncStatus("error");
-      console.error("[Sheets sync error]", err);
-      setTimeout(() => setSyncStatus("idle"), 3000);
-    },
-  });
-
-  // Auto-sync on first mount
-  useEffect(() => {
-    if (!hasSynced.current) {
-      hasSynced.current = true;
-      setSyncStatus("syncing");
-      syncMutation.mutate();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleManualRefresh = () => {
-    setSyncStatus("syncing");
-    syncMutation.mutate();
-  };
 
   const handleAccept = () => {
     acceptTermsMutation.mutate();
@@ -139,9 +101,6 @@ export default function Dashboard() {
       return dateStr;
     }
   }
-
-  const sports = ["NCAAM"];
-  const isLoading = gamesLoading || syncStatus === "syncing";
 
   return (
     <div className="min-h-screen bg-background">
@@ -191,7 +150,6 @@ export default function Dashboard() {
 
           {/* User menu — right */}
           <div className="flex-shrink-0 flex items-center gap-2">
-
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
@@ -268,42 +226,31 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-
-
       </header>
 
       {/* Main Content */}
       <main className="max-w-3xl mx-auto pb-8">
-        {isLoading && sortedDates.length === 0 ? (
+        {gamesLoading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
-            <p className="text-sm text-muted-foreground">
-              {syncStatus === "syncing" ? "Syncing from Model Database…" : "Loading projections…"}
-            </p>
+            <p className="text-sm text-muted-foreground">Loading projections…</p>
           </div>
         ) : sortedDates.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-6">
+          <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-4">
             <BarChart3 className="w-10 h-10 text-muted-foreground/40" />
             <div>
               <p className="text-sm font-semibold text-foreground mb-1">No projections available</p>
               <p className="text-xs text-muted-foreground">
-                No {selectedSport} games found for today. The sheet may not have been updated yet — try refreshing.
+                No NCAAM games found for today.
               </p>
             </div>
-            <button
-              onClick={handleManualRefresh}
-              disabled={syncStatus === "syncing"}
-              className="mt-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {syncStatus === "syncing" ? "Syncing…" : "Refresh from Model Database"}
-            </button>
           </div>
         ) : (
           sortedDates.map((date) => (
             <div key={date}>
               {/* Date section header */}
               <div className="flex items-center px-4 py-2 border-b border-border sticky top-[45px] bg-background/95 backdrop-blur-sm z-10">
-                {/* Left column (equal width) — empty spacer */}
+                {/* Left spacer */}
                 <div className="flex-1" />
 
                 {/* Center: date + separator + sport label */}
@@ -323,34 +270,8 @@ export default function Dashboard() {
                   </span>
                 </div>
 
-                {/* Right column (equal width) — sync + refresh aligned right */}
-                <div className="flex-1 flex items-center justify-end gap-1.5">
-                  {syncStatus === "syncing" && (
-                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      <span className="hidden sm:inline">Syncing</span>
-                    </span>
-                  )}
-                  {syncStatus === "done" && (
-                    <span className="text-[11px] text-green-400 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3" />
-                      <span className="hidden sm:inline">Updated</span>
-                    </span>
-                  )}
-                  {syncStatus === "idle" && lastUpdated && (
-                    <span className="text-[10px] text-muted-foreground hidden sm:inline" title={`Last synced: ${lastUpdated.toLocaleString()}`}>
-                      {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  )}
-                  <button
-                    onClick={handleManualRefresh}
-                    disabled={syncStatus === "syncing"}
-                    className="w-6 h-6 rounded flex items-center justify-center hover:bg-secondary transition-colors disabled:opacity-40"
-                    title="Refresh from Model Database"
-                  >
-                    <RefreshCw className={`w-3 h-3 text-muted-foreground ${syncStatus === "syncing" ? "animate-spin" : ""}`} />
-                  </button>
-                </div>
+                {/* Right spacer */}
+                <div className="flex-1" />
               </div>
 
               {/* Game Cards */}
@@ -362,7 +283,6 @@ export default function Dashboard() {
             </div>
           ))
         )}
-
       </main>
     </div>
   );

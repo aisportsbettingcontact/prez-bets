@@ -11,7 +11,6 @@ import {
   insertModelFile,
   listGames,
   listModelFiles,
-  upsertSheetGames,
   updateModelFileStatus,
   listStagingGames,
   updateGameProjections,
@@ -20,7 +19,6 @@ import {
 } from "./db";
 import { storagePut } from "./storage";
 import { parseFileBuffer, detectSportFromFilename, detectDateFromFilename } from "./fileParser";
-import { fetchLatestSheetGames, fetchAllSheetsGames, SHEETS_FILE_ID } from "./sheetsSync";
 import { syncEspnTeams, buildEspnLogoUrl } from "./espnScraper";
 import { listEspnTeams, getEspnTeamBySlug } from "./db";
 import { nanoid } from "nanoid";
@@ -37,41 +35,6 @@ export const appRouter = router({
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
-    }),
-  }),
-
-  // ─── Google Sheets Sync ────────────────────────────────────────────────────
-  sheets: router({
-    /**
-     * Fetch the latest sheet from Google Sheets and upsert games into the DB.
-     * Public so the dashboard can auto-sync on load.
-     */
-    syncLatest: publicProcedure.mutation(async () => {
-      const { games, sheetName } = await fetchLatestSheetGames();
-      if (games.length === 0) {
-        return { success: true, gamesUpserted: 0, sheetName: null };
-      }
-      await upsertSheetGames(games);
-      return {
-        success: true,
-        gamesUpserted: games.length,
-        sheetName,
-      };
-    }),
-
-    /**
-     * Fetch ALL historical sheets and upsert all games.
-     * Protected — only authenticated users can trigger a full sync.
-     */
-    syncAll: protectedProcedure.mutation(async () => {
-      const { games, result } = await fetchAllSheetsGames();
-      if (games.length > 0) {
-        await upsertSheetGames(games);
-      }
-      return {
-        success: true,
-        ...result,
-      };
     }),
   }),
 
@@ -224,7 +187,7 @@ export const appRouter = router({
       }),
 
     /**
-     * List all staging (unpublished) games for a given date.
+     * List all staging games for a given date.
      * Owner-only — used by the Publish Model Projections page.
      */
     listStaging: ownerProcedure
