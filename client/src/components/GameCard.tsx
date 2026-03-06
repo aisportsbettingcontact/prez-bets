@@ -403,7 +403,18 @@ export function GameCard({ game }: GameCardProps) {
   const awayLogoUrl = awayTeam?.logoUrl;
   const homeLogoUrl = homeTeam?.logoUrl;
   const time = formatMilitaryTime(game.startTimeEst);
-  const dateLabel = formatDate(game.gameDate);
+  // Midnight ET games (startTimeEst = "00:00") are stored under the actual play date (e.g. Mar 5)
+  // but the clock in ET has already rolled over to the next day (e.g. Fri, Mar 6 · 12:00 AM ET).
+  // Display the next calendar day in the header so the label matches the ET clock.
+  const displayDate = (() => {
+    if (game.startTimeEst === "00:00") {
+      const d = new Date(game.gameDate + "T00:00:00");
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().slice(0, 10);
+    }
+    return game.gameDate;
+  })();
+  const dateLabel = formatDate(displayDate);
 
   // Border color driven by max edge diff
   const maxDiff = Math.max(isNaN(spreadDiff) ? 0 : spreadDiff, isNaN(totalDiff) ? 0 : totalDiff);

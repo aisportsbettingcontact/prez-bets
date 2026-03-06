@@ -215,3 +215,8 @@
 - [ ] Investigate Youngstown St. vs Robert Morris showing 12:00 AM ET — likely TBD stored as 00:00
 - [ ] Fix epochToEst() to return "TBD" instead of "00:00" when NCAA API returns no start time
 - [ ] Clean up existing DB rows with bad 00:00 start times
+
+## Midnight Game Header Display Fix (2026-03-06)
+- [x] GameCard: when startTimeEst = "00:00", display header date as gameDate + 1 day (next ET calendar day), e.g. "Fri, Mar 6 · 12:00 AM ET"
+- [x] EditableGameCard (PublishProjections): same fix — show next-day ET date in header for midnight games
+- [x] Game remains grouped under gameDate (Thu, Mar 5) in the feed — only the header label changes

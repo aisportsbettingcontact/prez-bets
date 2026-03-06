@@ -521,7 +521,17 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
   const awayLogoUrl  = awayReg?.logoUrl ?? undefined;
   const homeLogoUrl  = homeReg?.logoUrl ?? undefined;
   const time      = formatMilitaryTime(game.startTimeEst);
-  const dateLabel = formatDate(game.gameDate);
+  // Midnight ET games (startTimeEst = "00:00") are stored under the actual play date (e.g. Mar 5)
+  // but the ET clock has rolled over to the next day (e.g. Fri, Mar 6 · 12:00 AM ET).
+  const displayDate = (() => {
+    if (game.startTimeEst === "00:00") {
+      const d = new Date(game.gameDate + "T00:00:00");
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().slice(0, 10);
+    }
+    return game.gameDate;
+  })();
+  const dateLabel = formatDate(displayDate);
 
   const hasAnyModel = awaySpread !== "" || modelTotal !== "";
   const hasOdds = !isNaN(awayBookSpread) || !isNaN(bookTotal);
