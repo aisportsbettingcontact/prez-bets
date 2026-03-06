@@ -1,0 +1,1 @@
+ALTER TABLE `games` ADD CONSTRAINT `games_matchup_unique` UNIQUE(`gameDate`,`awayTeam`,`homeTeam`);

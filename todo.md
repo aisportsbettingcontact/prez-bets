@@ -199,3 +199,19 @@
 - [x] Remove NCAA_ALIAS entirely from ncaaScoreboard.ts — registry is sole lookup, non-D1 teams filtered by VALID_DB_SLUGS
 - [x] Fix refreshBooksRoute.ts: hardcoded default date "2026-03-04" replaced with dynamic today PST
 - [ ] Consolidate ESPN logo source: teams.list DB query is redundant since registry has NCAA logos for all 365 teams (deferred — ESPN sync still used as fallback)
+
+## Publish Projections + Feed Correctness (2026-03-06)
+- [ ] Audit and fix duplicate game sources in vsinAutoRefresh (contestId + slug dedup)
+- [ ] Add DB-level unique constraint on (gameDate, awayTeam, homeTeam) to prevent duplicates at insert
+- [ ] Fix game ordering: sort by startTimeEst (earliest to latest) in all DB queries and frontend
+- [ ] Ensure Publish Projections page shows NCAA name, nickname, logo URL from registry
+- [ ] Ensure Feed shows NCAA name, nickname, logo URL from registry
+- [ ] Enforce 365-team filter on all game queries (server-side, not just at insert time)
+- [ ] Fix start time display: always show EST, never TBD on Feed
+- [ ] Populate all NCAA.com games where both teams are in 365-team registry
+
+## Midnight Game Date + Start Time Fixes (2026-03-06)
+- [ ] Fix midnight game date: 12:00 AM ET games (West Coast late-night) should be assigned to the prior calendar day
+- [ ] Investigate Youngstown St. vs Robert Morris showing 12:00 AM ET — likely TBD stored as 00:00
+- [ ] Fix epochToEst() to return "TBD" instead of "00:00" when NCAA API returns no start time
+- [ ] Clean up existing DB rows with bad 00:00 start times

@@ -20,7 +20,7 @@
 
 import { listGamesByDate, updateBookOdds, insertGames, getGameByNcaaContestId, updateNcaaStartTime } from "./db";
 import { scrapeVsinOdds } from "./vsinScraper";
-import { fetchNcaaGames, buildStartTimeMap } from "./ncaaScoreboard";
+import { fetchNcaaGames, buildStartTimeMap, getMidnightGameKeys } from "./ncaaScoreboard";
 import { VALID_DB_SLUGS, BY_DB_SLUG } from "../shared/ncaamTeams";
 import type { InsertGame } from "../drizzle/schema";
 
@@ -154,9 +154,14 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     const startTimeMaps = new Map<string, Map<string, string>>();
     const ncaaGamesByDate = new Map<string, Awaited<ReturnType<typeof fetchNcaaGames>>>();
 
-    // Fetch NCAA data for a rolling window: today through N days ahead
+    // Fetch NCAA data for a rolling window: today through N days ahead.
+    // We also need the day AFTER the range end to catch midnight games that
+    // the NCAA API places on the next calendar day (e.g. Hawaii 9 PM PT = midnight ET).
     const rangeEnd = datePst(NCAA_RANGE_DAYS_AHEAD);
     const allDates = dateRange(todayStr, rangeEnd);
+    // midnightGameKeys: maps each date to the set of matchup keys that are midnight ET games
+    // (i.e. games the NCAA API lists under dateStr+1 but belong on dateStr)
+    const midnightGameKeysByDate = new Map<string, Set<string>>();
     for (const dateStr of allDates) {
       try {
         const yyyymmdd = dateStr.replace(/-/g, "");
@@ -164,6 +169,26 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
         startTimeMaps.set(dateStr, buildStartTimeMap(ncaaGames));
         ncaaGamesByDate.set(dateStr, ncaaGames);
         console.log(`[VSiNAutoRefresh] NCAA: ${ncaaGames.length} games for ${dateStr}`);
+
+        // Check the NEXT day's NCAA data for midnight games that belong on dateStr
+        const nextYYYYMMDD = new Date(dateStr + "T00:00:00Z");
+        nextYYYYMMDD.setUTCDate(nextYYYYMMDD.getUTCDate() + 1);
+        const nextDateStr = nextYYYYMMDD.toISOString().slice(0, 10).replace(/-/g, "");
+        try {
+          const nextDayGames = await fetchNcaaGames(nextDateStr);
+          const midnightKeys = getMidnightGameKeys(nextDayGames);
+          if (midnightKeys.size > 0) {
+            midnightGameKeysByDate.set(dateStr, midnightKeys);
+            // Add midnight games to this date's start time map and game list
+            for (const g of nextDayGames) {
+              if (g.isMidnightGame) {
+                startTimeMaps.get(dateStr)?.set(`${g.awaySeoname}@${g.homeSeoname}`, g.startTimeEst);
+                ncaaGamesByDate.get(dateStr)?.push({ ...g });
+                console.log(`[VSiNAutoRefresh] Midnight game assigned to ${dateStr}: ${g.awaySeoname} @ ${g.homeSeoname} (00:00 ET)`);
+              }
+            }
+          }
+        } catch { /* non-fatal */ }
       } catch (ncaaErr) {
         console.warn(`[VSiNAutoRefresh] NCAA fetch failed for ${dateStr} (non-fatal):`, ncaaErr);
       }
@@ -282,7 +307,7 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
       const existing = await listGamesByDate(dateStr);
 
       for (const ncaaGame of ncaaGames) {
-        const { contestId, awaySeoname, homeSeoname, startTimeEst } = ncaaGame;
+        const { contestId, awaySeoname, homeSeoname, startTimeEst, isMidnightGame } = ncaaGame;
 
         // Skip if either team is not in the 365-team registry
         if (!VALID_DB_SLUGS.has(awaySeoname) || !VALID_DB_SLUGS.has(homeSeoname)) {
@@ -292,12 +317,22 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
           continue;
         }
 
+        // Midnight ET games (e.g. Hawaii 9 PM PT = midnight ET) are fetched from the NEXT day's
+        // NCAA API data and added to the current day's ncaaGamesByDate map (see the fetch loop above).
+        // So dateStr is already the correct play date — no adjustment needed here.
+        // isMidnightGame is preserved only for logging/debugging purposes.
+        const effectiveDateStr = dateStr;
+
         // Skip if already in DB by contestId
         const byContestId = await getGameByNcaaContestId(contestId);
         if (byContestId) continue;
 
         // Skip if already in DB by slug match (VSiN inserted it without contestId)
-        const bySlug = existing.find(
+        // Check both the effective date AND the NCAA API date to catch existing rows
+        const existingForEffectiveDate = effectiveDateStr !== dateStr
+          ? await listGamesByDate(effectiveDateStr)
+          : existing;
+        const bySlug = existingForEffectiveDate.find(
           e => slugsMatch(e.awayTeam, awaySeoname) && slugsMatch(e.homeTeam, homeSeoname)
         );
         if (bySlug) {
@@ -314,7 +349,7 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
         // Insert as NCAA-only stub (no VSiN odds, sortOrder = 9999 so it sorts after VSiN games)
         const row: InsertGame = {
           fileId: 0,
-          gameDate: dateStr,
+          gameDate: effectiveDateStr,
           startTimeEst: startTimeEst ?? "TBD",
           awayTeam: awaySeoname,
           homeTeam: homeSeoname,

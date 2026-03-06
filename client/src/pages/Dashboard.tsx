@@ -50,9 +50,9 @@ function formatDateShort(dateStr: string): string {
 }
 
 // ─── Team Logo Badge ──────────────────────────────────────────────────────────
-function TeamBadge({ slug, logoMap, size = 22 }: { slug: string; logoMap: Record<string, string>; size?: number }) {
+function TeamBadge({ slug, size = 22 }: { slug: string; size?: number }) {
   const team = getTeamByDbSlug(slug);
-  const logo = team?.logoUrl ?? logoMap[slug];
+  const logo = team?.logoUrl;
   const initials = (team?.ncaaName || slug.replace(/_/g, " ")).slice(0, 2).toUpperCase();
   return (
     <div
@@ -71,7 +71,7 @@ function TeamBadge({ slug, logoMap, size = 22 }: { slug: string; logoMap: Record
 // ─── Search Result Row ────────────────────────────────────────────────────────
 type GameRow = { id: number; awayTeam: string; homeTeam: string; gameDate: string; startTimeEst: string | null; awayBookSpread?: string | null };
 
-function SearchResultRow({ game, logoMap, onClick }: { game: GameRow; logoMap: Record<string, string>; onClick: () => void }) {
+function SearchResultRow({ game, onClick }: { game: GameRow; onClick: () => void }) {
   const awayTeam = getTeamByDbSlug(game.awayTeam);
   const homeTeam = getTeamByDbSlug(game.homeTeam);
   const awaySchool = awayTeam?.ncaaName || game.awayTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -91,7 +91,7 @@ function SearchResultRow({ game, logoMap, onClick }: { game: GameRow; logoMap: R
 
         {/* Away side: logo + name block */}
         <div className="flex items-center gap-1.5 sm:gap-2" style={{ flex: "1 1 0", minWidth: 0, overflow: "hidden" }}>
-          <TeamBadge slug={game.awayTeam} logoMap={logoMap} size={22} />
+          <TeamBadge slug={game.awayTeam} size={22} />
           <div className="flex flex-col" style={{ minWidth: 0, overflow: "hidden" }}>
             <span className="font-bold text-white leading-tight sm:text-[12px]" style={{ fontSize: "clamp(9px, 2.6vw, 12px)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{awaySchool}</span>
             {awayNick && <span className="font-normal text-gray-400 leading-tight sm:text-[10px]" style={{ fontSize: "clamp(8px, 2.2vw, 10px)", whiteSpace: "nowrap", display: "block" }}>{awayNick}</span>}
@@ -111,7 +111,7 @@ function SearchResultRow({ game, logoMap, onClick }: { game: GameRow; logoMap: R
             <span className="font-bold text-white leading-tight sm:text-[12px]" style={{ fontSize: "clamp(9px, 2.6vw, 12px)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{homeSchool}</span>
             {homeNick && <span className="font-normal text-gray-400 leading-tight sm:text-[10px]" style={{ fontSize: "clamp(8px, 2.2vw, 10px)", whiteSpace: "nowrap", display: "block" }}>{homeNick}</span>}
           </div>
-          <TeamBadge slug={game.homeTeam} logoMap={logoMap} size={22} />
+          <TeamBadge slug={game.homeTeam} size={22} />
         </div>
 
       </div>
@@ -178,14 +178,6 @@ export default function Dashboard() {
   const { data: games, isLoading: gamesLoading } = trpc.games.list.useQuery(
     { sport: selectedSport }, { refetchOnWindowFocus: false }
   );
-  const { data: espnTeams } = trpc.teams.list.useQuery(
-    { sport: selectedSport }, { refetchOnWindowFocus: false, staleTime: 1000 * 60 * 60 }
-  );
-  const logoMap = useMemo(() =>
-    (espnTeams ?? []).reduce<Record<string, string>>((acc, t) => { acc[t.slug] = t.logoUrl; return acc; }, {}),
-    [espnTeams]
-  );
-
   // ─── Search ───────────────────────────────────────────────────────────────
   const q = searchQuery.trim().toLowerCase();
 
@@ -408,7 +400,6 @@ export default function Dashboard() {
                   <SearchResultRow
                     key={game!.id}
                     game={game!}
-                    logoMap={logoMap}
                     onClick={() => scrollToGame(game!.id)}
                   />
                 ))
@@ -455,7 +446,7 @@ export default function Dashboard() {
               <div className="bg-card border-x border-border mx-0">
                 {gamesByDate[date]!.map((game) => (
                   <div key={game!.id} id={`game-card-${game!.id}`}>
-                    <GameCard game={game!} logoMap={logoMap} />
+                    <GameCard game={game!} />
                   </div>
                 ))}
               </div>

@@ -85,6 +85,13 @@
       "when": 1772751022752,
       "tag": "0011_silent_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1772779552510,
+      "tag": "0012_woozy_the_hunter",
+      "breakpoints": true
     }
   ]
 }

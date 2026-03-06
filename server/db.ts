@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, lte, lt, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, lte, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { games, modelFiles, users, espnTeams, type InsertGame, type InsertModelFile, type InsertUser, type InsertEspnTeam } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -141,7 +141,19 @@ export async function insertGames(rows: InsertGame[]) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (rows.length === 0) return;
-  await db.insert(games).values(rows);
+  // ON DUPLICATE KEY UPDATE: if (gameDate, awayTeam, homeTeam) already exists,
+  // update the book odds and start time instead of throwing a duplicate key error.
+  // This makes all inserts idempotent — safe to call multiple times.
+  await db.insert(games).values(rows).onDuplicateKeyUpdate({
+    set: {
+      startTimeEst: sql`VALUES(startTimeEst)`,
+      awayBookSpread: sql`VALUES(awayBookSpread)`,
+      homeBookSpread: sql`VALUES(homeBookSpread)`,
+      bookTotal: sql`VALUES(bookTotal)`,
+      sortOrder: sql`VALUES(sortOrder)`,
+      ncaaContestId: sql`COALESCE(ncaaContestId, VALUES(ncaaContestId))`,
+    },
+  });
 }
 
 /** Returns today's date in YYYY-MM-DD format using Eastern Time (matches DB storage format). */
@@ -181,7 +193,7 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }) {
     .select()
     .from(games)
     .where(and(...conditions))
-    .orderBy(games.gameDate, games.sortOrder, games.startTimeEst);
+    .orderBy(games.gameDate, games.startTimeEst, games.sortOrder);
 }
 
 export async function deleteGamesByFileId(fileId: number) {
@@ -305,7 +317,7 @@ export async function listGamesByDate(gameDate: string) {
     .select()
     .from(games)
     .where(eq(games.gameDate, gameDate))
-    .orderBy(games.sortOrder, games.startTimeEst);
+    .orderBy(games.startTimeEst, games.sortOrder);
 }
 
 /** List all staging games for a given date (fileId = 0, unpublished) */
@@ -316,7 +328,7 @@ export async function listStagingGames(gameDate: string) {
     .select()
     .from(games)
     .where(and(eq(games.gameDate, gameDate), eq(games.fileId, 0)))
-    .orderBy(games.sortOrder, games.startTimeEst);
+    .orderBy(games.startTimeEst, games.sortOrder);
 }
 
 /** Update model projections and edge labels for a single game */
@@ -388,7 +400,7 @@ export async function listStagingGamesRange(fromDate: string, toDate: string) {
       gte(games.gameDate, fromDate),
       lte(games.gameDate, toDate)
     ))
-    .orderBy(games.gameDate, games.sortOrder, games.startTimeEst);
+    .orderBy(games.gameDate, games.startTimeEst, games.sortOrder);
 }
 
 /** Look up a game by its NCAA contest ID (for dedup during NCAA-only insert) */

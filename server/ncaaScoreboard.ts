@@ -22,12 +22,23 @@ export interface NcaaGame {
   awaySeoname: string;
   /** DB-style slug for home team, e.g. "penn_state" ("tba" if unknown) */
   homeSeoname: string;
-  /** Start time in ET as "HH:MM", e.g. "19:30" (DST-aware) */
+  /**
+   * Start time in ET as "HH:MM", e.g. "19:30" (DST-aware).
+   * "TBD" when no confirmed start time.
+   * "00:00" means a real late-night West Coast game (9 PM PT = midnight ET) —
+   * check `isMidnightGame` to assign it to the prior calendar day.
+   */
   startTimeEst: string;
   /** Whether the start time is confirmed (not TBA) */
   hasStartTime: boolean;
   /** Unix epoch in seconds (UTC) */
   startTimeEpoch: number;
+  /**
+   * True when this is a real midnight ET game (e.g. Hawaii home games at 9 PM PT).
+   * These games should be stored under the PRIOR calendar day.
+   * Only set when hasStartTime=false but epoch resolves to 00:xx ET.
+   */
+  isMidnightGame: boolean;
 }
 
 function toNcaaDate(yyyymmdd: string): string {
@@ -90,14 +101,27 @@ export async function fetchNcaaGames(dateYYYYMMDD: string): Promise<NcaaGame[]> 
     const home = c.teams?.find((t: any) => t.isHome);
     if (!away || !home) continue;
 
-    // Resolve start time — prefer the confirmed startTime string from NCAA;
-    // fall back to epoch conversion (DST-aware). NCAA sometimes sets
-    // hasStartTime=false even when the epoch is valid.
+    // Resolve start time:
+    // - If hasStartTime=true: use the confirmed time directly.
+    // - If hasStartTime=false but epoch resolves to 00:xx ET: this is a real
+    //   late-night West Coast game (e.g. Hawaii 9 PM PT = midnight ET).
+    //   Mark as isMidnightGame=true so the caller assigns it to the prior day.
+    // - If hasStartTime=false and epoch is NOT midnight: TBD (placeholder epoch).
     let startTimeEst: string;
-    if (c.startTime && c.hasStartTime) {
+    let isMidnightGame = false;
+    if (c.hasStartTime && c.startTime) {
       startTimeEst = c.startTime;
     } else if (c.startTimeEpoch) {
-      startTimeEst = epochToEt(c.startTimeEpoch);
+      const etTime = epochToEt(c.startTimeEpoch);
+      const etHour = parseInt(etTime.split(":")[0] ?? "12", 10);
+      if (etHour === 0 || etHour === 24) {
+        // Midnight ET — real late-night West Coast game, not a TBD placeholder
+        startTimeEst = "00:00";
+        isMidnightGame = true;
+      } else {
+        // Non-midnight epoch with hasStartTime=false — treat as TBD
+        startTimeEst = "TBD";
+      }
     } else {
       startTimeEst = "TBD";
     }
@@ -113,6 +137,7 @@ export async function fetchNcaaGames(dateYYYYMMDD: string): Promise<NcaaGame[]> 
       startTimeEst,
       hasStartTime: c.hasStartTime ?? false,
       startTimeEpoch: c.startTimeEpoch,
+      isMidnightGame,
     });
   }
 
@@ -125,4 +150,16 @@ export function buildStartTimeMap(games: NcaaGame[]): Map<string, string> {
     map.set(`${g.awaySeoname}@${g.homeSeoname}`, g.startTimeEst);
   }
   return map;
+}
+
+/**
+ * Returns the set of matchup keys ("away@home") for midnight ET games.
+ * These games belong on the PRIOR calendar day (e.g. Hawaii 9 PM PT = midnight ET).
+ */
+export function getMidnightGameKeys(games: NcaaGame[]): Set<string> {
+  const keys = new Set<string>();
+  for (const g of games) {
+    if (g.isMidnightGame) keys.add(`${g.awaySeoname}@${g.homeSeoname}`);
+  }
+  return keys;
 }

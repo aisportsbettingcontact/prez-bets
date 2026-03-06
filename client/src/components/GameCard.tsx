@@ -26,34 +26,6 @@ import { getTeamByDbSlug } from "@shared/ncaamTeams";
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
 
-// ── Team name formatting (matches reference formatTeamName) ───────────────────
-function formatTeamName(slug: string): string {
-  return slug
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ")
-    .replace("Mount St Marys", "Mt. St. Mary's")
-    .replace("Nc Wilmington", "UNCW")
-    .replace("Uab", "UAB")
-    .replace("Utsa", "UTSA")
-    .replace("College Of Charleston", "Charleston")
-    .replace("Illinois Chicago", "UIC")
-    .replace("Northern Iowa", "UNI")
-    .replace("Southern Illinois", "SIU")
-    .replace("Michigan State", "Michigan St.")
-    .replace("Florida Atlantic", "FAU")
-    .replace("Saint Peters", "Saint Peter's")
-    .replace("Nc State", "NC State")
-    .replace("Iupui", "IUPUI")
-    .replace("Northern Arizona", "NAU")
-    .replace("Iowa State", "Iowa St.")
-    .replace("Eastern Washington", "EWU")
-    .replace("Weber State", "Weber St.")
-    .replace("Portland State", "Portland St.")
-    .replace("Idaho State", "Idaho St.")
-    .replace("Sacramento State", "Sac State");
-}
-
 // ── Time formatting ───────────────────────────────────────────────────────────
 function formatMilitaryTime(time: string): string {
   const upper = time?.toUpperCase() ?? "";
@@ -111,8 +83,11 @@ function dash(v: number, prefix = ""): string {
 // ── Normalize edge label (matches reference normalizeEdgeLabel) ───────────────
 function normalizeEdgeLabel(label: string | null | undefined): string {
   if (!label || label.toUpperCase() === "PASS") return "PASS";
-  // Replace leading slug with formatted team name: "duke (-9.5)" → "Duke (-9.5)"
-  return label.replace(/^([a-z][a-z0-9_]*)(\s+\()/i, (_, slug, rest) => formatTeamName(slug) + rest);
+  // Replace leading slug with NCAA name from registry: "duke (-9.5)" → "Duke (-9.5)"
+  return label.replace(/^([a-z][a-z0-9_]*)(\s+\()/i, (_, slug, rest) => {
+    const team = getTeamByDbSlug(slug);
+    return (team?.ncaaName ?? slug.replace(/_/g, " ")) + rest;
+  });
 }
 
 // ── TeamLogo ──────────────────────────────────────────────────────────────────
@@ -396,10 +371,9 @@ function ShareSheet({
 
 interface GameCardProps {
   game: GameRow;
-  logoMap?: Record<string, string>;
 }
 
-export function GameCard({ game, logoMap = {} }: GameCardProps) {
+export function GameCard({ game }: GameCardProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const awayBookSpread = toNum(game.awayBookSpread);
@@ -419,14 +393,15 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
 
   const awayTeam = getTeamByDbSlug(game.awayTeam);
   const homeTeam = getTeamByDbSlug(game.homeTeam);
-  const awayName = awayTeam?.ncaaName || formatTeamName(game.awayTeam);
-  const homeName = homeTeam?.ncaaName || formatTeamName(game.homeTeam);
+  // Registry is the sole source — all 365 valid teams are covered
+  const awayName = awayTeam?.ncaaName ?? game.awayTeam.replace(/_/g, " ");
+  const homeName = homeTeam?.ncaaName ?? game.homeTeam.replace(/_/g, " ");
   const awayNickname = awayTeam?.ncaaNickname ?? "";
   const homeNickname = homeTeam?.ncaaNickname ?? "";
 
-  // Use NCAA logo URLs from registry; fall back to DB logoMap
-  const awayLogoUrl = awayTeam?.logoUrl ?? logoMap[game.awayTeam];
-  const homeLogoUrl = homeTeam?.logoUrl ?? logoMap[game.homeTeam];
+  // Use NCAA logo URLs from registry (sole source — all 365 teams covered)
+  const awayLogoUrl = awayTeam?.logoUrl;
+  const homeLogoUrl = homeTeam?.logoUrl;
   const time = formatMilitaryTime(game.startTimeEst);
   const dateLabel = formatDate(game.gameDate);
 

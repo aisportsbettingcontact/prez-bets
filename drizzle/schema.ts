@@ -7,6 +7,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
 
@@ -113,7 +114,10 @@ export const games = mysqlTable("games", {
   /** NCAA contest ID (unique per game) — used to dedup NCAA-only games (e.g. TBA vs TBA) */
   ncaaContestId: varchar("ncaaContestId", { length: 20 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  /** Prevent duplicate rows for the same matchup on the same date */
+  uniqMatchup: uniqueIndex("games_matchup_unique").on(t.gameDate, t.awayTeam, t.homeTeam),
+}));
 
 export type Game = typeof games.$inferSelect;
 export type InsertGame = typeof games.$inferInsert;
