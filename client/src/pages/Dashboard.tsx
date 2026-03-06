@@ -7,8 +7,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
-import { getTeamName } from "@/lib/teamNicknames";
-import { getEspnLogoUrl } from "@/lib/espnTeamIds";
+import { getTeamByDbSlug } from "@shared/ncaamTeams";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -52,9 +51,9 @@ function formatDateShort(dateStr: string): string {
 
 // ─── Team Logo Badge ──────────────────────────────────────────────────────────
 function TeamBadge({ slug, logoMap, size = 22 }: { slug: string; logoMap: Record<string, string>; size?: number }) {
-  const logo = getEspnLogoUrl(slug) ?? logoMap[slug];
-  const names = getTeamName(slug);
-  const initials = (names.school || slug.replace(/_/g, " ")).slice(0, 2).toUpperCase();
+  const team = getTeamByDbSlug(slug);
+  const logo = team?.logoUrl ?? logoMap[slug];
+  const initials = (team?.ncaaName || slug.replace(/_/g, " ")).slice(0, 2).toUpperCase();
   return (
     <div
       className="rounded overflow-hidden bg-secondary flex items-center justify-center flex-shrink-0"
@@ -73,12 +72,12 @@ function TeamBadge({ slug, logoMap, size = 22 }: { slug: string; logoMap: Record
 type GameRow = { id: number; awayTeam: string; homeTeam: string; gameDate: string; startTimeEst: string | null; awayBookSpread?: string | null };
 
 function SearchResultRow({ game, logoMap, onClick }: { game: GameRow; logoMap: Record<string, string>; onClick: () => void }) {
-  const awayNames = getTeamName(game.awayTeam);
-  const homeNames = getTeamName(game.homeTeam);
-  const awaySchool = awayNames.school;
-  const awayNick = awayNames.nickname;
-  const homeSchool = homeNames.school;
-  const homeNick = homeNames.nickname;
+  const awayTeam = getTeamByDbSlug(game.awayTeam);
+  const homeTeam = getTeamByDbSlug(game.homeTeam);
+  const awaySchool = awayTeam?.ncaaName || game.awayTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const awayNick = awayTeam?.ncaaNickname ?? "";
+  const homeSchool = homeTeam?.ncaaName || game.homeTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const homeNick = homeTeam?.ncaaNickname ?? "";
   const time = formatMilitaryTime(game.startTimeEst);
   const dateShort = formatDateShort(game.gameDate);
 
@@ -194,14 +193,14 @@ export default function Dashboard() {
     if (!games || !q) return [];
     const filtered = games.filter((game) => {
       if (!game) return false;
-      const awayNames = getTeamName(game.awayTeam);
-      const homeNames = getTeamName(game.homeTeam);
+      const awayTeamInfo = getTeamByDbSlug(game.awayTeam);
+      const homeTeamInfo = getTeamByDbSlug(game.homeTeam);
       const terms = [
-        awayNames.school,
-        awayNames.nickname,
+        awayTeamInfo?.ncaaName ?? "",
+        awayTeamInfo?.ncaaNickname ?? "",
         game.awayTeam.replace(/_/g, " "),
-        homeNames.school,
-        homeNames.nickname,
+        homeTeamInfo?.ncaaName ?? "",
+        homeTeamInfo?.ncaaNickname ?? "",
         game.homeTeam.replace(/_/g, " "),
       ].map(s => s.toLowerCase());
       return terms.some(t => t.includes(q));

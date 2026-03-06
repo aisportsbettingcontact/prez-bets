@@ -173,3 +173,17 @@
 - [x] Fix "miami fl" → "Miami (FL)" in teamNicknames.ts; desktop dropdown full-width row layout; mobile stacked
 - [x] Fix gap between sticky search bar and first date banner (no gap on desktop and mobile)
 - [ ] Fix search dropdown: TEAM_NAMES lookup for all slugs (no lowercase slug fallback), home team Logo+School+Nickname layout, Miami (FL) correct display
+- [x] Migrate DB to canonical CSV dbSlugs (121 rows updated), purge non-365-team games (223 rows deleted)
+- [x] Generate shared/ncaamTeams.ts registry from authoritative 365-team CSV
+- [x] Refactor GameCard.tsx to use registry getTeamByDbSlug() for names/nicknames/logos
+- [x] Refactor Dashboard.tsx search to use registry for team names/logos
+- [x] Add server-side VALID_DB_SLUGS filtering to games.list, games.listStaging, games.listPublished
+- [x] Update ncaaScoreboard.ts to use registry BY_NCAA_SLUG as primary lookup
+- [x] Update vsinScraper.ts: remove HREF_SLUG_FALLBACK legacy map, use BY_VSIN_SLUG registry as sole lookup
+- [x] Update vsinAutoRefresh.ts: replace legacy slugsMatch() alias map with registry-based lookup
+- [x] Update vsinAutoRefresh.ts: replace hardcoded 03/04-03/10 date range with dynamic 7-day rolling window
+- [x] Update refreshBooksRoute.ts: replace matchTeam() name-based matching with slug-based matching
+- [x] Remove dead matchTeam/scrapeVsinOdds imports from routers.ts
+- [x] Delete orphaned teamNicknames.ts (no longer imported anywhere)
+- [x] Update vsinScraper.test.ts: remove normalizeTeamName tests, update matchTeam tests
+- [x] All 24 tests passing after refactoring

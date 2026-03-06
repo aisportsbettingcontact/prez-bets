@@ -21,8 +21,7 @@ import { Download, Link, ImageDown } from "lucide-react";
 import { toast } from "sonner";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/lib/trpc";
-import { getEspnLogoUrl } from "@/lib/espnTeamIds";
-import { getTeamName } from "@/lib/teamNicknames";
+import { getTeamByDbSlug } from "@shared/ncaamTeams";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
@@ -418,16 +417,16 @@ export function GameCard({ game, logoMap = {} }: GameCardProps) {
     ? Math.abs(modelTotal - bookTotal)
     : toNum(game.totalDiff);
 
-  const awayTeamName = getTeamName(game.awayTeam);
-  const homeTeamName = getTeamName(game.homeTeam);
-  const awayName = awayTeamName.school || formatTeamName(game.awayTeam);
-  const homeName = homeTeamName.school || formatTeamName(game.homeTeam);
-  const awayNickname = awayTeamName.nickname;
-  const homeNickname = homeTeamName.nickname;
+  const awayTeam = getTeamByDbSlug(game.awayTeam);
+  const homeTeam = getTeamByDbSlug(game.homeTeam);
+  const awayName = awayTeam?.ncaaName || formatTeamName(game.awayTeam);
+  const homeName = homeTeam?.ncaaName || formatTeamName(game.homeTeam);
+  const awayNickname = awayTeam?.ncaaNickname ?? "";
+  const homeNickname = homeTeam?.ncaaNickname ?? "";
 
-  // Resolve ESPN logo URLs: static ID map first, then DB logoMap as fallback
-  const awayLogoUrl = getEspnLogoUrl(game.awayTeam) ?? logoMap[game.awayTeam];
-  const homeLogoUrl = getEspnLogoUrl(game.homeTeam) ?? logoMap[game.homeTeam];
+  // Use NCAA logo URLs from registry; fall back to DB logoMap
+  const awayLogoUrl = awayTeam?.logoUrl ?? logoMap[game.awayTeam];
+  const homeLogoUrl = homeTeam?.logoUrl ?? logoMap[game.homeTeam];
   const time = formatMilitaryTime(game.startTimeEst);
   const dateLabel = formatDate(game.gameDate);
 

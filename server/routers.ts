@@ -24,9 +24,9 @@ import { syncEspnTeams, buildEspnLogoUrl } from "./espnScraper";
 import { listEspnTeams, getEspnTeamBySlug } from "./db";
 import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure } from "./routers/appUsers";
-import { scrapeVsinOdds, matchTeam } from "./vsinScraper";
 import { updateBookOdds } from "./db";
 import { getLastRefreshResult, runVsinRefresh } from "./vsinAutoRefresh";
+import { VALID_DB_SLUGS } from "@shared/ncaamTeams";
 
 export const appRouter = router({
   system: systemRouter,
@@ -187,7 +187,9 @@ export const appRouter = router({
           .optional()
       )
       .query(async ({ input }) => {
-        return listGames(input ?? {});
+        const games = await listGames(input ?? {});
+        // Only return games where both teams are in the 365-team D1 NCAAM registry
+        return games.filter(g => VALID_DB_SLUGS.has(g.awayTeam) && VALID_DB_SLUGS.has(g.homeTeam));
       }),
 
     /**
@@ -197,7 +199,8 @@ export const appRouter = router({
     listStaging: ownerProcedure
       .input(z.object({ gameDate: z.string() }))
       .query(async ({ input }) => {
-        return listStagingGames(input.gameDate);
+        const games = await listStagingGames(input.gameDate);
+        return games.filter(g => VALID_DB_SLUGS.has(g.awayTeam) && VALID_DB_SLUGS.has(g.homeTeam));
       }),
 
     /**
@@ -252,7 +255,8 @@ export const appRouter = router({
     listStagingRange: ownerProcedure
       .input(z.object({ fromDate: z.string(), toDate: z.string() }))
       .query(async ({ input }) => {
-        return listStagingGamesRange(input.fromDate, input.toDate);
+        const games = await listStagingGamesRange(input.fromDate, input.toDate);
+        return games.filter(g => VALID_DB_SLUGS.has(g.awayTeam) && VALID_DB_SLUGS.has(g.homeTeam));
       }),
 
     /** Returns the result of the last auto-refresh run (null if never run). */

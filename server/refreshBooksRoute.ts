@@ -17,7 +17,7 @@ import { parse as parseCookieHeader } from "cookie";
 import { jwtVerify } from "jose";
 import { ENV } from "./_core/env";
 import { listStagingGames, updateBookOdds, getAppUserById } from "./db";
-import { scrapeVsinOdds, matchTeam } from "./vsinScraper";
+import { scrapeVsinOdds } from "./vsinScraper";
 
 const APP_USER_COOKIE = "app_session";
 
@@ -92,11 +92,11 @@ export function registerRefreshBooksRoute(app: Express) {
       for (let i = 0; i < allGames.length; i++) {
         const game = allGames[i];
 
-        // Find the scraped entry where both away and home team names match
+        // Find the scraped entry by slug (deterministic href-based slugs)
         const match = scraped.find(
           (s) =>
-            matchTeam(s.awayTeam, game.awayTeam) &&
-            matchTeam(s.homeTeam, game.homeTeam)
+            s.awaySlug === game.awayTeam &&
+            s.homeSlug === game.homeTeam
         );
 
         if (match) {

@@ -20,13 +20,13 @@
 import { listGamesByDate, updateBookOdds, insertGames, getGameByNcaaContestId, updateNcaaStartTime } from "./db";
 import { scrapeVsinOdds } from "./vsinScraper";
 import { fetchNcaaGames, buildStartTimeMap } from "./ncaaScoreboard";
+import { VALID_DB_SLUGS, BY_DB_SLUG } from "../shared/ncaamTeams";
 import type { InsertGame } from "../drizzle/schema";
 
 const INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
-// Date range to populate from NCAA (inclusive)
-const NCAA_RANGE_START = "2026-03-04";
-const NCAA_RANGE_END   = "2026-03-10";
+// Rolling window: today through N days ahead
+const NCAA_RANGE_DAYS_AHEAD = 6; // fetch today + 6 more days = 7-day window
 
 export interface RefreshResult {
   refreshedAt: string;    // ISO timestamp
@@ -45,8 +45,8 @@ export function getLastRefreshResult(): RefreshResult | null {
 
 /**
  * Returns true if two team slugs refer to the same team.
- * Handles common suffix variations: _state/_st, _connecticut/_conn_st, etc.
- * Used as a fallback when exact slug match fails (e.g. legacy rows with old slugs).
+ * Uses the registry as the canonical source — both slugs must resolve to the same
+ * team entry (by dbSlug). Falls back to exact string comparison.
  */
 function slugsMatch(a: string, b: string): boolean {
   if (a === b) return true;
@@ -55,68 +55,12 @@ function slugsMatch(a: string, b: string): boolean {
   const na = norm(a);
   const nb = norm(b);
   if (na === nb) return true;
-  // Common suffix aliases
-  const aliases: Record<string, string> = {
-    // _st -> _state
-    michigan_st: "michigan_state",
-    ohio_st: "ohio_state",
-    penn_st: "penn_state",
-    florida_st: "florida_state",
-    colorado_st: "colorado_state",
-    cleveland_st: "cleveland_state",
-    chicago_st: "chicago_state",
-    georgia_st: "georgia_state",
-    youngstown_st: "youngstown_state",
-    wright_st: "wright_state",
-    iowa_st: "iowa_state",
-    // DB abbreviated slugs -> canonical
-    c_conn_st: "central_connecticut",
-    lemoyne: "le_moyne",
-    w_georgia: "west_georgia",
-    liu_brooklyn: "liu",
-    n_alabama: "north_alabama",
-    fl_gulf_coast: "florida_gulf_coast",
-    e_kentucky: "eastern_kentucky",
-    n_florida: "north_florida",
-    n_kentucky: "northern_kentucky",
-    sc_upstate: "south_carolina_upstate",
-    e_illinois: "eastern_illinois",
-    // NCAA seoname -> DB slug
-    southern_ill: "s_illinois",
-    middle_tenn: "middle_tenn_st",
-    north_dakota_st: "n_dakota_st",
-    south_dakota_st: "s_dakota_st",
-    southeast_mo_st: "se_missouri_st",
-    ut_martin: "tennessee_martin",
-    md_east_shore: "md_e_shore",
-    mississippi_val: "miss_valley_st",
-    western_ky: "w_kentucky",
-    prairie_view: "prairie_view_a_and_m",
-    grambling: "grambling_st",
-    south_carolina_st: "s_carolina_st",
-    uni: "n_iowa",
-    alcorn: "alcorn_st",
-    cal_st_northridge: "csu_northridge",
-    bakersfield: "csu_bakersfield",
-    cal_st_fullerton: "csu_fullerton",
-    lindenwood_mo: "lindenwood",
-    south_utah: "southern_utah",
-    coppin_st: "coppin_state",
-    delaware_st: "delaware_state",
-    florida_am: "florida_a_and_m",
-    alabama_am: "alabama_a_and_m",
-    alabama_st: "alabama_state",
-    grambling_st: "grambling_st",
-    morgan_st: "morgan_state",
-    norfolk_st: "norfolk_state",
-    kennesaw_st: "kennesaw_state",
-    jacksonville_st: "jacksonville_state",
-    new_mexico_st: "new_mexico_state",
-    tarleton_st: "tarleton_state",
-    arkansas_st: "arkansas_state",
-  };
-  const resolve = (s: string) => aliases[s] ?? s;
-  return resolve(na) === resolve(nb);
+  // Registry-based resolution: look up both slugs and compare canonical dbSlugs
+  const teamA = BY_DB_SLUG.get(na);
+  const teamB = BY_DB_SLUG.get(nb);
+  if (teamA && teamB) return teamA.dbSlug === teamB.dbSlug;
+  // If one is in registry and the other isn't, no match
+  return false;
 }
 
 /** Returns true if the current moment is inside 6am–midnight Pacific Time. */
@@ -184,10 +128,16 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
       console.log("[VSiNAutoRefresh] No games returned from VSiN — skipping VSiN step.");
     }
 
-    // Partition scraped games by date — ignore past dates
+    // Partition scraped games by date — ignore past dates AND non-365-team games
     const relevantGames = allScraped.filter(g => {
       const d = yyyymmddToIso(String(g.gameDate ?? ""));
-      return d >= todayStr; // today or future
+      if (d < todayStr) return false; // ignore past
+      // Filter: both teams must be in the 365-team registry
+      if (!VALID_DB_SLUGS.has(g.awaySlug) || !VALID_DB_SLUGS.has(g.homeSlug)) {
+        console.log(`[VSiNAutoRefresh] Skipping non-D1 game: ${g.awaySlug} @ ${g.homeSlug}`);
+        return false;
+      }
+      return true;
     });
 
     console.log(
@@ -203,8 +153,9 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     const startTimeMaps = new Map<string, Map<string, string>>();
     const ncaaGamesByDate = new Map<string, Awaited<ReturnType<typeof fetchNcaaGames>>>();
 
-    // Fetch NCAA data for all dates in the full range (03/04–03/10)
-    const allDates = dateRange(NCAA_RANGE_START, NCAA_RANGE_END);
+    // Fetch NCAA data for a rolling window: today through N days ahead
+    const rangeEnd = datePst(NCAA_RANGE_DAYS_AHEAD);
+    const allDates = dateRange(todayStr, rangeEnd);
     for (const dateStr of allDates) {
       try {
         const yyyymmdd = dateStr.replace(/-/g, "");
@@ -331,6 +282,14 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
 
       for (const ncaaGame of ncaaGames) {
         const { contestId, awaySeoname, homeSeoname, startTimeEst } = ncaaGame;
+
+        // Skip if either team is not in the 365-team registry
+        if (!VALID_DB_SLUGS.has(awaySeoname) || !VALID_DB_SLUGS.has(homeSeoname)) {
+          if (awaySeoname !== "tba" && homeSeoname !== "tba") {
+            console.log(`[VSiNAutoRefresh] Skipping non-D1 NCAA game: ${awaySeoname} @ ${homeSeoname}`);
+          }
+          continue;
+        }
 
         // Skip if already in DB by contestId
         const byContestId = await getGameByNcaaContestId(contestId);

@@ -17,8 +17,7 @@ import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw } from "lucide-react";
-import { getEspnLogoUrl } from "@/lib/espnTeamIds";
-import { getTeamName } from "@/lib/teamNicknames";
+import { getTeamByDbSlug } from "@shared/ncaamTeams";
 
 // ─── Helpers (mirrors GameCard exactly) ──────────────────────────────────────
 
@@ -188,7 +187,7 @@ function EditableTeamRow({
   slug, name, nickname, consensus, modelSpread,
   logoUrl, onSpreadChange, spreadInputRef,
 }: {
-  slug: string; name: string; nickname: string;
+  slug: string; name: string; nickname?: string;
   consensus: string; modelSpread: string;
   logoUrl?: string;
   onSpreadChange: (v: string) => void;
@@ -513,14 +512,14 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
       ? getEdgeColor(maxDiff)
       : "hsl(var(--border))";
 
-  const awayTeamName = getTeamName(game.awayTeam);
-  const homeTeamName = getTeamName(game.homeTeam);
-  const awayName     = awayTeamName.school || formatTeamName(game.awayTeam);
-  const homeName     = homeTeamName.school || formatTeamName(game.homeTeam);
-  const awayNickname = awayTeamName.nickname;
-  const homeNickname = homeTeamName.nickname;
-  const awayLogoUrl  = getEspnLogoUrl(game.awayTeam) ?? undefined;
-  const homeLogoUrl  = getEspnLogoUrl(game.homeTeam) ?? undefined;
+  const awayReg = getTeamByDbSlug(game.awayTeam);
+  const homeReg = getTeamByDbSlug(game.homeTeam);
+  const awayName     = awayReg?.ncaaName || formatTeamName(game.awayTeam);
+  const homeName     = homeReg?.ncaaName || formatTeamName(game.homeTeam);
+  const awayNickname = awayReg?.ncaaNickname ?? undefined;
+  const homeNickname = homeReg?.ncaaNickname ?? undefined;
+  const awayLogoUrl  = awayReg?.logoUrl ?? undefined;
+  const homeLogoUrl  = homeReg?.logoUrl ?? undefined;
   const time      = formatMilitaryTime(game.startTimeEst);
   const dateLabel = formatDate(game.gameDate);
 

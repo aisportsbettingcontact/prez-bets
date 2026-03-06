@@ -4,9 +4,11 @@
  * No authentication required — public endpoint.
  *
  * NCAA seonames use hyphens (e.g. "michigan-st").
- * seonameToSlug() converts hyphens to underscores ("michigan_st").
- * NCAA_ALIAS then maps abbreviated forms to full DB slugs ("michigan_st" -> "michigan_state").
+ * ncaaSlugToDb() converts NCAA seonames to DB slugs using the canonical
+ * 365-team registry (shared/ncaamTeams.ts).
  */
+
+import { BY_NCAA_SLUG } from "../shared/ncaamTeams";
 
 const NCAA_API = "https://sdataprod.ncaa.com/";
 const GET_CONTESTS_SHA =
@@ -44,10 +46,7 @@ function seonameToSlug(seoname: string): string {
   return seoname.replace(/-/g, "_");
 }
 
-/**
- * NCAA seoname (after hyphen->underscore) -> DB slug.
- * Only entries that differ from the default conversion are listed.
- */
+// Legacy alias map kept for any NCAA seonames not yet in the registry
 const NCAA_ALIAS: Record<string, string> = {
   // _st abbreviations -> _state
   michigan_st:         "michigan_state",
@@ -188,6 +187,10 @@ const NCAA_ALIAS: Record<string, string> = {
 };
 
 function ncaaSlugToDb(seoname: string): string {
+  // 1. Try registry lookup by NCAA slug (hyphen format) — canonical source
+  const team = BY_NCAA_SLUG.get(seoname);
+  if (team) return team.dbSlug;
+  // 2. Fall back to legacy alias map (underscore format)
   const slug = seonameToSlug(seoname);
   return NCAA_ALIAS[slug] ?? slug;
 }

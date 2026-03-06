@@ -19,6 +19,7 @@
 
 import * as cheerio from "cheerio";
 import { ENV } from "./_core/env";
+import { BY_VSIN_SLUG } from "../shared/ncaamTeams";
 
 export interface ScrapedOdds {
   awayTeam: string;   // display name from VSiN anchor text
@@ -130,124 +131,21 @@ async function fetchVsinPage(): Promise<string> {
 }
 
 /**
- * Maps VSiN href slugs (from /college-basketball/teams/<slug>) to DB slugs.
- * VSiN uses hyphens; DB uses underscores. Some slugs also need aliasing.
- */
-const HREF_SLUG_MAP: Record<string, string> = {
-  // Exact matches after hyphen→underscore conversion (no entry needed)
-  // Aliases for VSiN hrefs that differ from DB slugs
-  "central-conn-st": "central_connecticut",
-  "liu-brooklyn": "liu",
-  "long-island": "liu",
-  "ark-little-rock": "little_rock",
-  "little-rock": "little_rock",
-  "siu-edwardsville": "siu_edwardsville",
-  "siuedwardsville": "siu_edwardsville",
-  "loyola-chicago": "loyola_chicago",
-  "loyolachicago": "loyola_chicago",
-  "uw-milwaukee": "milwaukee",
-  "uwmilwaukee": "milwaukee",
-  "gardner-webb": "gardner_webb",
-  "gardnerwebb": "gardner_webb",
-  "le-moyne": "le_moyne",
-  "lemoyne": "le_moyne",
-  "w-georgia": "west_georgia",
-  "west-georgia": "west_georgia",
-  "n-alabama": "north_alabama",
-  "north-alabama": "north_alabama",
-  "fl-gulf-coast": "florida_gulf_coast",
-  "fgcu": "florida_gulf_coast",
-  "florida-gulf-coast": "florida_gulf_coast",
-  "e-kentucky": "eastern_kentucky",
-  "eastern-kentucky": "eastern_kentucky",
-  "n-florida": "north_florida",
-  "north-florida": "north_florida",
-  "n-kentucky": "northern_kentucky",
-  "northern-kentucky": "northern_kentucky",
-  "sc-upstate": "south_carolina_upstate",
-  "scupstate": "south_carolina_upstate",
-  "south-carolina-upstate": "south_carolina_upstate",
-  "chicago-st": "chicago_state",
-  "chicago-state": "chicago_state",
-  "cleveland-st": "cleveland_state",
-  "cleveland-state": "cleveland_state",
-  "colorado-st": "colorado_state",
-  "colorado-state": "colorado_state",
-  "ohio-st": "ohio_state",
-  "ohio-state": "ohio_state",
-  "penn-st": "penn_state",
-  "penn-state": "penn_state",
-  "florida-st": "florida_state",
-  "florida-state": "florida_state",
-  "wright-st": "wright_state",
-  "wright-state": "wright_state",
-  "youngstown-st": "youngstown_state",
-  "youngstown-state": "youngstown_state",
-  "e-illinois": "eastern_illinois",
-  "eastern-illinois": "eastern_illinois",
-  "georgia-st": "georgia_state",
-  "georgia-state": "georgia_state",
-  "miami-fl": "miami_fl",
-  "miami-florida": "miami_fl",
-  "la-lafayette": "ul_lafayette",
-  "ul-lafayette": "ul_lafayette",
-  "detroit": "detroit_mercy",
-  "detroit-mercy": "detroit_mercy",
-  "old-dom": "old_dominion",
-  "old-dominion": "old_dominion",
-  "georgia-southern": "georgia_southern",
-  "ga-southern": "georgia_southern",
-  "james-madison": "james_madison",
-  "jmu": "james_madison",
-  "george-washington": "george_washington",
-  "la-salle": "la_salle",
-  "oral-roberts": "oral_roberts",
-  "north-texas": "north_texas",
-  "new-mexico": "new_mexico",
-  "saint-louis": "saint_louis",
-  "robert-morris": "robert_morris",
-  "fairleigh-dickinson": "fairleigh_dickinson",
-  "st-josephs": "st_josephs",
-  "st-bonaventure": "st_bonaventure",
-  // Big Ten teams (VSiN uses abbreviated forms)
-  "michigan-st": "michigan_state",
-  "michigan-state": "michigan_state",
-  "iowa-st": "iowa_state",
-  "iowa-state": "iowa_state",
-  // Additional VSiN abbreviations
-  "c-conn-st": "central_connecticut",
-  "w-ga": "west_georgia",
-  "n-ala": "north_alabama",
-  "e-ky": "eastern_kentucky",
-  "e-ill": "eastern_illinois",
-  "siue": "siu_edwardsville",
-  "siu-e": "siu_edwardsville",
-  "uw-milw": "milwaukee",
-  "n-ky": "northern_kentucky",
-  "sc-up": "south_carolina_upstate",
-  "chi-st": "chicago_state",
-  "clev-st": "cleveland_state",
-  "colo-st": "colorado_state",
-  "fla-st": "florida_state",
-  "geo-st": "georgia_state",
-  "geo-so": "georgia_southern",
-  "young-st": "youngstown_state",
-  "fla-gulf": "florida_gulf_coast",
-  "ark-lr": "little_rock",
-  "miami-oh": "miami_oh",
-};
-
-/**
  * Converts a VSiN href team slug to a DB slug.
  * e.g. "/college-basketball/teams/central-conn-st" → "central_connecticut"
+ *
+ * Priority:
+ *   1. Registry lookup by VSiN slug (canonical 365-team source)
+ *   2. Hyphen → underscore conversion (fallback for any unregistered slug)
  */
 function hrefToDbSlug(href: string): string {
   // Extract the last path segment: "/college-basketball/teams/central-conn-st" → "central-conn-st"
   const parts = href.split("/");
   const raw = parts[parts.length - 1].toLowerCase();
-  // Check alias map first
-  if (HREF_SLUG_MAP[raw]) return HREF_SLUG_MAP[raw];
-  // Fall back: replace hyphens with underscores
+  // 1. Registry lookup (primary — canonical 365-team source)
+  const team = BY_VSIN_SLUG.get(raw);
+  if (team) return team.dbSlug;
+  // 2. Default: replace hyphens with underscores
   return raw.replace(/-/g, "_");
 }
 
@@ -383,8 +281,8 @@ function parseGames(
     // Extract DB slugs from href attributes (deterministic, no fuzzy matching needed)
     const awayHref = $(teamAnchors[0]).attr("href") || "";
     const homeHref = $(teamAnchors[1]).attr("href") || "";
-    const awaySlug = awayHref ? hrefToDbSlug(awayHref) : normalizeTeamName(awayTeam);
-    const homeSlug = homeHref ? hrefToDbSlug(homeHref) : normalizeTeamName(homeTeam);
+    const awaySlug = awayHref ? hrefToDbSlug(awayHref) : awayTeam.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const homeSlug = homeHref ? hrefToDbSlug(homeHref) : homeTeam.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
 
     // Extract spread from td[1]: two anchor links (away spread, home spread)
     const spreadTexts = getAnchorTexts($, tds[1]);
@@ -416,21 +314,11 @@ function parseGames(
 }
 
 /**
- * Normalizes a team name for fuzzy matching against DB slugs.
- */
-export function normalizeTeamName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9_]/g, "")
-    .trim();
-}
-
-/**
+ * @deprecated Use slug-based matching instead. Kept for backward compatibility.
  * Returns true if a scraped team name matches a stored DB team slug.
  */
 export function matchTeam(scrapedName: string, storedSlug: string): boolean {
-  const norm = normalizeTeamName(scrapedName);
+  const norm = scrapedName.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "").trim();
   const slug = storedSlug.toLowerCase().replace(/[^a-z0-9_]/g, "");
 
   if (norm === slug) return true;
