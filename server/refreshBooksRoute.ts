@@ -1,5 +1,5 @@
 /**
- * GET /api/refresh-books?gameDate=2026-03-04
+ * GET /api/refresh-books?gameDate=YYYY-MM-DD  (defaults to today PST)
  *
  * Server-Sent Events endpoint. Streams one JSON event per game as its
  * book odds are scraped from VSiN and written to the DB.
@@ -45,7 +45,12 @@ export function registerRefreshBooksRoute(app: Express) {
       return;
     }
 
-    const gameDate = (req.query.gameDate as string) || "2026-03-04";
+    // Default to today in Pacific Time if no date provided
+    const todayPst = new Date().toLocaleDateString("en-US", {
+      timeZone: "America/Los_Angeles",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).replace(/(\d+)\/(\d+)\/(\d+)/, "$3-$1-$2"); // MM/DD/YYYY → YYYY-MM-DD
+    const gameDate = (req.query.gameDate as string) || todayPst;
 
     // ── SSE headers ───────────────────────────────────────────────────────────
     res.setHeader("Content-Type", "text/event-stream");

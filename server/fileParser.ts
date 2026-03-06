@@ -12,7 +12,21 @@
 
 import * as XLSX from "xlsx";
 import type { InsertGame } from "../drizzle/schema";
-import { normalizeTeamSlug } from "./teamNormalizer";
+import { BY_DB_SLUG } from "../shared/ncaamTeams";
+
+/**
+ * Convert a CSV team name to a DB slug.
+ * The CSV is expected to already contain canonical DB slugs (snake_case).
+ * This function normalises whitespace/case and verifies the slug is in the
+ * 365-team registry. Unrecognised slugs are passed through as-is so the
+ * upload pipeline can surface them as validation errors.
+ */
+function normalizeTeamSlug(raw: string): string {
+  const slug = raw.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+  // If it's in the registry, return the canonical dbSlug (handles any minor case/spacing drift)
+  const team = BY_DB_SLUG.get(slug);
+  return team ? team.dbSlug : slug;
+}
 
 // Required column names (all must be present, order doesn't matter)
 const REQUIRED_HEADERS = new Set([

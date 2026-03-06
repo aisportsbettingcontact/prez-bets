@@ -314,8 +314,9 @@ function parseGames(
 }
 
 /**
- * @deprecated Use slug-based matching instead. Kept for backward compatibility.
- * Returns true if a scraped team name matches a stored DB team slug.
+ * @deprecated This function is no longer used in the main pipeline.
+ * All matching is done via href-derived slugs (deterministic).
+ * Kept only for the test suite — do not call from production code.
  */
 export function matchTeam(scrapedName: string, storedSlug: string): boolean {
   const norm = scrapedName.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "").trim();

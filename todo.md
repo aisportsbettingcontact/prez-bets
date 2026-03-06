@@ -187,3 +187,15 @@
 - [x] Delete orphaned teamNicknames.ts (no longer imported anywhere)
 - [x] Update vsinScraper.test.ts: remove normalizeTeamName tests, update matchTeam tests
 - [x] All 24 tests passing after refactoring
+
+## Pipeline Audit Fixes (2026-03-06)
+- [x] Fix epochToEst() DST bug in ncaaScoreboard.ts (hardcoded UTC-5 breaks after March 8 DST change, should use Intl)
+- [x] Remove deprecated matchTeam() and its 100-line abbrevMap from vsinScraper.ts (not called anywhere)
+- [x] Fix stale comments in vsinAutoRefresh.ts (still references "03/04-03/10" in 3 places)
+- [x] Fix per-date log count in vsinAutoRefresh.ts (uses different filter than actual update/insert logic)
+- [x] Delete orphaned sheetsSync.ts (not imported anywhere, all references removed)
+- [x] Delete orphaned csvParser.ts (only imported by sheetsSync.ts which is dead)
+- [x] Delete orphaned teamNormalizer.ts — replaced with inline registry lookup in fileParser.ts
+- [x] Remove NCAA_ALIAS entirely from ncaaScoreboard.ts — registry is sole lookup, non-D1 teams filtered by VALID_DB_SLUGS
+- [x] Fix refreshBooksRoute.ts: hardcoded default date "2026-03-04" replaced with dynamic today PST
+- [ ] Consolidate ESPN logo source: teams.list DB query is redundant since registry has NCAA logos for all 365 teams (deferred — ESPN sync still used as fallback)

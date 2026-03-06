@@ -6,9 +6,10 @@
  * On each tick it:
  *   1. Scrapes the VSiN CBB betting splits page and upserts every game on the page
  *      (book odds + sortOrder + start time from NCAA).
- *   2. Fetches ALL NCAA DI MBB games for 03/04–03/10 and inserts any that are not
- *      already in the DB (including TBA vs TBA games), using ncaaContestId as the
- *      dedup key. VSiN-matched games are skipped (already handled in step 1).
+ *   2. Fetches ALL NCAA DI MBB games for a rolling 7-day window (today + 6 days ahead)
+ *      and inserts any that are not already in the DB (including TBA vs TBA games),
+ *      using ncaaContestId as the dedup key. VSiN-matched games are skipped (already
+ *      handled in step 1).
  *
  * This guarantees that every game on NCAA.com is always in the DB, regardless of
  * whether VSiN has odds for it.
@@ -110,7 +111,7 @@ function dateRange(start: string, end: string): string[] {
 
 /**
  * Core refresh logic — fully idempotent upsert of all VSiN games,
- * plus insertion of all NCAA games for 03/04–03/10.
+ * plus insertion of all NCAA games for a rolling 7-day window (today + 6 days ahead).
  * Safe to call at any time; errors are caught and logged.
  */
 export async function runVsinRefresh(): Promise<RefreshResult | null> {
@@ -264,7 +265,7 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
       );
     }
 
-    // ── STEP 2: NCAA-only game insertion (all games for 03/04–03/10) ──────────
+    // ── STEP 2: NCAA-only game insertion (rolling 7-day window) ─────────────
     // Insert any NCAA game that isn't already in the DB (by contestId or slug match).
     // This covers games that VSiN doesn't have odds for (including TBA vs TBA).
 

@@ -3,9 +3,10 @@
  * Fetches game start times (in EST) from the NCAA GraphQL API.
  * No authentication required — public endpoint.
  *
- * NCAA seonames use hyphens (e.g. "michigan-st").
- * ncaaSlugToDb() converts NCAA seonames to DB slugs using the canonical
- * 365-team registry (shared/ncaamTeams.ts).
+ * Team resolution: NCAA seonames (hyphen format, e.g. "michigan-st") are
+ * looked up directly in the 365-team registry (BY_NCAA_SLUG). If a seoname
+ * is not in the registry, the team is not one of the 365 tracked teams and
+ * will be filtered out downstream by VALID_DB_SLUGS.
  */
 
 import { BY_NCAA_SLUG } from "../shared/ncaamTeams";
@@ -21,7 +22,7 @@ export interface NcaaGame {
   awaySeoname: string;
   /** DB-style slug for home team, e.g. "penn_state" ("tba" if unknown) */
   homeSeoname: string;
-  /** Start time in EST as "HH:MM", e.g. "19:30" */
+  /** Start time in ET as "HH:MM", e.g. "19:30" (DST-aware) */
   startTimeEst: string;
   /** Whether the start time is confirmed (not TBA) */
   hasStartTime: boolean;
@@ -36,163 +37,29 @@ function toNcaaDate(yyyymmdd: string): string {
   return `${m}/${d}/${y}`;
 }
 
-function epochToEst(epochSec: number): string {
+/** Convert a Unix epoch (seconds) to "HH:MM" in Eastern Time (DST-aware). */
+function epochToEt(epochSec: number): string {
   const d = new Date(epochSec * 1000);
-  const estH = ((d.getUTCHours() - 5) + 24) % 24;
-  return `${estH.toString().padStart(2, "0")}:${d.getUTCMinutes().toString().padStart(2, "0")}`;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(d); // e.g. "19:30"
 }
 
-function seonameToSlug(seoname: string): string {
-  return seoname.replace(/-/g, "_");
-}
-
-// Legacy alias map kept for any NCAA seonames not yet in the registry
-const NCAA_ALIAS: Record<string, string> = {
-  // _st abbreviations -> _state
-  michigan_st:         "michigan_state",
-  ohio_st:             "ohio_state",
-  penn_st:             "penn_state",
-  iowa_st:             "iowa_state",
-  florida_st:          "florida_state",
-  colorado_st:         "colorado_state",
-  kansas_st:           "kansas_state",
-  oklahoma_st:         "oklahoma_state",
-  oregon_st:           "oregon_state",
-  washington_st:       "washington_state",
-  utah_st:             "utah_state",
-  arizona_st:          "arizona_state",
-  boise_st:            "boise_state",
-  fresno_st:           "fresno_state",
-  san_diego_st:        "san_diego_state",
-  san_jose_st:         "san_jose_state",
-  wichita_st:          "wichita_state",
-  illinois_st:         "illinois_state",
-  indiana_st:          "indiana_state",
-  idaho_st:            "idaho_state",
-  montana_st:          "montana_state",
-  north_dakota_st:     "n_dakota_st",
-  south_dakota_st:     "s_dakota_st",
-  south_carolina_st:   "s_carolina_st",
-  tennessee_st:        "tennessee_state",
-  mississippi_st:      "mississippi_state",
-  missouri_st:         "missouri_state",
-  murray_st:           "murray_state",
-  morehead_st:         "morehead_state",
-  jackson_st:          "jackson_state",
-  norfolk_st:          "norfolk_state",
-  morgan_st:           "morgan_state",
-  savannah_st:         "savannah_state",
-  kennesaw_st:         "kennesaw_state",
-  jacksonville_st:     "jacksonville_state",
-  sam_houston_st:      "sam_houston_state",
-  tarleton_st:         "tarleton_state",
-  texas_st:            "texas_state",
-  new_mexico_st:       "new_mexico_state",
-  portland_st:         "portland_state",
-  sacramento_st:       "sacramento_state",
-  weber_st:            "weber_state",
-  youngstown_st:       "youngstown_state",
-  wright_st:           "wright_state",
-  cleveland_st:        "cleveland_state",
-  chicago_st:          "chicago_state",
-  georgia_st:          "georgia_state",
-  long_beach_st:       "long_beach_state",
-  kent_st:             "kent_state",
-  pittsburg_st:        "pittsburg_state",
-  fort_hays_st:        "fort_hays_state",
-  nicholls_st:         "nicholls_state",
-  north_carolina_st:   "nc_state",
-  southeast_mo_st:     "se_missouri_st",
-  northwest_mo_st:     "northwest_missouri_state",
-  northwestern_st:     "northwestern_state",
-  west_virginia_st:    "west_virginia_state",
-  wayne_st_mi:         "wayne_state",
-  // Institutional abbreviations
-  ualr:                "little_rock",
-  fgcu:                "florida_gulf_coast",
-  fdu:                 "fairleigh_dickinson",
-  usc_upstate:         "south_carolina_upstate",
-  long_island:         "liu",
-  lindenwood_mo:       "lindenwood",
-  central_conn_st:     "central_connecticut",
-  // Geographic abbreviations
-  north_ala:           "north_alabama",
-  south_ala:           "south_alabama",
-  west_ala:            "west_alabama",
-  west_ga:             "west_georgia",
-  northern_ky:         "northern_kentucky",
-  eastern_ky:          "eastern_kentucky",
-  eastern_ill:         "eastern_illinois",
-  southern_ill:        "s_illinois",       // DB uses s_illinois (VSiN slug)
-  southern_california: "usc",
-  south_fla:           "south_florida",
-  ga_southern:         "georgia_southern",
-  north_ala_2:         "north_alabama",    // alias
-  // Display name differences
-  detroit:             "detroit_mercy",
-  saint_josephs:       "st_josephs",
-  humboldt_st:         "cal_poly_humboldt",
-  // NCAA seoname -> DB slug (NCAA uses full names, DB uses VSiN abbreviated slugs)
-  middle_tenn:         "middle_tenn_st",
-  ut_martin:           "tennessee_martin",
-  md_east_shore:       "md_e_shore",
-  mississippi_val:     "miss_valley_st",
-  western_ky:          "w_kentucky",
-  prairie_view:        "prairie_view_a_and_m",
-  grambling:           "grambling_st",
-  uni:                 "n_iowa",
-  alcorn:              "alcorn_st",
-  cal_st_northridge:   "csu_northridge",
-  bakersfield:         "csu_bakersfield",
-  cal_st_fullerton:    "csu_fullerton",
-  cal_st_san_marcos:   "csu_san_marcos",
-  cal_poly:            "cal_poly_slo",
-  arkansas_st:         "arkansas_state",
-  alabama_am:          "alabama_a_and_m",
-  alabama_st:          "alabama_state",
-  south_utah:          "southern_utah",
-  coppin_st:           "coppin_state",
-  delaware_st:         "delaware_state",
-  florida_am:          "florida_a_and_m",
-  south_miss:          "southern_miss",
-  boston_u:            "boston_university",
-  loyola_maryland:     "loyola_md",
-  // Additional DB slug aliases
-  fiu:                 "florida_intl",
-  southern_utah:       "s_utah",
-  utep:                "texas_el_paso",
-  st_thomas_mn:        "st_thomas_mn_",
-  abilene_christian:   "abilene_chr",
-  california_baptist:  "california_baptist",
-  uc_riverside:        "uc_riverside",
-  uc_davis:            "uc_davis",
-  howard:              "howard",
-  nc_at:               "n_carolina_a_and_t",
-  eastern_mich:        "e_michigan",
-  central_ark:         "c_arkansas",
-  north_dakota:        "n_dakota",
-  charleston_so:       "charleston_southern",
-  ill_chicago:         "illinois_chicago",
-  citadel:             "the_citadel",
-  northern_ill:        "n_illinois",
-  vcu:                 "va_commonwealth",
-  central_mich:        "c_michigan",
-  western_mich:        "w_michigan",
-  neb_omaha:           "nebraska_omaha",
-  south_dakota:        "s_dakota",
-  ucf:                 "c_florida",
-  st_johns_ny:         "st_johns",
-  penn:                "pennsylvania",
-  hawaii:              "hawaii",
-};
-
+/**
+ * Convert an NCAA seoname (hyphen format) to a DB slug.
+ * The 365-team registry (BY_NCAA_SLUG) is the sole source of truth.
+ * If the seoname is not in the registry, the raw seoname is returned
+ * (with hyphens replaced by underscores) — it will be filtered out
+ * downstream by VALID_DB_SLUGS.
+ */
 function ncaaSlugToDb(seoname: string): string {
-  // 1. Try registry lookup by NCAA slug (hyphen format) — canonical source
   const team = BY_NCAA_SLUG.get(seoname);
   if (team) return team.dbSlug;
-  // 2. Fall back to legacy alias map (underscore format)
-  const slug = seonameToSlug(seoname);
-  return NCAA_ALIAS[slug] ?? slug;
+  // Not in registry — return as-is (will be filtered by VALID_DB_SLUGS)
+  return seoname.replace(/-/g, "_");
 }
 
 export async function fetchNcaaGames(dateYYYYMMDD: string): Promise<NcaaGame[]> {
@@ -223,13 +90,14 @@ export async function fetchNcaaGames(dateYYYYMMDD: string): Promise<NcaaGame[]> 
     const home = c.teams?.find((t: any) => t.isHome);
     if (!away || !home) continue;
 
-    // Use startTime if confirmed; fall back to epoch conversion if epoch is available.
-    // NCAA sometimes sets hasStartTime=false even when the epoch is valid (time is known).
+    // Resolve start time — prefer the confirmed startTime string from NCAA;
+    // fall back to epoch conversion (DST-aware). NCAA sometimes sets
+    // hasStartTime=false even when the epoch is valid.
     let startTimeEst: string;
     if (c.startTime && c.hasStartTime) {
       startTimeEst = c.startTime;
     } else if (c.startTimeEpoch) {
-      startTimeEst = epochToEst(c.startTimeEpoch);
+      startTimeEst = epochToEt(c.startTimeEpoch);
     } else {
       startTimeEst = "TBD";
     }
