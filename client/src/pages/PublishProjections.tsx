@@ -946,7 +946,7 @@ export default function PublishProjections() {
             }
           >
             <img
-              src="/march-madness-live/assets/icons/ncaa/disc.svg"
+              src="https://www.ncaa.com/march-madness-live/assets/icons/ncaa/disc.svg"
               alt="NCAA"
               width={16}
               height={16}
