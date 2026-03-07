@@ -359,3 +359,6 @@
 ## Splits Timestamp + EditableGameCard Splits (2026-03-07)
 - [x] Add global "Splits updated X min ago" timestamp at top of Dashboard feed (not per-card)
 - [x] Add BettingSplitsPanel to EditableGameCard on Publish Projections page (50/50 layout, splits right, inputs left)
+
+## Splits Timestamp Styling (2026-03-07)
+- [x] Make "Updated ## min ago" green (#39FF14), always visible, clock icon, format: "Updated ## min ago"

@@ -193,7 +193,7 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, []);
   const splitsAgoLabel = useMemo(() => {
-    if (!lastRefresh?.refreshedAt) return null;
+    if (!lastRefresh?.refreshedAt) return "—";
     const diffMs = now - new Date(lastRefresh.refreshedAt).getTime();
     const diffMin = Math.round(diffMs / 60_000);
     if (diffMin < 1) return "just now";
@@ -408,12 +408,12 @@ export default function Dashboard() {
             NBA
           </button>
           {/* Splits timestamp — pushed to the right */}
-          {splitsAgoLabel && (
-            <div className="ml-auto flex items-center gap-1" style={{ color: "rgba(163,163,163,0.7)" }}>
-              <Clock style={{ width: 10, height: 10, flexShrink: 0 }} />
-              <span style={{ fontSize: 10, whiteSpace: "nowrap" }}>Splits {splitsAgoLabel}</span>
-            </div>
-          )}
+          <div className="ml-auto flex items-center gap-1.5">
+            <Clock style={{ width: 11, height: 11, flexShrink: 0, color: "#39FF14" }} />
+            <span style={{ fontSize: 11, whiteSpace: "nowrap", color: "#39FF14", fontWeight: 700, letterSpacing: "0.03em" }}>
+              Updated {splitsAgoLabel}
+            </span>
+          </div>
         </div>
 
         {/* Row 3: Search bar (always visible, sticky with header) */}
