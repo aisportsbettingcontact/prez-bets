@@ -132,20 +132,25 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
   const homeTextColor = bestTextColor(homeColor);
   return (
     <div className="flex flex-col gap-0.5">
-      {/* Centered label */}
+      {/* Centered label — white */}
       <div className="flex items-center justify-center">
         <span
-          className="text-[9px] uppercase tracking-widest"
-          style={{ color: "hsl(var(--muted-foreground))", opacity: 0.5 }}
+          className="text-[9px] uppercase tracking-widest font-semibold"
+          style={{ color: "#ffffff", opacity: 0.75 }}
         >
           {label}
         </span>
       </div>
-      {/* Two-color bar */}
+      {/* Two-color bar with border outline */}
       {hasData ? (
         <div
           className="relative w-full rounded-full overflow-hidden"
-          style={{ height: 28, display: "flex" }}
+          style={{
+            height: 28,
+            display: "flex",
+            border: "1.5px solid rgba(255,255,255,0.18)",
+            boxSizing: "border-box",
+          }}
         >
           <div
             className="flex items-center justify-start pl-2 transition-all duration-700"
@@ -160,6 +165,15 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
               {awayPct}%
             </span>
           </div>
+          {/* Split divider line between the two halves */}
+          <div
+            style={{
+              width: 1.5,
+              background: "rgba(255,255,255,0.35)",
+              flexShrink: 0,
+              alignSelf: "stretch",
+            }}
+          />
           <div
             className="flex items-center justify-end pr-2 transition-all duration-700"
             style={{
@@ -241,23 +255,28 @@ function MarketSection({
         </span>
       </div>
 
-      {/* Money % bar */}
-      {moneyPct != null && (
+      {/* Ticket % bar — TOP */}
+      {betsPct != null && (
         <SplitBar
-          label="Money %"
-          awayPct={awayMoney}
-          homePct={homeMoney}
+          label="Ticket %"
+          awayPct={awayBets}
+          homePct={homeBets}
           awayColor={awayColor}
           homeColor={homeColor}
         />
       )}
 
-      {/* Bets % bar */}
-      {betsPct != null && (
+      {/* Thin divider between the two bars */}
+      {moneyPct != null && betsPct != null && (
+        <div style={{ height: 1, background: "rgba(255,255,255,0.10)", borderRadius: 1 }} />
+      )}
+
+      {/* Money % bar — BOTTOM */}
+      {moneyPct != null && (
         <SplitBar
-          label="Bet %"
-          awayPct={awayBets}
-          homePct={homeBets}
+          label="Money %"
+          awayPct={awayMoney}
+          homePct={homeMoney}
           awayColor={awayColor}
           homeColor={homeColor}
         />

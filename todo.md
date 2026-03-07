@@ -362,3 +362,9 @@
 
 ## Splits Timestamp Styling (2026-03-07)
 - [x] Make "Updated ## min ago" green (#39FF14), always visible, clock icon, format: "Updated ## min ago"
+
+## BettingSplitsPanel UX Polish (2026-03-07)
+- [x] Swap row order: TICKET % on top, MONEY % on bottom
+- [x] Rename "BET %" label to "TICKET %"
+- [x] Make label text white
+- [x] Add border/outline to bars (pills) and to the split divider line between the two halves
