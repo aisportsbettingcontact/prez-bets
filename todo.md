@@ -392,4 +392,10 @@
 - [x] Add ALL/Upcoming/LIVE/FINAL filter tabs to Dashboard NCAAM feed
 - [x] Wire filter tabs to gameStatus field in games.list tRPC procedure
 - [x] Show live game count badge on LIVE tab
+- [x] Save checkpoint and deliver
+
+## Publish Projections Game Status Filter (2026-03-07)
+- [x] Add ALL/UPCOMING/LIVE/FINAL filter tabs to Publish Projections page (mirrors Dashboard)
+- [x] Apply client-side status filter to the game list on Publish Projections
+- [x] Show live game count badge on LIVE tab
 - [ ] Save checkpoint and deliver

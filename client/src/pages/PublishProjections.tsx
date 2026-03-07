@@ -750,9 +750,15 @@ export default function PublishProjections() {
   const [, setLocation] = useLocation();
   const { appUser, isOwner, loading: authLoading } = useAppAuth();
   const [filter, setFilter] = useState<"all" | "regular_season" | "conference_tournament">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "upcoming" | "live" | "final">("all");
   const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA">("NCAAM");
   const [gameDate, setGameDate] = useState(() => todayPst());
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Reset status filter when sport changes to NBA (no status tracking yet)
+  useEffect(() => {
+    if (selectedSport === "NBA") setStatusFilter("all");
+  }, [selectedSport]);
 
   // ── Strict owner-only guard ─────────────────────────────────────────────────
   useEffect(() => {
@@ -813,9 +819,14 @@ export default function PublishProjections() {
 
   const handleRefetch = useCallback(() => { refetch(); }, [refetch]);
 
-  const filtered = (games ?? []).filter((g) =>
-    filter === "all" ? true : g.gameType === filter
-  );
+  // Count live games for the LIVE badge
+  const liveCount = (games ?? []).filter((g) => (g as GameRow & { gameStatus?: string }).gameStatus === 'live').length;
+
+  const filtered = (games ?? []).filter((g) => {
+    const typeOk = filter === "all" ? true : g.gameType === filter;
+    const statusOk = statusFilter === "all" ? true : (g as GameRow & { gameStatus?: string }).gameStatus === statusFilter;
+    return typeOk && statusOk;
+  });
 
   const publishedCount  = (games ?? []).filter((g) => g.publishedToFeed).length;
   const totalCount      = games?.length ?? 0;
@@ -979,6 +990,55 @@ export default function PublishProjections() {
           </button>
         </div>
 
+        {/* Status filter tabs (NCAAM only) */}
+        {selectedSport === "NCAAM" && (
+          <div className="px-4 pb-1 max-w-3xl mx-auto flex items-center gap-1.5">
+            {([
+              { key: "all", label: "ALL" },
+              { key: "upcoming", label: "UPCOMING" },
+              { key: "live", label: "LIVE" },
+              { key: "final", label: "FINAL" },
+            ] as const).map(({ key, label }) => {
+              const isActive = statusFilter === key;
+              const isLive = key === "live";
+              return (
+                <button
+                  key={key}
+                  onClick={() => setStatusFilter(key)}
+                  className="relative flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide transition-all"
+                  style={isActive
+                    ? isLive
+                      ? { background: "rgba(239,68,68,0.18)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.45)" }
+                      : { background: "rgba(57,255,20,0.12)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.35)" }
+                    : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+                  }
+                >
+                  {isLive && liveCount > 0 && (
+                    <span
+                      className="inline-block rounded-full"
+                      style={{
+                        width: 6, height: 6, flexShrink: 0,
+                        background: "#ef4444",
+                        boxShadow: isActive ? "0 0 6px #ef4444" : "none",
+                        animation: "pulse 1.5s ease-in-out infinite",
+                      }}
+                    />
+                  )}
+                  {label}
+                  {isLive && liveCount > 0 && (
+                    <span
+                      className="ml-0.5 text-[10px] font-black"
+                      style={{ color: isActive ? "#ef4444" : "hsl(var(--muted-foreground))" }}
+                    >
+                      {liveCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Stats row + filter tabs */}
         <div className="px-4 pb-2 max-w-3xl mx-auto space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
@@ -1032,7 +1092,12 @@ export default function PublishProjections() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-2">
-            <span className="text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>No games found</span>
+            <span className="text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>
+              {statusFilter !== "all"
+                ? `No ${statusFilter} ${selectedSport} games on ${formatDateNav(gameDate)}`
+                : `No games found for ${formatDateNav(gameDate)}`
+              }
+            </span>
           </div>
         ) : (
           filtered.map((game) => (
