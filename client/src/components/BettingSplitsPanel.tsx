@@ -152,7 +152,7 @@ function MarketSection({
         <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
         <span
           className="text-[13px] font-extrabold uppercase tracking-widest"
-          style={{ color: "hsl(var(--foreground))", opacity: 0.9 }}
+          style={{ color: '#d3d3d3', opacity: 0.9 }}
         >
           {title}
         </span>
@@ -163,13 +163,13 @@ function MarketSection({
       <div className="flex items-start justify-between gap-1 px-0.5">
         <span
           className="text-[11px] font-bold uppercase tracking-wide leading-tight"
-          style={{ color: awayColor, maxWidth: "48%", wordBreak: "break-word" }}
+          style={{ color: '#ffffff', maxWidth: "48%", wordBreak: "break-word" }}
         >
           {awayLabel}
         </span>
         <span
           className="text-[11px] font-bold uppercase tracking-wide leading-tight text-right"
-          style={{ color: homeColor, maxWidth: "48%", wordBreak: "break-word" }}
+          style={{ color: '#ffffff', maxWidth: "48%", wordBreak: "break-word" }}
         >
           {homeLabel}
         </span>
@@ -248,7 +248,7 @@ export function BettingSplitsPanel({
           <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.07)" }} />
           <span
             className="text-[15px] font-black uppercase tracking-widest"
-            style={{ color: "hsl(var(--foreground))", opacity: 0.7 }}
+            style={{ color: '#d3d3d3', opacity: 0.7 }}
           >
             Betting Splits
           </span>
@@ -273,7 +273,7 @@ export function BettingSplitsPanel({
         <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.07)" }} />
         <span
           className="text-[15px] font-black uppercase tracking-widest"
-          style={{ color: "hsl(var(--foreground))", opacity: 0.85 }}
+          style={{ color: '#d3d3d3', opacity: 0.85 }}
         >
           Betting Splits
         </span>
