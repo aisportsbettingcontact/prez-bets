@@ -7,6 +7,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  tinyint,
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
@@ -107,6 +108,23 @@ export const games = mysqlTable("games", {
   conference: varchar("conference", { length: 128 }),
   /** Whether this game has been published to the member feed by the owner */
   publishedToFeed: boolean("publishedToFeed").notNull().default(false),
+  // ─── VSiN Betting Splits (integer 0-100, null = not yet scraped) ───────────
+  /** % of spread bets placed on the away team */
+  spreadAwayBetsPct: tinyint("spreadAwayBetsPct"),
+  /** % of spread money wagered on the away team */
+  spreadAwayMoneyPct: tinyint("spreadAwayMoneyPct"),
+  /** % of total (O/U) bets placed on the Over */
+  totalOverBetsPct: tinyint("totalOverBetsPct"),
+  /** % of total (O/U) money wagered on the Over */
+  totalOverMoneyPct: tinyint("totalOverMoneyPct"),
+  /** % of moneyline bets placed on the away team */
+  mlAwayBetsPct: tinyint("mlAwayBetsPct"),
+  /** % of moneyline money wagered on the away team */
+  mlAwayMoneyPct: tinyint("mlAwayMoneyPct"),
+  /** Away team moneyline odds, e.g. "+120" or "-900" */
+  awayML: varchar("awayML", { length: 16 }),
+  /** Home team moneyline odds, e.g. "-142" or "+600" */
+  homeML: varchar("homeML", { length: 16 }),
   /** WagerTalk rotation numbers e.g. '689/690' (away/home) */
   rotNums: varchar("rotNums", { length: 32 }),
   /** WagerTalk display order — lower number appears first */

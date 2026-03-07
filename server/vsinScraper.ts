@@ -29,6 +29,15 @@ export interface ScrapedOdds {
   awaySpread: number | null;
   homeSpread: number | null;
   total: number | null;
+  // ─── NCAAM Betting Splits (4 fields only — no ML for NCAAM) ───────────────
+  /** % of spread bets on away team (0-100), null if not available */
+  spreadAwayBetsPct: number | null;
+  /** % of spread money on away team (0-100), null if not available */
+  spreadAwayMoneyPct: number | null;
+  /** % of total bets on Over (0-100), null if not available */
+  totalOverBetsPct: number | null;
+  /** % of total money on Over (0-100), null if not available */
+  totalOverMoneyPct: number | null;
   /** 0-based position of this game on the VSiN page (used for sortOrder) */
   vsinRowIndex: number;
   /** Date of the game as YYYYMMDD string, e.g. "20260304" */
@@ -147,6 +156,32 @@ function hrefToDbSlug(href: string): string {
   if (team) return team.dbSlug;
   // 2. Default: replace hyphens with underscores
   return raw.replace(/-/g, "_");
+}
+
+/**
+ * Parses a percentage value from a cell's visible text (e.g. "41%" → 41, "94%" → 94).
+ * Returns null if the text doesn't look like a valid percentage.
+ */
+function parsePct(text: string): number | null {
+  if (!text) return null;
+  const clean = text.trim().replace(/[^0-9]/g, "");
+  if (!clean) return null;
+  const val = parseInt(clean, 10);
+  if (isNaN(val) || val < 0 || val > 100) return null;
+  return val;
+}
+
+/**
+ * Extracts the first visible percentage text from a td cell.
+ * The VSiN splits cells contain two divs separated by <hr>; the first div is the away/over value.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getFirstPct($: cheerio.CheerioAPI, td: any): number | null {
+  // Get all direct div children that are NOT inside .collapse
+  const divs = $(td).children("div").not(".collapse").toArray();
+  if (divs.length === 0) return null;
+  const text = $(divs[0]).text().trim();
+  return parsePct(text);
 }
 
 /**
@@ -293,6 +328,16 @@ function parseGames(
     const totalTexts = getAnchorTexts($, tds[4]);
     const total = totalTexts.length > 0 ? parseTotal(totalTexts[0]) : null;
 
+    // ─── NCAAM Betting Splits ────────────────────────────────────────────────
+    // td[2] = spread bets% (away on top, home below <hr>)
+    // td[3] = spread money% (away on top, home below <hr>)
+    // td[5] = total bets% (over on top, under below <hr>)
+    // td[6] = total money% (over on top, under below <hr>)
+    const spreadAwayBetsPct = tds.length > 2 ? getFirstPct($, tds[2]) : null;
+    const spreadAwayMoneyPct = tds.length > 3 ? getFirstPct($, tds[3]) : null;
+    const totalOverBetsPct = tds.length > 5 ? getFirstPct($, tds[5]) : null;
+    const totalOverMoneyPct = tds.length > 6 ? getFirstPct($, tds[6]) : null;
+
     results.push({
       awayTeam,
       homeTeam,
@@ -301,6 +346,10 @@ function parseGames(
       awaySpread,
       homeSpread,
       total,
+      spreadAwayBetsPct,
+      spreadAwayMoneyPct,
+      totalOverBetsPct,
+      totalOverMoneyPct,
       vsinRowIndex: results.length, // 0-based position on VSiN page
       gameDate,                      // YYYYMMDD string, e.g. "20260304"
     });

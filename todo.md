@@ -269,3 +269,28 @@
 - [x] publishAll mutation now scoped to selected sport
 - [x] GameCard, SearchResultRow, TeamBadge all resolve NBA team names/logos
 - [x] normalizeEdgeLabel resolves NBA team names in edge verdict display
+
+## Betting Splits Feature (2026-03-07)
+- [ ] Audit existing DB schema for splits columns
+- [ ] Add splits columns to DB schema (spreadAwayBetsPct, spreadAwayMoneyPct, totalOverBetsPct, totalOverMoneyPct, mlAwayBetsPct, mlAwayMoneyPct)
+- [ ] Run db:push migration
+- [ ] Update vsinScraper.ts to parse and store all 6 splits fields
+- [ ] Update nbaVsinScraper.ts to parse and store all 6 splits fields
+- [ ] Update db.ts query helpers to return splits fields
+- [ ] Update tRPC procedures to expose splits data
+- [ ] Build BettingSplitsPanel component (side-by-side with model projections)
+- [ ] Integrate splits panel on Dashboard feed game cards (expandable)
+- [ ] Add splits view to Publish Projections page
+
+## Betting Splits Feature (2026-03-07) - COMPLETED
+- [x] Add 8 new DB columns (spreadAwayBetsPct, spreadAwayMoneyPct, totalOverBetsPct, totalOverMoneyPct, mlAwayBetsPct, mlAwayMoneyPct, awayML, homeML)
+- [x] Run db:push migration to apply columns
+- [x] Update vsinScraper.ts to parse 4 NCAAM splits fields (Bets%, Money% for spread and total)
+- [x] Update nbaVsinScraper.ts to parse 6 NBA splits fields + ML odds
+- [x] Fix NBA column order (Handle=money% is td[2]/td[5]/td[8], Bets% is td[3]/td[6]/td[9])
+- [x] Update updateBookOdds in db.ts to write splits fields
+- [x] Update vsinAutoRefresh.ts to pass splits to updateBookOdds for both NCAAM and NBA
+- [x] Build BettingSplitsPanel component with animated bars, section headers, VSiN attribution
+- [x] Integrate BettingSplitsPanel into GameCard with collapsible toggle
+- [x] Integrate BettingSplitsPanel into PublishProjections with collapsible toggle
+- [x] Verify splits data populated in DB (NCAAM: 4 fields, NBA: 6 fields + ML odds)

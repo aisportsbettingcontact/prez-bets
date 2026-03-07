@@ -30,6 +30,17 @@ export interface NbaScrapedOdds {
   awaySpread: number | null;
   homeSpread: number | null;
   total: number | null;
+  // ─── NBA Betting Splits (6 fields + ML odds) ──────────────────────────────
+  spreadAwayBetsPct: number | null;
+  spreadAwayMoneyPct: number | null;
+  totalOverBetsPct: number | null;
+  totalOverMoneyPct: number | null;
+  mlAwayBetsPct: number | null;
+  mlAwayMoneyPct: number | null;
+  /** Away team moneyline odds, e.g. "+120" or "-900" */
+  awayML: string | null;
+  /** Home team moneyline odds, e.g. "-142" or "+600" */
+  homeML: string | null;
   /** 0-based position of this game on the VSiN page (used for sortOrder) */
   vsinRowIndex: number;
   /** Date of the game as YYYYMMDD string, e.g. "20260306" */
@@ -191,6 +202,30 @@ function getAnchorTexts($: cheerio.CheerioAPI, td: any): string[] {
 }
 
 /**
+ * Parses a percentage value from a cell's visible text (e.g. "41%" → 41).
+ */
+function parsePct(text: string): number | null {
+  if (!text) return null;
+  const clean = text.trim().replace(/[^0-9]/g, "");
+  if (!clean) return null;
+  const val = parseInt(clean, 10);
+  if (isNaN(val) || val < 0 || val > 100) return null;
+  return val;
+}
+
+/**
+ * Extracts the first visible percentage text from a td cell.
+ * The VSiN splits cells contain two divs separated by <hr>; the first div is the away/over value.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getFirstPct($: cheerio.CheerioAPI, td: any): number | null {
+  const divs = $(td).children("div").not(".collapse").toArray();
+  if (divs.length === 0) return null;
+  const text = $(divs[0]).text().trim();
+  return parsePct(text);
+}
+
+/**
  * Extracts the game date (YYYYMMDD) from the game_id data attribute.
  * NBA game IDs look like: "20260306NBA00064"
  */
@@ -257,6 +292,26 @@ function parseNbaGames(
     const totalTexts = getAnchorTexts($, tds[4]);
     const total = totalTexts.length > 0 ? parseTotal(totalTexts[0]) : null;
 
+    // ─── NBA Betting Splits ───────────────────────────────────────────────────
+    // VSiN NBA column order: Spread | Handle(money) | Bets | Total | Handle(money) | Bets | ML | Handle(money) | Bets
+    // td[2] = spread HANDLE % = money % (away on top)
+    // td[3] = spread BETS % (away on top)
+    // td[5] = total HANDLE % = money % (over on top)
+    // td[6] = total BETS % (over on top)
+    // td[7] = moneyline odds (away on top, home below <hr>)
+    // td[8] = ML HANDLE % = money % (away on top)
+    // td[9] = ML BETS % (away on top)
+    const spreadAwayMoneyPct = tds.length > 2 ? getFirstPct($, tds[2]) : null;
+    const spreadAwayBetsPct = tds.length > 3 ? getFirstPct($, tds[3]) : null;
+    const totalOverMoneyPct = tds.length > 5 ? getFirstPct($, tds[5]) : null;
+    const totalOverBetsPct = tds.length > 6 ? getFirstPct($, tds[6]) : null;
+    const mlAwayMoneyPct = tds.length > 8 ? getFirstPct($, tds[8]) : null;
+    const mlAwayBetsPct = tds.length > 9 ? getFirstPct($, tds[9]) : null;
+    // ML odds from td[7]: two anchor links (away ML on top, home ML below <hr>)
+    const mlTexts = tds.length > 7 ? getAnchorTexts($, tds[7]) : [];
+    const awayML = mlTexts.length > 0 ? mlTexts[0].trim() || null : null;
+    const homeML = mlTexts.length > 1 ? mlTexts[1].trim() || null : null;
+
     results.push({
       awayTeam,
       homeTeam,
@@ -265,6 +320,14 @@ function parseNbaGames(
       awaySpread,
       homeSpread,
       total,
+      spreadAwayBetsPct,
+      spreadAwayMoneyPct,
+      totalOverBetsPct,
+      totalOverMoneyPct,
+      mlAwayBetsPct,
+      mlAwayMoneyPct,
+      awayML,
+      homeML,
       vsinRowIndex: results.length,
       gameDate,
     });

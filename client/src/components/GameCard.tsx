@@ -17,12 +17,13 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, Link, ImageDown } from "lucide-react";
+import { Download, Link, ImageDown, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/lib/trpc";
 import { getTeamByDbSlug } from "@shared/ncaamTeams";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
+import { BettingSplitsPanel } from "./BettingSplitsPanel";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
@@ -380,6 +381,7 @@ interface GameCardProps {
 
 export function GameCard({ game }: GameCardProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [splitsOpen, setSplitsOpen] = useState(false);
 
   const awayBookSpread = toNum(game.awayBookSpread);
   const homeBookSpread = toNum(game.homeBookSpread);
@@ -699,6 +701,46 @@ export function GameCard({ game }: GameCardProps) {
             />
           )}
         </div>
+
+        {/* Betting Splits toggle */}
+        <button
+          onClick={() => setSplitsOpen(v => !v)}
+          className="w-full flex items-center justify-center gap-1 py-1.5 transition-opacity hover:opacity-80"
+          style={{
+            borderTop: "1px solid hsl(var(--border) / 0.4)",
+            background: "hsl(var(--card))",
+          }}
+        >
+          <span
+            className="text-[9px] uppercase tracking-widest font-semibold"
+            style={{ color: "hsl(var(--muted-foreground))", opacity: 0.6 }}
+          >
+            {splitsOpen ? "Hide Splits" : "Betting Splits"}
+          </span>
+          {splitsOpen
+            ? <ChevronUp size={10} style={{ color: "hsl(var(--muted-foreground))", opacity: 0.6 }} />
+            : <ChevronDown size={10} style={{ color: "hsl(var(--muted-foreground))", opacity: 0.6 }} />
+          }
+        </button>
+
+        {/* Collapsible splits panel */}
+        <AnimatePresence>
+          {splitsOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ overflow: "hidden" }}
+            >
+              <BettingSplitsPanel
+                game={game}
+                awayLabel={awayName}
+                homeLabel={homeName}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       <ShareSheet

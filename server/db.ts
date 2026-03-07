@@ -333,7 +333,22 @@ export async function updateGameProjections(
  */
 export async function updateBookOdds(
   id: number,
-  data: { awayBookSpread: number | null; homeBookSpread: number | null; bookTotal: number | null; sortOrder?: number; startTimeEst?: string }
+  data: {
+    awayBookSpread: number | null;
+    homeBookSpread: number | null;
+    bookTotal: number | null;
+    sortOrder?: number;
+    startTimeEst?: string;
+    // Betting splits (NCAAM: 4 fields; NBA: 6 fields + ML odds)
+    spreadAwayBetsPct?: number | null;
+    spreadAwayMoneyPct?: number | null;
+    totalOverBetsPct?: number | null;
+    totalOverMoneyPct?: number | null;
+    mlAwayBetsPct?: number | null;
+    mlAwayMoneyPct?: number | null;
+    awayML?: string | null;
+    homeML?: string | null;
+  }
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -345,6 +360,15 @@ export async function updateBookOdds(
   };
   if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
   if (data.startTimeEst !== undefined) updateData.startTimeEst = data.startTimeEst;
+  // Splits — only write non-undefined values (null = explicitly clear, undefined = skip)
+  if (data.spreadAwayBetsPct !== undefined) updateData.spreadAwayBetsPct = data.spreadAwayBetsPct;
+  if (data.spreadAwayMoneyPct !== undefined) updateData.spreadAwayMoneyPct = data.spreadAwayMoneyPct;
+  if (data.totalOverBetsPct !== undefined) updateData.totalOverBetsPct = data.totalOverBetsPct;
+  if (data.totalOverMoneyPct !== undefined) updateData.totalOverMoneyPct = data.totalOverMoneyPct;
+  if (data.mlAwayBetsPct !== undefined) updateData.mlAwayBetsPct = data.mlAwayBetsPct;
+  if (data.mlAwayMoneyPct !== undefined) updateData.mlAwayMoneyPct = data.mlAwayMoneyPct;
+  if (data.awayML !== undefined) updateData.awayML = data.awayML;
+  if (data.homeML !== undefined) updateData.homeML = data.homeML;
   await db.update(games).set(updateData).where(eq(games.id, id));
 }
 

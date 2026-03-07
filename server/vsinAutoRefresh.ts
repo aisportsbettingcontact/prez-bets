@@ -215,6 +215,11 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
           bookTotal: scraped.total,
           sortOrder: scraped.vsinRowIndex,
           ...(startTimeEst ? { startTimeEst } : {}),
+          // NCAAM betting splits (4 fields)
+          spreadAwayBetsPct: scraped.spreadAwayBetsPct,
+          spreadAwayMoneyPct: scraped.spreadAwayMoneyPct,
+          totalOverBetsPct: scraped.totalOverBetsPct,
+          totalOverMoneyPct: scraped.totalOverMoneyPct,
         });
         if (ncaaContestId && !existingGame.ncaaContestId) {
           await updateNcaaStartTime(existingGame.id, {
@@ -420,6 +425,15 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
           bookTotal: scraped.total,
           sortOrder: scraped.vsinRowIndex,
           ...(startTimeEst ? { startTimeEst } : {}),
+          // NBA betting splits (6 fields + ML odds)
+          spreadAwayBetsPct: scraped.spreadAwayBetsPct,
+          spreadAwayMoneyPct: scraped.spreadAwayMoneyPct,
+          totalOverBetsPct: scraped.totalOverBetsPct,
+          totalOverMoneyPct: scraped.totalOverMoneyPct,
+          mlAwayBetsPct: scraped.mlAwayBetsPct,
+          mlAwayMoneyPct: scraped.mlAwayMoneyPct,
+          awayML: scraped.awayML,
+          homeML: scraped.homeML,
         });
         totalUpdated++;
       } else {
@@ -446,6 +460,15 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
           rotNums: null,
           sortOrder: scraped.vsinRowIndex,
           ncaaContestId: null,
+          // NBA betting splits
+          spreadAwayBetsPct: scraped.spreadAwayBetsPct,
+          spreadAwayMoneyPct: scraped.spreadAwayMoneyPct,
+          totalOverBetsPct: scraped.totalOverBetsPct,
+          totalOverMoneyPct: scraped.totalOverMoneyPct,
+          mlAwayBetsPct: scraped.mlAwayBetsPct,
+          mlAwayMoneyPct: scraped.mlAwayMoneyPct,
+          awayML: scraped.awayML,
+          homeML: scraped.homeML,
         };
         await insertGames([row]);
         totalInserted++;

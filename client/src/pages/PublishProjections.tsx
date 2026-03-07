@@ -16,9 +16,10 @@ import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw } from "lucide-react";
+import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { getTeamByDbSlug } from "@shared/ncaamTeams";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
+import { BettingSplitsPanel } from "@/components/BettingSplitsPanel";
 
 // ─── Helpers (mirrors GameCard exactly) ──────────────────────────────────────
 
@@ -369,6 +370,16 @@ type GameRow = {
   gameDate: string;
   gameType: "regular_season" | "conference_tournament";
   conference: string | null;
+  sport: string | null;
+  // Betting splits
+  spreadAwayBetsPct: number | null;
+  spreadAwayMoneyPct: number | null;
+  totalOverBetsPct: number | null;
+  totalOverMoneyPct: number | null;
+  mlAwayBetsPct: number | null;
+  mlAwayMoneyPct: number | null;
+  awayML: string | null;
+  homeML: string | null;
 };
 
 // ─── EditableGameCard ─────────────────────────────────────────────────────────
@@ -379,6 +390,7 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
   const [modelTotal, setModelTotal] = useState(game.modelTotal ?? "");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [splitsOpen, setSplitsOpen] = useState(false);
   const awaySpreadRef = useRef<HTMLInputElement | null>(null);
 
   const updateMutation = trpc.games.updateProjections.useMutation();
@@ -706,6 +718,36 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
           />
         )}
       </div>
+
+      {/* Betting Splits toggle */}
+      <button
+        onClick={() => setSplitsOpen(v => !v)}
+        className="w-full flex items-center justify-center gap-1 py-1.5 transition-opacity hover:opacity-80"
+        style={{
+          borderTop: "1px solid hsl(var(--border) / 0.4)",
+          background: "hsl(var(--card))",
+        }}
+      >
+        <span
+          className="text-[9px] uppercase tracking-widest font-semibold"
+          style={{ color: "hsl(var(--muted-foreground))", opacity: 0.6 }}
+        >
+          {splitsOpen ? "Hide Splits" : "Betting Splits"}
+        </span>
+        {splitsOpen
+          ? <ChevronUp size={10} style={{ color: "hsl(var(--muted-foreground))", opacity: 0.6 }} />
+          : <ChevronDown size={10} style={{ color: "hsl(var(--muted-foreground))", opacity: 0.6 }} />
+        }
+      </button>
+
+      {/* Collapsible splits panel */}
+      {splitsOpen && (
+        <BettingSplitsPanel
+          game={game}
+          awayLabel={awayName}
+          homeLabel={homeName}
+        />
+      )}
     </motion.div>
   );
 }
