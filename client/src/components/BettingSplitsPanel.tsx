@@ -66,7 +66,7 @@ function isUnusableBarColor(hex: string | null | undefined): boolean {
   const g = parseInt(full.slice(2, 4), 16) / 255;
   const b = parseInt(full.slice(4, 6), 16) / 255;
   const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return lum < 0.08 || lum > 0.90; // too dark (black) OR too light (white)
+  return lum < 0.04 || lum > 0.90; // too dark (near-black) OR too light (near-white)
 }
 
 // Keep backward-compat alias used in pickBarColor

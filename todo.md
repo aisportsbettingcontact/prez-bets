@@ -373,3 +373,11 @@
 - [x] Detect when away/home bar colors are too similar; cycle away team through secondary/tertiary/fallback until visually distinct
 - [x] No white or black allowed on bars (isUnusableBarColor blocks both black <8% luminance and white >90% luminance)
 - [x] Home team keeps primary unless it is white or black
+
+## BettingSplitsPanel Color Assignment Audit (2026-03-07)
+- [x] Verify each bar half uses only the hex color for the correct team (away left, home right) — no cross-contamination
+- [x] Fix darkness threshold: lowered from 8% to 4% so deep purples (High Point) and dark maroons (Texas A&M) are allowed through
+
+## Missing Team Colors (2026-03-07)
+- [ ] Identify all NCAAM and NBA teams with null primaryColor in the DB
+- [ ] Populate correct hex colors for all teams missing color data (source: ESPN team pages)
