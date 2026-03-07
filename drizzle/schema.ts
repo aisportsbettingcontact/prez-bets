@@ -122,22 +122,30 @@ export const games = mysqlTable("games", {
 export type Game = typeof games.$inferSelect;
 export type InsertGame = typeof games.$inferInsert;
 
-// ─── ESPN Teams (auto-synced from ESPN) ─────────────────────────────────────
+// ─── NBA Teams (seeded from NBA Mapping master sheet) ───────────────────────
 
-export const espnTeams = mysqlTable("espn_teams", {
+export const nbaTeams = mysqlTable("nba_teams", {
   id: int("id").autoincrement().primaryKey(),
-  /** Normalized slug matching the model file team name, e.g. "duke", "nc_state" */
-  slug: varchar("slug", { length: 128 }).notNull().unique(),
-  /** Full display name from ESPN, e.g. "Duke Blue Devils" */
-  displayName: varchar("displayName", { length: 255 }).notNull(),
-  /** ESPN numeric team ID used to build CDN logo URL */
-  espnId: varchar("espnId", { length: 20 }).notNull(),
-  /** Conference name from ESPN, e.g. "ACC", "Big Ten" */
-  conference: varchar("conference", { length: 128 }).notNull().default(""),
-  /** Sport identifier, e.g. "NCAAM", "NBA" */
-  sport: varchar("sport", { length: 64 }).notNull().default("NCAAM"),
+  /** DB storage key — vsinSlug with hyphens replaced by underscores, e.g. "boston_celtics" */
+  dbSlug: varchar("dbSlug", { length: 128 }).notNull().unique(),
+  /** NBA.com short slug, e.g. "celtics" */
+  nbaSlug: varchar("nbaSlug", { length: 64 }).notNull().unique(),
+  /** VSiN href slug, e.g. "boston-celtics" */
+  vsinSlug: varchar("vsinSlug", { length: 128 }).notNull().unique(),
+  /** Full team name, e.g. "Boston Celtics" */
+  name: varchar("name", { length: 255 }).notNull(),
+  /** Team nickname, e.g. "Celtics" */
+  nickname: varchar("nickname", { length: 128 }).notNull(),
+  /** City name, e.g. "Boston" */
+  city: varchar("city", { length: 128 }).notNull(),
+  /** Conference: "East" or "West" */
+  conference: varchar("conference", { length: 16 }).notNull(),
+  /** Division, e.g. "Atlantic" */
+  division: varchar("division", { length: 64 }).notNull(),
+  /** NBA.com CDN SVG logo URL */
+  logoUrl: text("logoUrl").notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
-export type EspnTeam = typeof espnTeams.$inferSelect;
-export type InsertEspnTeam = typeof espnTeams.$inferInsert;
+export type NbaTeamRow = typeof nbaTeams.$inferSelect;
+export type InsertNbaTeam = typeof nbaTeams.$inferInsert;

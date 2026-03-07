@@ -223,3 +223,19 @@
 
 ## Midnight Game Sort Order Fix (2026-03-06)
 - [x] DB queries: treat startTimeEst = "00:00" as "24:00" in ORDER BY so midnight games sort last on the day's slate
+
+## NBA Team Registry (2026-03-06)
+- [ ] Read NBAMapping-MASTERSHEET.csv and inspect NBA.com slug/logo URL patterns
+- [ ] Build shared/nbaTeams.ts registry (same structure as ncaamTeams.ts)
+- [ ] Add nba_teams DB table to drizzle/schema.ts and push migration
+- [ ] Wire up NBA registry to server (db.ts helpers, routers.ts procedure)
+- [ ] Run tests and save checkpoint
+
+## ESPN Removal + NBA Teams (2026-03-06)
+- [x] Drop espn_teams DB table and remove from drizzle/schema.ts
+- [x] Remove listEspnTeams, getEspnTeamBySlug, upsertEspnTeam helpers from db.ts
+- [x] Remove all ESPN imports from routers.ts and any other files
+- [x] Delete espnScraper.ts; TeamLogo.tsx updated to use registry directly
+- [x] Add upsertNbaTeams, listNbaTeams, getNbaTeamByDbSlug, getNbaTeamByNbaSlug helpers to db.ts
+- [x] Seed nba_teams table from NBA_TEAMS registry (30 teams inserted)
+- [x] Add nbaTeams.list and nbaTeams.byDbSlug tRPC procedures to routers.ts

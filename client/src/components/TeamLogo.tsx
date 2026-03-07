@@ -1,10 +1,9 @@
 /**
- * TeamLogo — resolves team logos dynamically from ESPN CDN via the DB.
- * The server auto-syncs ESPN team data on startup and daily.
+ * TeamLogo — resolves team logos from the shared registry (ncaamTeams / nbaTeams).
  * Falls back to a colored circle badge with initials if no logo is found.
  */
 
-import { trpc } from "@/lib/trpc";
+import { getTeamByDbSlug } from "@shared/ncaamTeams";
 
 const PALETTE = [
   "#e63946", "#2a9d8f", "#e9c46a", "#f4a261", "#264653",
@@ -29,27 +28,20 @@ function abbrev(name: string): string {
 }
 
 interface TeamLogoProps {
-  /** Team slug as it appears in the model file, e.g. "duke", "nc_state" */
+  /** Team DB slug, e.g. "duke", "nc_state" */
   name: string;
   size?: number;
 }
 
 export default function TeamLogo({ name, size = 36 }: TeamLogoProps) {
-  const { data: team } = trpc.teams.bySlug.useQuery(
-    { slug: name },
-    {
-      staleTime: 1000 * 60 * 60, // 1 hour — ESPN data is stable
-      retry: false,
-    }
-  );
-
+  const team = getTeamByDbSlug(name);
   const logoUrl = team?.logoUrl;
 
   if (logoUrl) {
     return (
       <img
         src={logoUrl}
-        alt={team?.displayName ?? name}
+        alt={team?.ncaaName ?? name}
         width={size}
         height={size}
         style={{

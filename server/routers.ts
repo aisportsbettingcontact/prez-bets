@@ -20,11 +20,9 @@ import {
 } from "./db";
 import { storagePut } from "./storage";
 import { parseFileBuffer, detectSportFromFilename, detectDateFromFilename } from "./fileParser";
-import { syncEspnTeams, buildEspnLogoUrl } from "./espnScraper";
-import { listEspnTeams, getEspnTeamBySlug } from "./db";
 import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure } from "./routers/appUsers";
-import { updateBookOdds } from "./db";
+import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug } from "./db";
 import { getLastRefreshResult, runVsinRefresh } from "./vsinAutoRefresh";
 import { VALID_DB_SLUGS } from "@shared/ncaamTeams";
 
@@ -134,41 +132,18 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── ESPN Teams ───────────────────────────────────────────────────────────
-  teams: router({
-    /**
-     * List all ESPN teams from DB (auto-synced on startup).
-     * Returns slug, displayName, espnId, conference, sport, and logoUrl.
-     */
-    list: publicProcedure
-      .input(z.object({ sport: z.string().optional() }).optional())
-      .query(async ({ input }) => {
-        const teams = await listEspnTeams(input?.sport ?? "NCAAM");
-        return teams.map((t) => ({
-          ...t,
-          logoUrl: buildEspnLogoUrl(t.espnId),
-        }));
-      }),
+  // ─── NBA Teams ─────────────────────────────────────────────────────
+  nbaTeams: router({
+    /** List all 30 NBA teams from DB. */
+    list: publicProcedure.query(async () => {
+      return listNbaTeams();
+    }),
 
-    /**
-     * Get a single team by slug with its ESPN logo URL.
-     */
-    bySlug: publicProcedure
-      .input(z.object({ slug: z.string() }))
+    /** Get a single NBA team by its DB slug (e.g. "boston_celtics"). */
+    byDbSlug: publicProcedure
+      .input(z.object({ dbSlug: z.string() }))
       .query(async ({ input }) => {
-        const team = await getEspnTeamBySlug(input.slug);
-        if (!team) return null;
-        return { ...team, logoUrl: buildEspnLogoUrl(team.espnId) };
-      }),
-
-    /**
-     * Manually trigger an ESPN sync (admin only).
-     */
-    sync: protectedProcedure
-      .input(z.object({ sport: z.string().optional() }).optional())
-      .mutation(async ({ input }) => {
-        const count = await syncEspnTeams(input?.sport ?? "NCAAM");
-        return { success: true, teamsUpserted: count };
+        return getNbaTeamByDbSlug(input.dbSlug);
       }),
   }),
 

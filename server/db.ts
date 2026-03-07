@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, isNotNull, lte, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { games, modelFiles, users, espnTeams, type InsertGame, type InsertModelFile, type InsertUser, type InsertEspnTeam } from "../drizzle/schema";
+import { games, modelFiles, users, nbaTeams, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -227,35 +227,9 @@ export async function deleteOldGames(): Promise<number> {
   return deleted;
 }
 
-// ─── ESPN Teams helpers ───────────────────────────────────────────────────────
-
-export async function listEspnTeams(sport = "NCAAM") {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(espnTeams)
-    .where(eq(espnTeams.sport, sport))
-    .orderBy(espnTeams.displayName);
-}
-
-export async function getEspnTeamBySlug(slug: string) {
-  const db = await getDb();
-  if (!db) return null;
-  const rows = await db
-    .select()
-    .from(espnTeams)
-    .where(eq(espnTeams.slug, slug))
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-
-
-// ─── App Users (custom accounts) ─────────────────────────────────────────────
+// ─── App Users (custom accounts) ─────────────────────────────────────────────────
 
 import { appUsers, type InsertAppUser } from "../drizzle/schema";
-
 export async function createAppUser(data: InsertAppUser) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -438,4 +412,58 @@ export async function publishAllStagingGames(gameDate: string) {
       // Only publish games that have live VSiN odds
       or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!
     ));
+}
+
+
+// ─── NBA Teams ────────────────────────────────────────────────────────────────
+
+export async function upsertNbaTeams(teams: InsertNbaTeam[]): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  for (const team of teams) {
+    await db
+      .insert(nbaTeams)
+      .values(team)
+      .onDuplicateKeyUpdate({
+        set: {
+          nbaSlug: team.nbaSlug,
+          vsinSlug: team.vsinSlug,
+          name: team.name,
+          nickname: team.nickname,
+          city: team.city,
+          conference: team.conference,
+          division: team.division,
+          logoUrl: team.logoUrl,
+        },
+      });
+  }
+  return teams.length;
+}
+
+export async function listNbaTeams() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(nbaTeams).orderBy(nbaTeams.name);
+}
+
+export async function getNbaTeamByDbSlug(dbSlug: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(nbaTeams)
+    .where(eq(nbaTeams.dbSlug, dbSlug))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getNbaTeamByNbaSlug(nbaSlug: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(nbaTeams)
+    .where(eq(nbaTeams.nbaSlug, nbaSlug))
+    .limit(1);
+  return rows[0] ?? null;
 }

@@ -7,7 +7,6 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { startEspnSyncSchedule } from "../espnScraper";
 import { startDailyPurgeSchedule } from "../dailyPurge";
 import { startVsinAutoRefresh } from "../vsinAutoRefresh";
 
@@ -62,8 +61,6 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
-    // Start ESPN team sync on startup + daily schedule
-    startEspnSyncSchedule();
     // Start daily 6am EST game purge (removes previous day's games)
     startDailyPurgeSchedule();
     // Auto-refresh VSiN book odds every 30 minutes (6am–midnight PST)
