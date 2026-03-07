@@ -337,3 +337,6 @@
 - [x] Center "SPREAD" in h2 style with "{Away Team} {Away Spread}" left and "{Home Team} {Home Spread}" right using live book spread
 - [x] Center "TOTAL" in h2 style with "OVER {Total}" left and "UNDER {Total}" right using live O/U
 - [x] Ensure % bars are accurate to each corresponding side
+
+## BettingSplitsPanel Black Bar Fix (2026-03-07)
+- [x] No bar should ever be black in any sport/league — if primary color is black/very dark, fall back to secondary color

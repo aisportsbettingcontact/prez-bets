@@ -51,6 +51,41 @@ function spreadSign(n: number): string {
 const FALLBACK_AWAY = "#1a4a8a";
 const FALLBACK_HOME = "#c84b0c";
 
+/**
+ * Returns true if a hex color is black or very dark (perceived luminance < 8%).
+ * Bars should never be black — fall back to secondary/tertiary if primary is too dark.
+ */
+function isTooDark(hex: string | null | undefined): boolean {
+  if (!hex) return false;
+  const clean = hex.replace(/^#/, "");
+  if (clean.length !== 6 && clean.length !== 3) return false;
+  const full = clean.length === 3
+    ? clean.split("").map(c => c + c).join("")
+    : clean;
+  const r = parseInt(full.slice(0, 2), 16) / 255;
+  const g = parseInt(full.slice(2, 4), 16) / 255;
+  const b = parseInt(full.slice(4, 6), 16) / 255;
+  // Perceived luminance (sRGB)
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum < 0.08; // < ~8% luminance = effectively black
+}
+
+/**
+ * Pick the best bar color: primary → secondary → tertiary → fallback.
+ * Skips any color that is too dark (black/near-black).
+ */
+function pickBarColor(
+  primary: string | null | undefined,
+  secondary: string | null | undefined,
+  tertiary: string | null | undefined,
+  fallback: string
+): string {
+  for (const c of [primary, secondary, tertiary]) {
+    if (c && !isTooDark(c)) return c;
+  }
+  return fallback;
+}
+
 // ── SplitBar ─────────────────────────────────────────────────────────────────
 // A single two-color bar with a centered label above it
 
@@ -215,8 +250,18 @@ export function BettingSplitsPanel({
     { staleTime: 1000 * 60 * 60 }
   );
 
-  const awayColor = colors?.away?.primaryColor ?? FALLBACK_AWAY;
-  const homeColor = colors?.home?.primaryColor ?? FALLBACK_HOME;
+  const awayColor = pickBarColor(
+    colors?.away?.primaryColor,
+    colors?.away?.secondaryColor,
+    colors?.away?.tertiaryColor,
+    FALLBACK_AWAY
+  );
+  const homeColor = pickBarColor(
+    colors?.home?.primaryColor,
+    colors?.home?.secondaryColor,
+    colors?.home?.tertiaryColor,
+    FALLBACK_HOME
+  );
 
   // Live book lines
   const awaySpread = toNum(game.awayBookSpread);
