@@ -329,14 +329,16 @@ function parseGames(
     const total = totalTexts.length > 0 ? parseTotal(totalTexts[0]) : null;
 
     // ─── NCAAM Betting Splits ────────────────────────────────────────────────
-    // td[2] = spread bets% (away on top, home below <hr>)
-    // td[3] = spread money% (away on top, home below <hr>)
-    // td[5] = total bets% (over on top, under below <hr>)
-    // td[6] = total money% (over on top, under below <hr>)
-    const spreadAwayBetsPct = tds.length > 2 ? getFirstPct($, tds[2]) : null;
-    const spreadAwayMoneyPct = tds.length > 3 ? getFirstPct($, tds[3]) : null;
-    const totalOverBetsPct = tds.length > 5 ? getFirstPct($, tds[5]) : null;
-    const totalOverMoneyPct = tds.length > 6 ? getFirstPct($, tds[6]) : null;
+    // VSiN column order (confirmed from raw HTML, Arkansas/Missouri row):
+    //   td[2] = spread Handle% (money) — no cellhightlight5 class → e.g. 41%
+    //   td[3] = spread Bets%           — has cellhightlight5 class → e.g. 70%
+    //   td[5] = total Handle% (money)  — no highlight              → e.g. 93%
+    //   td[6] = total Bets%            — no highlight              → e.g. 73%
+    // Note: Handle (money%) is the primary sharp-money signal
+    const spreadAwayMoneyPct = tds.length > 2 ? getFirstPct($, tds[2]) : null;  // Handle = td[2]
+    const spreadAwayBetsPct  = tds.length > 3 ? getFirstPct($, tds[3]) : null;  // Bets   = td[3]
+    const totalOverMoneyPct  = tds.length > 5 ? getFirstPct($, tds[5]) : null;  // Handle = td[5]
+    const totalOverBetsPct   = tds.length > 6 ? getFirstPct($, tds[6]) : null;  // Bets   = td[6]
 
     results.push({
       awayTeam,
