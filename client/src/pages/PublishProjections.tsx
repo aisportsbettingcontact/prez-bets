@@ -209,9 +209,10 @@ function EditableTeamRow({
       </div>
 
       {/* Team name — school on top, nickname on bottom */}
+      {/* Width handles longest NBA city names: "Oklahoma City" (13 chars), "Golden State" (12 chars) */}
       <div
         className="flex-shrink-0 flex flex-col justify-center overflow-hidden"
-        style={{ width: "clamp(80px, 22vw, 120px)" }}
+        style={{ width: "clamp(108px, 28vw, 135px)" }}
       >
         <div
           className="font-bold leading-none"
@@ -619,8 +620,8 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
         >
           {/* Logo spacer */}
           <div className="w-8 flex-shrink-0" />
-          {/* Team name spacer */}
-          <div className="flex-shrink-0" style={{ width: "clamp(80px, 22vw, 120px)" }} />
+          {/* Team name spacer — must match the team name column width in TeamRow */}
+          <div className="flex-shrink-0" style={{ width: "clamp(108px, 28vw, 135px)" }} />
           {/* Books + Model Line headers — same flex-1 + 1fr 1fr grid as the row */}
           <div className="flex-1 grid text-center" style={{ gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
             <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>Books</span>

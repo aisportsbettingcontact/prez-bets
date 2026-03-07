@@ -134,7 +134,8 @@ function TeamRow({
       </div>
 
       {/* Team name — school on top, nickname on bottom, each strictly one line */}
-      <div className="flex-shrink-0 flex flex-col justify-center overflow-hidden" style={{ width: "clamp(80px, 22vw, 120px)" }}>
+      {/* Width is generous enough for longest NBA city names: "Oklahoma City" (13 chars), "Golden State" (12 chars) */}
+      <div className="flex-shrink-0 flex flex-col justify-center overflow-hidden" style={{ width: "clamp(108px, 28vw, 135px)" }}>
         <div
           className="font-bold leading-none overflow-hidden"
           style={{
