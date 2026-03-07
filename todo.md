@@ -321,3 +321,6 @@
 - [x] Redesign BettingSplitsPanel: always-visible, two-color bars, team abbreviations, Spread+Total (NCAAM) / Spread+Total+ML (NBA)
 - [x] Restructure GameCard: splits panel left, model projections right on desktop; stacked on mobile
 - [ ] Apply same layout to PublishProjections page (deferred — PublishProjections uses EditableGameCard, separate component)
+
+## GameCard Layout Fix (2026-03-07)
+- [x] Fix GameCard flex layout: splits column must be constrained to fixed width on desktop so model projections are always visible

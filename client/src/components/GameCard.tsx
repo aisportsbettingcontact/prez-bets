@@ -630,19 +630,15 @@ export function GameCard({ game }: GameCardProps) {
           {/* ── Left: Betting Splits ─────────────────────────────────────── */}
           {/* Mobile: full width; Desktop: fixed 220px */}
           <div
-            className="flex-shrink-0 px-3 py-2"
-            style={{ width: "100%" }}
+            className="flex-shrink-0 px-3 py-2 w-full sm:w-[220px]"
           >
-            <style>{`@media (min-width: 640px) { .splits-col { width: 220px !important; } }`}</style>
-            <div className="splits-col" style={{ width: "100%" }}>
-              <BettingSplitsPanel
-                game={game}
-                awayLabel={awayName}
-                homeLabel={homeName}
-                awayNickname={awayNickname}
-                homeNickname={homeNickname}
-              />
-            </div>
+            <BettingSplitsPanel
+              game={game}
+              awayLabel={awayName}
+              homeLabel={homeName}
+              awayNickname={awayNickname}
+              homeNickname={homeNickname}
+            />
           </div>
 
           {/* Vertical divider (desktop only) */}
