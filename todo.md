@@ -355,3 +355,7 @@
   - NBA insert path: already writing all 6 splits fields + ML odds
 - [x] Refresh Now button: also update betting splits for each game when triggered
   - refreshBooksRoute.ts rewritten: scrapes NCAAM + NBA in parallel, writes all splits fields in updateBookOdds call
+
+## Splits Timestamp + EditableGameCard Splits (2026-03-07)
+- [x] Add global "Splits updated X min ago" timestamp at top of Dashboard feed (not per-card)
+- [x] Add BettingSplitsPanel to EditableGameCard on Publish Projections page (50/50 layout, splits right, inputs left)

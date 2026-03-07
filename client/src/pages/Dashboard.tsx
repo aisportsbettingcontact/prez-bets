@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
-import { User, LogOut, BarChart3, Loader2, Crown, Send, Search, X } from "lucide-react";
+import { User, LogOut, BarChart3, Loader2, Crown, Send, Search, X, Clock } from "lucide-react";
 import { GameCard } from "@/components/GameCard";
 import { AgeModal } from "@/components/AgeModal";
 import { toast } from "sonner";
@@ -183,6 +183,25 @@ export default function Dashboard() {
   const { data: games, isLoading: gamesLoading } = trpc.games.list.useQuery(
     { sport: selectedSport }, { refetchOnWindowFocus: false }
   );
+  const { data: lastRefresh } = trpc.games.lastRefresh.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
+  // Tick every 30s so "X min ago" stays current without a full re-fetch
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const splitsAgoLabel = useMemo(() => {
+    if (!lastRefresh?.refreshedAt) return null;
+    const diffMs = now - new Date(lastRefresh.refreshedAt).getTime();
+    const diffMin = Math.round(diffMs / 60_000);
+    if (diffMin < 1) return "just now";
+    if (diffMin === 1) return "1 min ago";
+    if (diffMin < 60) return `${diffMin} min ago`;
+    const diffHr = Math.round(diffMin / 60);
+    return diffHr === 1 ? "1 hr ago" : `${diffHr} hrs ago`;
+  }, [lastRefresh, now]);
   // ─── Search ───────────────────────────────────────────────────────────────
   const q = searchQuery.trim().toLowerCase();
 
@@ -350,7 +369,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Row 2: Sport filter toggle */}
+        {/* Row 2: Sport filter toggle + splits timestamp */}
         <div className="px-4 pb-1 max-w-3xl mx-auto flex items-center gap-2">
           {/* NCAAM button */}
           <button
@@ -388,6 +407,13 @@ export default function Dashboard() {
             />
             NBA
           </button>
+          {/* Splits timestamp — pushed to the right */}
+          {splitsAgoLabel && (
+            <div className="ml-auto flex items-center gap-1" style={{ color: "rgba(163,163,163,0.7)" }}>
+              <Clock style={{ width: 10, height: 10, flexShrink: 0 }} />
+              <span style={{ fontSize: 10, whiteSpace: "nowrap" }}>Splits {splitsAgoLabel}</span>
+            </div>
+          )}
         </div>
 
         {/* Row 3: Search bar (always visible, sticky with header) */}

@@ -16,7 +16,7 @@ import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw } from "lucide-react";
 import { getTeamByDbSlug } from "@shared/ncaamTeams";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 import { BettingSplitsPanel } from "@/components/BettingSplitsPanel";
@@ -390,7 +390,6 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
   const [modelTotal, setModelTotal] = useState(game.modelTotal ?? "");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [splitsOpen, setSplitsOpen] = useState(false);
   const awaySpreadRef = useRef<HTMLInputElement | null>(null);
 
   const updateMutation = trpc.games.updateProjections.useMutation();
@@ -622,132 +621,94 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
         )}
       </div>
 
-      {/* Team rows — restructured so O/U pill spans both rows */}
-      <div className="px-3 pt-1 pb-3">
+      {/* ── Two-column body: model inputs left (50%), splits right (50%) ── */}
+      <div className="flex flex-col sm:flex-row min-h-0" style={{ borderTop: "1px solid hsl(var(--border))" }}>
 
-        {/* Column labels — mirrors body layout exactly */}
-        <div
-          className="flex items-center gap-1.5 pb-1.5"
-          style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}
-        >
-          {/* Logo spacer */}
-          <div className="w-8 flex-shrink-0" />
-          {/* Team name spacer — must match the team name column width in TeamRow */}
-          <div className="flex-shrink-0" style={{ width: "clamp(108px, 28vw, 135px)" }} />
-          {/* Books + Model Line headers — same flex-1 + 1fr 1fr grid as the row */}
-          <div className="flex-1 grid text-center" style={{ gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
-            <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>Books</span>
-            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>Model Line</span>
+        {/* LEFT: model inputs */}
+        <div className="flex-1 min-w-0 px-3 pt-2 pb-3 flex flex-col justify-between" style={{ borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+          {/* Column labels */}
+          <div>
+            <div
+              className="flex items-center gap-1.5 pb-1.5"
+              style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}
+            >
+              <div className="w-8 flex-shrink-0" />
+              <div className="flex-shrink-0" style={{ width: "clamp(90px, 22vw, 120px)" }} />
+              <div className="flex-1 grid text-center" style={{ gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
+                <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>Books</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>Model Line</span>
+              </div>
+              <div className="flex-shrink-0 text-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
+                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>O/U</span>
+              </div>
+            </div>
+            {/* Team rows */}
+            <div className="flex gap-1.5 min-w-0 mt-1">
+              <div className="flex-1 min-w-0 flex flex-col">
+                <EditableTeamRow
+                  slug={game.awayTeam}
+                  name={awayName}
+                  nickname={awayNickname}
+                  consensus={awayConsensus}
+                  modelSpread={awaySpread}
+                  logoUrl={awayLogoUrl}
+                  onSpreadChange={handleAwaySpreadChange}
+                  spreadInputRef={awaySpreadRef}
+                />
+                <div className="my-0.5" style={{ height: 1, background: "hsl(var(--border))" }} />
+                <EditableTeamRow
+                  slug={game.homeTeam}
+                  name={homeName}
+                  nickname={homeNickname}
+                  consensus={homeConsensus}
+                  modelSpread={homeSpread}
+                  logoUrl={homeLogoUrl}
+                  onSpreadChange={handleHomeSpreadChange}
+                />
+              </div>
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
+                <EditablePill value={modelTotal} onChange={handleTotalChange} placeholder="—" />
+              </div>
+            </div>
           </div>
-          {/* Model O/U header — same fixed width as the pill column */}
-          <div
-            className="flex-shrink-0 text-center"
-            style={{ width: "clamp(52px, 14vw, 80px)" }}
-          >
-            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>O/U</span>
+          {/* Save button + edge verdict */}
+          <div>
+            <div className="mt-2 flex justify-end">
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={saving || !dirty}
+                className="h-7 px-4 text-xs gap-1.5 font-bold transition-all"
+                style={dirty
+                  ? { background: "#39FF14", color: "#000" }
+                  : { background: "rgba(57,255,20,0.12)", color: "rgba(57,255,20,0.45)", border: "1px solid rgba(57,255,20,0.2)" }
+                }
+              >
+                {saving && <Loader2 size={10} className="animate-spin" />}
+                {saving ? "Saving…" : dirty ? "Save" : "Saved"}
+              </Button>
+            </div>
+            {hasAnyModel && (
+              <EdgeVerdictLive
+                spreadDiff={previewSpreadDiff}
+                spreadEdge={edges.spreadEdge ?? "PASS"}
+                totalDiff={previewTotalDiff}
+                totalEdge={edges.totalEdge ?? "PASS"}
+              />
+            )}
           </div>
         </div>
 
-        {/* Two-row layout: left side has away+home rows, right side has a single O/U pill spanning both */}
-        <div className="flex gap-1.5 min-w-0">
-
-          {/* Left side: away row + divider + home row */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            {/* Away row */}
-            <EditableTeamRow
-              slug={game.awayTeam}
-              name={awayName}
-              nickname={awayNickname}
-              consensus={awayConsensus}
-              modelSpread={awaySpread}
-              logoUrl={awayLogoUrl}
-              onSpreadChange={handleAwaySpreadChange}
-              spreadInputRef={awaySpreadRef}
-            />
-            <div className="my-0.5" style={{ height: 1, background: "hsl(var(--border))" }} />
-            {/* Home row */}
-            <EditableTeamRow
-              slug={game.homeTeam}
-              name={homeName}
-              nickname={homeNickname}
-              consensus={homeConsensus}
-              modelSpread={homeSpread}
-              logoUrl={homeLogoUrl}
-              onSpreadChange={handleHomeSpreadChange}
-            />
-          </div>
-
-          {/* Right side: single O/U pill centered between both rows */}
-          <div
-            className="flex-shrink-0 flex items-center justify-center"
-            style={{ width: "clamp(52px, 14vw, 80px)" }}
-          >
-            <EditablePill
-              value={modelTotal}
-              onChange={handleTotalChange}
-              placeholder="—"
-            />
-          </div>
-
-        </div>
-
-        {/* Save button — always visible; bright green when dirty, dimmed when saved */}
-        <div className="mt-2 flex justify-end">
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={saving || !dirty}
-            className="h-7 px-4 text-xs gap-1.5 font-bold transition-all"
-            style={dirty
-              ? { background: "#39FF14", color: "#000" }
-              : { background: "rgba(57,255,20,0.12)", color: "rgba(57,255,20,0.45)", border: "1px solid rgba(57,255,20,0.2)" }
-            }
-          >
-            {saving && <Loader2 size={10} className="animate-spin" />}
-            {saving ? "Saving…" : dirty ? "Save" : "Saved"}
-          </Button>
-        </div>
-
-        {/* Edge verdict — live preview as @prez types */}
-        {hasAnyModel && (
-          <EdgeVerdictLive
-            spreadDiff={previewSpreadDiff}
-            spreadEdge={edges.spreadEdge ?? "PASS"}
-            totalDiff={previewTotalDiff}
-            totalEdge={edges.totalEdge ?? "PASS"}
+        {/* RIGHT: betting splits — always visible */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <BettingSplitsPanel
+            game={game}
+            awayLabel={awayName}
+            homeLabel={homeName}
           />
-        )}
+        </div>
+
       </div>
-
-      {/* Betting Splits toggle */}
-      <button
-        onClick={() => setSplitsOpen(v => !v)}
-        className="w-full flex items-center justify-center gap-1 py-1.5 transition-opacity hover:opacity-80"
-        style={{
-          borderTop: "1px solid hsl(var(--border) / 0.4)",
-          background: "hsl(var(--card))",
-        }}
-      >
-        <span
-          className="text-[9px] uppercase tracking-widest font-semibold"
-          style={{ color: "hsl(var(--muted-foreground))", opacity: 0.6 }}
-        >
-          {splitsOpen ? "Hide Splits" : "Betting Splits"}
-        </span>
-        {splitsOpen
-          ? <ChevronUp size={10} style={{ color: "hsl(var(--muted-foreground))", opacity: 0.6 }} />
-          : <ChevronDown size={10} style={{ color: "hsl(var(--muted-foreground))", opacity: 0.6 }} />
-        }
-      </button>
-
-      {/* Collapsible splits panel */}
-      {splitsOpen && (
-        <BettingSplitsPanel
-          game={game}
-          awayLabel={awayName}
-          homeLabel={homeName}
-        />
-      )}
     </motion.div>
   );
 }
