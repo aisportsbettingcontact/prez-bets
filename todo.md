@@ -239,3 +239,33 @@
 - [x] Add upsertNbaTeams, listNbaTeams, getNbaTeamByDbSlug, getNbaTeamByNbaSlug helpers to db.ts
 - [x] Seed nba_teams table from NBA_TEAMS registry (30 teams inserted)
 - [x] Add nbaTeams.list and nbaTeams.byDbSlug tRPC procedures to routers.ts
+
+## NBA Data Pipeline (2026-03-07)
+- [ ] Inspect NBA.com/schedule API endpoint structure
+- [ ] Inspect VSiN NBA betting-splits page structure
+- [ ] Build nbaScoreboard.ts — NBA.com schedule scraper with registry mapping
+- [ ] Build nbaVsinScraper.ts — VSiN NBA betting splits scraper
+- [ ] Build nbaAutoRefresh.ts — merge scoreboard + odds, upsert games table
+- [ ] Wire up to server startup cron and tRPC refresh procedure
+- [ ] Run tests and save checkpoint
+
+## League Logos + Sport Filter (2026-03-07)
+- [ ] Download NCAA and NBA league SVG logos and upload to CDN
+- [ ] Store league logos in shared/leagues.ts registry
+- [ ] Add sport field (ncaam | nba) to games table schema and push migration
+- [ ] Update all game queries to accept optional sport filter
+- [ ] Add NCAAM/NBA sport filter toggle to Dashboard feed
+- [ ] Add NCAAM/NBA sport filter toggle to Publish Projections page
+- [ ] Persist selected sport in URL query param or localStorage
+
+## NBA Pipeline + Sport Filter Completion (2026-03-07)
+- [x] Rebuilt nbaTeams.ts from NBAMapping-MASTERSHEET.csv (authoritative source)
+- [x] Built nbaScoreboard.ts — NBA.com CDN JSON schedule scraper
+- [x] Built nbaVsinScraper.ts — VSiN NBA betting splits scraper (same structure as NCAAM)
+- [x] Updated vsinAutoRefresh.ts to handle NBA games alongside NCAAM
+- [x] NBA games now auto-refresh every 30 min (13 live today + 46 schedule-only for next 7 days)
+- [x] Added NCAAM/NBA sport filter toggle with logos to Dashboard feed
+- [x] Added NCAAM/NBA sport filter toggle with logos to Publish Projections page
+- [x] publishAll mutation now scoped to selected sport
+- [x] GameCard, SearchResultRow, TeamBadge all resolve NBA team names/logos
+- [x] normalizeEdgeLabel resolves NBA team names in edge verdict display

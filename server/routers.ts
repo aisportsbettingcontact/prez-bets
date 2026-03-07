@@ -25,6 +25,16 @@ import { appUsersRouter, ownerProcedure } from "./routers/appUsers";
 import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug } from "./db";
 import { getLastRefreshResult, runVsinRefresh } from "./vsinAutoRefresh";
 import { VALID_DB_SLUGS } from "@shared/ncaamTeams";
+import { NBA_VALID_DB_SLUGS } from "@shared/nbaTeams";
+
+/** Returns true if both teams are in the appropriate registry for the given sport */
+function isValidGame(awayTeam: string, homeTeam: string, sport?: string | null): boolean {
+  if (sport === "NBA") {
+    return NBA_VALID_DB_SLUGS.has(awayTeam) && NBA_VALID_DB_SLUGS.has(homeTeam);
+  }
+  // Default: NCAAM check
+  return VALID_DB_SLUGS.has(awayTeam) && VALID_DB_SLUGS.has(homeTeam);
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -163,8 +173,8 @@ export const appRouter = router({
       )
       .query(async ({ input }) => {
         const games = await listGames(input ?? {});
-        // Only return games where both teams are in the 365-team D1 NCAAM registry
-        return games.filter(g => VALID_DB_SLUGS.has(g.awayTeam) && VALID_DB_SLUGS.has(g.homeTeam));
+        // Filter by the appropriate registry based on sport
+        return games.filter(g => isValidGame(g.awayTeam, g.homeTeam, g.sport));
       }),
 
     /**
@@ -172,10 +182,10 @@ export const appRouter = router({
      * Owner-only — used by the Publish Model Projections page.
      */
     listStaging: ownerProcedure
-      .input(z.object({ gameDate: z.string() }))
+      .input(z.object({ gameDate: z.string(), sport: z.string().optional() }))
       .query(async ({ input }) => {
-        const games = await listStagingGames(input.gameDate);
-        return games.filter(g => VALID_DB_SLUGS.has(g.awayTeam) && VALID_DB_SLUGS.has(g.homeTeam));
+        const games = await listStagingGames(input.gameDate, input.sport);
+        return games.filter(g => isValidGame(g.awayTeam, g.homeTeam, g.sport));
       }),
 
     /**
@@ -217,9 +227,9 @@ export const appRouter = router({
      * Owner-only.
      */
     publishAll: ownerProcedure
-      .input(z.object({ gameDate: z.string() }))
+      .input(z.object({ gameDate: z.string(), sport: z.string().optional() }))
       .mutation(async ({ input }) => {
-        await publishAllStagingGames(input.gameDate);
+        await publishAllStagingGames(input.gameDate, input.sport);
         return { success: true };
       }),
 
@@ -228,10 +238,10 @@ export const appRouter = router({
      * Owner-only — used by Publish Projections for multi-day view.
      */
     listStagingRange: ownerProcedure
-      .input(z.object({ fromDate: z.string(), toDate: z.string() }))
+      .input(z.object({ fromDate: z.string(), toDate: z.string(), sport: z.string().optional() }))
       .query(async ({ input }) => {
-        const games = await listStagingGamesRange(input.fromDate, input.toDate);
-        return games.filter(g => VALID_DB_SLUGS.has(g.awayTeam) && VALID_DB_SLUGS.has(g.homeTeam));
+        const games = await listStagingGamesRange(input.fromDate, input.toDate, input.sport);
+        return games.filter(g => isValidGame(g.awayTeam, g.homeTeam, g.sport));
       }),
 
     /** Returns the result of the last auto-refresh run (null if never run). */

@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/lib/trpc";
 import { getTeamByDbSlug } from "@shared/ncaamTeams";
+import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
@@ -83,10 +84,13 @@ function dash(v: number, prefix = ""): string {
 // ── Normalize edge label (matches reference normalizeEdgeLabel) ───────────────
 function normalizeEdgeLabel(label: string | null | undefined): string {
   if (!label || label.toUpperCase() === "PASS") return "PASS";
-  // Replace leading slug with NCAA name from registry: "duke (-9.5)" → "Duke (-9.5)"
+  // Replace leading slug with NCAA or NBA name from registry
   return label.replace(/^([a-z][a-z0-9_]*)(\s+\()/i, (_, slug, rest) => {
-    const team = getTeamByDbSlug(slug);
-    return (team?.ncaaName ?? slug.replace(/_/g, " ")) + rest;
+    const ncaa = getTeamByDbSlug(slug);
+    if (ncaa) return ncaa.ncaaName + rest;
+    const nba = getNbaTeamByDbSlug(slug);
+    if (nba) return nba.name + rest;
+    return slug.replace(/_/g, " ") + rest;
   });
 }
 
@@ -391,17 +395,17 @@ export function GameCard({ game }: GameCardProps) {
     ? Math.abs(modelTotal - bookTotal)
     : toNum(game.totalDiff);
 
-  const awayTeam = getTeamByDbSlug(game.awayTeam);
-  const homeTeam = getTeamByDbSlug(game.homeTeam);
-  // Registry is the sole source — all 365 valid teams are covered
-  const awayName = awayTeam?.ncaaName ?? game.awayTeam.replace(/_/g, " ");
-  const homeName = homeTeam?.ncaaName ?? game.homeTeam.replace(/_/g, " ");
-  const awayNickname = awayTeam?.ncaaNickname ?? "";
-  const homeNickname = homeTeam?.ncaaNickname ?? "";
-
-  // Use NCAA logo URLs from registry (sole source — all 365 teams covered)
-  const awayLogoUrl = awayTeam?.logoUrl;
-  const homeLogoUrl = homeTeam?.logoUrl;
+   // Resolve team info from NCAA or NBA registry
+  const awayNcaa = getTeamByDbSlug(game.awayTeam);
+  const homeNcaa = getTeamByDbSlug(game.homeTeam);
+  const awayNba  = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
+  const homeNba  = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
+  const awayName = awayNcaa?.ncaaName ?? awayNba?.name ?? game.awayTeam.replace(/_/g, " ");
+  const homeName = homeNcaa?.ncaaName ?? homeNba?.name ?? game.homeTeam.replace(/_/g, " ");
+  const awayNickname = awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? "";
+  const homeNickname = homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? "";
+  const awayLogoUrl = awayNcaa?.logoUrl ?? awayNba?.logoUrl;
+  const homeLogoUrl = homeNcaa?.logoUrl ?? homeNba?.logoUrl;
   const time = formatMilitaryTime(game.startTimeEst);
   // Midnight ET games (startTimeEst = "00:00") are stored under the actual play date (e.g. Mar 5)
   // but the clock in ET has already rolled over to the next day (e.g. Fri, Mar 6 · 12:00 AM ET).

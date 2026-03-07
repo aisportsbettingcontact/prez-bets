@@ -8,6 +8,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { getTeamByDbSlug } from "@shared/ncaamTeams";
+import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -49,11 +50,12 @@ function formatDateShort(dateStr: string): string {
   } catch { return dateStr; }
 }
 
-// ─── Team Logo Badge ──────────────────────────────────────────────────────────
+// ─── Team Logo Badge ──────────────────────────────────────────────────────────────────────────────
 function TeamBadge({ slug, size = 22 }: { slug: string; size?: number }) {
-  const team = getTeamByDbSlug(slug);
-  const logo = team?.logoUrl;
-  const initials = (team?.ncaaName || slug.replace(/_/g, " ")).slice(0, 2).toUpperCase();
+  const ncaa = getTeamByDbSlug(slug);
+  const nba = !ncaa ? getNbaTeamByDbSlug(slug) : null;
+  const logo = ncaa?.logoUrl ?? nba?.logoUrl;
+  const initials = (ncaa?.ncaaName ?? nba?.name ?? slug.replace(/_/g, " ")).slice(0, 2).toUpperCase();
   return (
     <div
       className="rounded overflow-hidden bg-secondary flex items-center justify-center flex-shrink-0"
@@ -72,12 +74,14 @@ function TeamBadge({ slug, size = 22 }: { slug: string; size?: number }) {
 type GameRow = { id: number; awayTeam: string; homeTeam: string; gameDate: string; startTimeEst: string | null; awayBookSpread?: string | null };
 
 function SearchResultRow({ game, onClick }: { game: GameRow; onClick: () => void }) {
-  const awayTeam = getTeamByDbSlug(game.awayTeam);
-  const homeTeam = getTeamByDbSlug(game.homeTeam);
-  const awaySchool = awayTeam?.ncaaName || game.awayTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  const awayNick = awayTeam?.ncaaNickname ?? "";
-  const homeSchool = homeTeam?.ncaaName || game.homeTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  const homeNick = homeTeam?.ncaaNickname ?? "";
+  const awayNcaa = getTeamByDbSlug(game.awayTeam);
+  const homeNcaa = getTeamByDbSlug(game.homeTeam);
+  const awayNba = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
+  const homeNba = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
+  const awaySchool = awayNcaa?.ncaaName ?? awayNba?.name ?? game.awayTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const awayNick = awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? "";
+  const homeSchool = homeNcaa?.ncaaName ?? homeNba?.name ?? game.homeTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const homeNick = homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? "";
   const time = formatMilitaryTime(game.startTimeEst);
   const dateShort = formatDateShort(game.gameDate);
 
@@ -125,7 +129,7 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [selectedSport] = useState("NCAAM");
+  const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA">("NCAAM");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -185,14 +189,16 @@ export default function Dashboard() {
     if (!games || !q) return [];
     const filtered = games.filter((game) => {
       if (!game) return false;
-      const awayTeamInfo = getTeamByDbSlug(game.awayTeam);
-      const homeTeamInfo = getTeamByDbSlug(game.homeTeam);
+      const awayNcaa = getTeamByDbSlug(game.awayTeam);
+      const homeNcaa = getTeamByDbSlug(game.homeTeam);
+      const awayNba = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
+      const homeNba = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
       const terms = [
-        awayTeamInfo?.ncaaName ?? "",
-        awayTeamInfo?.ncaaNickname ?? "",
+        awayNcaa?.ncaaName ?? awayNba?.name ?? "",
+        awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? "",
         game.awayTeam.replace(/_/g, " "),
-        homeTeamInfo?.ncaaName ?? "",
-        homeTeamInfo?.ncaaNickname ?? "",
+        homeNcaa?.ncaaName ?? homeNba?.name ?? "",
+        homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? "",
         game.homeTeam.replace(/_/g, " "),
       ].map(s => s.toLowerCase());
       return terms.some(t => t.includes(q));
@@ -343,7 +349,47 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Row 2: Search bar (always visible, sticky with header) */}
+        {/* Row 2: Sport filter toggle */}
+        <div className="px-4 pb-1 max-w-3xl mx-auto flex items-center gap-2">
+          {/* NCAAM button */}
+          <button
+            onClick={() => setSelectedSport("NCAAM")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+            style={selectedSport === "NCAAM"
+              ? { background: "rgba(57,255,20,0.15)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.4)" }
+              : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+            }
+          >
+            <img
+              src="/march-madness-live/assets/icons/ncaa/disc.svg"
+              alt="NCAA"
+              width={16}
+              height={16}
+              style={{ opacity: selectedSport === "NCAAM" ? 1 : 0.5 }}
+            />
+            NCAAM
+          </button>
+          {/* NBA button */}
+          <button
+            onClick={() => setSelectedSport("NBA")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+            style={selectedSport === "NBA"
+              ? { background: "rgba(200,16,46,0.15)", color: "#C8102E", border: "1px solid rgba(200,16,46,0.5)" }
+              : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+            }
+          >
+            <img
+              src="https://cdn.nba.com/logos/leagues/logo-nba.svg"
+              alt="NBA"
+              width={16}
+              height={16}
+              style={{ opacity: selectedSport === "NBA" ? 1 : 0.5 }}
+            />
+            NBA
+          </button>
+        </div>
+
+        {/* Row 3: Search bar (always visible, sticky with header) */}
         <div ref={searchRef} className="relative px-4 pb-2 max-w-3xl mx-auto">
           <div
             className="flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all duration-150"
@@ -421,7 +467,7 @@ export default function Dashboard() {
             <BarChart3 className="w-10 h-10 text-muted-foreground/40" />
             <div>
               <p className="text-sm font-semibold text-foreground mb-1">No projections available</p>
-              <p className="text-xs text-muted-foreground">No NCAAM games found for today.</p>
+              <p className="text-xs text-muted-foreground">No {selectedSport} games found.</p>
             </div>
           </div>
         ) : (
@@ -436,7 +482,7 @@ export default function Dashboard() {
                   </span>
                   <span className="text-muted-foreground/40" style={{ fontSize: "10px" }}>·</span>
                   <span className="font-semibold hidden sm:inline" style={{ color: "#a3a3a3", letterSpacing: "0.06em", fontSize: "clamp(10px, 1.8vw, 12px)" }}>
-                    Men's College Basketball
+                    {selectedSport === "NCAAM" ? "Men's College Basketball" : "NBA"}
                   </span>
                 </div>
                 <div className="flex-1" />

@@ -283,28 +283,31 @@ export async function updateAppUserLastSignedIn(id: number) {
 
 // ─── Publish / Model Projection helpers ──────────────────────────────────────
 
-/** List all games for a given date regardless of fileId (used by auto-refresh to check what already exists) */
-export async function listGamesByDate(gameDate: string) {
+/** List all games for a given date, optionally filtered by sport */
+export async function listGamesByDate(gameDate: string, sport?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const conditions = [eq(games.gameDate, gameDate)];
+  if (sport) conditions.push(eq(games.sport, sport));
   return db
     .select()
     .from(games)
-    .where(eq(games.gameDate, gameDate))
+    .where(and(...conditions))
     .orderBy(sql`CASE WHEN ${games.startTimeEst} = '00:00' THEN '24:00' ELSE ${games.startTimeEst} END`, games.sortOrder);
 }
 
-/** List all staging games for a given date (fileId = 0, unpublished) */
-export async function listStagingGames(gameDate: string) {
+/** List all staging games for a given date (fileId = 0, unpublished), optionally filtered by sport */
+export async function listStagingGames(gameDate: string, sport?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const conditions: ReturnType<typeof eq>[] = [eq(games.gameDate, gameDate), eq(games.fileId, 0)];
+  if (sport) conditions.push(eq(games.sport, sport));
   return db
     .select()
     .from(games)
-    .where(and(eq(games.gameDate, gameDate), eq(games.fileId, 0)))
+    .where(and(...conditions))
     .orderBy(sql`CASE WHEN ${games.startTimeEst} = '00:00' THEN '24:00' ELSE ${games.startTimeEst} END`, games.sortOrder);
 }
-
 /** Update model projections and edge labels for a single game */
 export async function updateGameProjections(
   id: number,
@@ -363,17 +366,19 @@ export async function setGamePublished(id: number, published: boolean) {
 }
 
 /** List all staging games for a date range (inclusive). Owner-only. */
-export async function listStagingGamesRange(fromDate: string, toDate: string) {
+export async function listStagingGamesRange(fromDate: string, toDate: string, sport?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const conditions: ReturnType<typeof eq>[] = [
+    eq(games.fileId, 0),
+    gte(games.gameDate, fromDate),
+    lte(games.gameDate, toDate),
+  ];
+  if (sport) conditions.push(eq(games.sport, sport));
   return db
     .select()
     .from(games)
-    .where(and(
-      eq(games.fileId, 0),
-      gte(games.gameDate, fromDate),
-      lte(games.gameDate, toDate)
-    ))
+    .where(and(...conditions))
     .orderBy(games.gameDate, sql`CASE WHEN ${games.startTimeEst} = '00:00' THEN '24:00' ELSE ${games.startTimeEst} END`, games.sortOrder);
 }
 
@@ -400,18 +405,20 @@ export async function updateNcaaStartTime(
 }
 
 /** Bulk publish all staging games for a date — only publishes games with live VSiN odds */
-export async function publishAllStagingGames(gameDate: string) {
+export async function publishAllStagingGames(gameDate: string, sport?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const conditions = [
+    eq(games.gameDate, gameDate),
+    eq(games.fileId, 0),
+    // Only publish games that have live VSiN odds
+    or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!,
+  ];
+  if (sport) conditions.push(eq(games.sport, sport));
   await db
     .update(games)
     .set({ publishedToFeed: true })
-    .where(and(
-      eq(games.gameDate, gameDate),
-      eq(games.fileId, 0),
-      // Only publish games that have live VSiN odds
-      or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!
-    ));
+    .where(and(...conditions));
 }
 
 

@@ -1,6 +1,6 @@
 /**
  * NBA Team Registry — 30 NBA teams
- * Auto-generated from the authoritative NBA Mapping master sheet.
+ * Generated from NBAMapping-MASTERSHEET.csv — this is the authoritative source.
  * DO NOT edit manually — regenerate from NBAMapping-MASTERSHEET.csv
  *
  * Key fields:
@@ -8,6 +8,11 @@
  *   vsinSlug  — VSiN href slug (hyphen format, e.g. "boston-celtics")
  *   dbSlug    — Database storage key (vsinSlug with hyphens → underscores)
  *   logoUrl   — Official NBA.com SVG logo URL (cdn.nba.com)
+ *
+ * VSiN href aliases (live page uses shortened forms):
+ *   "la-clippers"  → los-angeles-clippers (Los Angeles Clippers)
+ *   "la-lakers"    → los-angeles-lakers   (Los Angeles Lakers)
+ * These are handled in the NBA VSiN scraper via VSIN_HREF_ALIASES.
  */
 export interface NbaTeam {
   conference: string;
@@ -84,7 +89,7 @@ export const NBA_TEAMS: NbaTeam[] = [
     dbSlug: "toronto_raptors",
     logoUrl: "https://cdn.nba.com/logos/nba/1610612761/primary/L/logo.svg",
   },
-  // ── Eastern Conference — Central Division ─────────────────────────────────
+  // ── Eastern Conference — Central Division ────────────────────────────────
   {
     conference: "East",
     division: "Central",
@@ -267,7 +272,7 @@ export const NBA_TEAMS: NbaTeam[] = [
     dbSlug: "utah_jazz",
     logoUrl: "https://cdn.nba.com/logos/nba/1610612762/primary/L/logo.svg",
   },
-  // ── Western Conference — Pacific Division ─────────────────────────────────
+  // ── Western Conference — Pacific Division ────────────────────────────────
   {
     conference: "West",
     division: "Pacific",
@@ -391,42 +396,45 @@ export const NBA_TEAMS: NbaTeam[] = [
   },
 ];
 
-// ─── Lookup maps ──────────────────────────────────────────────────────────────
-
+// ─── Lookup maps ─────────────────────────────────────────────────────────────
 /** Lookup by DB slug (vsinSlug with hyphens replaced by underscores) */
 export const NBA_BY_DB_SLUG = new Map<string, NbaTeam>(
   NBA_TEAMS.map(t => [t.dbSlug, t])
 );
-
 /** Lookup by NBA.com slug (short form, e.g. "celtics") */
 export const NBA_BY_NBA_SLUG = new Map<string, NbaTeam>(
   NBA_TEAMS.map(t => [t.nbaSlug, t])
 );
-
 /** Lookup by VSiN slug (hyphen format from VSiN) */
 export const NBA_BY_VSIN_SLUG = new Map<string, NbaTeam>(
   NBA_TEAMS.map(t => [t.vsinSlug, t])
 );
-
 /** Set of all valid DB slugs — used for server-side filtering */
 export const NBA_VALID_DB_SLUGS = new Set<string>(NBA_TEAMS.map(t => t.dbSlug));
-
 /** Set of all valid NBA.com slugs — used for NBA scoreboard filtering */
 export const NBA_VALID_NBA_SLUGS = new Set<string>(NBA_TEAMS.map(t => t.nbaSlug));
 
-// ─── Helper functions ─────────────────────────────────────────────────────────
+/**
+ * VSiN href aliases — the live VSiN page sometimes uses shortened slugs
+ * that differ from the canonical vsinSlug in the master sheet.
+ * Maps the live href slug → canonical vsinSlug.
+ */
+export const VSIN_HREF_ALIASES: Record<string, string> = {
+  "la-clippers": "los-angeles-clippers",
+  "la-lakers": "los-angeles-lakers",
+};
 
+// ─── Helper functions ─────────────────────────────────────────────────────────
 /** Get team by DB slug (the key stored in the games table) */
 export function getNbaTeamByDbSlug(dbSlug: string): NbaTeam | undefined {
   return NBA_BY_DB_SLUG.get(dbSlug);
 }
-
 /** Get team by NBA.com slug */
 export function getNbaTeamByNbaSlug(nbaSlug: string): NbaTeam | undefined {
   return NBA_BY_NBA_SLUG.get(nbaSlug);
 }
-
-/** Get team by VSiN slug (from VSiN href) */
+/** Get team by VSiN slug (from VSiN href), with alias resolution */
 export function getNbaTeamByVsinSlug(vsinSlug: string): NbaTeam | undefined {
-  return NBA_BY_VSIN_SLUG.get(vsinSlug);
+  const canonical = VSIN_HREF_ALIASES[vsinSlug] ?? vsinSlug;
+  return NBA_BY_VSIN_SLUG.get(canonical);
 }

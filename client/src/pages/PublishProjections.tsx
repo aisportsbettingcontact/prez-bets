@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw } from "lucide-react";
 import { getTeamByDbSlug } from "@shared/ncaamTeams";
+import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 
 // ─── Helpers (mirrors GameCard exactly) ──────────────────────────────────────
 
@@ -92,7 +93,13 @@ function toNum(v: string | number | null | undefined): number {
 
 function normalizeEdgeLabel(label: string | null | undefined): string {
   if (!label || label.toUpperCase() === "PASS") return "PASS";
-  return label.replace(/^([a-z][a-z0-9_]*)(\s+\()/i, (_, slug, rest) => formatTeamName(slug) + rest);
+  return label.replace(/^([a-z][a-z0-9_]*)(\s+\()/i, (_, slug, rest) => {
+    const ncaa = getTeamByDbSlug(slug);
+    if (ncaa) return ncaa.ncaaName + rest;
+    const nba = getNbaTeamByDbSlug(slug);
+    if (nba) return nba.name + rest;
+    return formatTeamName(slug) + rest;
+  });
 }
 
 // ─── TeamLogo (identical to GameCard) ────────────────────────────────────────
@@ -512,14 +519,16 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
       ? getEdgeColor(maxDiff)
       : "hsl(var(--border))";
 
-  const awayReg = getTeamByDbSlug(game.awayTeam);
-  const homeReg = getTeamByDbSlug(game.homeTeam);
-  const awayName     = awayReg?.ncaaName || formatTeamName(game.awayTeam);
-  const homeName     = homeReg?.ncaaName || formatTeamName(game.homeTeam);
-  const awayNickname = awayReg?.ncaaNickname ?? undefined;
-  const homeNickname = homeReg?.ncaaNickname ?? undefined;
-  const awayLogoUrl  = awayReg?.logoUrl ?? undefined;
-  const homeLogoUrl  = homeReg?.logoUrl ?? undefined;
+  const awayNcaa = getTeamByDbSlug(game.awayTeam);
+  const homeNcaa = getTeamByDbSlug(game.homeTeam);
+  const awayNba  = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
+  const homeNba  = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
+  const awayName     = awayNcaa?.ncaaName ?? awayNba?.name ?? formatTeamName(game.awayTeam);
+  const homeName     = homeNcaa?.ncaaName ?? homeNba?.name ?? formatTeamName(game.homeTeam);
+  const awayNickname = awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? undefined;
+  const homeNickname = homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? undefined;
+  const awayLogoUrl  = awayNcaa?.logoUrl ?? awayNba?.logoUrl ?? undefined;
+  const homeLogoUrl  = homeNcaa?.logoUrl ?? homeNba?.logoUrl ?? undefined;
   const time      = formatMilitaryTime(game.startTimeEst);
   // Midnight ET games (startTimeEst = "00:00") are stored under the actual play date (e.g. Mar 5)
   // but the ET clock has rolled over to the next day (e.g. Fri, Mar 6 · 12:00 AM ET).
@@ -736,6 +745,7 @@ export default function PublishProjections() {
   const [, setLocation] = useLocation();
   const { appUser, isOwner, loading: authLoading } = useAppAuth();
   const [filter, setFilter] = useState<"all" | "regular_season" | "conference_tournament">("all");
+  const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA">("NCAAM");
   const [gameDate, setGameDate] = useState(() => todayPst());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -753,7 +763,7 @@ export default function PublishProjections() {
     isLoading,
     refetch,
   } = trpc.games.listStaging.useQuery(
-    { gameDate },
+    { gameDate, sport: selectedSport },
     { enabled: !!appUser && isOwner, refetchOnWindowFocus: false }
   );
 
@@ -858,7 +868,7 @@ export default function PublishProjections() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <Button
               size="sm"
-              onClick={() => publishAllMutation.mutate({ gameDate })}
+              onClick={() => publishAllMutation.mutate({ gameDate, sport: selectedSport })}
               disabled={publishAllMutation.isPending || totalCount === 0}
               className="gap-1.5 text-xs h-8 font-bold"
               style={{ background: "#39FF14", color: "#000" }}
@@ -921,6 +931,46 @@ export default function PublishProjections() {
               className={isRefreshing || triggerRefreshMutation.isPending ? "animate-spin" : ""}
             />
             {isRefreshing || triggerRefreshMutation.isPending ? "Refreshing…" : "Refresh Now"}
+          </button>
+        </div>
+
+        {/* Sport filter toggle */}
+        <div className="px-4 pb-1 max-w-3xl mx-auto flex items-center gap-2">
+          {/* NCAAM button */}
+          <button
+            onClick={() => setSelectedSport("NCAAM")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+            style={selectedSport === "NCAAM"
+              ? { background: "rgba(57,255,20,0.15)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.4)" }
+              : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+            }
+          >
+            <img
+              src="/march-madness-live/assets/icons/ncaa/disc.svg"
+              alt="NCAA"
+              width={16}
+              height={16}
+              style={{ opacity: selectedSport === "NCAAM" ? 1 : 0.5 }}
+            />
+            NCAAM
+          </button>
+          {/* NBA button */}
+          <button
+            onClick={() => setSelectedSport("NBA")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+            style={selectedSport === "NBA"
+              ? { background: "rgba(200,16,46,0.15)", color: "#C8102E", border: "1px solid rgba(200,16,46,0.5)" }
+              : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+            }
+          >
+            <img
+              src="https://cdn.nba.com/logos/leagues/logo-nba.svg"
+              alt="NBA"
+              width={16}
+              height={16}
+              style={{ opacity: selectedSport === "NBA" ? 1 : 0.5 }}
+            />
+            NBA
           </button>
         </div>
 
