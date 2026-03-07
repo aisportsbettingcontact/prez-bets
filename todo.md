@@ -343,3 +343,6 @@
 
 ## BettingSplitsPanel Adaptive Bar Text Color (2026-03-07)
 - [x] When bar color is white/very light, switch in-bar % text to black for readability
+
+## BettingSplitsPanel WCAG Bar Text Contrast (2026-03-07)
+- [x] Replace simple luminance threshold with WCAG contrast-ratio check for maximum bar text readability

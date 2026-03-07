@@ -71,21 +71,31 @@ function isTooDark(hex: string | null | undefined): boolean {
 }
 
 /**
- * Returns true if a hex color is white or very light (perceived luminance > 85%).
- * In-bar text should be black on light-colored bars.
+ * Compute relative luminance of a hex color per WCAG 2.1.
  */
-function isTooLight(hex: string | null | undefined): boolean {
-  if (!hex) return false;
+function relativeLuminance(hex: string): number {
   const clean = hex.replace(/^#/, "");
-  if (clean.length !== 6 && clean.length !== 3) return false;
   const full = clean.length === 3
     ? clean.split("").map(c => c + c).join("")
     : clean;
-  const r = parseInt(full.slice(0, 2), 16) / 255;
-  const g = parseInt(full.slice(2, 4), 16) / 255;
-  const b = parseInt(full.slice(4, 6), 16) / 255;
-  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return lum > 0.85; // > ~85% luminance = white/near-white
+  const toLinear = (c: number) => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  const r = toLinear(parseInt(full.slice(0, 2), 16) / 255);
+  const g = toLinear(parseInt(full.slice(2, 4), 16) / 255);
+  const b = toLinear(parseInt(full.slice(4, 6), 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Returns the text color (#000 or #fff) that maximises WCAG contrast ratio
+ * against the given background hex color. Falls back to white if hex is invalid.
+ */
+function bestTextColor(hex: string | null | undefined): string {
+  if (!hex || !/^#[0-9a-fA-F]{3,6}$/.test(hex)) return "#ffffff";
+  const bgLum = relativeLuminance(hex);
+  // WCAG contrast ratio: (L1+0.05)/(L2+0.05) where L1 >= L2
+  const contrastWithWhite = (1 + 0.05) / (bgLum + 0.05);
+  const contrastWithBlack = (bgLum + 0.05) / (0 + 0.05);
+  return contrastWithBlack > contrastWithWhite ? "#000000" : "#ffffff";
 }
 
 /**
@@ -117,9 +127,9 @@ interface SplitBarProps {
 
 function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarProps) {
   const hasData = awayPct != null && homePct != null;
-  // Adaptive text: black on light bars, white on dark bars
-  const awayTextColor = isTooLight(awayColor) ? "#000000" : "#ffffff";
-  const homeTextColor = isTooLight(homeColor) ? "#000000" : "#ffffff";
+  // Adaptive text: use WCAG contrast ratio to pick the most readable text color
+  const awayTextColor = bestTextColor(awayColor);
+  const homeTextColor = bestTextColor(homeColor);
   return (
     <div className="flex flex-col gap-0.5">
       {/* Centered label */}
