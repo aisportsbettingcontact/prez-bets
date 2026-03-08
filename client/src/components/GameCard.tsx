@@ -153,7 +153,7 @@ function VerdictSide({ diff, label, isStrong, logoUrl, teamSlug, teamName }: {
         {(logoUrl || teamSlug) && (
           <TeamLogo slug={teamSlug ?? ""} name={teamName ?? ""} logoUrl={logoUrl} size={18} />
         )}
-        <span className="font-bold leading-none whitespace-nowrap" style={{ fontSize: betNameSize, color: "hsl(var(--foreground))" }}>
+        <span className="font-bold leading-none whitespace-nowrap uppercase tracking-wide" style={{ fontSize: betNameSize, color: "hsl(var(--foreground))" }}>
           {showArrow && <span className="mr-0.5 text-[10px]" style={{ color }}>▲</span>}
           {normalized}
         </span>
