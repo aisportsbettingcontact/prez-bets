@@ -253,7 +253,7 @@ function MarketColumn({ title, awayLabel, homeLabel, totalValue, ticketsPct, han
           </span>
           <span
             className="uppercase tracking-wide leading-tight tabular-nums"
-            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 700 }}
+            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 400 }}
           >
             {totalValue}
           </span>
@@ -344,7 +344,7 @@ function MarketSection({ title, awayLabel, homeLabel, totalValue, moneyPct, bets
           <span className="text-[10px] uppercase tracking-wide leading-tight" style={{ color: '#ffffff', fontWeight: 400 }}>
             OVER
           </span>
-          <span className="text-[10px] uppercase tracking-wide leading-tight tabular-nums" style={{ color: '#ffffff', fontWeight: 700 }}>
+          <span className="text-[10px] uppercase tracking-wide leading-tight tabular-nums" style={{ color: '#ffffff', fontWeight: 400 }}>
             {totalValue}
           </span>
           <span className="text-[10px] uppercase tracking-wide leading-tight" style={{ color: '#ffffff', fontWeight: 400 }}>
