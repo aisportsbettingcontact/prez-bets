@@ -517,4 +517,10 @@
 - [x] Game clock / LIVE badge / FINAL badge above the score rows
 - [x] Full responsive scaling: clamp() font sizes, lg breakpoint for 3-col vs 2-row layout
 - [x] Winner highlighting: winning team name bold white, loser muted on FINAL
-- [ ] Save checkpoint and deliver
+- [x] Save checkpoint and deliver
+
+## Feed Desktop Full-Width Layout (2026-03-08)
+- [x] Remove max-w-3xl constraint from main feed container
+- [x] Remove max-w-3xl from header rows (brand, sport filter, status tabs, search bar)
+- [x] Game cards fill full screen width edge-to-edge on desktop
+- [x] Save checkpoint and deliver

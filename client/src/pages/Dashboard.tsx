@@ -408,7 +408,7 @@ export default function Dashboard() {
       <header ref={headerRef} className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
 
         {/* Row 1: brand + user icon */}
-        <div className="relative flex items-center px-4 pt-2 pb-1 max-w-3xl mx-auto">
+        <div className="relative flex items-center px-4 pt-2 pb-1">
           {/* Centered brand */}
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
             <BarChart3
@@ -487,7 +487,7 @@ export default function Dashboard() {
         </div>
 
         {/* Row 2: Sport filter toggle + splits timestamp */}
-        <div className="px-4 pb-1 max-w-3xl mx-auto flex items-center gap-2">
+        <div className="px-4 pb-1 flex items-center gap-2">
           {/* NCAAM button */}
           <button
             onClick={() => setSelectedSport("NCAAM")}
@@ -534,7 +534,7 @@ export default function Dashboard() {
         </div>
 
         {/* Row 3: Status filter tabs — multi-select; selecting all 3 reverts to ALL */}
-        <div className="px-4 pb-1 max-w-3xl mx-auto flex items-center gap-1.5">
+        <div className="px-4 pb-1 flex items-center gap-1.5">
             {/* ALL pill — active when nothing is selected */}
             <button
               onClick={() => setSelectedStatuses(new Set())}
@@ -590,7 +590,7 @@ export default function Dashboard() {
         </div>
 
         {/* Row 4: Search bar (always visible, sticky with header) */}
-        <div ref={searchRef} className="relative px-4 pb-2 max-w-3xl mx-auto">
+        <div ref={searchRef} className="relative px-4 pb-2">
           <div
             className="flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all duration-150"
             style={{
@@ -656,7 +656,7 @@ export default function Dashboard() {
       </header>
 
       {/* ── Main Feed ── */}
-      <main className="max-w-3xl mx-auto pb-8">
+      <main className="w-full pb-8">
         {gamesLoading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
