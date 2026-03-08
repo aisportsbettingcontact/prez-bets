@@ -510,41 +510,40 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
 
     // Whether model data is available (any model field populated)
     const hasModelData = !isNaN(mdlAwaySpread) || !isNaN(mdlTotal) || mdlAwayMl !== '—';
-    const isModelPublished = tab === 'model' && game.publishedToFeed;
 
     // Displayed values based on active tab
     // MODEL tab: if no model data at all → show '—' for everything
-    // MODEL tab: if model data exists → show model value on edge side, book on non-edge side
+    // MODEL tab: if model data exists → always show model values (not gated by publishedToFeed)
     const dispAwaySpread = tab === 'book'
       ? (!isNaN(awaySpread) ? spreadSign(awaySpread) : '—')
       : !hasModelData
         ? '—'
-        : isModelPublished && spreadHasEdge && awayHasSpreadEdge && !isNaN(mdlAwaySpread)
+        : !isNaN(mdlAwaySpread)
           ? spreadSign(mdlAwaySpread)
-          : (!isNaN(awaySpread) ? spreadSign(awaySpread) : '—');
+          : '—';
     const dispHomeSpread = tab === 'book'
       ? (!isNaN(homeSpread) ? spreadSign(homeSpread) : '—')
       : !hasModelData
         ? '—'
-        : isModelPublished && spreadHasEdge && !awayHasSpreadEdge && !isNaN(mdlHomeSpread)
+        : !isNaN(mdlHomeSpread)
           ? spreadSign(mdlHomeSpread)
-          : (!isNaN(homeSpread) ? spreadSign(homeSpread) : '—');
+          : '—';
     const dispOverTotal = tab === 'book'
       ? (!isNaN(bkTotal) ? String(bkTotal) : '—')
       : !hasModelData
         ? '—'
-        : isModelPublished && overHasTotalEdge && !isNaN(mdlTotal)
+        : !isNaN(mdlTotal)
           ? String(mdlTotal)
-          : (!isNaN(bkTotal) ? String(bkTotal) : '—');
+          : '—';
     const dispUnderTotal = tab === 'book'
       ? (!isNaN(bkTotal) ? String(bkTotal) : '—')
       : !hasModelData
         ? '—'
-        : isModelPublished && underHasTotalEdge && !isNaN(mdlTotal)
+        : !isNaN(mdlTotal)
           ? String(mdlTotal)
-          : (!isNaN(bkTotal) ? String(bkTotal) : '—');
-    const dispAwayMl = tab === 'book' ? awayMl : (!hasModelData ? '—' : (isModelPublished ? mdlAwayMl : awayMl));
-    const dispHomeMl = tab === 'book' ? homeMl : (!hasModelData ? '—' : (isModelPublished ? mdlHomeMl : homeMl));
+          : '—';
+    const dispAwayMl = tab === 'book' ? awayMl : (!hasModelData ? '—' : mdlAwayMl);
+    const dispHomeMl = tab === 'book' ? homeMl : (!hasModelData ? '—' : mdlHomeMl);
 
     const isModel = tab === 'model';
     const accentColor = isModel ? '#39FF14' : '#D3D3D3';
@@ -638,8 +637,8 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
           </div>
         </div>
 
-        {/* Edge verdict (model tab only, when published) */}
-        {isModel && game.publishedToFeed && (!isNaN(spreadDiff) || !isNaN(totalDiff)) && (
+        {/* Edge verdict (model tab only, when model data exists) */}
+        {isModel && hasModelData && (!isNaN(spreadDiff) || !isNaN(totalDiff)) && (
           <EdgeVerdict
             spreadDiff={isNaN(spreadDiff) ? null : spreadDiff}
             spreadEdge={computedSpreadEdge}
