@@ -160,7 +160,7 @@ function VerdictSide({ diff, label, isStrong, logoUrl, teamSlug, teamName }: {
       </div>
       <span className="text-[12px] leading-none" style={{ color: "hsl(var(--muted-foreground))", fontWeight: 500 }}>
         EDGE:{" "}
-        <span style={{ color, fontWeight: 800 }}>{diff} {diff === 1 ? "pt" : "pts"}</span>
+        <span style={{ color, fontWeight: 800 }}>{diff} {diff === 1 ? "PT" : "PTS"}</span>
       </span>
     </div>
   );
@@ -202,21 +202,24 @@ function EdgeVerdict({
   const spreadTeamName = spreadEdgeIsAway ? awayDisplayName : homeDisplayName;
 
   return (
-    <div className="mt-2 pt-2 flex items-center" style={{ borderTop: "1px solid hsl(var(--border))" }}>
-      <div className="flex-1 flex items-center justify-center">
-        <VerdictSide
-          diff={spreadDiff}
-          label={spreadEdge}
-          isStrong={spreadIsStronger && !spreadPass}
-          logoUrl={spreadLogoUrl}
-          teamSlug={spreadSlug}
-          teamName={spreadTeamName}
-        />
-      </div>
-      <div className="w-px self-stretch mx-2" style={{ background: "hsl(var(--border))" }} />
-      <div className="flex-1 flex items-center justify-center">
-        <VerdictSide diff={totalDiff} label={totalEdge} isStrong={!spreadIsStronger && !totalPass} />
-      </div>
+    <div className="mt-2 pt-2 flex flex-col gap-2" style={{ borderTop: "1px solid hsl(var(--border))" }}>
+      {!spreadPass && (
+        <div className="flex items-center justify-center">
+          <VerdictSide
+            diff={spreadDiff}
+            label={spreadEdge}
+            isStrong={spreadIsStronger && !spreadPass}
+            logoUrl={spreadLogoUrl}
+            teamSlug={spreadSlug}
+            teamName={spreadTeamName}
+          />
+        </div>
+      )}
+      {!totalPass && (
+        <div className="flex items-center justify-center">
+          <VerdictSide diff={totalDiff} label={totalEdge} isStrong={!spreadIsStronger && !totalPass} />
+        </div>
+      )}
     </div>
   );
 }
@@ -376,8 +379,8 @@ function OddsLinesPanel({
       <div className={`grid ${GRID} py-2.5`}>
         <Cell val={bkAwaySpread} style={bookCell} />
         <Cell val={mdlAwaySpreadStr} style={showModel ? modelCell : dimCell} />
-        <Cell val={`O ${bkOverTotal}`} style={bookCell} />
-        <Cell val={`O ${mdlOverTotal}`} style={showModel ? modelCell : dimCell} />
+        <Cell val={`OVER ${bkOverTotal}`} style={bookCell} />
+        <Cell val={`OVER ${mdlOverTotal}`} style={showModel ? modelCell : dimCell} />
         <Cell val={awayMl || '—'} style={bookCell} />
         <Cell val={mdlAwayMlStr} style={showModel ? modelCell : dimCell} />
       </div>
@@ -389,8 +392,8 @@ function OddsLinesPanel({
       <div className={`grid ${GRID} py-2.5`}>
         <Cell val={bkHomeSpread} style={bookCell} />
         <Cell val={mdlHomeSpreadStr} style={showModel ? modelCell : dimCell} />
-        <Cell val={`U ${bkUnderTotal}`} style={bookCell} />
-        <Cell val={`U ${mdlUnderTotal}`} style={showModel ? modelCell : dimCell} />
+        <Cell val={`UNDER ${bkUnderTotal}`} style={bookCell} />
+        <Cell val={`UNDER ${mdlUnderTotal}`} style={showModel ? modelCell : dimCell} />
         <Cell val={homeMl || '—'} style={bookCell} />
         <Cell val={mdlHomeMlStr} style={showModel ? modelCell : dimCell} />
       </div>
@@ -591,14 +594,9 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
             FINAL
           </span>
         ) : (
-          <div className="flex flex-col">
-            <span className="text-[10px] font-medium" style={{ color: "hsl(var(--muted-foreground))" }}>
-              {dateLabel}
-            </span>
-            <span className="text-[13px] font-bold" style={{ color: "hsl(var(--foreground))" }}>
-              {time}
-            </span>
-          </div>
+          <span className="text-[13px] font-bold" style={{ color: "hsl(var(--foreground))" }}>
+            {time}
+          </span>
         )}
       </div>
 
@@ -616,11 +614,11 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
                 fontWeight: awayWins ? 800 : 700,
               }}
             >
-              {awayNickname || awayName}
+              {awayName}
             </span>
             {awayNickname && (
               <span className="text-[10px] leading-none truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
-                {awayName}
+                {awayNickname}
               </span>
             )}
           </div>
@@ -664,11 +662,11 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
                 fontWeight: homeWins ? 800 : 700,
               }}
             >
-              {homeNickname || homeName}
+              {homeName}
             </span>
             {homeNickname && (
               <span className="text-[10px] leading-none truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
-                {homeName}
+                {homeNickname}
               </span>
             )}
           </div>
