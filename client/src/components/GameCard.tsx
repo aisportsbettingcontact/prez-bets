@@ -259,9 +259,11 @@ function ShareSheet({
 
 interface GameCardProps {
   game: GameRow;
+  /** 'full' = all 3 panels (default), 'projections' = score+odds only, 'splits' = score+splits only */
+  mode?: "full" | "projections" | "splits";
 }
 
-export function GameCard({ game }: GameCardProps) {
+export function GameCard({ game, mode = "full" }: GameCardProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const awayBookSpread = toNum(game.awayBookSpread);
@@ -832,53 +834,100 @@ export function GameCard({ game }: GameCardProps) {
 
         {/* ── Desktop layout ── */}
         <div className="hidden lg:flex items-stretch w-full" style={{ overflowX: "auto" }}>
-          {/* Col 1: Score panel */}
-          <div className="flex-shrink-0" style={{ width: "22%", minWidth: 180, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+          {/* Col 1: Score panel — always shown */}
+          <div
+            className="flex-shrink-0"
+            style={{
+              width: mode === "splits" ? "28%" : "22%",
+              minWidth: 180,
+              borderRight: "1px solid hsl(var(--border) / 0.5)",
+            }}
+          >
             <ScorePanel />
           </div>
 
-          {/* Col 2: Odds/Lines panel */}
-          <div className="flex-shrink-0" style={{ width: "28%", minWidth: 200, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
-            <OddsLinesPanel />
-          </div>
+          {/* Col 2: Odds/Lines — hidden in splits mode */}
+          {mode !== "splits" && (
+            <div
+              className="flex-shrink-0"
+              style={{
+                width: mode === "projections" ? "78%" : "28%",
+                minWidth: 200,
+                borderRight: mode === "full" ? "1px solid hsl(var(--border) / 0.5)" : undefined,
+              }}
+            >
+              <OddsLinesPanel />
+            </div>
+          )}
 
-          {/* Col 3: Betting splits */}
-          <div className="flex-1 px-3 py-3" style={{ minWidth: 220 }}>
-            <BettingSplitsPanel
-              game={game}
-              awayLabel={awayName}
-              homeLabel={homeName}
-              awayNickname={awayNickname}
-              homeNickname={homeNickname}
-            />
-          </div>
+          {/* Col 3: Betting splits — hidden in projections mode */}
+          {mode !== "projections" && (
+            <div className="flex-1 px-3 py-3" style={{ minWidth: 220 }}>
+              <BettingSplitsPanel
+                game={game}
+                awayLabel={awayName}
+                homeLabel={homeName}
+                awayNickname={awayNickname}
+                homeNickname={homeNickname}
+              />
+            </div>
+          )}
         </div>
 
         {/* ── Mobile layout ── */}
         <div className="flex lg:hidden flex-col w-full">
-          {/* Row 1: Score (left) + Odds/Lines (right) side-by-side */}
-          <div className="flex items-stretch w-full" style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)", overflowX: "auto" }}>
-            {/* Score — left ~50% */}
-            <div className="flex-1" style={{ minWidth: 160, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
-              <ScorePanel />
+          {/* Projections mode: Score (left) + Odds/Lines (right) side-by-side, no splits */}
+          {mode === "projections" && (
+            <div className="flex items-stretch w-full" style={{ overflowX: "auto" }}>
+              <div className="flex-1" style={{ minWidth: 160, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+                <ScorePanel />
+              </div>
+              <div className="flex-1" style={{ minWidth: 160 }}>
+                <OddsLinesPanel />
+              </div>
             </div>
+          )}
 
-            {/* Odds/Lines — right ~50% */}
-            <div className="flex-1" style={{ minWidth: 160 }}>
-              <OddsLinesPanel />
-            </div>
-          </div>
+          {/* Splits mode: Score on top, Splits below (full width) */}
+          {mode === "splits" && (
+            <>
+              <div style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}>
+                <ScorePanel />
+              </div>
+              <div className="w-full px-3 py-3">
+                <BettingSplitsPanel
+                  game={game}
+                  awayLabel={awayName}
+                  homeLabel={homeName}
+                  awayNickname={awayNickname}
+                  homeNickname={homeNickname}
+                />
+              </div>
+            </>
+          )}
 
-          {/* Row 2: Betting Splits — full width */}
-          <div className="w-full px-3 py-3">
-            <BettingSplitsPanel
-              game={game}
-              awayLabel={awayName}
-              homeLabel={homeName}
-              awayNickname={awayNickname}
-              homeNickname={homeNickname}
-            />
-          </div>
+          {/* Full mode: Score+Odds on top, Splits below */}
+          {mode === "full" && (
+            <>
+              <div className="flex items-stretch w-full" style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)", overflowX: "auto" }}>
+                <div className="flex-1" style={{ minWidth: 160, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+                  <ScorePanel />
+                </div>
+                <div className="flex-1" style={{ minWidth: 160 }}>
+                  <OddsLinesPanel />
+                </div>
+              </div>
+              <div className="w-full px-3 py-3">
+                <BettingSplitsPanel
+                  game={game}
+                  awayLabel={awayName}
+                  homeLabel={homeName}
+                  awayNickname={awayNickname}
+                  homeNickname={homeNickname}
+                />
+              </div>
+            </>
+          )}
         </div>
       </motion.div>
 

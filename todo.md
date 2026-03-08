@@ -674,3 +674,19 @@
 - [x] Remove mobile vertical stacked layout (md:hidden flex-col)
 - [x] Use horizontal 3-column layout at all screen sizes (compact mode on mobile)
 - [x] Test and save checkpoint
+
+## Two-Page Split: Model Projections + Betting Splits (2026-03-08)
+- [ ] Create ModelProjections page: matchup/score + ODDS/LINES only (no splits)
+- [ ] Create BettingSplits page: splits data only (no ODDS/LINES) for all leagues
+- [ ] Add top-level navigation between the two pages
+- [ ] Update App.tsx routes: /projections and /splits
+- [ ] Update header nav to link to both pages
+- [ ] Test and save checkpoint
+
+## Two Dedicated Pages
+
+- [x] Add mode prop to GameCard (projections / splits / full)
+- [x] Create /projections page (ModelProjections) — score + ODDS/LINES only
+- [x] Create /splits page (BettingSplitsPage) — score + BETTING SPLITS only
+- [x] Register both routes in App.tsx
+- [x] Page-tab navigation (Model Projections | Betting Splits) in both page headers
