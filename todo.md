@@ -573,3 +573,9 @@
 - [x] Confirmed BettingSplitsPanel shows "Over/Under" on desktop/tablet and "O/U" on mobile for NBA
 - [x] All 20 tests passing
 - [x] Save checkpoint and deliver
+
+## Live Game Visibility Fix (2026-03-08)
+- [x] Remove today-only date filter from listGames — show all games that have VSiN odds regardless of date (purge handles cleanup at 6am EST)
+- [x] Verified: 114 NCAAM games now visible (90 from 03/07 including 5 live + 24 from 03/08)
+- [x] All 20 tests passing
+- [x] Save checkpoint and deliver

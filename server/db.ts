@@ -156,20 +156,6 @@ export async function insertGames(rows: InsertGame[]) {
   });
 }
 
-/** Returns today's date in YYYY-MM-DD format using Eastern Time (matches DB storage format). */
-function todayEst(): string {
-  const now = new Date();
-  // toLocaleDateString gives MM/DD/YYYY in en-US locale
-  const estStr = now.toLocaleDateString("en-US", {
-    timeZone: "America/New_York",
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
-  }); // e.g. "03/03/2026"
-  const [mm, dd, yyyy] = estStr.split("/");
-  return `${yyyy}-${mm}-${dd}`; // YYYY-MM-DD to match parseDate() output
-}
-
 export async function listGames(opts?: { sport?: string; gameDate?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -179,10 +165,11 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }) {
   if (opts?.gameDate) {
     // Specific date requested — return only that date
     conditions.push(eq(games.gameDate, opts.gameDate));
-  } else {
-    // Default: show all games from today onwards (EST) so upcoming dates are visible
-    conditions.push(gte(games.gameDate, todayEst()));
   }
+  // No date filter when no specific date is requested:
+  // Games remain visible as long as they exist in the DB (i.e. as long as VSiN
+  // still lists them). The 6am EST daily purge removes previous-day rows, so
+  // live and final games from the current slate stay on the feed until that purge.
 
   if (opts?.sport) conditions.push(eq(games.sport, opts.sport));
 
