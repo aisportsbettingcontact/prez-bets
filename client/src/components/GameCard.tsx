@@ -888,13 +888,13 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
             </div>
           )}
 
-          {/* Splits mode: Score on top, Splits below (full width) */}
+          {/* Splits mode: Score (left) + Splits (right) side-by-side */}
           {mode === "splits" && (
-            <>
-              <div style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}>
+            <div className="flex items-stretch w-full" style={{ overflowX: "auto" }}>
+              <div className="flex-1" style={{ minWidth: 160, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
                 <ScorePanel />
               </div>
-              <div className="w-full px-3 py-3">
+              <div className="flex-1" style={{ minWidth: 160 }}>
                 <BettingSplitsPanel
                   game={game}
                   awayLabel={awayName}
@@ -903,7 +903,7 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
                   homeNickname={homeNickname}
                 />
               </div>
-            </>
+            </div>
           )}
 
           {/* Full mode: Score+Odds on top, Splits below */}

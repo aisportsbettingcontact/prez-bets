@@ -700,3 +700,11 @@
 
 - [x] Change Home.tsx post-login redirect from /dashboard to /projections
 - [x] Redirect /dashboard route to /projections in App.tsx
+
+## Betting Splits Page Layout Fix
+
+- [x] GameCard splits mode: Score on left, BettingSplits table on right (side-by-side)
+
+## BettingSplitsPanel Redesign
+
+- [x] Redesign BettingSplitsPanel: maximized padding, centering, spacing, large values, clear labels

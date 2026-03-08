@@ -1,21 +1,13 @@
 /*
- * BettingSplitsPanel
+ * BettingSplitsPanel — Redesigned for maximum readability
  *
- * Desktop/Tablet layout (≥ md):
- *   BETTING SPLITS header
- *   ┌─────────────┬─────────────┬─────────────┐
- *   │   SPREAD    │    TOTAL    │  MONEYLINE  │  ← side-by-side columns
- *   │  team labels│ OVER # UNDER│  team labels│
- *   │  TICKETS %  │  TICKETS %  │  TICKETS %  │  ← bar on top
- *   │  HANDLE %   │  HANDLE %   │  HANDLE %   │  ← bar on bottom
- *   └─────────────┴─────────────┴─────────────┘
- *
- * Mobile (< md): vertical stacked
- *
- * Label formatting:
- *   - Spread:     ABBR (+1.5)   — unbolded abbrev, spread in parens
- *   - Total:      OVER  153.5  UNDER  — three-column, value centered
- *   - Moneyline:  ABBR (+575)   — unbolded abbrev, ML in parens
+ * Layout: 3 equal columns side-by-side (SPREAD | TOTAL | MONEYLINE)
+ * Each column:
+ *   - Market title (centered, bold, spaced)
+ *   - Side labels (team abbr + line value, centered)
+ *   - TICKETS bar (tall, full-width, large %)
+ *   - HANDLE bar  (tall, full-width, large %)
+ *   - Generous padding/spacing throughout
  */
 
 import { trpc } from "@/lib/trpc";
@@ -126,63 +118,73 @@ function pickBarColor(
 }
 
 // ── SplitBar ──────────────────────────────────────────────────────────────────
+
 interface SplitBarProps {
   label: string;
   awayPct: number | null;
   homePct: number | null;
   awayColor: string;
   homeColor: string;
-  compact?: boolean;
 }
 
-function SplitBar({ label, awayPct, homePct, awayColor, homeColor, compact }: SplitBarProps) {
+function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarProps) {
   const hasData = awayPct != null && homePct != null;
   const awayTextColor = bestTextColor(awayColor);
   const homeTextColor = bestTextColor(homeColor);
-  const barH = compact ? 22 : 26;
 
   return (
-    <div className="flex flex-col gap-0.5 w-full">
+    <div className="flex flex-col gap-1 w-full">
+      {/* Bar label */}
       <span
-        className="text-center uppercase tracking-widest font-semibold"
-        style={{ fontSize: 9, color: "rgba(255,255,255,0.55)" }}
+        className="text-center uppercase tracking-widest font-bold"
+        style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", letterSpacing: "0.12em" }}
       >
         {label}
       </span>
+
       {hasData ? (
         <div
           className="relative w-full rounded-full overflow-hidden"
           style={{
-            height: barH,
+            height: 30,
             display: "flex",
-            border: "1.5px solid rgba(255,255,255,0.14)",
+            border: "1.5px solid rgba(255,255,255,0.15)",
             boxSizing: "border-box",
           }}
         >
+          {/* Away side */}
           <div
-            className="flex items-center justify-start pl-1.5 transition-all duration-700"
+            className="flex items-center justify-start pl-2 transition-all duration-700"
             style={{
               width: `${awayPct}%`,
               background: awayColor,
-              minWidth: awayPct! > 0 ? 28 : 0,
+              minWidth: awayPct! > 0 ? 32 : 0,
               borderRadius: awayPct! >= 100 ? "9999px" : "9999px 0 0 9999px",
             }}
           >
-            <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: compact ? 10 : 11, color: awayTextColor }}>
+            <span
+              className="font-extrabold tabular-nums leading-none"
+              style={{ fontSize: 12, color: awayTextColor }}
+            >
               {awayPct}%
             </span>
           </div>
+          {/* Divider */}
           <div style={{ width: 1.5, background: "rgba(255,255,255,0.3)", flexShrink: 0, alignSelf: "stretch" }} />
+          {/* Home side */}
           <div
-            className="flex items-center justify-end pr-1.5 transition-all duration-700"
+            className="flex items-center justify-end pr-2 transition-all duration-700"
             style={{
               width: `${homePct}%`,
               background: homeColor,
-              minWidth: homePct! > 0 ? 28 : 0,
+              minWidth: homePct! > 0 ? 32 : 0,
               borderRadius: homePct! >= 100 ? "9999px" : "0 9999px 9999px 0",
             }}
           >
-            <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: compact ? 10 : 11, color: homeTextColor }}>
+            <span
+              className="font-extrabold tabular-nums leading-none"
+              style={{ fontSize: 12, color: homeTextColor }}
+            >
               {homePct}%
             </span>
           </div>
@@ -190,9 +192,9 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor, compact }: Sp
       ) : (
         <div
           className="w-full rounded-full flex items-center justify-center"
-          style={{ height: barH, background: "rgba(255,255,255,0.05)" }}
+          style={{ height: 30, background: "rgba(255,255,255,0.05)" }}
         >
-          <span style={{ fontSize: 9, color: "hsl(var(--muted-foreground))", opacity: 0.35 }}>No data</span>
+          <span style={{ fontSize: 10, color: "hsl(var(--muted-foreground))", opacity: 0.35 }}>—</span>
         </div>
       )}
     </div>
@@ -200,22 +202,19 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor, compact }: Sp
 }
 
 // ── MarketColumn ──────────────────────────────────────────────────────────────
-// One column in the horizontal layout: title + side labels + tickets bar + handle bar
 
 interface MarketColumnProps {
   title: string;
   awayLabel: string;
   homeLabel: string;
-  /** For the Total column: the raw total number to show centered between OVER and UNDER */
   totalValue?: number;
-  ticketsPct: number | null | undefined;   // away side %
-  handlePct: number | null | undefined;    // away side %
+  ticketsPct: number | null | undefined;
+  handlePct: number | null | undefined;
   awayColor: string;
   homeColor: string;
-  compact?: boolean;
 }
 
-function MarketColumn({ title, awayLabel, homeLabel, totalValue, ticketsPct, handlePct, awayColor, homeColor, compact }: MarketColumnProps) {
+function MarketColumn({ title, awayLabel, homeLabel, totalValue, ticketsPct, handlePct, awayColor, homeColor }: MarketColumnProps) {
   const hasTickets = ticketsPct != null;
   const hasHandle  = handlePct  != null;
   if (!hasTickets && !hasHandle) return null;
@@ -228,54 +227,46 @@ function MarketColumn({ title, awayLabel, homeLabel, totalValue, ticketsPct, han
   const isTotalMarket = totalValue !== undefined && !isNaN(totalValue);
 
   return (
-    <div className="flex flex-col gap-1.5 flex-1 min-w-0 px-2">
-      {/* Market title */}
-      <div className="flex items-center gap-1.5">
-        <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+    <div
+      className="flex flex-col flex-1 min-w-0"
+      style={{ padding: "12px 10px", gap: 10 }}
+    >
+      {/* Market title — centered with flanking rules */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.08)" }} />
         <span
-          className="uppercase tracking-widest font-extrabold whitespace-nowrap"
-          style={{ fontSize: compact ? 10 : 11, color: "#ffffff" }}
+          className="uppercase tracking-widest font-extrabold whitespace-nowrap text-center"
+          style={{ fontSize: 11, color: "#ffffff", letterSpacing: "0.14em" }}
         >
           {title}
         </span>
-        <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+        <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.08)" }} />
       </div>
 
       {/* Side labels */}
       {isTotalMarket ? (
-        /* Total: OVER  {value}  UNDER — three columns */
-        <div className="flex items-center justify-between gap-1">
-          <span
-            className="uppercase tracking-wide leading-tight"
-            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 400 }}
-          >
+        <div className="flex items-center justify-between" style={{ paddingLeft: 2, paddingRight: 2 }}>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", fontWeight: 600, letterSpacing: "0.06em" }}>
             OVER
           </span>
-          <span
-            className="uppercase tracking-wide leading-tight tabular-nums"
-            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 400 }}
-          >
+          <span style={{ fontSize: 13, color: "#ffffff", fontWeight: 700, letterSpacing: "0.04em" }}>
             {totalValue}
           </span>
-          <span
-            className="uppercase tracking-wide leading-tight"
-            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 400 }}
-          >
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", fontWeight: 600, letterSpacing: "0.06em" }}>
             UNDER
           </span>
         </div>
       ) : (
-        /* Spread / Moneyline: away left, home right — unbolded */
-        <div className="flex items-start justify-between gap-1">
+        <div className="flex items-start justify-between" style={{ paddingLeft: 2, paddingRight: 2, gap: 4 }}>
           <span
-            className="uppercase tracking-wide leading-tight"
-            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 400, maxWidth: "48%", wordBreak: "break-word" }}
+            className="uppercase leading-tight"
+            style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", fontWeight: 600, maxWidth: "48%", wordBreak: "break-word", letterSpacing: "0.04em" }}
           >
             {awayLabel}
           </span>
           <span
-            className="uppercase tracking-wide leading-tight text-right"
-            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 400, maxWidth: "48%", wordBreak: "break-word" }}
+            className="uppercase leading-tight text-right"
+            style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", fontWeight: 600, maxWidth: "48%", wordBreak: "break-word", letterSpacing: "0.04em" }}
           >
             {homeLabel}
           </span>
@@ -289,7 +280,6 @@ function MarketColumn({ title, awayLabel, homeLabel, totalValue, ticketsPct, han
         homePct={homeTickets}
         awayColor={awayColor}
         homeColor={homeColor}
-        compact={compact}
       />
 
       {/* Handle bar */}
@@ -299,75 +289,7 @@ function MarketColumn({ title, awayLabel, homeLabel, totalValue, ticketsPct, han
         homePct={homeHandle}
         awayColor={awayColor}
         homeColor={homeColor}
-        compact={compact}
       />
-    </div>
-  );
-}
-
-// ── Vertical MarketSection (mobile fallback) ──────────────────────────────────
-interface MarketSectionProps {
-  title: string;
-  awayLabel: string;
-  homeLabel: string;
-  /** For the Total column: the raw total number to show centered between OVER and UNDER */
-  totalValue?: number;
-  moneyPct: number | null | undefined;
-  betsPct: number | null | undefined;
-  awayColor: string;
-  homeColor: string;
-}
-
-function MarketSection({ title, awayLabel, homeLabel, totalValue, moneyPct, betsPct, awayColor, homeColor }: MarketSectionProps) {
-  const hasAny = moneyPct != null || betsPct != null;
-  if (!hasAny) return null;
-
-  const awayMoney = moneyPct != null ? moneyPct : null;
-  const homeMoney = moneyPct != null ? 100 - moneyPct : null;
-  const awayBets  = betsPct  != null ? betsPct  : null;
-  const homeBets  = betsPct  != null ? 100 - betsPct  : null;
-
-  const isTotalMarket = totalValue !== undefined && !isNaN(totalValue);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
-        <span className="text-[11px] font-extrabold uppercase tracking-widest" style={{ color: '#ffffff' }}>{title}</span>
-        <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
-      </div>
-
-      {/* Side labels */}
-      {isTotalMarket ? (
-        /* Total: OVER  {value}  UNDER — three columns */
-        <div className="flex items-center justify-between gap-1 px-0.5">
-          <span className="text-[10px] uppercase tracking-wide leading-tight" style={{ color: '#ffffff', fontWeight: 400 }}>
-            OVER
-          </span>
-          <span className="text-[10px] uppercase tracking-wide leading-tight tabular-nums" style={{ color: '#ffffff', fontWeight: 400 }}>
-            {totalValue}
-          </span>
-          <span className="text-[10px] uppercase tracking-wide leading-tight" style={{ color: '#ffffff', fontWeight: 400 }}>
-            UNDER
-          </span>
-        </div>
-      ) : (
-        /* Spread / Moneyline: away left, home right — unbolded */
-        <div className="flex items-start justify-between gap-1 px-0.5">
-          <span className="text-[10px] uppercase tracking-wide leading-tight" style={{ color: '#ffffff', fontWeight: 400, maxWidth: "48%", wordBreak: "break-word" }}>{awayLabel}</span>
-          <span className="text-[10px] uppercase tracking-wide leading-tight text-right" style={{ color: '#ffffff', fontWeight: 400, maxWidth: "48%", wordBreak: "break-word" }}>{homeLabel}</span>
-        </div>
-      )}
-
-      {betsPct != null && (
-        <SplitBar label="Tickets" awayPct={awayBets} homePct={homeBets} awayColor={awayColor} homeColor={homeColor} />
-      )}
-      {moneyPct != null && betsPct != null && (
-        <div style={{ height: 1, background: "rgba(255,255,255,0.08)", borderRadius: 1 }} />
-      )}
-      {moneyPct != null && (
-        <SplitBar label="Handle" awayPct={awayMoney} homePct={homeMoney} awayColor={awayColor} homeColor={homeColor} />
-      )}
     </div>
   );
 }
@@ -407,16 +329,13 @@ export function BettingSplitsPanel({
     return FALLBACK_AWAY;
   })();
 
-  // Book line values for labels
   const awaySpread = toNum(game.awayBookSpread);
   const homeSpread = toNum(game.homeBookSpread);
   const bookTotal  = toNum(game.bookTotal);
 
-  // Use abbreviation (e.g. "SEAU", "NDAK") for spread/ML labels; fall back to full name
   const awayAbbr = colors?.away?.abbrev ?? awayLabel;
   const homeAbbr = colors?.home?.abbrev ?? homeLabel;
 
-  // Spread: "ABBR (+1.5)" — abbrev unbolded, spread value in parens
   const awaySpreadLabel = !isNaN(awaySpread)
     ? `${awayAbbr} (${spreadSign(awaySpread)})`
     : awayAbbr;
@@ -424,7 +343,6 @@ export function BettingSplitsPanel({
     ? `${homeAbbr} (${spreadSign(homeSpread)})`
     : homeAbbr;
 
-  // Moneyline: "ABBR (+575)" — abbrev unbolded, ML value in parens
   const awayMlLabel = game.awayML ? `${awayAbbr} (${game.awayML})` : awayAbbr;
   const homeMlLabel = game.homeML ? `${homeAbbr} (${game.homeML})` : homeAbbr;
 
@@ -433,78 +351,73 @@ export function BettingSplitsPanel({
   const hasMlSplits     = (game.mlAwayMoneyPct != null || game.mlAwayBetsPct != null || game.awayML != null);
   const hasAnySplits    = hasSpreadSplits || hasTotalSplits || hasMlSplits;
 
-  const header = (
-    <div className="flex items-center gap-2 mb-2">
-      <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.07)" }} />
-      <span className="text-[13px] font-black uppercase tracking-widest" style={{ color: '#d3d3d3', opacity: 0.85 }}>
-        Betting Splits
-      </span>
-      <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.07)" }} />
-    </div>
-  );
-
   if (!hasAnySplits) {
     return (
-      <div className="flex flex-col gap-2 py-3">
-        {header}
-        <div className="w-full rounded-lg flex items-center justify-center" style={{ height: 40, background: "rgba(255,255,255,0.04)" }}>
-          <span className="text-[10px]" style={{ color: "hsl(var(--muted-foreground))", opacity: 0.35 }}>Not yet available</span>
-        </div>
+      <div
+        className="w-full flex items-center justify-center"
+        style={{ minHeight: 80, padding: "16px 12px" }}
+      >
+        <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", opacity: 0.4, letterSpacing: "0.06em" }}>
+          Splits not yet available
+        </span>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col py-2">
-      {header}
+    <div
+      className="flex items-stretch w-full"
+      style={{ minHeight: 0 }}
+    >
+      {/* SPREAD */}
+      {hasSpreadSplits && (
+        <MarketColumn
+          title="Spread"
+          awayLabel={awaySpreadLabel}
+          homeLabel={homeSpreadLabel}
+          ticketsPct={game.spreadAwayBetsPct}
+          handlePct={game.spreadAwayMoneyPct}
+          awayColor={awayColor}
+          homeColor={homeColor}
+        />
+      )}
 
-      {/* ── ALL SCREEN SIZES: horizontal 3-column layout ── */}
-      {/* compact=true on mobile keeps bars slightly slimmer */}
-      <div className="flex items-stretch gap-0 w-full">
-        {hasSpreadSplits && (
-          <MarketColumn
-            title="Spread"
-            awayLabel={awaySpreadLabel}
-            homeLabel={homeSpreadLabel}
-            ticketsPct={game.spreadAwayBetsPct}
-            handlePct={game.spreadAwayMoneyPct}
-            awayColor={awayColor}
-            homeColor={homeColor}
-            compact
-          />
-        )}
-        {hasSpreadSplits && (hasTotalSplits || hasMlSplits) && (
-          <div style={{ width: 1, background: "rgba(255,255,255,0.07)", flexShrink: 0, alignSelf: "stretch" }} />
-        )}
-        {hasTotalSplits && (
-          <MarketColumn
-            title="Total"
-            awayLabel=""
-            homeLabel=""
-            totalValue={isNaN(bookTotal) ? undefined : bookTotal}
-            ticketsPct={game.totalOverBetsPct}
-            handlePct={game.totalOverMoneyPct}
-            awayColor={awayColor}
-            homeColor={homeColor}
-            compact
-          />
-        )}
-        {hasTotalSplits && hasMlSplits && (
-          <div style={{ width: 1, background: "rgba(255,255,255,0.07)", flexShrink: 0, alignSelf: "stretch" }} />
-        )}
-        {hasMlSplits && (
-          <MarketColumn
-            title="Moneyline"
-            awayLabel={awayMlLabel}
-            homeLabel={homeMlLabel}
-            ticketsPct={game.mlAwayBetsPct}
-            handlePct={game.mlAwayMoneyPct}
-            awayColor={awayColor}
-            homeColor={homeColor}
-            compact
-          />
-        )}
-      </div>
+      {/* Divider */}
+      {hasSpreadSplits && (hasTotalSplits || hasMlSplits) && (
+        <div style={{ width: 1, background: "rgba(255,255,255,0.07)", flexShrink: 0, alignSelf: "stretch", margin: "8px 0" }} />
+      )}
+
+      {/* TOTAL */}
+      {hasTotalSplits && (
+        <MarketColumn
+          title="Total"
+          awayLabel=""
+          homeLabel=""
+          totalValue={isNaN(bookTotal) ? undefined : bookTotal}
+          ticketsPct={game.totalOverBetsPct}
+          handlePct={game.totalOverMoneyPct}
+          awayColor={awayColor}
+          homeColor={homeColor}
+        />
+      )}
+
+      {/* Divider */}
+      {hasTotalSplits && hasMlSplits && (
+        <div style={{ width: 1, background: "rgba(255,255,255,0.07)", flexShrink: 0, alignSelf: "stretch", margin: "8px 0" }} />
+      )}
+
+      {/* MONEYLINE */}
+      {hasMlSplits && (
+        <MarketColumn
+          title="Moneyline"
+          awayLabel={awayMlLabel}
+          homeLabel={homeMlLabel}
+          ticketsPct={game.mlAwayBetsPct}
+          handlePct={game.mlAwayMoneyPct}
+          awayColor={awayColor}
+          homeColor={homeColor}
+        />
+      )}
     </div>
   );
 }
