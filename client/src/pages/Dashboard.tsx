@@ -187,13 +187,12 @@ export default function Dashboard() {
   }, [selectedSport]);
 
   // ─── Data queries ─────────────────────────────────────────────────────────
-  // Auto-refresh every 30 seconds when LIVE filter is active so scores stay current
-  const isLiveFilterActive = selectedStatuses.has('live') || selectedStatuses.size === 0;
+  // Auto-refresh every 15 seconds (always on) so live scores update without page refresh
   const { data: allGames, isLoading: gamesLoading } = trpc.games.list.useQuery(
     { sport: selectedSport },
     {
       refetchOnWindowFocus: false,
-      refetchInterval: isLiveFilterActive ? 30 * 1000 : false,
+      refetchInterval: 15 * 1000, // always poll — scores update even when no LIVE filter active
     }
   );
 

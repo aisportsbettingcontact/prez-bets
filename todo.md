@@ -501,4 +501,10 @@
 - [x] High-alert confirmation dialog: irreversible warning before deletion
 - [x] Auto-hide MISSING ODDS/MODELED/NOT MODELED row when slate is fully complete (0 missing + 0 not modeled)
 - [x] Stats bar counts update immediately after deletion (via listStaging invalidation)
+- [x] Save checkpoint and deliver
+
+## Score Refresh: 15s Interval + Real-Time Feed Updates (2026-03-08)
+- [x] Change SCORE_INTERVAL_MS from 30s to 15s in vsinAutoRefresh.ts
+- [x] Wire Feed page to auto-poll scores every 15s (refetchInterval) without page refresh
+- [x] Animate score updates on GameCard: score flashes green with glow for 800ms when it changes
 - [ ] Save checkpoint and deliver

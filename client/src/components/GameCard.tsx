@@ -14,7 +14,7 @@
  * Mobile: splits stack above projections (flex-col).
  */
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, Link, ImageDown } from "lucide-react";
 import { toast } from "sonner";
@@ -411,6 +411,19 @@ export function GameCard({ game }: GameCardProps) {
   const awayWins = isFinal && hasScores && (game.awayScore! > game.homeScore!);
   const homeWins = isFinal && hasScores && (game.homeScore! > game.awayScore!);
 
+  // Score flash animation: briefly highlight score when it changes
+  const prevScoreRef = useRef<string | null>(null);
+  const [scoreFlash, setScoreFlash] = useState(false);
+  const scoreKey = hasScores ? `${game.awayScore}-${game.homeScore}` : null;
+  useEffect(() => {
+    if (scoreKey && prevScoreRef.current !== null && prevScoreRef.current !== scoreKey) {
+      setScoreFlash(true);
+      const t = setTimeout(() => setScoreFlash(false), 800);
+      return () => clearTimeout(t);
+    }
+    prevScoreRef.current = scoreKey;
+  }, [scoreKey]);
+
   const maxDiff = Math.max(isNaN(spreadDiff) ? 0 : spreadDiff, isNaN(totalDiff) ? 0 : totalDiff);
   const borderColor = getEdgeColor(maxDiff);
 
@@ -630,7 +643,13 @@ export function GameCard({ game }: GameCardProps) {
                 />
               )}
               {/* Score */}
-              <span className="text-sm font-bold tabular-nums" style={{ color: "hsl(var(--foreground))" }}>
+              <span
+                className="text-sm font-bold tabular-nums transition-colors duration-300"
+                style={{
+                  color: scoreFlash ? "#39FF14" : "hsl(var(--foreground))",
+                  textShadow: scoreFlash ? "0 0 8px rgba(57,255,20,0.7)" : "none",
+                }}
+              >
                 {game.awayScore}-{game.homeScore}
               </span>
               {/* Home logo */}
