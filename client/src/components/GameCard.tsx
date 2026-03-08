@@ -3,7 +3,7 @@
  *
  * Layout (desktop ≥ lg):
  *   ┌──────────────────┬──────────────────────────────┬──────────────────┐
- *   │  SCORE PANEL     │  BOOKS | MODEL LINE | O/U    │  BETTING SPLITS  │
+ *   │  SCORE PANEL     │  ODDS/LINES                  │  BETTING SPLITS  │
  *   │  Clock/Status    │  Column headers              │                  │
  *   │  Away logo+name  │  Away row                    │                  │
  *   │  [score]         │  Home row                    │                  │
@@ -13,10 +13,10 @@
  *
  * Layout (mobile < lg):
  *   ┌────────────────────────────────────────────────────────────────────┐
- *   │  SCORE PANEL (left)  │  BETTING SPLITS (right)                    │
- *   ├────────────────────────────────────────────────────────────────────┤
- *   │  BOOKS | MODEL LINE | O/U  (full width below)                     │
- *   └────────────────────────────────────────────────────────────────────┘
+ *   │  SCORE PANEL  (full width, top row)                               │
+ *   ├─────────────────────────────┬──────────────────────────────────────┤
+ *   │  ODDS/LINES (left)          │  BETTING SPLITS (right)             │
+ *   └─────────────────────────────┴──────────────────────────────────────┘
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -821,12 +821,15 @@ export function GameCard({ game }: GameCardProps) {
         </button>
 
         {/*
-          ALL SCREEN SIZES: single horizontal 3-column row
-          Score panel | Model table | Betting splits
-          The card uses overflow-x: auto so it scrolls on very small screens
-          rather than ever stacking sections vertically.
+          DESKTOP (≥ lg): single horizontal 3-column row
+            Score panel | Odds/Lines | Betting Splits
+          MOBILE (< lg): 2-row layout
+            Row 1: Score panel (full width)
+            Row 2: Odds/Lines (left ~45%) | Betting Splits (right ~55%)
         */}
-        <div className="flex items-stretch w-full" style={{ overflowX: "auto" }}>
+
+        {/* ── Desktop layout ── */}
+        <div className="hidden lg:flex items-stretch w-full" style={{ overflowX: "auto" }}>
           {/* Col 1: Score panel */}
           <div className="flex-shrink-0" style={{ width: "22%", minWidth: 180, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
             <ScorePanel />
@@ -846,6 +849,33 @@ export function GameCard({ game }: GameCardProps) {
               awayNickname={awayNickname}
               homeNickname={homeNickname}
             />
+          </div>
+        </div>
+
+        {/* ── Mobile layout ── */}
+        <div className="flex lg:hidden flex-col w-full">
+          {/* Row 1: Score panel — full width */}
+          <div style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}>
+            <ScorePanel />
+          </div>
+
+          {/* Row 2: Odds/Lines (left) + Betting Splits (right) */}
+          <div className="flex items-stretch w-full" style={{ overflowX: "auto" }}>
+            {/* Odds/Lines — left ~45% */}
+            <div className="flex-shrink-0" style={{ width: "45%", minWidth: 160, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+              <OddsLinesPanel />
+            </div>
+
+            {/* Betting Splits — right ~55% */}
+            <div className="flex-1 px-3 py-3" style={{ minWidth: 180 }}>
+              <BettingSplitsPanel
+                game={game}
+                awayLabel={awayName}
+                homeLabel={homeName}
+                awayNickname={awayNickname}
+                homeNickname={homeNickname}
+              />
+            </div>
           </div>
         </div>
       </motion.div>

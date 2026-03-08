@@ -653,3 +653,8 @@
 - [x] ML: non-edge side keeps book ML (model ML shows — until schema updated)
 - [x] All 20 tests passing, no TypeScript errors
 - [x] Save checkpoint and deliver
+
+## Mobile GameCard Layout Redesign (2026-03-08)
+- [x] Mobile: Score full-width on top, then ODDS/LINES left + BETTING SPLITS right side-by-side below
+- [x] Desktop: keep existing 3-column horizontal layout (Score | Odds/Lines | Betting Splits)
+- [x] Test and save checkpoint
