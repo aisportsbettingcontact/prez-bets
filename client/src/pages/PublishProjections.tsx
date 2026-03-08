@@ -1039,30 +1039,71 @@ export default function PublishProjections() {
           </div>
         )}
 
-        {/* Stats row + filter tabs */}
-        <div className="px-4 pb-2 max-w-3xl mx-auto space-y-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-[11px]" style={{ color: "#39FF14" }}>
-              {publishedCount}/{totalCount} live
-            </span>
-            <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>·</span>
-            <span className="text-[11px]" style={{ color: "#FFB800" }}>
-              {withModelCount} with model data
-            </span>
-            <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>·</span>
-            <span className="text-[11px]" style={{ color: withOddsCount === totalCount ? "#39FF14" : missingOddsCount > 0 ? "#FF6B00" : "hsl(var(--muted-foreground))" }}>
-              {withOddsCount}/{totalCount} w/ odds{missingOddsCount > 0 ? ` (${missingOddsCount} missing)` : ""}
-            </span>
-            {lastRefresh?.refreshedAt && (
-              <>
-                <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>·</span>
-                <span className="text-[11px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                  Books {new Date(lastRefresh.refreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-              </>
-            )}
-          </div>
+        {/* Stats bar — slate completeness + refresh timestamps */}
+        <div className="px-4 pb-3 max-w-3xl mx-auto">
+          <div
+            className="rounded-lg px-4 py-2.5 grid gap-x-4 gap-y-1.5"
+            style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              gridTemplateColumns: "repeat(2, 1fr)",
+            }}
+          >
+            {/* Row 1: Odds count | Modeled count */}
+            <div className="flex items-baseline gap-1.5">
+              <span
+                className="text-[13px] font-black tabular-nums"
+                style={{ color: withOddsCount === totalCount ? "#39FF14" : missingOddsCount > 0 ? "#FF6B00" : "hsl(var(--muted-foreground))" }}
+              >
+                {withOddsCount}/{totalCount}
+              </span>
+              <span className="text-[10px] uppercase tracking-wide" style={{ color: "hsl(var(--muted-foreground))" }}>
+                Games with All Odds
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <span
+                className="text-[13px] font-black tabular-nums"
+                style={{ color: withModelCount === totalCount ? "#39FF14" : withModelCount > 0 ? "#FFB800" : "hsl(var(--muted-foreground))" }}
+              >
+                {withModelCount}/{totalCount}
+              </span>
+              <span className="text-[10px] uppercase tracking-wide" style={{ color: "hsl(var(--muted-foreground))" }}>
+                Games Modeled
+              </span>
+            </div>
 
+            {/* Divider */}
+            <div className="col-span-2" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+
+            {/* Row 2: Odds timestamp | Scores timestamp */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))" }}>
+                Odds Last Updated
+              </span>
+              <span className="text-[11px] font-mono" style={{ color: lastRefresh?.refreshedAt ? "rgba(255,255,255,0.75)" : "hsl(var(--muted-foreground))" }}>
+                {lastRefresh?.refreshedAt
+                  ? new Date(lastRefresh.refreshedAt).toLocaleTimeString("en-US", {
+                      hour: "2-digit", minute: "2-digit", second: "2-digit",
+                      timeZone: "America/New_York", hour12: true,
+                    }) + " EST"
+                  : "—"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))" }}>
+                Scores Last Updated
+              </span>
+              <span className="text-[11px] font-mono" style={{ color: lastRefresh?.scoresRefreshedAt ? "rgba(255,255,255,0.75)" : "hsl(var(--muted-foreground))" }}>
+                {lastRefresh?.scoresRefreshedAt
+                  ? new Date(lastRefresh.scoresRefreshedAt).toLocaleTimeString("en-US", {
+                      hour: "2-digit", minute: "2-digit", second: "2-digit",
+                      timeZone: "America/New_York", hour12: true,
+                    }) + " EST"
+                  : "—"}
+              </span>
+            </div>
+          </div>
         </div>
       </header>
 

@@ -261,7 +261,8 @@ export const appRouter = router({
      */
     triggerRefresh: ownerProcedure.mutation(async () => {
       const result = await runVsinRefresh();
-      return result ?? { refreshedAt: new Date().toISOString(), updated: 0, inserted: 0, total: 0, gameDate: "" };
+      const now = new Date().toISOString();
+      return result ?? { refreshedAt: now, scoresRefreshedAt: now, updated: 0, inserted: 0, ncaaInserted: 0, nbaUpdated: 0, nbaInserted: 0, nbaScheduleInserted: 0, total: 0, nbaTotal: 0, gameDate: "" };
     }),
   }),
 

@@ -467,4 +467,11 @@
 - [x] Fix frontend: no change needed — groups by gameDate from DB which is now correct
 - [x] Fixed DB record: Long Beach St @ Hawaii moved from 2026-03-07 to 2026-03-08
 - [x] Test and verify Long Beach St vs Hawaii appears under March 8, not March 7
+- [x] Save checkpoint and deliver
+
+## Publish Projections Stats Bar Redesign (2026-03-08)
+- [x] Add scoresRefreshedAt field to RefreshResult in vsinAutoRefresh.ts
+- [x] Update refreshAllScoresNow() to record scoresRefreshedAt timestamp
+- [x] Expose scoresRefreshedAt via lastRefresh tRPC procedure
+- [x] Redesign stats bar: X/Y Games with Odds | X/Y Games Modeled | Odds Last Updated HH:MM:SS AM/PM EST | Scores Last Updated HH:MM:SS AM/PM EST
 - [ ] Save checkpoint and deliver

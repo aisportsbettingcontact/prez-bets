@@ -30,7 +30,8 @@ const INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const RANGE_DAYS_AHEAD = 6; // fetch today + 6 more days = 7-day window
 
 export interface RefreshResult {
-  refreshedAt: string;       // ISO timestamp
+  refreshedAt: string;       // ISO timestamp of last VSiN odds/splits refresh
+  scoresRefreshedAt: string; // ISO timestamp of last score refresh (NCAAM + NBA)
   updated: number;           // NCAAM games matched + updated (VSiN)
   inserted: number;          // new NCAAM games inserted (VSiN stubs)
   ncaaInserted: number;      // new NCAA-only games inserted
@@ -43,6 +44,7 @@ export interface RefreshResult {
 }
 
 let lastRefreshResult: RefreshResult | null = null;
+let lastScoresRefreshedAt: string = new Date().toISOString();
 
 export function getLastRefreshResult(): RefreshResult | null {
   return lastRefreshResult;
@@ -569,6 +571,7 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
 
     const result: RefreshResult = {
       refreshedAt: new Date().toISOString(),
+      scoresRefreshedAt: lastScoresRefreshedAt,
       updated: ncaamResult.updated,
       inserted: ncaamResult.inserted,
       ncaaInserted: ncaamResult.ncaaInserted,
@@ -681,6 +684,11 @@ async function refreshNbaScores(): Promise<void> {
  */
 export async function refreshAllScoresNow(): Promise<void> {
   await Promise.allSettled([refreshNcaamScores(), refreshNbaScores()]);
+  lastScoresRefreshedAt = new Date().toISOString();
+  // Patch scoresRefreshedAt into the last refresh result so the UI can show it
+  if (lastRefreshResult) {
+    lastRefreshResult = { ...lastRefreshResult, scoresRefreshedAt: lastScoresRefreshedAt };
+  }
 }
 
 /**
