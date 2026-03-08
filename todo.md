@@ -597,3 +597,14 @@
 - [x] Falls back to full awayLabel/homeLabel when abbrev is null
 - [x] All 20 tests passing, no TypeScript errors
 - [x] Save checkpoint and deliver
+
+## BettingSplitsPanel Label Formatting (2026-03-08)
+- [x] Unbold team abbreviation/name in Spread and ML label rows (fontWeight: 400)
+- [x] Put spread value in parentheses: "UND (+11.5)" not "UND +11.5"
+- [x] Put ML value in parentheses: "UND (+575)" not "UND +575"
+- [x] Rename "Over/Under" section title to "Total" (desktop and mobile)
+- [x] Rename "ML" section title to "Moneyline" (desktop and mobile)
+- [x] Restructure Total label row: OVER {total#} UNDER left-center-right layout
+- [x] Apply to both desktop MarketColumn and mobile MarketSection via isTotalMarket prop
+- [x] All 20 tests passing, no TypeScript errors
+- [x] Save checkpoint and deliver

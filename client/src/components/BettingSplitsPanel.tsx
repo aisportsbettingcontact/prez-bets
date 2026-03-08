@@ -1,16 +1,21 @@
-/**
+/*
  * BettingSplitsPanel
  *
  * Desktop/Tablet layout (≥ md):
  *   BETTING SPLITS header
  *   ┌─────────────┬─────────────┬─────────────┐
- *   │   SPREAD    │    TOTAL    │     ML      │  ← side-by-side columns
- *   │  team labels│  O/U labels │  team labels│
+ *   │   SPREAD    │    TOTAL    │  MONEYLINE  │  ← side-by-side columns
+ *   │  team labels│ OVER # UNDER│  team labels│
  *   │  TICKETS %  │  TICKETS %  │  TICKETS %  │  ← bar on top
  *   │  HANDLE %   │  HANDLE %   │  HANDLE %   │  ← bar on bottom
  *   └─────────────┴─────────────┴─────────────┘
  *
- * Mobile (< md): vertical stacked (original layout)
+ * Mobile (< md): vertical stacked
+ *
+ * Label formatting:
+ *   - Spread:     ABBR (+1.5)   — unbolded abbrev, spread in parens
+ *   - Total:      OVER  153.5  UNDER  — three-column, value centered
+ *   - Moneyline:  ABBR (+575)   — unbolded abbrev, ML in parens
  */
 
 import { trpc } from "@/lib/trpc";
@@ -201,6 +206,8 @@ interface MarketColumnProps {
   title: string;
   awayLabel: string;
   homeLabel: string;
+  /** For the Total column: the raw total number to show centered between OVER and UNDER */
+  totalValue?: number;
   ticketsPct: number | null | undefined;   // away side %
   handlePct: number | null | undefined;    // away side %
   awayColor: string;
@@ -208,7 +215,7 @@ interface MarketColumnProps {
   compact?: boolean;
 }
 
-function MarketColumn({ title, awayLabel, homeLabel, ticketsPct, handlePct, awayColor, homeColor, compact }: MarketColumnProps) {
+function MarketColumn({ title, awayLabel, homeLabel, totalValue, ticketsPct, handlePct, awayColor, homeColor, compact }: MarketColumnProps) {
   const hasTickets = ticketsPct != null;
   const hasHandle  = handlePct  != null;
   if (!hasTickets && !hasHandle) return null;
@@ -217,6 +224,8 @@ function MarketColumn({ title, awayLabel, homeLabel, ticketsPct, handlePct, away
   const homeTickets = hasTickets ? 100 - ticketsPct! : null;
   const awayHandle  = hasHandle  ? handlePct!  : null;
   const homeHandle  = hasHandle  ? 100 - handlePct!  : null;
+
+  const isTotalMarket = totalValue !== undefined && !isNaN(totalValue);
 
   return (
     <div className="flex flex-col gap-1.5 flex-1 min-w-0 px-2">
@@ -232,21 +241,46 @@ function MarketColumn({ title, awayLabel, homeLabel, ticketsPct, handlePct, away
         <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
       </div>
 
-      {/* Side labels: away left, home right */}
-      <div className="flex items-start justify-between gap-1">
-        <span
-          className="font-bold uppercase tracking-wide leading-tight"
-          style={{ fontSize: compact ? 9 : 10, color: "#ffffff", maxWidth: "48%", wordBreak: "break-word" }}
-        >
-          {awayLabel}
-        </span>
-        <span
-          className="font-bold uppercase tracking-wide leading-tight text-right"
-          style={{ fontSize: compact ? 9 : 10, color: "#ffffff", maxWidth: "48%", wordBreak: "break-word" }}
-        >
-          {homeLabel}
-        </span>
-      </div>
+      {/* Side labels */}
+      {isTotalMarket ? (
+        /* Total: OVER  {value}  UNDER — three columns */
+        <div className="flex items-center justify-between gap-1">
+          <span
+            className="uppercase tracking-wide leading-tight"
+            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 400 }}
+          >
+            OVER
+          </span>
+          <span
+            className="uppercase tracking-wide leading-tight tabular-nums"
+            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 700 }}
+          >
+            {totalValue}
+          </span>
+          <span
+            className="uppercase tracking-wide leading-tight"
+            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 400 }}
+          >
+            UNDER
+          </span>
+        </div>
+      ) : (
+        /* Spread / Moneyline: away left, home right — unbolded */
+        <div className="flex items-start justify-between gap-1">
+          <span
+            className="uppercase tracking-wide leading-tight"
+            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 400, maxWidth: "48%", wordBreak: "break-word" }}
+          >
+            {awayLabel}
+          </span>
+          <span
+            className="uppercase tracking-wide leading-tight text-right"
+            style={{ fontSize: compact ? 9 : 10, color: "#ffffff", fontWeight: 400, maxWidth: "48%", wordBreak: "break-word" }}
+          >
+            {homeLabel}
+          </span>
+        </div>
+      )}
 
       {/* Tickets bar */}
       <SplitBar
@@ -276,13 +310,15 @@ interface MarketSectionProps {
   title: string;
   awayLabel: string;
   homeLabel: string;
+  /** For the Total column: the raw total number to show centered between OVER and UNDER */
+  totalValue?: number;
   moneyPct: number | null | undefined;
   betsPct: number | null | undefined;
   awayColor: string;
   homeColor: string;
 }
 
-function MarketSection({ title, awayLabel, homeLabel, moneyPct, betsPct, awayColor, homeColor }: MarketSectionProps) {
+function MarketSection({ title, awayLabel, homeLabel, totalValue, moneyPct, betsPct, awayColor, homeColor }: MarketSectionProps) {
   const hasAny = moneyPct != null || betsPct != null;
   if (!hasAny) return null;
 
@@ -291,6 +327,8 @@ function MarketSection({ title, awayLabel, homeLabel, moneyPct, betsPct, awayCol
   const awayBets  = betsPct  != null ? betsPct  : null;
   const homeBets  = betsPct  != null ? 100 - betsPct  : null;
 
+  const isTotalMarket = totalValue !== undefined && !isNaN(totalValue);
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
@@ -298,10 +336,29 @@ function MarketSection({ title, awayLabel, homeLabel, moneyPct, betsPct, awayCol
         <span className="text-[11px] font-extrabold uppercase tracking-widest" style={{ color: '#ffffff' }}>{title}</span>
         <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
       </div>
-      <div className="flex items-start justify-between gap-1 px-0.5">
-        <span className="text-[10px] font-bold uppercase tracking-wide leading-tight" style={{ color: '#ffffff', maxWidth: "48%", wordBreak: "break-word" }}>{awayLabel}</span>
-        <span className="text-[10px] font-bold uppercase tracking-wide leading-tight text-right" style={{ color: '#ffffff', maxWidth: "48%", wordBreak: "break-word" }}>{homeLabel}</span>
-      </div>
+
+      {/* Side labels */}
+      {isTotalMarket ? (
+        /* Total: OVER  {value}  UNDER — three columns */
+        <div className="flex items-center justify-between gap-1 px-0.5">
+          <span className="text-[10px] uppercase tracking-wide leading-tight" style={{ color: '#ffffff', fontWeight: 400 }}>
+            OVER
+          </span>
+          <span className="text-[10px] uppercase tracking-wide leading-tight tabular-nums" style={{ color: '#ffffff', fontWeight: 700 }}>
+            {totalValue}
+          </span>
+          <span className="text-[10px] uppercase tracking-wide leading-tight" style={{ color: '#ffffff', fontWeight: 400 }}>
+            UNDER
+          </span>
+        </div>
+      ) : (
+        /* Spread / Moneyline: away left, home right — unbolded */
+        <div className="flex items-start justify-between gap-1 px-0.5">
+          <span className="text-[10px] uppercase tracking-wide leading-tight" style={{ color: '#ffffff', fontWeight: 400, maxWidth: "48%", wordBreak: "break-word" }}>{awayLabel}</span>
+          <span className="text-[10px] uppercase tracking-wide leading-tight text-right" style={{ color: '#ffffff', fontWeight: 400, maxWidth: "48%", wordBreak: "break-word" }}>{homeLabel}</span>
+        </div>
+      )}
+
       {betsPct != null && (
         <SplitBar label="Tickets" awayPct={awayBets} homePct={homeBets} awayColor={awayColor} homeColor={homeColor} />
       )}
@@ -359,12 +416,17 @@ export function BettingSplitsPanel({
   const awayAbbr = colors?.away?.abbrev ?? awayLabel;
   const homeAbbr = colors?.home?.abbrev ?? homeLabel;
 
-  const awaySpreadLabel = !isNaN(awaySpread) ? `${awayAbbr} ${spreadSign(awaySpread)}` : awayAbbr;
-  const homeSpreadLabel = !isNaN(homeSpread) ? `${homeAbbr} ${spreadSign(homeSpread)}` : homeAbbr;
-  const overLabel  = !isNaN(bookTotal) ? `Over ${bookTotal}`  : "Over";
-  const underLabel = !isNaN(bookTotal) ? `Under ${bookTotal}` : "Under";
-  const awayMlLabel = game.awayML ? `${awayAbbr} ${game.awayML}` : awayAbbr;
-  const homeMlLabel = game.homeML ? `${homeAbbr} ${game.homeML}` : homeAbbr;
+  // Spread: "ABBR (+1.5)" — abbrev unbolded, spread value in parens
+  const awaySpreadLabel = !isNaN(awaySpread)
+    ? `${awayAbbr} (${spreadSign(awaySpread)})`
+    : awayAbbr;
+  const homeSpreadLabel = !isNaN(homeSpread)
+    ? `${homeAbbr} (${spreadSign(homeSpread)})`
+    : homeAbbr;
+
+  // Moneyline: "ABBR (+575)" — abbrev unbolded, ML value in parens
+  const awayMlLabel = game.awayML ? `${awayAbbr} (${game.awayML})` : awayAbbr;
+  const homeMlLabel = game.homeML ? `${homeAbbr} (${game.homeML})` : homeAbbr;
 
   const hasSpreadSplits = game.spreadAwayMoneyPct != null || game.spreadAwayBetsPct != null;
   const hasTotalSplits  = game.totalOverMoneyPct  != null || game.totalOverBetsPct  != null;
@@ -414,9 +476,10 @@ export function BettingSplitsPanel({
         )}
         {hasTotalSplits && (
           <MarketColumn
-            title="Over/Under"
-            awayLabel={overLabel}
-            homeLabel={underLabel}
+            title="Total"
+            awayLabel=""
+            homeLabel=""
+            totalValue={isNaN(bookTotal) ? undefined : bookTotal}
             ticketsPct={game.totalOverBetsPct}
             handlePct={game.totalOverMoneyPct}
             awayColor={awayColor}
@@ -428,7 +491,7 @@ export function BettingSplitsPanel({
         )}
         {hasMlSplits && (
           <MarketColumn
-            title="ML"
+            title="Moneyline"
             awayLabel={awayMlLabel}
             homeLabel={homeMlLabel}
             ticketsPct={game.mlAwayBetsPct}
@@ -454,9 +517,10 @@ export function BettingSplitsPanel({
         )}
         {hasTotalSplits && (
           <MarketSection
-            title="O/U"
-            awayLabel={overLabel}
-            homeLabel={underLabel}
+            title="Total"
+            awayLabel=""
+            homeLabel=""
+            totalValue={isNaN(bookTotal) ? undefined : bookTotal}
             moneyPct={game.totalOverMoneyPct}
             betsPct={game.totalOverBetsPct}
             awayColor={awayColor}
@@ -465,7 +529,7 @@ export function BettingSplitsPanel({
         )}
         {hasMlSplits && (
           <MarketSection
-            title="ML"
+            title="Moneyline"
             awayLabel={awayMlLabel}
             homeLabel={homeMlLabel}
             moneyPct={game.mlAwayMoneyPct}
