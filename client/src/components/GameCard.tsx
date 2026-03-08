@@ -230,7 +230,7 @@ function OddsLinesPanel({
   computedSpreadEdge,
   computedTotalEdge,
 }: OddsLinesPanelProps) {
-  const [showModel, setShowModel] = useState(false);
+  const [showModel, setShowModel] = useState(true);
 
   const mdlAwayMl = modelAwayML ?? '—';
   const mdlHomeMl = modelHomeML ?? '—';
@@ -295,7 +295,7 @@ function OddsLinesPanel({
             }}
           />
         </button>
-        <span className="text-[9px] font-bold uppercase tracking-widest flex-shrink-0" style={{ color: showModel ? '#39FF14' : 'rgba(255,255,255,0.35)' }}>
+        <span className="text-[9px] font-bold uppercase tracking-widest flex-shrink-0" style={{ color: '#ffffff' }}>
           Model
         </span>
       </div>
