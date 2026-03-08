@@ -955,6 +955,23 @@ export default function PublishProjections() {
     },
   });
 
+  const triggerNbaModelSyncMutation = trpc.games.triggerNbaModelSync.useMutation({
+    onSuccess: (result) => {
+      utils.games.lastNbaModelSync.invalidate();
+      utils.games.listStaging.invalidate();
+      refetch();
+      toast.success(`NBA model synced — ${result.synced} games updated`);
+    },
+    onError: () => toast.error("NBA model sync failed"),
+  });
+
+  const handleRefreshNow = () => {
+    triggerRefreshMutation.mutate();
+    if (selectedSport === "NBA") {
+      triggerNbaModelSyncMutation.mutate();
+    }
+  };
+
   // ── Auto-refresh status (server-driven, every 30 min) ──────────────────────
   const { data: lastRefresh } = trpc.games.lastRefresh.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -1106,22 +1123,24 @@ export default function PublishProjections() {
             <ChevronRight size={14} style={{ color: "hsl(var(--muted-foreground))" }} />
           </button>
 
-          {/* Refresh Now button */}
+          {/* Refresh Now button — sport-aware */}
           <button
-            onClick={() => triggerRefreshMutation.mutate()}
-            disabled={isRefreshing || triggerRefreshMutation.isPending}
+            onClick={handleRefreshNow}
+            disabled={isRefreshing || triggerRefreshMutation.isPending || triggerNbaModelSyncMutation.isPending}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all flex-shrink-0"
-            style={isRefreshing || triggerRefreshMutation.isPending
+            style={isRefreshing || triggerRefreshMutation.isPending || triggerNbaModelSyncMutation.isPending
               ? { background: "rgba(57,255,20,0.08)", color: "rgba(57,255,20,0.4)", border: "1px solid rgba(57,255,20,0.15)" }
               : { background: "rgba(57,255,20,0.12)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.3)" }
             }
-            title="Trigger immediate VSiN + NCAA refresh"
+            title={selectedSport === "NBA"
+              ? "Refresh VSiN NBA odds, scores, and NBA model data"
+              : "Refresh VSiN NCAAM odds and scores"}
           >
             <RefreshCw
               size={11}
-              className={isRefreshing || triggerRefreshMutation.isPending ? "animate-spin" : ""}
+              className={isRefreshing || triggerRefreshMutation.isPending || triggerNbaModelSyncMutation.isPending ? "animate-spin" : ""}
             />
-            {isRefreshing || triggerRefreshMutation.isPending ? "Refreshing…" : "Refresh Now"}
+            {isRefreshing || triggerRefreshMutation.isPending || triggerNbaModelSyncMutation.isPending ? "Refreshing…" : "Refresh Now"}
           </button>
         </div>
 
@@ -1273,17 +1292,19 @@ export default function PublishProjections() {
           >
             {/* Context label spanning both columns */}
             <div className="col-span-2 flex items-center gap-1.5 pb-1" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: selectedSport === "NBA" ? "#C8102E" : "#39FF14" }}>
+              <span className="font-bold uppercase tracking-widest" style={{ color: '#ffffff', fontSize: '20px' }}>
                 {selectedSport}
               </span>
               <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>·</span>
-              <span className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>
-                {formatDateNav(gameDate)}
+              <span className="font-semibold" style={{ color: '#fafafa', fontSize: '18px' }}>
+                {gameDate === todayPst()
+                  ? new Date(gameDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+                  : formatDateNav(gameDate)}
               </span>
               {totalCount > 0 && (
                 <>
                   <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>·</span>
-                  <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.35)" }}>{totalCount} games</span>
+                  <span style={{ color: "rgba(255,255,255,0.6)", fontSize: '15px' }}>{totalCount} Total {selectedSport} Games</span>
                 </>
               )}
             </div>
@@ -1316,7 +1337,7 @@ export default function PublishProjections() {
 
             {/* Row 2: Odds timestamp | Scores timestamp */}
             <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))" }}>
+              <span className="uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))", fontSize: '14px' }}>
                 Odds Last Updated
               </span>
               <span className="text-[11px] font-mono" style={{ color: lastRefresh?.refreshedAt ? "rgba(255,255,255,0.75)" : "hsl(var(--muted-foreground))" }}>
@@ -1329,7 +1350,7 @@ export default function PublishProjections() {
               </span>
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))" }}>
+              <span className="uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))", fontSize: '14px' }}>
                 Scores Last Updated
               </span>
               <span className="text-[11px] font-mono" style={{ color: lastRefresh?.scoresRefreshedAt ? "rgba(255,255,255,0.75)" : "hsl(var(--muted-foreground))" }}>
@@ -1348,12 +1369,12 @@ export default function PublishProjections() {
                 <div className="col-span-2" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
                 <div className="col-span-2 flex items-center justify-between">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))" }}>
+                    <span className="uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))", fontSize: '14px' }}>
                       NBA Model Last Synced
                     </span>
                     <span
-                      className="text-[11px] font-mono"
-                      style={{ color: lastNbaModelSync?.syncedAt ? "rgba(200,16,46,0.9)" : "hsl(var(--muted-foreground))" }}
+                      className="font-mono"
+                      style={{ color: '#39ff14', fontSize: '13px' }}
                     >
                       {lastNbaModelSync?.syncedAt
                         ? new Date(lastNbaModelSync.syncedAt).toLocaleTimeString("en-US", {
