@@ -658,3 +658,8 @@
 - [x] Mobile: Score full-width on top, then ODDS/LINES left + BETTING SPLITS right side-by-side below
 - [x] Desktop: keep existing 3-column horizontal layout (Score | Odds/Lines | Betting Splits)
 - [x] Test and save checkpoint
+
+## ScorePanel Layout — Score Pushed to Far Right (2026-03-08)
+- [x] Team rows: logo+name on left, score pushed to far right (justify-between), no whitespace gap
+- [x] Large score font, matching reference screenshot style
+- [x] Test and save checkpoint
