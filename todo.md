@@ -588,3 +588,12 @@
 - [x] Verified: long_beach_st @ hawaii now shows as date=2026-03-07 startTime=00:00 status=live
 - [x] All 20 tests passing
 - [x] Save checkpoint and deliver
+
+## BettingSplitsPanel Abbreviation Display (2026-03-08)
+- [x] Revert invalid inline styles injected by visual editor on the root div
+- [x] Add abbrev field to TeamColors interface and getTeamColors query (server/db.ts)
+- [x] Show school abbreviations (e.g., UND, SEAU) next to spread odds in SPREAD section
+- [x] Show school abbreviations next to ML odds in ML section
+- [x] Falls back to full awayLabel/homeLabel when abbrev is null
+- [x] All 20 tests passing, no TypeScript errors
+- [x] Save checkpoint and deliver

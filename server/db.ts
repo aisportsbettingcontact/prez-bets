@@ -509,6 +509,7 @@ export interface TeamColors {
   primaryColor: string | null;
   secondaryColor: string | null;
   tertiaryColor: string | null;
+  abbrev: string | null;
 }
 
 /**
@@ -527,6 +528,7 @@ export async function getTeamColors(dbSlug: string, sport: string): Promise<Team
         primaryColor: nbaTeams.primaryColor,
         secondaryColor: nbaTeams.secondaryColor,
         tertiaryColor: nbaTeams.tertiaryColor,
+        abbrev: nbaTeams.abbrev,
       })
       .from(nbaTeams)
       .where(eq(nbaTeams.dbSlug, dbSlug))
@@ -539,6 +541,7 @@ export async function getTeamColors(dbSlug: string, sport: string): Promise<Team
         primaryColor: ncaamTeams.primaryColor,
         secondaryColor: ncaamTeams.secondaryColor,
         tertiaryColor: ncaamTeams.tertiaryColor,
+        abbrev: ncaamTeams.abbrev,
       })
       .from(ncaamTeams)
       .where(eq(ncaamTeams.dbSlug, dbSlug))

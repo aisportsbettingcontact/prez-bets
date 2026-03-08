@@ -355,12 +355,16 @@ export function BettingSplitsPanel({
   const homeSpread = toNum(game.homeBookSpread);
   const bookTotal  = toNum(game.bookTotal);
 
-  const awaySpreadLabel = !isNaN(awaySpread) ? `${awayLabel} ${spreadSign(awaySpread)}` : awayLabel;
-  const homeSpreadLabel = !isNaN(homeSpread) ? `${homeLabel} ${spreadSign(homeSpread)}` : homeLabel;
+  // Use abbreviation (e.g. "SEAU", "NDAK") for spread/ML labels; fall back to full name
+  const awayAbbr = colors?.away?.abbrev ?? awayLabel;
+  const homeAbbr = colors?.home?.abbrev ?? homeLabel;
+
+  const awaySpreadLabel = !isNaN(awaySpread) ? `${awayAbbr} ${spreadSign(awaySpread)}` : awayAbbr;
+  const homeSpreadLabel = !isNaN(homeSpread) ? `${homeAbbr} ${spreadSign(homeSpread)}` : homeAbbr;
   const overLabel  = !isNaN(bookTotal) ? `Over ${bookTotal}`  : "Over";
   const underLabel = !isNaN(bookTotal) ? `Under ${bookTotal}` : "Under";
-  const awayMlLabel = game.awayML ? `${awayLabel} ${game.awayML}` : awayLabel;
-  const homeMlLabel = game.homeML ? `${homeLabel} ${game.homeML}` : homeLabel;
+  const awayMlLabel = game.awayML ? `${awayAbbr} ${game.awayML}` : awayAbbr;
+  const homeMlLabel = game.homeML ? `${homeAbbr} ${game.homeML}` : homeAbbr;
 
   const hasSpreadSplits = game.spreadAwayMoneyPct != null || game.spreadAwayBetsPct != null;
   const hasTotalSplits  = game.totalOverMoneyPct  != null || game.totalOverBetsPct  != null;
