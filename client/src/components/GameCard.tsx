@@ -656,18 +656,41 @@ export function GameCard({ game }: GameCardProps) {
     const mdlAwayMl = '—';
     const mdlHomeMl = '—';
 
-    // Displayed values based on active tab
+    // Determine which side has the edge (for MODEL mode — only edge side shows model value)
+    // Spread edge: if awayModelSpread < awayBookSpread, model likes the away team (away is the edge side)
+    const spreadHasEdge = !isNaN(mdlAwaySpread) && !isNaN(awaySpread) && mdlAwaySpread !== awaySpread;
+    const awayHasSpreadEdge = spreadHasEdge && mdlAwaySpread < awaySpread;
+    // Total edge: if modelTotal < bookTotal → UNDER has edge; if modelTotal > bookTotal → OVER has edge
+    const totalHasEdge = !isNaN(mdlTotal) && !isNaN(bkTotal) && mdlTotal !== bkTotal;
+    const overHasTotalEdge = totalHasEdge && mdlTotal > bkTotal;
+    const underHasTotalEdge = totalHasEdge && mdlTotal < bkTotal;
+
+    const isModelPublished = tab === 'model' && game.publishedToFeed;
+
+    // Displayed values based on active tab — MODEL only changes the edge side
     const dispAwaySpread = tab === 'book'
       ? (!isNaN(awaySpread) ? spreadSign(awaySpread) : '—')
-      : (game.publishedToFeed && !isNaN(mdlAwaySpread) ? spreadSign(mdlAwaySpread) : '—');
+      : isModelPublished && spreadHasEdge && awayHasSpreadEdge && !isNaN(mdlAwaySpread)
+        ? spreadSign(mdlAwaySpread)
+        : (!isNaN(awaySpread) ? spreadSign(awaySpread) : '—');
     const dispHomeSpread = tab === 'book'
       ? (!isNaN(homeSpread) ? spreadSign(homeSpread) : '—')
-      : (game.publishedToFeed && !isNaN(mdlHomeSpread) ? spreadSign(mdlHomeSpread) : '—');
-    const dispTotal = tab === 'book'
+      : isModelPublished && spreadHasEdge && !awayHasSpreadEdge && !isNaN(mdlHomeSpread)
+        ? spreadSign(mdlHomeSpread)
+        : (!isNaN(homeSpread) ? spreadSign(homeSpread) : '—');
+    // For total: OVER row shows model total if OVER has edge, UNDER row shows model total if UNDER has edge
+    const dispOverTotal = tab === 'book'
       ? (!isNaN(bkTotal) ? String(bkTotal) : '—')
-      : (game.publishedToFeed && !isNaN(mdlTotal) ? String(mdlTotal) : '—');
-    const dispAwayMl = tab === 'book' ? awayMl : (game.publishedToFeed ? mdlAwayMl : '—');
-    const dispHomeMl = tab === 'book' ? homeMl : (game.publishedToFeed ? mdlHomeMl : '—');
+      : isModelPublished && overHasTotalEdge && !isNaN(mdlTotal)
+        ? String(mdlTotal)
+        : (!isNaN(bkTotal) ? String(bkTotal) : '—');
+    const dispUnderTotal = tab === 'book'
+      ? (!isNaN(bkTotal) ? String(bkTotal) : '—')
+      : isModelPublished && underHasTotalEdge && !isNaN(mdlTotal)
+        ? String(mdlTotal)
+        : (!isNaN(bkTotal) ? String(bkTotal) : '—');
+    const dispAwayMl = tab === 'book' ? awayMl : (isModelPublished ? mdlAwayMl : awayMl);
+    const dispHomeMl = tab === 'book' ? homeMl : (isModelPublished ? mdlHomeMl : homeMl);
 
     const isModel = tab === 'model';
     const accentColor = isModel ? '#39FF14' : '#D3D3D3';
@@ -729,7 +752,7 @@ export function GameCard({ game }: GameCardProps) {
           </div>
           <div className="flex items-center justify-center">
             <span className="font-bold tabular-nums text-center" style={{ fontSize: 'clamp(11px,1.8vw,14px)', color: '#D3D3D3' }}>
-              O {dispTotal !== '—' ? dispTotal : '—'}
+              O {dispOverTotal !== '—' ? dispOverTotal : '—'}
             </span>
           </div>
           <div className="flex items-center justify-center">
@@ -751,7 +774,7 @@ export function GameCard({ game }: GameCardProps) {
           </div>
           <div className="flex items-center justify-center">
             <span className="font-bold tabular-nums text-center" style={{ fontSize: 'clamp(11px,1.8vw,14px)', color: '#D3D3D3' }}>
-              U {dispTotal !== '—' ? dispTotal : '—'}
+              U {dispUnderTotal !== '—' ? dispUnderTotal : '—'}
             </span>
           </div>
           <div className="flex items-center justify-center">

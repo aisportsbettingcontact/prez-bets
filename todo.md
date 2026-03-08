@@ -645,3 +645,11 @@
 - [x] Edge verdict shows only in MODEL tab when published
 - [x] All 20 tests passing, no TypeScript errors
 - [x] Save checkpoint and deliver
+
+## ODDS/LINES MODEL Toggle — Edge-Only Values (2026-03-08)
+- [x] MODEL mode: only replace the edge side's spread/total/ML value; non-edge side keeps the book line
+- [x] Spread: awayModelSpread < awayBookSpread → away has edge (shows model spread); home keeps book spread
+- [x] Total: modelTotal < bookTotal → UNDER has edge; modelTotal > bookTotal → OVER has edge
+- [x] ML: non-edge side keeps book ML (model ML shows — until schema updated)
+- [x] All 20 tests passing, no TypeScript errors
+- [x] Save checkpoint and deliver
