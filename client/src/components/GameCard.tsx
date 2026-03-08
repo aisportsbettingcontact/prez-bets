@@ -21,7 +21,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, Link, ImageDown } from "lucide-react";
+
 import { toast } from "sonner";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/lib/trpc";
@@ -187,74 +187,6 @@ function EdgeVerdict({
   );
 }
 
-// ── ShareSheet ────────────────────────────────────────────────────────────────
-function ShareSheet({
-  open, onClose, onCopyLink, onSavePhoto,
-}: {
-  open: boolean; onClose: () => void; onCopyLink: () => void; onSavePhoto: () => void;
-}) {
-  return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            key="backdrop"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40"
-            style={{ background: "rgba(0,0,0,0.55)" }}
-            onClick={onClose}
-          />
-          <motion.div
-            key="sheet"
-            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 28, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl px-4 pb-10 pt-5"
-            style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}
-          >
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full" style={{ background: "hsl(var(--muted-foreground) / 0.4)" }} />
-            <p className="text-center text-sm font-semibold mb-5" style={{ color: "hsl(var(--foreground))" }}>Share Card</p>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => { onCopyLink(); onClose(); }}
-                className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl active:scale-[0.98]"
-                style={{ background: "hsl(var(--muted) / 0.5)" }}
-              >
-                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "rgba(99,102,241,0.15)" }}>
-                  <Link size={18} style={{ color: "#6366f1" }} />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-semibold" style={{ color: "hsl(var(--foreground))" }}>Copy Link</p>
-                  <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>aisportsbettingmodels.com</p>
-                </div>
-              </button>
-              <button
-                onClick={() => { onSavePhoto(); onClose(); }}
-                className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl active:scale-[0.98]"
-                style={{ background: "hsl(var(--muted) / 0.5)" }}
-              >
-                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "rgba(57,255,20,0.15)" }}>
-                  <ImageDown size={18} style={{ color: "#39FF14" }} />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-semibold" style={{ color: "hsl(var(--foreground))" }}>Save Photo</p>
-                  <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>Save card to your camera roll</p>
-                </div>
-              </button>
-            </div>
-            <button
-              onClick={onClose}
-              className="mt-3 w-full py-3 rounded-xl text-sm font-semibold"
-              style={{ background: "hsl(var(--muted) / 0.3)", color: "hsl(var(--muted-foreground))" }}
-            >
-              Cancel
-            </button>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-  );
-}
-
 // ── Main GameCard ─────────────────────────────────────────────────────────────
 
 interface GameCardProps {
@@ -264,8 +196,6 @@ interface GameCardProps {
 }
 
 export function GameCard({ game, mode = "full" }: GameCardProps) {
-  const [sheetOpen, setSheetOpen] = useState(false);
-
   const awayBookSpread = toNum(game.awayBookSpread);
   const homeBookSpread = toNum(game.homeBookSpread);
   const awayModelSpread = toNum(game.awayModelSpread);
@@ -354,153 +284,6 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
     : homeBookSpread < 0
     ? spreadSign(homeBookSpread)
     : isNaN(bookTotal) ? "—" : `${bookTotal}`;
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText("https://aisportsbettingmodels.com");
-      toast.success("Link copied!");
-    } catch {
-      toast.error("Could not copy link.");
-    }
-  };
-
-  const handleSavePhoto = async () => {
-    try {
-      const html2canvas = (await import("html2canvas")).default;
-      const isLight = document.documentElement.dataset.theme === "light";
-      const c = isLight ? {
-        card: "#ffffff", headerBg: "#0d1117", headerFg: "#f9fafb",
-        subFg: "#9ca3af", fg: "#111827", mutedFg: "#9ca3af", border: "#e5e7eb",
-      } : {
-        card: "#111620", headerBg: "#0d1117", headerFg: "#dce3f0",
-        subFg: "#8a97ad", fg: "#dce3f0", mutedFg: "#8a97ad", border: "#1e2a3a",
-      };
-
-      const spreadColor = getEdgeColor(spreadDiff);
-      const totalColor  = getEdgeColor(totalDiff);
-      const spreadLabel = normalizeEdgeLabel(computedSpreadEdge);
-      const totalLabel  = normalizeEdgeLabel(computedTotalEdge);
-      const spreadPass  = spreadLabel === "PASS" || spreadDiff <= 0 || !computedSpreadEdge;
-      const totalPass   = totalLabel  === "PASS" || totalDiff  <= 0 || !computedTotalEdge;
-
-      const verdictSideHtml = (diff: number, label: string, color: string) => {
-        if (label === "PASS" || diff <= 0) {
-          return `<div style="flex:1;display:flex;align-items:center;justify-content:center;"><span style="font-size:11px;font-weight:500;color:${c.mutedFg};opacity:0.5;">PASS</span></div>`;
-        }
-        const arrow = diff >= 3 ? `<span style="color:${color};margin-right:3px;font-size:10px;">▲</span>` : "";
-        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
-          <span style="font-size:13px;font-weight:700;color:${c.fg};white-space:nowrap;line-height:1;">${arrow}${label}</span>
-          <span style="font-size:12px;font-weight:700;color:${color};line-height:1;">EDGE: ${diff} pts</span>
-        </div>`;
-      };
-
-      const exportEl = document.createElement("div");
-      exportEl.style.cssText = `
-        position:fixed;top:-9999px;left:-9999px;
-        width:390px;background:${c.card};border-radius:16px;overflow:hidden;
-        font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif;
-        -webkit-font-smoothing:antialiased;border:1px solid ${c.border};
-        border-left:3px solid ${borderColor};
-      `;
-      exportEl.innerHTML = `
-        <div style="background:${c.headerBg};padding:8px 16px;display:flex;align-items:center;justify-content:center;gap:6px;border-bottom:1px solid ${c.border};">
-          <span style="color:${c.headerFg};font-size:12px;font-weight:700;">${dateLabel}</span>
-          <span style="color:${c.subFg};font-size:11px;">·</span>
-          <span style="color:${c.subFg};font-size:12px;font-weight:500;">${time}</span>
-        </div>
-        <div style="padding:8px 12px 10px;background:${c.card};">
-          <div style="display:flex;align-items:center;padding-bottom:6px;border-bottom:1px solid ${c.border};">
-            <div style="width:36px;flex-shrink:0;"></div>
-            <div style="width:90px;flex-shrink:0;"></div>
-            <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;">
-              <span style="font-size:10px;color:#D3D3D3;">Books</span>
-              <span style="font-size:10px;font-weight:700;color:#39FF14;">Model Line</span>
-              <span style="font-size:10px;font-weight:700;color:#39FF14;">Model O/U</span>
-            </div>
-          </div>
-          <div style="height:1px;background:${c.border};margin:0;"></div>
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
-            <div style="width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-              <img src="${awayLogoUrl ?? ''}" width="36" height="36" style="object-fit:contain;" crossorigin="anonymous"/>
-            </div>
-            <div style="width:90px;flex-shrink:0;overflow:hidden;">
-              <div style="font-size:13px;font-weight:700;color:${c.fg};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${awayName}</div>
-            </div>
-            <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">
-              <div style="display:flex;align-items:center;justify-content:center;">
-                <span style="font-size:16px;font-weight:800;color:#D3D3D3;">${awayConsensus}</span>
-              </div>
-              <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:4px 6px;display:flex;align-items:center;justify-content:center;">
-                <span style="font-size:15px;font-weight:700;color:#FFFFFF;">${spreadSign(awayModelSpread)}</span>
-              </div>
-              <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:4px 6px;display:flex;align-items:center;justify-content:center;">
-                <span style="font-size:15px;font-weight:700;color:#FFFFFF;">${isNaN(modelTotal) ? "-" : `O ${modelTotal}`}</span>
-              </div>
-            </div>
-          </div>
-          <div style="height:1px;background:${c.border};margin:0;"></div>
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
-            <div style="width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-              <img src="${homeLogoUrl ?? ''}" width="36" height="36" style="object-fit:contain;" crossorigin="anonymous"/>
-            </div>
-            <div style="width:90px;flex-shrink:0;overflow:hidden;">
-              <div style="font-size:13px;font-weight:700;color:${c.fg};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${homeName}</div>
-            </div>
-            <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">
-              <div style="display:flex;align-items:center;justify-content:center;">
-                <span style="font-size:16px;font-weight:800;color:#D3D3D3;">${homeConsensus}</span>
-              </div>
-              <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:4px 6px;display:flex;align-items:center;justify-content:center;">
-                <span style="font-size:15px;font-weight:700;color:#FFFFFF;">${spreadSign(homeModelSpread)}</span>
-              </div>
-              <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:4px 6px;display:flex;align-items:center;justify-content:center;">
-                <span style="font-size:15px;font-weight:700;color:#FFFFFF;">${isNaN(modelTotal) ? "-" : `U ${modelTotal}`}</span>
-              </div>
-            </div>
-          </div>
-          <div style="border-top:1px solid ${c.border};margin-top:6px;padding-top:6px;display:flex;align-items:center;">
-            ${spreadPass && totalPass
-              ? `<div style="flex:1;text-align:center;"><span style="font-size:11px;font-weight:500;color:${c.mutedFg};opacity:0.5;letter-spacing:0.1em;">PASS</span></div>`
-              : `${verdictSideHtml(spreadDiff, spreadLabel, spreadColor)}
-                 <div style="width:1px;align-self:stretch;background:${c.border};margin:0 8px;"></div>
-                 ${verdictSideHtml(totalDiff, totalLabel, totalColor)}`
-            }
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(exportEl);
-      const imgs = Array.from(exportEl.querySelectorAll("img")) as HTMLImageElement[];
-      await Promise.allSettled(imgs.map((img) => new Promise((res) => {
-        if (img.complete) res(null);
-        else { img.onload = res; img.onerror = res; }
-      })));
-
-      const canvas = await html2canvas(exportEl, {
-        backgroundColor: c.card, scale: 3, useCORS: true,
-        allowTaint: true, logging: false,
-        width: 390, height: exportEl.scrollHeight, windowWidth: 390,
-      });
-      document.body.removeChild(exportEl);
-
-      canvas.toBlob(async (blob) => {
-        if (!blob) { toast.error("Failed to generate image."); return; }
-        const file = new File([blob], `${awayName}-vs-${homeName}.png`, { type: "image/png" });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: `${awayName} vs ${homeName}` });
-        } else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url; a.download = `${awayName}-vs-${homeName}.png`; a.click();
-          URL.revokeObjectURL(url);
-          toast.success("Card saved!");
-        }
-      }, "image/png");
-    } catch (e) {
-      console.error(e);
-      toast.error("Export failed. Please try again.");
-    }
-  };
 
   // ── Score Panel ─────────────────────────────────────────────────────────────
   // Compact score panel for splits mode — logo + name only, score pushed right
@@ -870,16 +653,6 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
           borderLeft: `3px solid ${borderColor}`,
         }}
       >
-        {/* Download / share button */}
-        <button
-          onClick={() => setSheetOpen(true)}
-          className="absolute top-1.5 right-2 z-10 p-1 rounded-md transition-opacity opacity-25 hover:opacity-70"
-          style={{ background: "transparent" }}
-          title="Share card"
-        >
-          <Download size={12} style={{ color: "hsl(var(--muted-foreground))" }} />
-        </button>
-
         {/*
           DESKTOP (≥ lg): single horizontal 3-column row
             Score panel | Odds/Lines | Betting Splits
@@ -989,12 +762,7 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
         </div>
       </motion.div>
 
-      <ShareSheet
-        open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        onCopyLink={handleCopyLink}
-        onSavePhoto={handleSavePhoto}
-      />
+
     </>
   );
 }

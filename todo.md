@@ -721,3 +721,6 @@
 ## CompactScorePanel Name Display Fix
 
 - [x] CompactScorePanel: show school name for NCAAM, nickname for NBA
+
+## Share/Export Button Removal
+- [x] Remove share/export buttons and ShareSheet from GameCard
