@@ -16,8 +16,8 @@ function Router() {
     <Switch>
       {/* Public paywall landing — default entry point */}
       <Route path="/" component={Home} />
-      {/* Authenticated dashboard */}
-      <Route path="/dashboard" component={Dashboard} />
+      {/* Legacy dashboard — redirect to projections */}
+      <Route path="/dashboard">{() => <Redirect to="/projections" />}</Route>
       {/* Dedicated pages */}
       <Route path="/projections" component={ModelProjections} />
       <Route path="/splits" component={BettingSplitsPage} />

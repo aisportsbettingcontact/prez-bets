@@ -695,3 +695,8 @@
 
 - [x] Replace small pill tabs with full-width underline tab bar in ModelProjections header
 - [x] Replace small pill tabs with full-width underline tab bar in BettingSplits header
+
+## Fix Post-Login Redirect & Dashboard
+
+- [x] Change Home.tsx post-login redirect from /dashboard to /projections
+- [x] Redirect /dashboard route to /projections in App.tsx

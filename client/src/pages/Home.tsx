@@ -37,10 +37,10 @@ export default function Home() {
   const [stayLoggedIn, setStayLoggedIn] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Redirect authenticated users straight to the dashboard
+  // Redirect authenticated users straight to the projections feed
   useEffect(() => {
     if (!authLoading && appUser) {
-      setLocation("/dashboard");
+      setLocation("/projections");
     }
   }, [appUser, authLoading, setLocation]);
 
@@ -60,7 +60,7 @@ export default function Home() {
     onSuccess: () => {
       refetch();
       toast.success("Welcome back!");
-      setLocation("/dashboard");
+      setLocation("/projections");
     },
     onError: (e) => {
       toast.error(e.message);
