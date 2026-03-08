@@ -508,32 +508,43 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
     const overHasTotalEdge = totalHasEdge && mdlTotal > bkTotal;
     const underHasTotalEdge = totalHasEdge && mdlTotal < bkTotal;
 
+    // Whether model data is available (any model field populated)
+    const hasModelData = !isNaN(mdlAwaySpread) || !isNaN(mdlTotal) || mdlAwayMl !== '—';
     const isModelPublished = tab === 'model' && game.publishedToFeed;
 
-    // Displayed values based on active tab — MODEL only changes the edge side
+    // Displayed values based on active tab
+    // MODEL tab: if no model data at all → show '—' for everything
+    // MODEL tab: if model data exists → show model value on edge side, book on non-edge side
     const dispAwaySpread = tab === 'book'
       ? (!isNaN(awaySpread) ? spreadSign(awaySpread) : '—')
-      : isModelPublished && spreadHasEdge && awayHasSpreadEdge && !isNaN(mdlAwaySpread)
-        ? spreadSign(mdlAwaySpread)
-        : (!isNaN(awaySpread) ? spreadSign(awaySpread) : '—');
+      : !hasModelData
+        ? '—'
+        : isModelPublished && spreadHasEdge && awayHasSpreadEdge && !isNaN(mdlAwaySpread)
+          ? spreadSign(mdlAwaySpread)
+          : (!isNaN(awaySpread) ? spreadSign(awaySpread) : '—');
     const dispHomeSpread = tab === 'book'
       ? (!isNaN(homeSpread) ? spreadSign(homeSpread) : '—')
-      : isModelPublished && spreadHasEdge && !awayHasSpreadEdge && !isNaN(mdlHomeSpread)
-        ? spreadSign(mdlHomeSpread)
-        : (!isNaN(homeSpread) ? spreadSign(homeSpread) : '—');
-    // For total: OVER row shows model total if OVER has edge, UNDER row shows model total if UNDER has edge
+      : !hasModelData
+        ? '—'
+        : isModelPublished && spreadHasEdge && !awayHasSpreadEdge && !isNaN(mdlHomeSpread)
+          ? spreadSign(mdlHomeSpread)
+          : (!isNaN(homeSpread) ? spreadSign(homeSpread) : '—');
     const dispOverTotal = tab === 'book'
       ? (!isNaN(bkTotal) ? String(bkTotal) : '—')
-      : isModelPublished && overHasTotalEdge && !isNaN(mdlTotal)
-        ? String(mdlTotal)
-        : (!isNaN(bkTotal) ? String(bkTotal) : '—');
+      : !hasModelData
+        ? '—'
+        : isModelPublished && overHasTotalEdge && !isNaN(mdlTotal)
+          ? String(mdlTotal)
+          : (!isNaN(bkTotal) ? String(bkTotal) : '—');
     const dispUnderTotal = tab === 'book'
       ? (!isNaN(bkTotal) ? String(bkTotal) : '—')
-      : isModelPublished && underHasTotalEdge && !isNaN(mdlTotal)
-        ? String(mdlTotal)
-        : (!isNaN(bkTotal) ? String(bkTotal) : '—');
-    const dispAwayMl = tab === 'book' ? awayMl : (isModelPublished ? mdlAwayMl : awayMl);
-    const dispHomeMl = tab === 'book' ? homeMl : (isModelPublished ? mdlHomeMl : homeMl);
+      : !hasModelData
+        ? '—'
+        : isModelPublished && underHasTotalEdge && !isNaN(mdlTotal)
+          ? String(mdlTotal)
+          : (!isNaN(bkTotal) ? String(bkTotal) : '—');
+    const dispAwayMl = tab === 'book' ? awayMl : (!hasModelData ? '—' : (isModelPublished ? mdlAwayMl : awayMl));
+    const dispHomeMl = tab === 'book' ? homeMl : (!hasModelData ? '—' : (isModelPublished ? mdlHomeMl : homeMl));
 
     const isModel = tab === 'model';
     const accentColor = isModel ? '#39FF14' : '#D3D3D3';
