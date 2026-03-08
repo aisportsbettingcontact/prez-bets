@@ -856,28 +856,28 @@ export function GameCard({ game }: GameCardProps) {
 
         {/* ── Mobile layout ── */}
         <div className="flex lg:hidden flex-col w-full">
-          {/* Row 1: Score panel — full width */}
-          <div style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}>
-            <ScorePanel />
-          </div>
+          {/* Row 1: Score (left) + Odds/Lines (right) side-by-side */}
+          <div className="flex items-stretch w-full" style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)", overflowX: "auto" }}>
+            {/* Score — left ~50% */}
+            <div className="flex-1" style={{ minWidth: 160, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+              <ScorePanel />
+            </div>
 
-          {/* Row 2: Odds/Lines (left) + Betting Splits (right) */}
-          <div className="flex items-stretch w-full" style={{ overflowX: "auto" }}>
-            {/* Odds/Lines — left ~45% */}
-            <div className="flex-shrink-0" style={{ width: "45%", minWidth: 160, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+            {/* Odds/Lines — right ~50% */}
+            <div className="flex-1" style={{ minWidth: 160 }}>
               <OddsLinesPanel />
             </div>
+          </div>
 
-            {/* Betting Splits — right ~55% */}
-            <div className="flex-1 px-3 py-3" style={{ minWidth: 180 }}>
-              <BettingSplitsPanel
-                game={game}
-                awayLabel={awayName}
-                homeLabel={homeName}
-                awayNickname={awayNickname}
-                homeNickname={homeNickname}
-              />
-            </div>
+          {/* Row 2: Betting Splits — full width */}
+          <div className="w-full px-3 py-3">
+            <BettingSplitsPanel
+              game={game}
+              awayLabel={awayName}
+              homeLabel={homeName}
+              awayNickname={awayNickname}
+              homeNickname={homeNickname}
+            />
           </div>
         </div>
       </motion.div>

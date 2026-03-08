@@ -663,3 +663,9 @@
 - [x] Team rows: logo+name on left, score pushed to far right (justify-between), no whitespace gap
 - [x] Large score font, matching reference screenshot style
 - [x] Test and save checkpoint
+
+## Mobile Layout v2 — Score+OddsLines top, Splits below (2026-03-08)
+- [x] Mobile row 1: Score (left) + ODDS/LINES (right) side-by-side
+- [x] Mobile row 2: BETTING SPLITS full-width below
+- [x] Desktop: unchanged 3-column layout
+- [x] Test and save checkpoint
