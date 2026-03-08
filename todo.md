@@ -553,4 +553,12 @@
 - [x] Run db:push migration (0020_faithful_deathbird.sql)
 - [x] Seed all 30 NBA abbreviations
 - [x] Verified: 30/30 teams matched (0 unmatched)
-- [ ] Save checkpoint and deliver
+- [x] Save checkpoint and deliver
+
+## VSiN Auth + NCAAM ML Splits + OVER/UNDER Label (2026-03-08)
+- [x] Log into VSiN via browser and extract session cookies
+- [x] Store VSiN credentials as env secrets and update scraper to send auth cookies
+- [x] Verify NCAAM ML splits data is now populated after next refresh (8+ games with ML data confirmed)
+- [x] Update BettingSplitsPanel: OVER/UNDER on desktop/tablet, O/U on mobile
+- [x] Add ML fields to NCAAM updateBookOdds call in vsinAutoRefresh.ts (was missing)
+- [x] Save checkpoint and deliver

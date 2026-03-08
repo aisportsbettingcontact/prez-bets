@@ -204,11 +204,15 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
           bookTotal: scraped.total,
           sortOrder: scraped.vsinRowIndex,
           ...(startTimeEst ? { startTimeEst } : {}),
-          // NCAAM betting splits (4 fields)
+          // NCAAM betting splits (8 fields: spread + total + ML)
           spreadAwayBetsPct: scraped.spreadAwayBetsPct,
           spreadAwayMoneyPct: scraped.spreadAwayMoneyPct,
           totalOverBetsPct: scraped.totalOverBetsPct,
           totalOverMoneyPct: scraped.totalOverMoneyPct,
+          awayML: scraped.awayML,
+          homeML: scraped.homeML,
+          mlAwayBetsPct: scraped.mlAwayBetsPct,
+          mlAwayMoneyPct: scraped.mlAwayMoneyPct,
         });
         // Always update gameStatus, scores, and clock when we have NCAA data
         await updateNcaaStartTime(existingGame.id, {
@@ -248,11 +252,15 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
           awayScore: ncaaGame?.awayScore ?? null,
           homeScore: ncaaGame?.homeScore ?? null,
           gameClock: ncaaGame?.gameClock ?? null,
-          // NCAAM betting splits (4 fields) — include on insert so splits are captured immediately
+          // NCAAM betting splits (8 fields: spread + total + ML) — include on insert
           spreadAwayBetsPct: scraped.spreadAwayBetsPct,
           spreadAwayMoneyPct: scraped.spreadAwayMoneyPct,
           totalOverBetsPct: scraped.totalOverBetsPct,
           totalOverMoneyPct: scraped.totalOverMoneyPct,
+          awayML: scraped.awayML,
+          homeML: scraped.homeML,
+          mlAwayBetsPct: scraped.mlAwayBetsPct,
+          mlAwayMoneyPct: scraped.mlAwayMoneyPct,
         };
         await insertGames([row]);
         totalInserted++;

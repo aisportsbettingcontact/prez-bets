@@ -410,7 +410,7 @@ export function BettingSplitsPanel({
         )}
         {hasTotalSplits && (
           <MarketColumn
-            title="Total"
+            title="Over/Under"
             awayLabel={overLabel}
             homeLabel={underLabel}
             ticketsPct={game.totalOverBetsPct}
@@ -450,7 +450,7 @@ export function BettingSplitsPanel({
         )}
         {hasTotalSplits && (
           <MarketSection
-            title="Total"
+            title="O/U"
             awayLabel={overLabel}
             homeLabel={underLabel}
             moneyPct={game.totalOverMoneyPct}
