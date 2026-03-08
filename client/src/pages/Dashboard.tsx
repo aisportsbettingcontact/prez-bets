@@ -218,21 +218,31 @@ export default function Dashboard() {
     });
   };
 
-  // Parse gameClock string (e.g. "04:03 4th", "07:08 OT", "Half", "Final") into a sort key.
-  // Lower = closer to end of game = higher priority in LIVE sort.
-  // Returns [periodRank (desc), clockSeconds (asc)] — we negate periodRank for ascending sort.
+  // Parse gameClock string into a sort key.
+  // Handles: "04:03 4th", "07:08 OT", "04:57 2OT", "00:10 3OT", "HALF", "Final", bare "OT"/"2OT"
+  // Returns [periodRank (desc), clockSeconds (asc)].
+  // Higher periodRank = closer to end of game = sorts first (we sort by periodRank DESC).
   const parseLiveSortKey = (gameClock: string | null): [number, number] => {
     if (!gameClock) return [-1, 9999];
     const upper = gameClock.trim().toUpperCase();
-    // Halftime — between 1st and 2nd half / 2nd and 3rd period
+    // Halftime
     if (upper === 'HALF' || upper === 'HALFTIME') return [2, 0];
-    // OT variants: OT, 2OT, 3OT, etc.
-    const otMatch = upper.match(/^(\d*)OT$/);
-    if (otMatch) {
-      const otNum = otMatch[1] ? parseInt(otMatch[1]) : 1;
-      return [50 + otNum, 0]; // OT always highest period rank
+    // Bare OT label with no clock: "OT", "2OT", "3OT"
+    const bareOtMatch = upper.match(/^(\d*)OT$/);
+    if (bareOtMatch) {
+      const otNum = bareOtMatch[1] ? parseInt(bareOtMatch[1]) : 1;
+      return [50 + otNum, 0];
     }
-    // "MM:SS Period" format
+    // "MM:SS OT" or "MM:SS 2OT" / "MM:SS 3OT" — clock + OT period label
+    const clockOtMatch = upper.match(/^(\d{1,2}):(\d{2})\s+(\d*)OT$/);
+    if (clockOtMatch) {
+      const mins = parseInt(clockOtMatch[1]!);
+      const secs = parseInt(clockOtMatch[2]!);
+      const otNum = clockOtMatch[3] ? parseInt(clockOtMatch[3]) : 1;
+      const totalSecs = mins * 60 + secs;
+      return [50 + otNum, totalSecs]; // OT always outranks regulation
+    }
+    // "MM:SS 1st" / "MM:SS 2nd" / "MM:SS 3rd" / "MM:SS 4th" — regulation period
     const clockMatch = upper.match(/^(\d{1,2}):(\d{2})\s+(\d+)(ST|ND|RD|TH)?$/);
     if (clockMatch) {
       const mins = parseInt(clockMatch[1]!);

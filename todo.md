@@ -454,4 +454,8 @@
 
 ## Fix LIVE Sort Always-On (2026-03-08)
 - [x] Apply OT-first LIVE sort in ALL filter states (LIVE only, LIVE+FINAL, ALL), not just LIVE+FINAL
+- [x] Save checkpoint and deliver
+
+## Fix parseLiveSortKey for 2OT/3OT (2026-03-08)
+- [x] Fixed: gameClock stored as "MM:SS 2OT" — added clockOtMatch regex to handle clock+OT-label format
 - [ ] Save checkpoint and deliver
