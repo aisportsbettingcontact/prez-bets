@@ -156,9 +156,9 @@ export default function BettingSplitsPage() {
 
   useEffect(() => {
     if (!headerRef.current) return;
-    const obs = new ResizeObserver(() => { setHeaderHeight(headerRef.current?.offsetHeight ?? 88); });
+    const obs = new ResizeObserver(() => { setHeaderHeight(Math.ceil(headerRef.current?.getBoundingClientRect().height ?? 88)); });
     obs.observe(headerRef.current);
-    setHeaderHeight(headerRef.current.offsetHeight);
+    setHeaderHeight(Math.ceil(headerRef.current.getBoundingClientRect().height));
     return () => obs.disconnect();
   }, []);
 
@@ -470,7 +470,7 @@ export default function BettingSplitsPage() {
         ) : (
           sortedDates.map((date) => (
             <div key={date}>
-              <div className="flex items-center px-4 py-1 border-b border-border sticky bg-background/95 backdrop-blur-sm z-10" style={{ top: headerHeight, marginTop: -1 }}>
+              <div className="flex items-center px-4 py-1 border-b border-border sticky bg-background/95 backdrop-blur-sm z-10" style={{ top: headerHeight }}>
                 <div className="flex-1" />
                 <div className="flex items-center gap-2 whitespace-nowrap">
                   <span className="font-bold text-foreground tracking-widest uppercase" style={{ fontSize: "clamp(11px, 2vw, 13px)" }}>{formatDateHeader(date)}</span>
