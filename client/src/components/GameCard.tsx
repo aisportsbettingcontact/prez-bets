@@ -503,7 +503,12 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
   };
 
   // ── Score Panel ─────────────────────────────────────────────────────────────
-  // Compact score panel for splits mode — logo + abbrev only, score below
+  // Compact score panel for splits mode — logo + name only, score pushed right
+  // NCAAM: show school name (awayName/homeName); NBA: show team nickname (awayNickname/homeNickname)
+  const isNba = !awayNcaa && !!awayNba;
+  const compactAwayLabel = isNba ? (awayNickname || awayName) : awayName;
+  const compactHomeLabel = isNba ? (homeNickname || homeName) : homeName;
+
   const CompactScorePanel = () => (
     <div className="flex flex-col justify-center h-full px-2 py-3 gap-2" style={{ minWidth: 0 }}>
       {/* Status */}
@@ -527,7 +532,7 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={22} />
           <span className="font-bold truncate" style={{ fontSize: 11, color: awayWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))", fontWeight: awayWins ? 800 : 600 }}>
-            {awayNickname || awayName}
+            {compactAwayLabel}
           </span>
         </div>
         {(isLive || isFinal) && hasScores && (
@@ -542,7 +547,7 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={22} />
           <span className="font-bold truncate" style={{ fontSize: 11, color: homeWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))", fontWeight: homeWins ? 800 : 600 }}>
-            {homeNickname || homeName}
+            {compactHomeLabel}
           </span>
         </div>
         {(isLive || isFinal) && hasScores && (

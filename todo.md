@@ -717,3 +717,7 @@
 ## Mobile Splits Height Fix
 
 - [x] Shrink mobile MarketBlock height to match compact score panel height
+
+## CompactScorePanel Name Display Fix
+
+- [x] CompactScorePanel: show school name for NCAAM, nickname for NBA
