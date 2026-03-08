@@ -316,7 +316,7 @@ function OddsLinesPanel({
   );
 
   return (
-    <div className="flex flex-col h-full pl-2 pr-0 py-1.5 min-w-0">
+    <div className="flex flex-col h-full pl-2 pr-0 pt-1.5 pb-0 min-w-0">
       {/* Top-level column group headers: SPREAD | TOTAL | MONEYLINE */}
       <div className={`grid ${GRID} pb-0.5`}>
         <span className="col-span-2 text-center text-[11px] font-extrabold uppercase tracking-widest" style={{ color: '#E8E8E8' }}>Spread</span>
@@ -708,7 +708,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {/* Col 2: Odds/Lines — hidden in splits mode */}
           {mode !== "splits" && (
             <div
-              className="flex-shrink-0"
+              className="flex-shrink-0 flex flex-col justify-center"
               style={{
                 width: mode === "projections" ? "54%" : "28%",
                 minWidth: 200,
@@ -745,7 +745,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {/* Col 3: Edge Verdict (projections) or Betting Splits (full/splits) */}
           {mode === "projections" && showModel && (
             <div
-              className="flex-1 flex items-center justify-center px-2 py-1.5"
+              className="flex-1 flex items-center justify-center px-2 py-0"
               style={{ minWidth: 150, borderLeft: "none" }}
             >
               <EdgeVerdict
