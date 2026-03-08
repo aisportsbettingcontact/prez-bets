@@ -122,7 +122,14 @@ function TeamLogo({ slug, name, logoUrl, size = 36 }: { slug: string; name: stri
 }
 
 // ── VerdictSide ───────────────────────────────────────────────────────────────
-function VerdictSide({ diff, label, isStrong }: { diff: number | null; label: string | null; isStrong: boolean }) {
+function VerdictSide({ diff, label, isStrong, logoUrl, teamSlug, teamName }: {
+  diff: number | null;
+  label: string | null;
+  isStrong: boolean;
+  logoUrl?: string;
+  teamSlug?: string;
+  teamName?: string;
+}) {
   const normalized = normalizeEdgeLabel(label);
   const isPass = normalized === "PASS" || (diff ?? 0) <= 0;
   const color = getEdgeColor(diff ?? 0);
@@ -142,10 +149,15 @@ function VerdictSide({ diff, label, isStrong }: { diff: number | null; label: st
 
   return (
     <div className="flex flex-col items-center gap-1 py-0.5">
-      <span className="font-bold leading-none whitespace-nowrap" style={{ fontSize: betNameSize, color: "hsl(var(--foreground))" }}>
-        {showArrow && <span className="mr-0.5 text-[10px]" style={{ color }}>▲</span>}
-        {normalized}
-      </span>
+      <div className="flex items-center gap-1.5">
+        {(logoUrl || teamSlug) && (
+          <TeamLogo slug={teamSlug ?? ""} name={teamName ?? ""} logoUrl={logoUrl} size={18} />
+        )}
+        <span className="font-bold leading-none whitespace-nowrap" style={{ fontSize: betNameSize, color: "hsl(var(--foreground))" }}>
+          {showArrow && <span className="mr-0.5 text-[10px]" style={{ color }}>▲</span>}
+          {normalized}
+        </span>
+      </div>
       <span className="text-[11px] leading-none" style={{ color: "hsl(var(--muted-foreground))", fontWeight: 500 }}>
         EDGE:{" "}
         <span style={{ color, fontWeight: 700 }}>{diff} {diff === 1 ? "pt" : "pts"}</span>
@@ -157,9 +169,13 @@ function VerdictSide({ diff, label, isStrong }: { diff: number | null; label: st
 // ── EdgeVerdict ───────────────────────────────────────────────────────────────
 function EdgeVerdict({
   spreadDiff, spreadEdge, totalDiff, totalEdge,
+  awayLogoUrl, homeLogoUrl, awaySlug, homeSlug, awayDisplayName, homeDisplayName,
 }: {
   spreadDiff: number | null; spreadEdge: string | null;
   totalDiff: number | null; totalEdge: string | null;
+  awayLogoUrl?: string; homeLogoUrl?: string;
+  awaySlug?: string; homeSlug?: string;
+  awayDisplayName?: string; homeDisplayName?: string;
 }) {
   const spreadPass = normalizeEdgeLabel(spreadEdge) === "PASS" || (spreadDiff ?? 0) <= 0;
   const totalPass  = normalizeEdgeLabel(totalEdge)  === "PASS" || (totalDiff ?? 0)  <= 0;
@@ -176,10 +192,26 @@ function EdgeVerdict({
 
   const spreadIsStronger = (spreadDiff ?? 0) >= (totalDiff ?? 0);
 
+  // Determine which team logo to show for the spread edge
+  // The spread edge label starts with the team's display name
+  const spreadEdgeIsAway = spreadEdge && awayDisplayName
+    ? normalizeEdgeLabel(spreadEdge).toLowerCase().startsWith(awayDisplayName.toLowerCase())
+    : false;
+  const spreadLogoUrl = spreadEdgeIsAway ? awayLogoUrl : homeLogoUrl;
+  const spreadSlug = spreadEdgeIsAway ? awaySlug : homeSlug;
+  const spreadTeamName = spreadEdgeIsAway ? awayDisplayName : homeDisplayName;
+
   return (
     <div className="mt-2 pt-2 flex items-center" style={{ borderTop: "1px solid hsl(var(--border))" }}>
       <div className="flex-1 flex items-center justify-center">
-        <VerdictSide diff={spreadDiff} label={spreadEdge} isStrong={spreadIsStronger && !spreadPass} />
+        <VerdictSide
+          diff={spreadDiff}
+          label={spreadEdge}
+          isStrong={spreadIsStronger && !spreadPass}
+          logoUrl={spreadLogoUrl}
+          teamSlug={spreadSlug}
+          teamName={spreadTeamName}
+        />
       </div>
       <div className="w-px self-stretch mx-2" style={{ background: "hsl(var(--border))" }} />
       <div className="flex-1 flex items-center justify-center">
@@ -212,6 +244,13 @@ interface OddsLinesPanelProps {
   totalDiff: number;
   computedSpreadEdge: string | null;
   computedTotalEdge: string | null;
+  // Team identity for EdgeVerdict logos
+  awayLogoUrl?: string;
+  homeLogoUrl?: string;
+  awaySlug?: string;
+  homeSlug?: string;
+  awayDisplayName?: string;
+  homeDisplayName?: string;
 }
 
 function OddsLinesPanel({
@@ -229,6 +268,12 @@ function OddsLinesPanel({
   totalDiff,
   computedSpreadEdge,
   computedTotalEdge,
+  awayLogoUrl,
+  homeLogoUrl,
+  awaySlug,
+  homeSlug,
+  awayDisplayName,
+  homeDisplayName,
 }: OddsLinesPanelProps) {
   const [showModel, setShowModel] = useState(true);
 
@@ -353,6 +398,12 @@ function OddsLinesPanel({
           spreadEdge={computedSpreadEdge}
           totalDiff={isNaN(totalDiff) ? null : totalDiff}
           totalEdge={computedTotalEdge}
+          awayLogoUrl={awayLogoUrl}
+          homeLogoUrl={homeLogoUrl}
+          awaySlug={awaySlug}
+          homeSlug={homeSlug}
+          awayDisplayName={awayDisplayName}
+          homeDisplayName={homeDisplayName}
         />
       )}
     </div>
@@ -716,6 +767,12 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
                 totalDiff={totalDiff}
                 computedSpreadEdge={computedSpreadEdge}
                 computedTotalEdge={computedTotalEdge}
+                awayLogoUrl={awayLogoUrl}
+                homeLogoUrl={homeLogoUrl}
+                awaySlug={game.awayTeam}
+                homeSlug={game.homeTeam}
+                awayDisplayName={awayDisplayName}
+                homeDisplayName={homeDisplayName}
               />
             </div>
           )}
@@ -758,6 +815,12 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
                 totalDiff={totalDiff}
                 computedSpreadEdge={computedSpreadEdge}
                 computedTotalEdge={computedTotalEdge}
+                awayLogoUrl={awayLogoUrl}
+                homeLogoUrl={homeLogoUrl}
+                awaySlug={game.awayTeam}
+                homeSlug={game.homeTeam}
+                awayDisplayName={awayDisplayName}
+                homeDisplayName={homeDisplayName}
               />
               </div>
             </div>
@@ -806,6 +869,12 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
                 totalDiff={totalDiff}
                 computedSpreadEdge={computedSpreadEdge}
                 computedTotalEdge={computedTotalEdge}
+                awayLogoUrl={awayLogoUrl}
+                homeLogoUrl={homeLogoUrl}
+                awaySlug={game.awayTeam}
+                homeSlug={game.homeTeam}
+                awayDisplayName={awayDisplayName}
+                homeDisplayName={homeDisplayName}
               />
                 </div>
               </div>
