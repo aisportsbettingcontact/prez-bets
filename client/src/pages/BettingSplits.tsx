@@ -405,6 +405,7 @@ export default function BettingSplitsPage() {
             selectedDate={selectedDate}
             onSelect={setSelectedDate}
             availableDates={new Set(allDates)}
+            isAdmin={isOwner || user?.role === "admin"}
           />
 
           {/* NCAAM pill */}

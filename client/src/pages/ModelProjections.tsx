@@ -432,6 +432,7 @@ export default function ModelProjections() {
             selectedDate={selectedDate}
             onSelect={setSelectedDate}
             availableDates={new Set(allDates)}
+            isAdmin={isOwner || user?.role === "admin"}
           />
 
           {/* NCAAM pill */}

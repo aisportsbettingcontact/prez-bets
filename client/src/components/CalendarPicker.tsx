@@ -2,10 +2,11 @@
  * CalendarPicker
  *
  * A compact date-picker button that opens a month-view calendar dropdown.
- * - Shows the selected date as "Mon DD" (e.g. "Mar 8") on the button
- * - Today's UTC date is circled/highlighted by default
- * - Dates that have games are shown with a small dot indicator
- * - Clicking a date selects it; clicking the same date again deselects (shows all)
+ * - Today's UTC date is selected by default and highlighted with a neon green ring
+ * - Past dates are locked (dimmed, unclickable) for standard users
+ * - Admin users (isAdmin=true) can select any date including past ones
+ * - Only today and future dates show green game-dot indicators
+ * - Month name is always displayed in ALL CAPS
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -45,24 +46,30 @@ function toDateStr(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+/** Compare two YYYY-MM-DD strings. Returns negative if a < b, 0 if equal, positive if a > b */
+function compareDates(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface CalendarPickerProps {
-  /** Currently selected date as YYYY-MM-DD, or null for "all dates" */
-  selectedDate: string | null;
+  /** Currently selected date as YYYY-MM-DD */
+  selectedDate: string;
   /** Called when user picks a date */
   onSelect: (date: string) => void;
   /** Set of YYYY-MM-DD strings that have games (shown with dot) */
   availableDates?: Set<string>;
+  /** If true, past dates are also selectable (admin/owner bypass) */
+  isAdmin?: boolean;
 }
 
 const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
-export function CalendarPicker({ selectedDate, onSelect, availableDates }: CalendarPickerProps) {
+export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin = false }: CalendarPickerProps) {
   const today = todayUTC();
-  const [todayYear, todayMonth] = today.split("-").map(Number) as [number, number, number];
 
   // Calendar view state — default to the month of the selected date (or today)
   const displayBase = selectedDate ?? today;
@@ -94,10 +101,25 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates }: Calen
   const daysInMonth = getDaysInMonth(viewYear, viewMonth);
   const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
 
+  // Prevent navigating to months entirely in the past for standard users
+  const isViewingPastMonth =
+    !isAdmin &&
+    (viewYear < parseInt(today.slice(0, 4)) ||
+      (viewYear === parseInt(today.slice(0, 4)) &&
+        viewMonth < parseInt(today.slice(5, 7)) - 1));
+
   function prevMonth() {
+    // Standard users: don't go before current month
+    if (!isAdmin) {
+      const todayYear = parseInt(today.slice(0, 4));
+      const todayMon = parseInt(today.slice(5, 7)) - 1;
+      if (viewYear === todayYear && viewMonth === todayMon) return;
+      if (viewYear < todayYear) return;
+    }
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
     else setViewMonth(m => m - 1);
   }
+
   function nextMonth() {
     if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
     else setViewMonth(m => m + 1);
@@ -105,11 +127,21 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates }: Calen
 
   function handleDayClick(day: number) {
     const dateStr = toDateStr(viewYear, viewMonth, day);
+    const isPast = compareDates(dateStr, today) < 0;
+    // Block past dates for standard users
+    if (isPast && !isAdmin) return;
     onSelect(dateStr);
     setOpen(false);
   }
 
-  const buttonLabel = selectedDate ? formatButtonLabel(selectedDate) : formatButtonLabel(today);
+  const buttonLabel = formatButtonLabel(selectedDate ?? today);
+
+  // Is the prev-month arrow disabled for standard users?
+  const prevDisabled = !isAdmin && (() => {
+    const todayYear = parseInt(today.slice(0, 4));
+    const todayMon = parseInt(today.slice(5, 7)) - 1;
+    return viewYear === todayYear && viewMonth === todayMon;
+  })();
 
   return (
     <div ref={containerRef} className="relative flex-shrink-0">
@@ -137,8 +169,12 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates }: Calen
           <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
             <button
               onClick={prevMonth}
-              className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
-              style={{ color: "rgba(255,255,255,0.6)" }}
+              disabled={prevDisabled}
+              className="w-6 h-6 flex items-center justify-center rounded-full transition-colors"
+              style={{
+                color: prevDisabled ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.6)",
+                cursor: prevDisabled ? "not-allowed" : "pointer",
+              }}
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
@@ -175,19 +211,25 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates }: Calen
               const dateStr = toDateStr(viewYear, viewMonth, day);
               const isToday = dateStr === today;
               const isSelected = dateStr === selectedDate;
-              const hasGames = availableDates?.has(dateStr) ?? false;
+              const isPast = compareDates(dateStr, today) < 0;
+              // Past dates are locked for standard users
+              const isLocked = isPast && !isAdmin;
+              // Only show game dots on today and future dates (or admin viewing past)
+              const hasGames = (availableDates?.has(dateStr) ?? false) && (!isPast || isAdmin);
 
               // Style priority:
-              // 1. selected + today  → white fill, black text, neon green ring
-              // 2. selected only     → white fill, black text
-              // 3. today only        → neon green ring, white text, subtle bg
-              // 4. has games         → white text
-              // 5. no games          → dimmed text
+              // 1. locked (past, standard user) → very dim, no interaction
+              // 2. selected + today             → white fill, black text, neon green ring
+              // 3. selected only                → white fill, black text
+              // 4. today only                   → neon green ring, green text, subtle bg
+              // 5. has games (future)            → white text
+              // 6. future no games              → dim white
               const dayStyle: React.CSSProperties = (() => {
-                if (isSelected && isToday) return { background: "#ffffff", color: "#000000", outline: "2px solid #39FF14", outlineOffset: "1px" };
-                if (isSelected)           return { background: "#ffffff", color: "#000000" };
-                if (isToday)              return { background: "rgba(57,255,20,0.12)", color: "#39FF14", outline: "1.5px solid #39FF14", outlineOffset: "-1px" };
-                if (hasGames)             return { color: "#ffffff" };
+                if (isLocked)                  return { color: "rgba(255,255,255,0.12)", cursor: "not-allowed" };
+                if (isSelected && isToday)     return { background: "#ffffff", color: "#000000", outline: "2px solid #39FF14", outlineOffset: "1px" };
+                if (isSelected)                return { background: "#ffffff", color: "#000000" };
+                if (isToday)                   return { background: "rgba(57,255,20,0.12)", color: "#39FF14", outline: "1.5px solid #39FF14", outlineOffset: "-1px" };
+                if (hasGames)                  return { color: "#ffffff" };
                 return { color: "rgba(255,255,255,0.3)" };
               })();
 
@@ -195,11 +237,12 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates }: Calen
                 <button
                   key={day}
                   onClick={() => handleDayClick(day)}
+                  disabled={isLocked}
                   className="relative flex flex-col items-center justify-center w-full aspect-square rounded-full text-[11px] font-bold transition-all"
                   style={dayStyle}
                 >
                   {day}
-                  {/* Game dot indicator — hide when selected */}
+                  {/* Game dot indicator — only on today/future, hide when selected */}
                   {hasGames && !isSelected && (
                     <span
                       className="absolute bottom-0.5 left-1/2 -translate-x-1/2 rounded-full"
