@@ -351,9 +351,41 @@ function OddsLinesPanel({
 
   // 6-column grid: [Spread Book | Spread Model | Total Book | Total Model | ML Book | ML Model]
   const GRID = 'grid-cols-6';
-  const bookCell  = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 400, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
-  const modelCell = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 700, color: '#39FF14', letterSpacing: '0.02em' } as React.CSSProperties;
-  const dimCell   = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 700, color: 'rgba(57,255,20,0.28)', letterSpacing: '0.02em' } as React.CSSProperties;
+
+  // Determine which side has the spread edge (away or home)
+  const spreadEdgeIsAway = (() => {
+    if (isNaN(spreadDiff) || spreadDiff <= 0) return null;
+    if (!isNaN(mdlAwaySpread) && !isNaN(awaySpread)) {
+      return mdlAwaySpread < awaySpread; // model favors away more than book → away edge
+    }
+    return null;
+  })();
+  const totalEdgeIsOver = (() => {
+    if (isNaN(totalDiff) || totalDiff <= 0) return null;
+    if (!isNaN(mdlTotal) && !isNaN(bkTotal)) {
+      return mdlTotal > bkTotal; // model higher than book → over edge
+    }
+    return null;
+  })();
+
+  const hasSpreadEdge = spreadEdgeIsAway !== null;
+  const hasTotalEdge  = totalEdgeIsOver !== null;
+
+  // Base cell styles
+  const bookCell      = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 400, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
+  // Model cells: neon green only when this specific cell is the edge side; otherwise bold white
+  const modelGreen    = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 700, color: '#39FF14', letterSpacing: '0.02em' } as React.CSSProperties;
+  const modelWhite    = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 700, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
+  const dimCell       = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 700, color: 'rgba(57,255,20,0.28)', letterSpacing: '0.02em' } as React.CSSProperties;
+
+  // Per-cell model style helpers
+  const awaySpreadModelStyle = showModel ? (hasSpreadEdge && spreadEdgeIsAway  ? modelGreen : modelWhite) : dimCell;
+  const homeSpreadModelStyle = showModel ? (hasSpreadEdge && !spreadEdgeIsAway ? modelGreen : modelWhite) : dimCell;
+  const overTotalModelStyle  = showModel ? (hasTotalEdge  && totalEdgeIsOver   ? modelGreen : modelWhite) : dimCell;
+  const underTotalModelStyle = showModel ? (hasTotalEdge  && !totalEdgeIsOver  ? modelGreen : modelWhite) : dimCell;
+  // ML edges: if spread edge is away → away ML is green; if home → home ML is green
+  const awayMlModelStyle     = showModel ? (hasSpreadEdge && spreadEdgeIsAway  ? modelGreen : modelWhite) : dimCell;
+  const homeMlModelStyle     = showModel ? (hasSpreadEdge && !spreadEdgeIsAway ? modelGreen : modelWhite) : dimCell;
 
   // Helper: cell value with style
   const Cell = ({ val, style }: { val: string; style: React.CSSProperties }) => (
@@ -363,7 +395,7 @@ function OddsLinesPanel({
   );
 
   return (
-    <div className="flex flex-col h-full pl-2 pr-0 pt-0 pb-0 min-w-0 justify-center">
+    <div className="flex flex-col pl-2 pr-0 pt-0 pb-0 min-w-0">
       {/* Top-level column group headers: SPREAD | TOTAL | MONEYLINE */}
       <div className={`grid ${GRID} pb-0.5`}>
         <span className="col-span-2 text-center text-[11px] font-extrabold uppercase tracking-widest" style={{ color: '#E8E8E8' }}>Spread</span>
@@ -388,26 +420,26 @@ function OddsLinesPanel({
       </div>
 
       {/* Away row */}
-      <div className={`grid ${GRID} py-3`}>
+      <div className={`grid ${GRID} py-2`}>
         <Cell val={bkAwaySpread} style={bookCell} />
-        <Cell val={mdlAwaySpreadStr} style={showModel ? modelCell : dimCell} />
+        <Cell val={mdlAwaySpreadStr} style={awaySpreadModelStyle} />
         <Cell val={`o${bkOverTotal}`} style={bookCell} />
-        <Cell val={`o${mdlOverTotal}`} style={showModel ? modelCell : dimCell} />
+        <Cell val={`o${mdlOverTotal}`} style={overTotalModelStyle} />
         <Cell val={awayMl || '—'} style={bookCell} />
-        <Cell val={mdlAwayMlStr} style={showModel ? modelCell : dimCell} />
+        <Cell val={mdlAwayMlStr} style={awayMlModelStyle} />
       </div>
 
       {/* Divider */}
       <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
 
       {/* Home row */}
-      <div className={`grid ${GRID} py-3`}>
+      <div className={`grid ${GRID} py-2`}>
         <Cell val={bkHomeSpread} style={bookCell} />
-        <Cell val={mdlHomeSpreadStr} style={showModel ? modelCell : dimCell} />
+        <Cell val={mdlHomeSpreadStr} style={homeSpreadModelStyle} />
         <Cell val={`u${bkUnderTotal}`} style={bookCell} />
-        <Cell val={`u${mdlUnderTotal}`} style={showModel ? modelCell : dimCell} />
+        <Cell val={`u${mdlUnderTotal}`} style={underTotalModelStyle} />
         <Cell val={homeMl || '—'} style={bookCell} />
-        <Cell val={mdlHomeMlStr} style={showModel ? modelCell : dimCell} />
+        <Cell val={mdlHomeMlStr} style={homeMlModelStyle} />
       </div>
 
     </div>
