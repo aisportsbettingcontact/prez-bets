@@ -22,7 +22,7 @@ import { storagePut } from "./storage";
 import { parseFileBuffer, detectSportFromFilename, detectDateFromFilename } from "./fileParser";
 import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure } from "./routers/appUsers";
-import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors } from "./db";
+import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById } from "./db";
 import { getLastRefreshResult, runVsinRefresh, refreshAllScoresNow } from "./vsinAutoRefresh";
 import { VALID_DB_SLUGS } from "@shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS } from "@shared/nbaTeams";
@@ -254,6 +254,16 @@ export const appRouter = router({
     lastRefresh: publicProcedure.query(() => {
       return getLastRefreshResult();
     }),
+
+    /**
+     * Hard-delete a single game by ID. Owner-only. Irreversible.
+     */
+    deleteGame: ownerProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        await deleteGameById(input.id);
+        return { success: true, deletedId: input.id };
+      }),
 
     /**
      * Manually trigger an immediate VSiN + NCAA refresh.

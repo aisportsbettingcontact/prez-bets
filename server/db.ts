@@ -207,6 +207,16 @@ export async function deleteGamesByFileId(fileId: number) {
  * Called by the 6am EST daily cron job to purge previous-day data.
  * Returns the number of rows deleted.
  */
+/**
+ * Hard-delete a single game by its primary key ID.
+ * Owner-only operation — enforced at the procedure layer.
+ */
+export async function deleteGameById(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(games).where(eq(games.id, id));
+}
+
 export async function deleteOldGames(): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

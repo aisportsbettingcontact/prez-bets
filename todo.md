@@ -492,4 +492,13 @@
 - [x] Verified sort order: DB query already orders by startTimeEst earliest to latest
 - [x] Added date-change reset so filter resets to ALL when navigating dates
 - [x] Added contextual empty-state messages for each new filter
+- [x] Save checkpoint and deliver
+
+## Publish Projections: Delete Game Feature (2026-03-08)
+- [x] Add deleteGame backend procedure (owner-only, hard delete from DB)
+- [x] Add DELETE button to game card header (next to Live/No Odds badge)
+- [x] Show DELETE button only in MISSING ODDS and NOT MODELED filter views
+- [x] High-alert confirmation dialog: irreversible warning before deletion
+- [x] Auto-hide MISSING ODDS/MODELED/NOT MODELED row when slate is fully complete (0 missing + 0 not modeled)
+- [x] Stats bar counts update immediately after deletion (via listStaging invalidation)
 - [ ] Save checkpoint and deliver

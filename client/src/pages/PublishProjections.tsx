@@ -16,7 +16,18 @@ import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw } from "lucide-react";
+import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { getTeamByDbSlug } from "@shared/ncaamTeams";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 import { BettingSplitsPanel } from "@/components/BettingSplitsPanel";
@@ -384,7 +395,7 @@ type GameRow = {
 
 // ─── EditableGameCard ─────────────────────────────────────────────────────────
 
-function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => void }) {
+function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: GameRow; onSaved: () => void; showDeleteButton?: boolean }) {
   const [awaySpread, setAwaySpread] = useState(game.awayModelSpread ?? "");
   const [homeSpread, setHomeSpread] = useState(game.homeModelSpread ?? "");
   const [modelTotal, setModelTotal] = useState(game.modelTotal ?? "");
@@ -397,8 +408,17 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
   );
   const awaySpreadRef = useRef<HTMLInputElement | null>(null);
 
+  const utils = trpc.useUtils();
   const updateMutation = trpc.games.updateProjections.useMutation();
   const publishMutation = trpc.games.setPublished.useMutation();
+  const deleteMutation = trpc.games.deleteGame.useMutation({
+    onSuccess: () => {
+      toast.success("Game permanently deleted from database");
+      utils.games.listStaging.invalidate();
+      onSaved();
+    },
+    onError: () => toast.error("Delete failed — please try again"),
+  });
 
   // Sync from server when game data refreshes (don't overwrite if user is typing)
   useEffect(() => {
@@ -576,28 +596,96 @@ function EditableGameCard({ game, onSaved }: { game: GameRow; onSaved: () => voi
         borderLeft: `3px solid ${borderColor}`,
       }}
     >
-      {/* Publish toggle — top right (mirrors the download button position in GameCard) */}
-      <button
-        onClick={handleTogglePublish}
-        disabled={publishMutation.isPending || saving || (!game.publishedToFeed && !hasOdds)}
-        className="absolute top-1.5 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all"
-        style={game.publishedToFeed
-          ? { background: "rgba(57,255,20,0.15)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.35)" }
-          : !hasOdds
-            ? { background: "rgba(255,255,255,0.03)", color: "rgba(156,163,175,0.4)", border: "1px solid rgba(255,255,255,0.06)", cursor: "not-allowed" }
-            : { background: "rgba(255,255,255,0.06)", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
-        }
-        title={game.publishedToFeed ? "Remove from feed" : !hasOdds ? "No VSiN odds yet — cannot publish" : "Publish to feed"}
-      >
-        {publishMutation.isPending || saving
-          ? <Loader2 size={9} className="animate-spin" />
-          : game.publishedToFeed
-            ? <><Eye size={9} /> Live</>
+      {/* Top-right button group: Delete (conditional) + Publish toggle */}
+      <div className="absolute top-1.5 right-2 z-10 flex items-center gap-1.5">
+
+        {/* DELETE button — only shown when showDeleteButton=true (owner-only, MISSING ODDS / NOT MODELED views) */}
+        {showDeleteButton && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button
+                disabled={deleteMutation.isPending}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all"
+                style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.35)" }}
+                title="Permanently delete this game from the database"
+              >
+                {deleteMutation.isPending
+                  ? <Loader2 size={9} className="animate-spin" />
+                  : <Trash2 size={9} />
+                }
+                Delete
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent
+              style={{
+                background: "hsl(var(--card))",
+                border: "2px solid rgba(239,68,68,0.5)",
+                boxShadow: "0 0 40px rgba(239,68,68,0.2)",
+              }}
+            >
+              <AlertDialogHeader>
+                <AlertDialogTitle
+                  className="flex items-center gap-2 text-base font-black tracking-wide"
+                  style={{ color: "#ef4444" }}
+                >
+                  <Trash2 size={18} />
+                  PERMANENTLY DELETE GAME
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-sm leading-relaxed" style={{ color: "hsl(var(--muted-foreground))" }}>
+                  <span className="block font-bold text-foreground mb-1">
+                    {game.awayTeam.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+                    {" @ "}
+                    {game.homeTeam.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+                  </span>
+                  This will <strong style={{ color: "#ef4444" }}>permanently remove this game</strong> from the database.
+                  {" "}It will no longer appear on the Publish Projections page or the public feed.
+                  <br /><br />
+                  <strong style={{ color: "#FFB800" }}>This action is irreversible.</strong>{" "}
+                  There is no undo. The game cannot be recovered once deleted.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel
+                  className="text-xs font-semibold"
+                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                >
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteMutation.mutate({ id: game.id })}
+                  className="text-xs font-black tracking-wide"
+                  style={{ background: "rgba(239,68,68,0.85)", color: "#fff", border: "1px solid rgba(239,68,68,0.6)" }}
+                >
+                  Yes, Delete Permanently
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+
+        {/* Publish toggle */}
+        <button
+          onClick={handleTogglePublish}
+          disabled={publishMutation.isPending || saving || (!game.publishedToFeed && !hasOdds)}
+          className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all"
+          style={game.publishedToFeed
+            ? { background: "rgba(57,255,20,0.15)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.35)" }
             : !hasOdds
-              ? <><EyeOff size={9} /> No Odds</>
-              : <><EyeOff size={9} /> Off</>
-        }
-      </button>
+              ? { background: "rgba(255,255,255,0.03)", color: "rgba(156,163,175,0.4)", border: "1px solid rgba(255,255,255,0.06)", cursor: "not-allowed" }
+              : { background: "rgba(255,255,255,0.06)", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+          }
+          title={game.publishedToFeed ? "Remove from feed" : !hasOdds ? "No VSiN odds yet — cannot publish" : "Publish to feed"}
+        >
+          {publishMutation.isPending || saving
+            ? <Loader2 size={9} className="animate-spin" />
+            : game.publishedToFeed
+              ? <><Eye size={9} /> Live</>
+              : !hasOdds
+                ? <><EyeOff size={9} /> No Odds</>
+                : <><EyeOff size={9} /> Off</>
+          }
+        </button>
+      </div>
 
       {/* Header — identical to GameCard */}
       <div
@@ -1071,8 +1159,8 @@ export default function PublishProjections() {
                 );
               })}
             </div>
-            {/* Row 2: modeling-status filters */}
-            <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Row 2: modeling-status filters — only shown when there's something to filter */}
+            {(missingOddsGames > 0 || notModeledGames > 0) && (<div className="flex items-center gap-1.5 flex-wrap">
               {/* MISSING ODDS */}
               <button
                 onClick={() => setStatusFilter("missing_odds")}
@@ -1117,7 +1205,7 @@ export default function PublishProjections() {
                   {notModeledGames}
                 </span>
               </button>
-            </div>
+            </div>)}
           </div>
         )}
 
@@ -1232,6 +1320,7 @@ export default function PublishProjections() {
               key={game.id}
               game={game as GameRow}
               onSaved={handleRefetch}
+              showDeleteButton={isOwner && (statusFilter === "missing_odds" || statusFilter === "not_modeled")}
             />
           ))
         )}
