@@ -429,4 +429,4 @@
 - [x] Add 5-minute NBA score refresh cycle in vsinAutoRefresh.ts
 - [x] Add ALL/UPCOMING/LIVE/FINAL filter tabs to Dashboard for NBA sport
 - [x] Verify GameCard LIVE/FINAL header displays correctly for NBA games
-- [ ] Save checkpoint and deliver
+- [x] Save checkpoint and deliver

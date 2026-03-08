@@ -688,9 +688,18 @@ async function refreshNbaScores(): Promise<void> {
 }
 
 /**
+ * Runs both NCAAM and NBA score refreshes immediately.
+ * Exported so it can be triggered manually from the admin panel.
+ */
+export async function refreshAllScoresNow(): Promise<void> {
+  await Promise.allSettled([refreshNcaamScores(), refreshNbaScores()]);
+}
+
+/**
  * Start the 30-minute auto-refresh scheduler.
  * Fires immediately if inside the active window, then every 30 minutes.
  * Also starts a separate 5-minute score-only refresh for live/final scores.
+ * Score refresh fires immediately on startup so scores are never stale after a restart.
  */
 export function startVsinAutoRefresh() {
   if (isWithinActiveHours()) {
@@ -698,6 +707,9 @@ export function startVsinAutoRefresh() {
   } else {
     console.log("[VSiNAutoRefresh] Outside active hours (6am–midnight PST) — waiting for next tick.");
   }
+
+  // Fire score refresh immediately on startup (don't wait for first 5-min tick)
+  void refreshAllScoresNow();
 
   setInterval(() => {
     if (isWithinActiveHours()) {
