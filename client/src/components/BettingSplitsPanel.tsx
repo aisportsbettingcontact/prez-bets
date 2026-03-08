@@ -458,8 +458,9 @@ export function BettingSplitsPanel({
     <div className="flex flex-col py-2">
       {header}
 
-      {/* ── DESKTOP / TABLET (≥ md): horizontal columns ── */}
-      <div className="hidden md:flex items-stretch gap-0 w-full">
+      {/* ── ALL SCREEN SIZES: horizontal 3-column layout ── */}
+      {/* compact=true on mobile keeps bars slightly slimmer */}
+      <div className="flex items-stretch gap-0 w-full">
         {hasSpreadSplits && (
           <MarketColumn
             title="Spread"
@@ -469,6 +470,7 @@ export function BettingSplitsPanel({
             handlePct={game.spreadAwayMoneyPct}
             awayColor={awayColor}
             homeColor={homeColor}
+            compact
           />
         )}
         {hasSpreadSplits && (hasTotalSplits || hasMlSplits) && (
@@ -484,6 +486,7 @@ export function BettingSplitsPanel({
             handlePct={game.totalOverMoneyPct}
             awayColor={awayColor}
             homeColor={homeColor}
+            compact
           />
         )}
         {hasTotalSplits && hasMlSplits && (
@@ -498,44 +501,7 @@ export function BettingSplitsPanel({
             handlePct={game.mlAwayMoneyPct}
             awayColor={awayColor}
             homeColor={homeColor}
-          />
-        )}
-      </div>
-
-      {/* ── MOBILE (< md): vertical stacked ── */}
-      <div className="md:hidden flex flex-col gap-3">
-        {hasSpreadSplits && (
-          <MarketSection
-            title="Spread"
-            awayLabel={awaySpreadLabel}
-            homeLabel={homeSpreadLabel}
-            moneyPct={game.spreadAwayMoneyPct}
-            betsPct={game.spreadAwayBetsPct}
-            awayColor={awayColor}
-            homeColor={homeColor}
-          />
-        )}
-        {hasTotalSplits && (
-          <MarketSection
-            title="Total"
-            awayLabel=""
-            homeLabel=""
-            totalValue={isNaN(bookTotal) ? undefined : bookTotal}
-            moneyPct={game.totalOverMoneyPct}
-            betsPct={game.totalOverBetsPct}
-            awayColor={awayColor}
-            homeColor={homeColor}
-          />
-        )}
-        {hasMlSplits && (
-          <MarketSection
-            title="Moneyline"
-            awayLabel={awayMlLabel}
-            homeLabel={homeMlLabel}
-            moneyPct={game.mlAwayMoneyPct}
-            betsPct={game.mlAwayBetsPct}
-            awayColor={awayColor}
-            homeColor={homeColor}
+            compact
           />
         )}
       </div>

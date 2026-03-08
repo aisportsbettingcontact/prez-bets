@@ -669,3 +669,8 @@
 - [x] Mobile row 2: BETTING SPLITS full-width below
 - [x] Desktop: unchanged 3-column layout
 - [x] Test and save checkpoint
+
+## BettingSplitsPanel — Always 3-column horizontal on mobile (2026-03-08)
+- [x] Remove mobile vertical stacked layout (md:hidden flex-col)
+- [x] Use horizontal 3-column layout at all screen sizes (compact mode on mobile)
+- [x] Test and save checkpoint
