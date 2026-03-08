@@ -149,7 +149,7 @@ function VerdictSide({ diff, label, isStrong, logoUrl, teamSlug, teamName, compa
     // Compact inline version: logo + name + edge pts all on one line
     const showArrow = (diff ?? 0) >= 3;
     return (
-      <div className="flex items-center gap-1 px-2 py-1">
+      <div className="flex items-center gap-1 px-1.5 py-0.5">
         {(logoUrl || teamSlug) && (
           <TeamLogo slug={teamSlug ?? ""} name={teamName ?? ""} logoUrl={logoUrl} size={16} />
         )}
@@ -226,7 +226,7 @@ function EdgeVerdict({
   if (compact) {
     // Compact horizontal layout: spread edge | divider | total edge, all on one row
     return (
-      <div className="flex items-center justify-center gap-0 w-full">
+      <div className="flex items-center justify-center gap-0 w-full py-0 my-0">
         {!spreadPass && (
           <VerdictSide
             diff={spreadDiff}
