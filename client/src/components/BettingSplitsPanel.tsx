@@ -151,15 +151,21 @@ function LabeledBar({ awayPct, homePct, awayColor, homeColor, awayLineLabel, hom
       {/* Bar — only % inside the pill */}
       <div className="relative w-full rounded-md overflow-hidden flex"
         style={{ height: 20, border: "1px solid rgba(255,255,255,0.12)", boxSizing: "border-box", minWidth: 0 }}>
-        <div className="flex items-center justify-start px-1.5 transition-all duration-700"
-          style={{ width: `${awayPct}%`, background: awayColor, minWidth: 32, borderRadius: awayPct! >= 100 ? "4px" : "4px 0 0 4px", flexShrink: 0, overflow: "visible" }}>
-          <span className="font-extrabold leading-none whitespace-nowrap" style={{ fontSize: 10, color: awayTextColor }}>{awayPct}%</span>
-        </div>
-        <div style={{ width: 1, background: "rgba(255,255,255,0.25)", flexShrink: 0, alignSelf: "stretch" }} />
-        <div className="flex items-center justify-end px-1.5 transition-all duration-700"
-          style={{ width: `${homePct}%`, background: homeColor, minWidth: 32, borderRadius: homePct! >= 100 ? "4px" : "0 4px 4px 0", flexShrink: 0, overflow: "visible" }}>
-          <span className="font-extrabold leading-none whitespace-nowrap" style={{ fontSize: 10, color: homeTextColor }}>{homePct}%</span>
-        </div>
+        {awayPct! > 0 && (
+          <div className="flex items-center justify-start px-1.5 transition-all duration-700"
+            style={{ width: `${awayPct}%`, background: awayColor, minWidth: awayPct! >= 100 ? "100%" : 32, borderRadius: awayPct! >= 100 ? "4px" : "4px 0 0 4px", flexShrink: 0, overflow: "visible" }}>
+            <span className="font-extrabold leading-none whitespace-nowrap" style={{ fontSize: 10, color: awayTextColor }}>{awayPct}%</span>
+          </div>
+        )}
+        {awayPct! > 0 && homePct! > 0 && (
+          <div style={{ width: 1, background: "rgba(255,255,255,0.25)", flexShrink: 0, alignSelf: "stretch" }} />
+        )}
+        {homePct! > 0 && (
+          <div className="flex items-center justify-end px-1.5 transition-all duration-700"
+            style={{ width: `${homePct}%`, background: homeColor, minWidth: homePct! >= 100 ? "100%" : 32, borderRadius: homePct! >= 100 ? "4px" : "0 4px 4px 0", flexShrink: 0, overflow: "visible" }}>
+            <span className="font-extrabold leading-none whitespace-nowrap" style={{ fontSize: 10, color: homeTextColor }}>{homePct}%</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -232,15 +238,21 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
       {hasData ? (
         <div className="relative w-full rounded-full overflow-hidden"
           style={{ height: 30, display: "flex", border: "1.5px solid rgba(255,255,255,0.15)", boxSizing: "border-box" }}>
-          <div className="flex items-center justify-start pl-2 transition-all duration-700"
-            style={{ width: `${awayPct}%`, background: awayColor, minWidth: awayPct! > 0 ? 36 : 0, borderRadius: awayPct! >= 100 ? "9999px" : "9999px 0 0 9999px" }}>
-            <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: 13, color: awayTextColor }}>{awayPct}%</span>
-          </div>
-          <div style={{ width: 1.5, background: "rgba(255,255,255,0.3)", flexShrink: 0, alignSelf: "stretch" }} />
-          <div className="flex items-center justify-end pr-2 transition-all duration-700"
-            style={{ width: `${homePct}%`, background: homeColor, minWidth: homePct! > 0 ? 36 : 0, borderRadius: homePct! >= 100 ? "9999px" : "0 9999px 9999px 0" }}>
-            <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: 13, color: homeTextColor }}>{homePct}%</span>
-          </div>
+          {awayPct! > 0 && (
+            <div className="flex items-center justify-start pl-2 transition-all duration-700"
+              style={{ width: `${awayPct}%`, background: awayColor, minWidth: awayPct! >= 100 ? "100%" : 36, borderRadius: awayPct! >= 100 ? "9999px" : "9999px 0 0 9999px" }}>
+              <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: 13, color: awayTextColor }}>{awayPct}%</span>
+            </div>
+          )}
+          {awayPct! > 0 && homePct! > 0 && (
+            <div style={{ width: 1.5, background: "rgba(255,255,255,0.3)", flexShrink: 0, alignSelf: "stretch" }} />
+          )}
+          {homePct! > 0 && (
+            <div className="flex items-center justify-end pr-2 transition-all duration-700"
+              style={{ width: `${homePct}%`, background: homeColor, minWidth: homePct! >= 100 ? "100%" : 36, borderRadius: homePct! >= 100 ? "9999px" : "0 9999px 9999px 0" }}>
+              <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: 13, color: homeTextColor }}>{homePct}%</span>
+            </div>
+          )}
         </div>
       ) : (
         <div className="w-full rounded-full flex items-center justify-center"
