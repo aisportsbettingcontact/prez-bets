@@ -694,7 +694,7 @@ export default function Dashboard() {
               </div>
 
               {/* Game Cards */}
-              <div className="bg-card border-x border-border mx-0">
+              <div className="bg-card mx-0">
                 {gamesByDate[date]!.map((game) => (
                   <div key={game!.id} id={`game-card-${game!.id}`}>
                     <GameCard game={game!} />

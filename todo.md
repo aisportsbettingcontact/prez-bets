@@ -524,3 +524,12 @@
 - [x] Remove max-w-3xl from header rows (brand, sport filter, status tabs, search bar)
 - [x] Game cards fill full screen width edge-to-edge on desktop
 - [x] Save checkpoint and deliver
+
+## GameCard Layout Fixes: Full-Width, Compact Model Table, Horizontal Splits (2026-03-08)
+- [x] Fix model table: remove justify-between, rows now compact and vertically centered
+- [x] Fix score panel: flush left, no internal gaps
+- [x] Redesign BettingSplitsPanel: horizontal SPREAD | TOTAL | ML columns on desktop/tablet (≥md)
+- [x] Each market column: title, side labels, TICKETS bar on top, HANDLE bar on bottom
+- [x] Remove rounded-xl from card, remove border-x from wrapper so cards fill full width edge-to-edge
+- [x] Mobile: vertical stacked layout preserved (< md)
+- [ ] Save checkpoint and deliver

@@ -631,7 +631,7 @@ export function GameCard({ game }: GameCardProps) {
   // ── Model Table Panel ───────────────────────────────────────────────────────
   // Books | Model Line | Model O/U columns with two team rows + edge verdict
   const ModelTablePanel = () => (
-    <div className="flex flex-col justify-between px-3 py-3 min-w-0 h-full">
+    <div className="flex flex-col justify-start px-3 py-3 min-w-0">
       {/* Column headers */}
       <div
         className="grid pb-2"
@@ -722,10 +722,11 @@ export function GameCard({ game }: GameCardProps) {
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full rounded-xl overflow-hidden relative"
+        className="w-full overflow-hidden relative"
         style={{
           background: "hsl(var(--card))",
-          border: "1px solid hsl(var(--border))",
+          borderTop: "1px solid hsl(var(--border))",
+          borderBottom: "1px solid hsl(var(--border))",
           borderLeft: `3px solid ${borderColor}`,
         }}
       >
@@ -749,20 +750,20 @@ export function GameCard({ game }: GameCardProps) {
           Row 2: Model table (full width)
         */}
 
-        {/* DESKTOP: 3-column flex row */}
-        <div className="hidden lg:flex items-stretch">
-          {/* Col 1: Score panel */}
-          <div className="flex-shrink-0" style={{ width: "26%", borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+        {/* DESKTOP: 3-column flex row — fills full card width */}
+        <div className="hidden lg:flex items-stretch w-full">
+          {/* Col 1: Score panel — fixed width, flush left */}
+          <div className="flex-shrink-0" style={{ width: "22%", minWidth: 200, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
             <ScorePanel />
           </div>
 
-          {/* Col 2: Model table */}
-          <div className="flex-1" style={{ borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+          {/* Col 2: Model table — grows to fill remaining space */}
+          <div className="flex-shrink-0" style={{ width: "28%", borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
             <ModelTablePanel />
           </div>
 
-          {/* Col 3: Betting splits */}
-          <div className="flex-shrink-0 px-3 py-3" style={{ width: "34%" }}>
+          {/* Col 3: Betting splits — takes the rest */}
+          <div className="flex-1 px-3 py-3" style={{ minWidth: 0 }}>
             <BettingSplitsPanel
               game={game}
               awayLabel={awayName}
