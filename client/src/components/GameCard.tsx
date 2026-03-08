@@ -495,9 +495,9 @@ export function GameCard({ game, mode = "full" }: GameCardProps) {
     const mdlAwaySpread = awayModelSpread;
     const mdlHomeSpread = homeModelSpread;
     const mdlTotal      = modelTotal;
-    // Model ML not yet in schema — show dash
-    const mdlAwayMl = '—';
-    const mdlHomeMl = '—';
+    // Model ML from schema (Fair_ML_Away / Fair_ML_Home from Google Sheet)
+    const mdlAwayMl = game.modelAwayML ?? '—';
+    const mdlHomeMl = game.modelHomeML ?? '—';
 
     // Determine which side has the edge (for MODEL mode — only edge side shows model value)
     // Spread edge: if awayModelSpread < awayBookSpread, model likes the away team (away is the edge side)

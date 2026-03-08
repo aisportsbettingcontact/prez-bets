@@ -125,6 +125,10 @@ export const games = mysqlTable("games", {
   awayML: varchar("awayML", { length: 16 }),
   /** Home team moneyline odds, e.g. "-142" or "+600" */
   homeML: varchar("homeML", { length: 16 }),
+  /** Model fair value moneyline for the away team, e.g. "+225" or "-670" */
+  modelAwayML: varchar("modelAwayML", { length: 16 }),
+  /** Model fair value moneyline for the home team, e.g. "-225" or "+670" */
+  modelHomeML: varchar("modelHomeML", { length: 16 }),
   /** WagerTalk rotation numbers e.g. '689/690' (away/home) */
   rotNums: varchar("rotNums", { length: 32 }),
   /** WagerTalk display order — lower number appears first */

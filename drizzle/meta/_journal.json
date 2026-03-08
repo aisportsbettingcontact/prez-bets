@@ -148,6 +148,13 @@
       "when": 1772945315419,
       "tag": "0020_faithful_deathbird",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1772965491400,
+      "tag": "0021_peaceful_emma_frost",
+      "breakpoints": true
     }
   ]
 }
