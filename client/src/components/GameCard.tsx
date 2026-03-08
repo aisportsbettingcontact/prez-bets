@@ -501,8 +501,9 @@ export function GameCard({ game }: GameCardProps) {
   };
 
   // ── Score Panel ─────────────────────────────────────────────────────────────
-  // Shows: game clock/status at top, then two team rows (logo + name + big score)
-  // For upcoming games: shows start time instead of scores
+  // Shows: game clock/status at top, then two team rows (logo + name + score)
+  // Score sits immediately after the team name, not pushed to the far right.
+  // For upcoming games: shows start time instead of scores.
   const ScorePanel = () => (
     <div className="flex flex-col justify-center h-full px-3 py-3 min-w-0" style={{ minWidth: 0 }}>
       {/* Status row: clock / LIVE badge / FINAL / start time */}
@@ -541,89 +542,95 @@ export function GameCard({ game }: GameCardProps) {
         )}
       </div>
 
-      {/* Away team row */}
+      {/* Away team row: logo | name+nickname | score (tight to name) */}
       <div className="flex items-center gap-2 mb-1">
         <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={32} />
-        <div className="flex flex-col flex-1 min-w-0">
-          <span
-            className="font-bold leading-tight truncate"
-            style={{
-              fontSize: "clamp(11px, 1.8vw, 14px)",
-              color: awayWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
-              fontWeight: awayWins ? 800 : 600,
-            }}
-          >
-            {awayName}
-          </span>
-          {awayNickname && (
-            <span className="text-[10px] leading-none truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
-              {awayNickname}
+        {/* Name + score grouped together, score immediately follows name */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-col min-w-0">
+            <span
+              className="font-bold leading-tight truncate"
+              style={{
+                fontSize: "clamp(11px, 1.8vw, 14px)",
+                color: awayWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
+                fontWeight: awayWins ? 800 : 600,
+              }}
+            >
+              {awayName}
+            </span>
+            {awayNickname && (
+              <span className="text-[10px] leading-none truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
+                {awayNickname}
+              </span>
+            )}
+          </div>
+          {(isLive || isFinal) && hasScores && (
+            <span
+              className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
+              style={{
+                fontSize: "clamp(20px, 3vw, 32px)",
+                lineHeight: 1,
+                color: scoreFlash
+                  ? "#39FF14"
+                  : awayWins
+                  ? "hsl(var(--foreground))"
+                  : isFinal
+                  ? "hsl(var(--muted-foreground))"
+                  : "hsl(var(--foreground))",
+                textShadow: scoreFlash ? "0 0 12px rgba(57,255,20,0.7)" : "none",
+              }}
+            >
+              {game.awayScore}
             </span>
           )}
         </div>
-        {(isLive || isFinal) && hasScores && (
-          <span
-            className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
-            style={{
-              fontSize: "clamp(22px, 3.5vw, 36px)",
-              lineHeight: 1,
-              color: scoreFlash
-                ? "#39FF14"
-                : awayWins
-                ? "hsl(var(--foreground))"
-                : isFinal
-                ? "hsl(var(--muted-foreground))"
-                : "hsl(var(--foreground))",
-              textShadow: scoreFlash ? "0 0 12px rgba(57,255,20,0.7)" : "none",
-            }}
-          >
-            {game.awayScore}
-          </span>
-        )}
       </div>
 
       {/* Divider */}
       <div style={{ height: 1, background: "hsl(var(--border) / 0.4)", margin: "2px 0" }} />
 
-      {/* Home team row */}
+      {/* Home team row: logo | name+nickname | score (tight to name) */}
       <div className="flex items-center gap-2 mt-1">
         <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={32} />
-        <div className="flex flex-col flex-1 min-w-0">
-          <span
-            className="font-bold leading-tight truncate"
-            style={{
-              fontSize: "clamp(11px, 1.8vw, 14px)",
-              color: homeWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
-              fontWeight: homeWins ? 800 : 600,
-            }}
-          >
-            {homeName}
-          </span>
-          {homeNickname && (
-            <span className="text-[10px] leading-none truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
-              {homeNickname}
+        {/* Name + score grouped together, score immediately follows name */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-col min-w-0">
+            <span
+              className="font-bold leading-tight truncate"
+              style={{
+                fontSize: "clamp(11px, 1.8vw, 14px)",
+                color: homeWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
+                fontWeight: homeWins ? 800 : 600,
+              }}
+            >
+              {homeName}
+            </span>
+            {homeNickname && (
+              <span className="text-[10px] leading-none truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
+                {homeNickname}
+              </span>
+            )}
+          </div>
+          {(isLive || isFinal) && hasScores && (
+            <span
+              className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
+              style={{
+                fontSize: "clamp(20px, 3vw, 32px)",
+                lineHeight: 1,
+                color: scoreFlash
+                  ? "#39FF14"
+                  : homeWins
+                  ? "hsl(var(--foreground))"
+                  : isFinal
+                  ? "hsl(var(--muted-foreground))"
+                  : "hsl(var(--foreground))",
+                textShadow: scoreFlash ? "0 0 12px rgba(57,255,20,0.7)" : "none",
+              }}
+            >
+              {game.homeScore}
             </span>
           )}
         </div>
-        {(isLive || isFinal) && hasScores && (
-          <span
-            className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
-            style={{
-              fontSize: "clamp(22px, 3.5vw, 36px)",
-              lineHeight: 1,
-              color: scoreFlash
-                ? "#39FF14"
-                : homeWins
-                ? "hsl(var(--foreground))"
-                : isFinal
-                ? "hsl(var(--muted-foreground))"
-                : "hsl(var(--foreground))",
-              textShadow: scoreFlash ? "0 0 12px rgba(57,255,20,0.7)" : "none",
-            }}
-          >
-            {game.homeScore}
-          </span>
-        )}
       </div>
     </div>
   );

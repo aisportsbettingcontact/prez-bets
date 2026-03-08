@@ -608,3 +608,11 @@
 - [x] Apply to both desktop MarketColumn and mobile MarketSection via isTotalMarket prop
 - [x] All 20 tests passing, no TypeScript errors
 - [x] Save checkpoint and deliver
+
+## GameCard Layout Restructure (2026-03-08)
+- [x] Move team scores adjacent to team names (score inline, not pushed to far right)
+- [x] Score now sits immediately after team name in a grouped flex container
+- [x] Desktop 3-column order confirmed: Score | Book/Model | Betting Splits
+- [x] Mobile layout unchanged (score+splits row 1, model table row 2)
+- [x] All 20 tests passing, no TypeScript errors
+- [x] Save checkpoint and deliver
