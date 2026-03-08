@@ -413,6 +413,17 @@ export const NBA_BY_VSIN_SLUG = new Map<string, NbaTeam>(
 export const NBA_VALID_DB_SLUGS = new Set<string>(NBA_TEAMS.map(t => t.dbSlug));
 /** Set of all valid NBA.com slugs — used for NBA scoreboard filtering */
 export const NBA_VALID_NBA_SLUGS = new Set<string>(NBA_TEAMS.map(t => t.nbaSlug));
+/**
+ * Lookup by NBA teamId (numeric, extracted from logo URL).
+ * Logo URL format: https://cdn.nba.com/logos/nba/{teamId}/primary/L/logo.svg
+ * Used to match live scoreboard API responses (which use teamId) to DB slugs.
+ */
+export const NBA_BY_TEAM_ID = new Map<number, NbaTeam>(
+  NBA_TEAMS.flatMap(t => {
+    const m = t.logoUrl.match(/\/logos\/nba\/(\d+)\//); 
+    return m ? [[parseInt(m[1], 10), t]] : [];
+  })
+);
 
 /**
  * VSiN href aliases — the live VSiN page sometimes uses shortened slugs

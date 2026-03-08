@@ -13,7 +13,7 @@
  * actual ET start time (the 1900-01-01 date is a placeholder).
  */
 
-import { NBA_BY_NBA_SLUG } from "../shared/nbaTeams";
+import { NBA_BY_NBA_SLUG, NBA_BY_TEAM_ID } from "../shared/nbaTeams";
 
 const NBA_SCHEDULE_URL =
   "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json";
@@ -174,4 +174,121 @@ export function buildNbaStartTimeMap(games: NbaGame[]): Map<string, string> {
  */
 export function invalidateNbaScheduleCache(): void {
   cachedSchedule = null;
+}
+
+// ─── Live Scoreboard ─────────────────────────────────────────────────────────
+
+const NBA_LIVE_SCOREBOARD_URL =
+  "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json";
+
+export interface NbaLiveGame {
+  /** DB slug for away team */
+  awayDbSlug: string;
+  /** DB slug for home team */
+  homeDbSlug: string;
+  /** Away team score (null if not started) */
+  awayScore: number | null;
+  /** Home team score (null if not started) */
+  homeScore: number | null;
+  /**
+   * Game status mapped to our DB enum:
+   * 1 (scheduled) → 'upcoming', 2 (in-progress) → 'live', 3 (final) → 'final'
+   */
+  gameStatus: 'upcoming' | 'live' | 'final';
+  /**
+   * Human-readable game clock string, e.g. "15:07 1st", "Half", "OT", "Final".
+   * Null for upcoming games.
+   */
+  gameClock: string | null;
+}
+
+/**
+ * Parses the NBA gameClock ISO duration (e.g. "PT12M34.00S") and period number
+ * into a human-readable string like "12:34 1st", "Half", "OT".
+ */
+function parseNbaGameClock(gameClock: string, period: number, gameStatusText: string): string | null {
+  // Halftime
+  if (gameStatusText?.toLowerCase().includes('half')) return 'Half';
+  // Overtime
+  if (period > 4) {
+    const otNum = period - 4;
+    const match = gameClock?.match(/PT(\d+)M([\d.]+)S/);
+    if (match) {
+      const mins = match[1].padStart(2, '0');
+      const secs = Math.floor(parseFloat(match[2])).toString().padStart(2, '0');
+      return `${mins}:${secs} OT${otNum > 1 ? otNum : ''}`;
+    }
+    return `OT${otNum > 1 ? otNum : ''}`;
+  }
+  // Regular period
+  const periodNames = ['1st', '2nd', '3rd', '4th'];
+  const periodLabel = periodNames[period - 1] ?? `P${period}`;
+  if (!gameClock) return periodLabel;
+  const match = gameClock.match(/PT(\d+)M([\d.]+)S/);
+  if (!match) return periodLabel;
+  const mins = match[1].padStart(2, '0');
+  const secs = Math.floor(parseFloat(match[2])).toString().padStart(2, '0');
+  return `${mins}:${secs} ${periodLabel}`;
+}
+
+/**
+ * Fetches today's NBA live scoreboard from NBA.com CDN.
+ * Returns live/final scores and status for all games today.
+ * This endpoint updates in near-real-time during games.
+ */
+export async function fetchNbaLiveScores(): Promise<NbaLiveGame[]> {
+  const resp = await fetch(NBA_LIVE_SCOREBOARD_URL, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      Accept: "application/json",
+      Referer: "https://www.nba.com/",
+    },
+  });
+
+  if (!resp.ok) {
+    throw new Error(`NBA live scoreboard API returned HTTP ${resp.status}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const json = (await resp.json()) as any;
+  const games: any[] = json?.scoreboard?.games ?? [];
+
+  const result: NbaLiveGame[] = [];
+
+  for (const g of games) {
+    const awayTeamId: number = g.awayTeam?.teamId;
+    const homeTeamId: number = g.homeTeam?.teamId;
+
+    const awayTeam = NBA_BY_TEAM_ID.get(awayTeamId);
+    const homeTeam = NBA_BY_TEAM_ID.get(homeTeamId);
+
+    // Skip if either team is not in our registry
+    if (!awayTeam || !homeTeam) continue;
+
+    const rawStatus: number = g.gameStatus ?? 1;
+    const gameStatus: 'upcoming' | 'live' | 'final' =
+      rawStatus === 3 ? 'final' : rawStatus === 2 ? 'live' : 'upcoming';
+
+    const awayScore: number | null = rawStatus > 1 ? (g.awayTeam?.score ?? null) : null;
+    const homeScore: number | null = rawStatus > 1 ? (g.homeTeam?.score ?? null) : null;
+
+    let gameClock: string | null = null;
+    if (rawStatus === 2) {
+      gameClock = parseNbaGameClock(g.gameClock ?? '', g.period ?? 0, g.gameStatusText ?? '');
+    } else if (rawStatus === 3) {
+      gameClock = 'Final';
+    }
+
+    result.push({
+      awayDbSlug: awayTeam.dbSlug,
+      homeDbSlug: homeTeam.dbSlug,
+      awayScore,
+      homeScore,
+      gameStatus,
+      gameClock,
+    });
+  }
+
+  console.log(`[NBAScoreboard] Live scoreboard: ${result.length} games (${result.filter(g => g.gameStatus === 'live').length} live, ${result.filter(g => g.gameStatus === 'final').length} final)`);
+  return result;
 }

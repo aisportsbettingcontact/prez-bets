@@ -420,4 +420,13 @@
 ## GameCard LIVE Header Redesign (2026-03-07)
 - [x] Hide date when game is LIVE (date is implied to be today)
 - [x] Reformat LIVE score as: AwayLogo AwayScore-HomeScore HomeLogo
+- [x] Save checkpoint and deliver
+
+## NBA Live Scores + Status Filter (2026-03-07)
+- [x] Add fetchNbaLiveScores() to nbaScoreboard.ts using todaysScoreboard_00.json
+- [x] Map NBA teamId → DB slug for score matching (via NBA_BY_TEAM_ID from logo URLs)
+- [x] Wire NBA scores/status/clock into vsinAutoRefresh.ts on insert and update
+- [x] Add 5-minute NBA score refresh cycle in vsinAutoRefresh.ts
+- [x] Add ALL/UPCOMING/LIVE/FINAL filter tabs to Dashboard for NBA sport
+- [x] Verify GameCard LIVE/FINAL header displays correctly for NBA games
 - [ ] Save checkpoint and deliver

@@ -19,7 +19,7 @@ import { listGamesByDate, updateBookOdds, insertGames, getGameByNcaaContestId, u
 import { scrapeVsinOdds } from "./vsinScraper";
 import { scrapeNbaVsinOdds } from "./nbaVsinScraper";
 import { fetchNcaaGames, buildStartTimeMap, getMidnightGameKeys } from "./ncaaScoreboard";
-import { fetchNbaGamesForDate, buildNbaStartTimeMap } from "./nbaScoreboard";
+import { fetchNbaGamesForDate, buildNbaStartTimeMap, fetchNbaLiveScores } from "./nbaScoreboard";
 import { VALID_DB_SLUGS, BY_DB_SLUG } from "../shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS } from "../shared/nbaTeams";
 import type { InsertGame } from "../drizzle/schema";
@@ -645,6 +645,49 @@ async function refreshNcaamScores(): Promise<void> {
 const SCORE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
+ * Refreshes NBA live/final scores and game status from the NBA live scoreboard API.
+ * Runs every 5 minutes so live scores stay current.
+ */
+async function refreshNbaScores(): Promise<void> {
+  const todayStr = datePst();
+  try {
+    const liveGames = await fetchNbaLiveScores();
+    const existing = await listGamesByDate(todayStr, "NBA");
+
+    let updated = 0;
+    for (const liveGame of liveGames) {
+      // Match by away+home DB slugs
+      const dbGame = existing.find(
+        g => g.awayTeam === liveGame.awayDbSlug && g.homeTeam === liveGame.homeDbSlug
+      );
+      if (!dbGame) continue;
+
+      // Only update if status or scores have changed
+      const statusChanged = dbGame.gameStatus !== liveGame.gameStatus;
+      const scoresChanged =
+        dbGame.awayScore !== liveGame.awayScore ||
+        dbGame.homeScore !== liveGame.homeScore ||
+        dbGame.gameClock !== liveGame.gameClock;
+
+      if (!statusChanged && !scoresChanged) continue;
+
+      await updateNcaaStartTime(dbGame.id, {
+        startTimeEst: dbGame.startTimeEst,
+        ncaaContestId: dbGame.ncaaContestId ?? '',
+        gameStatus: liveGame.gameStatus,
+        awayScore: liveGame.awayScore,
+        homeScore: liveGame.homeScore,
+        gameClock: liveGame.gameClock,
+      });
+      updated++;
+    }
+    console.log(`[ScoreRefresh] Updated scores for ${updated} NBA games (${todayStr})`);
+  } catch (err) {
+    console.warn("[ScoreRefresh] NBA score refresh failed (non-fatal):", err);
+  }
+}
+
+/**
  * Start the 30-minute auto-refresh scheduler.
  * Fires immediately if inside the active window, then every 30 minutes.
  * Also starts a separate 5-minute score-only refresh for live/final scores.
@@ -653,14 +696,14 @@ export function startVsinAutoRefresh() {
   if (isWithinActiveHours()) {
     void runVsinRefresh();
   } else {
-    console.log("[VSiNAutoRefresh] Outside active hours (6am\u2013midnight PST) \u2014 waiting for next tick.");
+    console.log("[VSiNAutoRefresh] Outside active hours (6am–midnight PST) — waiting for next tick.");
   }
 
   setInterval(() => {
     if (isWithinActiveHours()) {
       void runVsinRefresh();
     } else {
-      console.log("[VSiNAutoRefresh] Tick skipped \u2014 outside active hours (6am\u2013midnight PST).");
+      console.log("[VSiNAutoRefresh] Tick skipped — outside active hours (6am–midnight PST).");
     }
   }, INTERVAL_MS);
 
@@ -668,8 +711,9 @@ export function startVsinAutoRefresh() {
   setInterval(() => {
     if (isWithinActiveHours()) {
       void refreshNcaamScores();
+      void refreshNbaScores();
     }
   }, SCORE_INTERVAL_MS);
 
-  console.log("[VSiNAutoRefresh] Scheduler started \u2014 every 30 min (6am\u2013midnight PST) + score refresh every 5 min.");
+  console.log("[VSiNAutoRefresh] Scheduler started — every 30 min (6am–midnight PST) + score refresh every 5 min.");
 }

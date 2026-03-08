@@ -181,9 +181,9 @@ export default function Dashboard() {
   });
   const appLogout = () => appLogoutMutation.mutate();
 
-  // Reset status filter when sport changes (NBA doesn't have status tracking yet)
+  // Reset status filter when sport changes
   useEffect(() => {
-    if (selectedSport === "NBA") setSelectedStatuses(new Set());
+    setSelectedStatuses(new Set());
   }, [selectedSport]);
 
   // ─── Data queries ─────────────────────────────────────────────────────────
@@ -473,9 +473,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Row 3: Status filter tabs (NCAAM only) — multi-select; selecting all 3 reverts to ALL */}
-        {selectedSport === "NCAAM" && (
-          <div className="px-4 pb-1 max-w-3xl mx-auto flex items-center gap-1.5">
+        {/* Row 3: Status filter tabs — multi-select; selecting all 3 reverts to ALL */}
+        <div className="px-4 pb-1 max-w-3xl mx-auto flex items-center gap-1.5">
             {/* ALL pill — active when nothing is selected */}
             <button
               onClick={() => setSelectedStatuses(new Set())}
@@ -528,8 +527,7 @@ export default function Dashboard() {
                 </button>
               );
             })}
-          </div>
-        )}
+        </div>
 
         {/* Row 4: Search bar (always visible, sticky with header) */}
         <div ref={searchRef} className="relative px-4 pb-2 max-w-3xl mx-auto">
