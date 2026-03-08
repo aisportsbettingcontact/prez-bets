@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startDailyPurgeSchedule } from "../dailyPurge";
 import { startVsinAutoRefresh } from "../vsinAutoRefresh";
+import { startNbaModelSyncScheduler } from "../nbaModelSync";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -65,6 +66,8 @@ async function startServer() {
     startDailyPurgeSchedule();
     // Auto-refresh VSiN book odds every 30 minutes (6am–midnight PST)
     startVsinAutoRefresh();
+    // Auto-sync NBA model projections from Google Sheet every 3 hours (9AM–midnight PST)
+    startNbaModelSyncScheduler();
   });
 }
 

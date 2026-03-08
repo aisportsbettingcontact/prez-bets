@@ -24,6 +24,7 @@ import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure } from "./routers/appUsers";
 import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById } from "./db";
 import { getLastRefreshResult, runVsinRefresh, refreshAllScoresNow } from "./vsinAutoRefresh";
+import { syncNbaModelFromSheet } from "./nbaModelSync";
 import { VALID_DB_SLUGS } from "@shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS } from "@shared/nbaTeams";
 
@@ -266,6 +267,15 @@ export const appRouter = router({
         await deleteGameById(input.id);
         return { success: true, deletedId: input.id };
       }),
+
+    /**
+     * Manually trigger an immediate NBA model sheet sync.
+     * Owner-only.
+     */
+    triggerNbaModelSync: ownerProcedure.mutation(async () => {
+      const result = await syncNbaModelFromSheet();
+      return result;
+    }),
 
     /**
      * Manually trigger an immediate VSiN + NCAA refresh.

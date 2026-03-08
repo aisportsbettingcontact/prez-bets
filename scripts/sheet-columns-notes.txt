@@ -1,0 +1,42 @@
+DC_Context_adj sheet columns (0-indexed from screenshot):
+Row 1 = headers
+
+Visible columns from screenshot:
+A = date (e.g. 20260308)
+B = matchup_ke (e.g. BOS@CLE, NYK@LAL, DET@MIA, ORL@MIL, WAS@NOP, CHA@PHX, IND@POR, CHI@SAC, HOU@SAS, DAL@TOR)
+C = away_team (e.g. BOS, NYK, DET, ORL, WAS, CHA, IND, CHI, HOU, DAL)
+D = Final_Pro_Total (e.g. 236.5, 233.5, 228.5, 216.5, 243.5, 226.5, 230.5, 234.5, 223.5, 220.5)
+E = Final_Favorite (e.g. CLE, NYK, MIA, ORL, NOP, CHA, POR, SAC, HOU, TOR)
+F = Favorite_Team (same as E)
+G = Underdog_Team (e.g. BOS, LAL, DET, MIL, WAS, PHX, IND, CHI, SAS, DAL)
+H = Favorite_Spread (e.g. PK, -6.5, -8, -4.5, -1.5, -11, PK, -1, -1, -7.5)
+I = Underdog_Spread (e.g. PK, 6.5, 8, 4.5, 1.5, 11, PK, 1, 1, 7.5)
+J = Spread_Volatility (e.g. 6.5, 8, 4.5 Balanced, Volatile, Stable, Very Volatile, Volatile, Balanced, Volatile, Balanced, Balanced)
+K = Total_Volatility_L (e.g. Volatile, Balanced, Volatile, Stable, Very Volatile, Stable, Volatile, Very Volatile, Volatile, Balanced)
+L = Final_Home_Win (probability, e.g. 0.5380786915, 0.7311276425, 0.7618769021, ...)
+M = Final_Away_Win (probability, e.g. 0.4619213085, 0.2688723575, 0.2381230979, ...)
+N = Fair_ML_Home (e.g. -115, 270, -320, -240, -140, -530, 100, -110, -115, -285)
+S = Spread_Confidence (e.g. C, A, B, B, C, B, C, A, C, C) 
+T = Total_Confidence (e.g. C, B, C, B, B, C, C, B, B, C)
+
+User requested columns: A, C, D, I, J, L, M, N, S, T
+= date, away_team, Final_Pro_Total, Underdog_Spread (away spread), Spread_Volatility, Final_Home_Win, Final_Away_Win, Fair_ML_Home, Spread_Confidence, Total_Confidence
+
+Mapping to DB fields:
+- A (date) → gameDate (format: 20260308 → 2026-03-08)
+- C (away_team) → awayTeam (NBA slug lookup)  
+- D (Final_Pro_Total) → modelTotal
+- I (Underdog_Spread / away spread) → awayModelSpread (positive = underdog, need to determine if away is underdog or favorite)
+- J (Spread_Volatility) → spreadVolatility (new field? or just display)
+- L (Final_Home_Win) → modelHomeWinProb (new field)
+- M (Final_Away_Win) → modelAwayWinProb (new field)
+- N (Fair_ML_Home) → modelHomeML (fair value)
+- S (Spread_Confidence) → spreadConfidence (new field)
+- T (Total_Confidence) → totalConfidence (new field)
+
+Note: Need to also derive:
+- modelAwayML from Final_Away_Win probability
+- homeModelSpread = -awayModelSpread
+- Need to check if column H = favorite spread, I = underdog spread
+  If away team is the underdog: awayModelSpread = +I value
+  If away team is the favorite: awayModelSpread = H value (negative)
