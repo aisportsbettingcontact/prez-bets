@@ -634,3 +634,14 @@
 - [x] Add "ODDS/LINES" section title to ModelTablePanel, styled same as "BETTING SPLITS" title
 - [x] All 20 tests passing, no TypeScript errors
 - [x] Save checkpoint and deliver
+
+## ODDS/LINES Redesign with BOOK/MODEL Toggle (2026-03-08)
+- [x] Add BOOK/MODEL toggle to ODDS/LINES section
+- [x] BOOK mode: show VSiN SPREAD, TOTAL (O/U), MONEYLINE for away and home teams
+- [x] MODEL mode: show model SPREAD, TOTAL (O/U), MONEYLINE for away and home teams (model ML shows — until schema updated)
+- [x] Columns: SPREAD | TOTAL | MONEYLINE (matching Betting Splits layout)
+- [x] Equal height alignment via h-full on both columns
+- [x] Column headers change color: white for BOOK, green (#39FF14) for MODEL
+- [x] Edge verdict shows only in MODEL tab when published
+- [x] All 20 tests passing, no TypeScript errors
+- [x] Save checkpoint and deliver
