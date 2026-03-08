@@ -562,3 +562,14 @@
 - [x] Update BettingSplitsPanel: OVER/UNDER on desktop/tablet, O/U on mobile
 - [x] Add ML fields to NCAAM updateBookOdds call in vsinAutoRefresh.ts (was missing)
 - [x] Save checkpoint and deliver
+
+## NBA VSiN Splits Verification (2026-03-08)
+- [x] Verified NBA VSiN page HTML structure matches scraper column mapping (td[0]-td[9])
+- [x] Confirmed NBA scraper correctly parses SPREAD (td[1]), TOTAL (td[4]), ML (td[7]) odds
+- [x] Confirmed NBA scraper correctly parses Spread splits (td[2]=money, td[3]=tickets)
+- [x] Confirmed NBA scraper correctly parses Total splits (td[5]=money, td[6]=tickets)
+- [x] Confirmed NBA scraper correctly parses ML splits (td[8]=money, td[9]=tickets)
+- [x] Confirmed 10 NBA games with full splits data in DB (all 3 markets populated)
+- [x] Confirmed BettingSplitsPanel shows "Over/Under" on desktop/tablet and "O/U" on mobile for NBA
+- [x] All 20 tests passing
+- [x] Save checkpoint and deliver
