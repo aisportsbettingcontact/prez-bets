@@ -750,3 +750,4 @@
 - [x] Replace NBA filter icon with NBA logo
 - [x] Fix midnight EST game date: remove "pull from next day" logic in vsinAutoRefresh.ts
 - [x] Fix frontend effectiveGameDate helper to not subtract a day for midnight games
+- [x] Sort FINAL games to the bottom of their date group (after upcoming and live games) on both pages
