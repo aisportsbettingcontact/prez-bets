@@ -639,6 +639,15 @@ export function GameCard({ game }: GameCardProps) {
   // Books | Model Line | Model O/U columns with two team rows + edge verdict
   const ModelTablePanel = () => (
     <div className="flex flex-col justify-start px-3 py-3 min-w-0">
+      {/* ODDS/LINES title — matches BETTING SPLITS header style */}
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.07)" }} />
+        <span className="text-[13px] font-black uppercase tracking-widest" style={{ color: '#d3d3d3', opacity: 0.85 }}>
+          Odds/Lines
+        </span>
+        <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.07)" }} />
+      </div>
+
       {/* Column headers */}
       <div
         className="grid pb-2"

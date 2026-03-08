@@ -629,3 +629,8 @@
 - [x] overflow-x: auto on the card wrapper for very small screens
 - [x] All 20 tests passing, no TypeScript errors
 - [x] Save checkpoint and deliver
+
+## ODDS/LINES Title for Model Table (2026-03-08)
+- [x] Add "ODDS/LINES" section title to ModelTablePanel, styled same as "BETTING SPLITS" title
+- [x] All 20 tests passing, no TypeScript errors
+- [x] Save checkpoint and deliver
