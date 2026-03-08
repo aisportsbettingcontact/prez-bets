@@ -751,3 +751,10 @@
 - [x] Fix midnight EST game date: remove "pull from next day" logic in vsinAutoRefresh.ts
 - [x] Fix frontend effectiveGameDate helper to not subtract a day for midnight games
 - [x] Sort FINAL games to the bottom of their date group (after upcoming and live games) on both pages
+
+## Visual Edit Batch (Mar 8 - ML Inputs & EV Grade)
+- [ ] PublishProjections: add modelAwayML and modelHomeML editable input fields
+- [ ] PublishProjections: wire ML inputs to updateProjections save mutation
+- [ ] Backend: extend updateProjections to accept modelAwayML/modelHomeML
+- [ ] EdgeVerdict (GameCard): add EV Grade A+–F scale below edge pts display
+- [ ] EdgeVerdictLive (PublishProjections): add EV Grade A+–F scale below edge pts display

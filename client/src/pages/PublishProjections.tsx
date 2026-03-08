@@ -93,6 +93,21 @@ function getEdgeColor(diff: number): string {
   if (diff < 4.5) return "#AAFF1A";
   return "#39FF14";
 }
+function getEvGrade(diff: number | null): string {
+  const d = diff ?? 0;
+  if (d <= 0)   return "F";
+  if (d < 0.5)  return "D";
+  if (d < 1.0)  return "C";
+  if (d < 1.5)  return "C+";
+  if (d < 2.0)  return "B-";
+  if (d < 2.5)  return "B";
+  if (d < 3.0)  return "B+";
+  if (d < 3.5)  return "A-";
+  if (d < 4.0)  return "A";
+  if (d < 4.5)  return "A+";
+  return "A+";
+}
+
 
 function spreadSign(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
@@ -334,6 +349,9 @@ function EdgeVerdictLive({
               {spreadDiff} {spreadDiff === 1 ? "pt" : "pts"}
             </span>
           </span>
+          <span className="text-[10px] font-black leading-none tracking-widest uppercase mt-0.5" style={{ color: spreadColor }}>
+            EV: {getEvGrade(spreadDiff)}
+          </span>
         </div>
       )}
       {!spreadPass && !totalPass && (
@@ -353,6 +371,9 @@ function EdgeVerdictLive({
             <span style={{ color: totalColor, fontWeight: 700 }}>
               {totalDiff} {totalDiff === 1 ? "pt" : "pts"}
             </span>
+          </span>
+          <span className="text-[10px] font-black leading-none tracking-widest uppercase mt-0.5" style={{ color: totalColor }}>
+            EV: {getEvGrade(totalDiff)}
           </span>
         </div>
       )}
@@ -391,6 +412,8 @@ type GameRow = {
   mlAwayMoneyPct: number | null;
   awayML: string | null;
   homeML: string | null;
+  modelAwayML: string | null;
+  modelHomeML: string | null;
 };
 
 // ─── EditableGameCard ─────────────────────────────────────────────────────────
@@ -399,6 +422,8 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
   const [awaySpread, setAwaySpread] = useState(game.awayModelSpread ?? "");
   const [homeSpread, setHomeSpread] = useState(game.homeModelSpread ?? "");
   const [modelTotal, setModelTotal] = useState(game.modelTotal ?? "");
+  const [awayML, setAwayML] = useState(game.modelAwayML ?? "");
+  const [homeML, setHomeML] = useState(game.modelHomeML ?? "");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   // Track whether this game has ever been submitted in this session
@@ -426,9 +451,11 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
       setAwaySpread(game.awayModelSpread ?? "");
       setHomeSpread(game.homeModelSpread ?? "");
       setModelTotal(game.modelTotal ?? "");
+      setAwayML(game.modelAwayML ?? "");
+      setHomeML(game.modelHomeML ?? "");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.awayModelSpread, game.homeModelSpread, game.modelTotal]);
+  }, [game.awayModelSpread, game.homeModelSpread, game.modelTotal, game.modelAwayML, game.modelHomeML]);
 
   // Away spread change → auto-compute home spread as inverse
   const handleAwaySpreadChange = (val: string) => {
@@ -510,6 +537,8 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
         awayModelSpread: awaySpread || null,
         homeModelSpread: homeSpread || null,
         modelTotal: modelTotal || null,
+        modelAwayML: awayML || null,
+        modelHomeML: homeML || null,
         ...edges,
       });
       setDirty(false);
@@ -582,7 +611,7 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
   })();
   const dateLabel = formatDate(displayDate);
 
-  const hasAnyModel = awaySpread !== "" || modelTotal !== "";
+  const hasAnyModel = awaySpread !== "" || modelTotal !== "" || awayML !== "" || homeML !== "";
   const hasOdds = !isNaN(awayBookSpread) || !isNaN(bookTotal);
 
   return (
@@ -736,6 +765,9 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
               <div className="flex-shrink-0 text-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
                 <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>O/U</span>
               </div>
+              <div className="flex-shrink-0 text-center" style={{ width: "clamp(52px, 13vw, 76px)" }}>
+                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>Model ML</span>
+              </div>
             </div>
             {/* Team rows */}
             <div className="flex gap-1.5 min-w-0 mt-1">
@@ -761,8 +793,27 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
                   onSpreadChange={handleHomeSpreadChange}
                 />
               </div>
+              {/* O/U pill */}
               <div className="flex-shrink-0 flex items-center justify-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
                 <EditablePill value={modelTotal} onChange={handleTotalChange} placeholder="—" />
+              </div>
+              {/* Model ML pills — one per team row */}
+              <div className="flex-shrink-0 flex flex-col justify-around" style={{ width: "clamp(52px, 13vw, 76px)", gap: 4 }}>
+                <div className="flex items-center justify-center" style={{ flex: 1 }}>
+                  <EditablePill
+                    value={awayML}
+                    onChange={(v) => { setAwayML(v); setDirty(true); }}
+                    placeholder="—"
+                  />
+                </div>
+                <div style={{ height: 1, background: "hsl(var(--border))" }} />
+                <div className="flex items-center justify-center" style={{ flex: 1 }}>
+                  <EditablePill
+                    value={homeML}
+                    onChange={(v) => { setHomeML(v); setDirty(true); }}
+                    placeholder="—"
+                  />
+                </div>
               </div>
             </div>
           </div>

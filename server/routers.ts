@@ -205,6 +205,8 @@ export const appRouter = router({
           awayModelSpread: z.string().nullable().optional(),
           homeModelSpread: z.string().nullable().optional(),
           modelTotal: z.string().nullable().optional(),
+          modelAwayML: z.string().nullable().optional(),
+          modelHomeML: z.string().nullable().optional(),
           spreadEdge: z.string().nullable().optional(),
           spreadDiff: z.string().nullable().optional(),
           totalEdge: z.string().nullable().optional(),

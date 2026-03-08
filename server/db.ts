@@ -312,6 +312,8 @@ export async function updateGameProjections(
     awayModelSpread?: string | null;
     homeModelSpread?: string | null;
     modelTotal?: string | null;
+    modelAwayML?: string | null;
+    modelHomeML?: string | null;
     spreadEdge?: string | null;
     spreadDiff?: string | null;
     totalEdge?: string | null;
