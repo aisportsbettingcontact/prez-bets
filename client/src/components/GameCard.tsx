@@ -777,40 +777,47 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
         {/* ── Mobile layout ── */}
         <div className="flex lg:hidden flex-col w-full">
-          {/* Projections mode: Score | Odds/Lines | EdgeVerdict */}
+          {/* Projections mode: Row 1 = Score | Odds/Lines, Row 2 = EdgeVerdict (full width below) */}
           {mode === "projections" && (
-            <div className="flex items-stretch w-full" style={{ overflowX: "auto" }}>
-              <div style={{ minWidth: 140, width: "28%", borderRight: "1px solid hsl(var(--border) / 0.5)", flexShrink: 0 }}>
-                <ScorePanel />
+            <div className="flex flex-col w-full">
+              {/* Row 1: Score panel + Odds/Lines table side by side */}
+              <div className="flex items-stretch w-full" style={{ overflowX: "auto" }}>
+                <div style={{ minWidth: 140, width: "28%", borderRight: "1px solid hsl(var(--border) / 0.5)", flexShrink: 0 }}>
+                  <ScorePanel />
+                </div>
+                <div style={{ minWidth: 180, flex: "1 1 0%" }}>
+                  <OddsLinesPanel
+                    awayBookSpread={awayBookSpread}
+                    homeBookSpread={homeBookSpread}
+                    bookTotal={bookTotal}
+                    awayML={game.awayML ?? '—'}
+                    homeML={game.homeML ?? '—'}
+                    awayModelSpread={awayModelSpread}
+                    homeModelSpread={homeModelSpread}
+                    modelTotal={modelTotal}
+                    modelAwayML={game.modelAwayML}
+                    modelHomeML={game.modelHomeML}
+                    spreadDiff={spreadDiff}
+                    totalDiff={totalDiff}
+                    computedSpreadEdge={computedSpreadEdge}
+                    computedTotalEdge={computedTotalEdge}
+                    awayLogoUrl={awayLogoUrl}
+                    homeLogoUrl={homeLogoUrl}
+                    awaySlug={game.awayTeam}
+                    homeSlug={game.homeTeam}
+                    awayDisplayName={awayDisplayName}
+                    homeDisplayName={homeDisplayName}
+                    showModel={showModel}
+                    onToggleModel={toggleModel}
+                  />
+                </div>
               </div>
-              <div style={{ minWidth: 180, flex: "1 1 0%", borderRight: showModel ? "1px solid hsl(var(--border) / 0.5)" : undefined }}>
-                <OddsLinesPanel
-                awayBookSpread={awayBookSpread}
-                homeBookSpread={homeBookSpread}
-                bookTotal={bookTotal}
-                awayML={game.awayML ?? '—'}
-                homeML={game.homeML ?? '—'}
-                awayModelSpread={awayModelSpread}
-                homeModelSpread={homeModelSpread}
-                modelTotal={modelTotal}
-                modelAwayML={game.modelAwayML}
-                modelHomeML={game.modelHomeML}
-                spreadDiff={spreadDiff}
-                totalDiff={totalDiff}
-                computedSpreadEdge={computedSpreadEdge}
-                computedTotalEdge={computedTotalEdge}
-                awayLogoUrl={awayLogoUrl}
-                homeLogoUrl={homeLogoUrl}
-                awaySlug={game.awayTeam}
-                homeSlug={game.homeTeam}
-                awayDisplayName={awayDisplayName}
-                homeDisplayName={homeDisplayName}
-                showModel={showModel}
-                onToggleModel={toggleModel}
-              />
-              </div>
+              {/* Row 2: EdgeVerdict — full width below the table, only when model is on */}
               {showModel && (
-                <div className="flex items-center justify-center px-3 py-2" style={{ minWidth: 130, flex: "0 0 auto" }}>
+                <div
+                  className="flex items-center justify-center w-full px-3 py-2"
+                  style={{ borderTop: "1px solid hsl(var(--border) / 0.5)" }}
+                >
                   <EdgeVerdict
                     spreadDiff={isNaN(spreadDiff) ? null : spreadDiff}
                     spreadEdge={computedSpreadEdge}
