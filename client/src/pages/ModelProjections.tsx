@@ -416,9 +416,9 @@ export default function ModelProjections() {
           <Link href="/splits" className="flex-1">
             <button
               className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-bold tracking-wide transition-colors"
-              style={{ color: "hsl(var(--muted-foreground))" }}
+              style={{ color: "rgba(255,255,255,0.35)" }}
             >
-              <img src={CDN_MONEY_BAG} alt="Money bag" width={14} height={14} style={{ objectFit: "contain", filter: "invert(1)", opacity: 0.45 }} />
+              <img src={CDN_MONEY_BAG} alt="Money bag" width={14} height={14} style={{ objectFit: "contain", filter: "invert(1)", opacity: 0.35 }} />
               <span>BETTING SPLITS</span>
             </button>
           </Link>

@@ -25,7 +25,9 @@ export function todayUTC(): string {
 function formatButtonLabel(dateStr: string): string {
   try {
     const d = new Date(dateStr + "T00:00:00Z");
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+    const month = d.toLocaleDateString("en-US", { month: "long", timeZone: "UTC" }).toUpperCase();
+    const day = d.getUTCDate();
+    return `${month} ${day}`;
   } catch {
     return dateStr;
   }
