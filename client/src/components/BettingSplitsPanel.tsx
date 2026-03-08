@@ -8,7 +8,10 @@
  * Desktop (≥ lg): 3 markets side-by-side in equal columns (full layout)
  */
 
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+
+type MobileMarket = "spread" | "total" | "ml";
 
 interface BettingSplitsPanelProps {
   game: {
@@ -316,6 +319,7 @@ export function BettingSplitsPanel({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   awayNickname: _aN, homeNickname: _hN,
 }: BettingSplitsPanelProps) {
+  const [mobileMarket, setMobileMarket] = useState<MobileMarket>("spread");
   const sport = game.sport ?? "NCAAM";
   const { data: colors } = trpc.teamColors.getForGame.useQuery(
     { awayTeam: game.awayTeam, homeTeam: game.homeTeam, sport },
@@ -365,39 +369,76 @@ export function BettingSplitsPanel({
     );
   }
 
+  // Determine which markets are available; default to first available
+  const availableMarkets: MobileMarket[] = [
+    ...(hasSpreadSplits ? ["spread" as const] : []),
+    ...(hasTotalSplits  ? ["total"  as const] : []),
+    ...(hasMlSplits     ? ["ml"     as const] : []),
+  ];
+  // Resolve active market — fall back to first available if current isn't available
+  const activeMarket: MobileMarket = availableMarkets.includes(mobileMarket)
+    ? mobileMarket
+    : (availableMarkets[0] ?? "spread");
+
   return (
     <>
-      {/* ── Mobile (< lg): ultra-compact vertical rows ── */}
-      <div className="flex flex-col w-full h-full justify-around lg:hidden" style={{ padding: "4px 0" }}>
-        {hasSpreadSplits && (
-          <>
-            <CompactMarketRow
-              title="Spread"
-              ticketsPct={game.spreadAwayBetsPct}
-              handlePct={game.spreadAwayMoneyPct}
-              awayColor={awayColor}
-              homeColor={homeColor}
-              awayLineLabel={awaySpreadLabel}
-              homeLineLabel={homeSpreadLabel}
-            />
-            <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 8px" }} />
-          </>
+      {/* ── Mobile (< lg): toggle + single active market ── */}
+      <div className="flex flex-col w-full h-full lg:hidden" style={{ padding: "4px 0" }}>
+        {/* 3-way toggle */}
+        <div className="flex items-center" style={{ padding: "0 8px 4px 8px", gap: 4 }}>
+          {(["spread", "total", "ml"] as MobileMarket[]).map((m) => {
+            const label = m === "spread" ? "SPR" : m === "total" ? "TOT" : "ML";
+            const isActive = m === activeMarket;
+            const isAvailable = availableMarkets.includes(m);
+            return (
+              <button
+                key={m}
+                onClick={() => setMobileMarket(m)}
+                disabled={!isAvailable}
+                style={{
+                  flex: 1,
+                  padding: "3px 0",
+                  fontSize: 9,
+                  fontWeight: 800,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  borderRadius: 4,
+                  border: isActive ? "1px solid rgba(255,255,255,0.35)" : "1px solid rgba(255,255,255,0.1)",
+                  background: isActive ? "rgba(255,255,255,0.12)" : "transparent",
+                  color: isActive ? "#ffffff" : isAvailable ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.15)",
+                  cursor: isAvailable ? "pointer" : "default",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {/* Active market bars */}
+        {activeMarket === "spread" && hasSpreadSplits && (
+          <CompactMarketRow
+            title="Spread"
+            ticketsPct={game.spreadAwayBetsPct}
+            handlePct={game.spreadAwayMoneyPct}
+            awayColor={awayColor}
+            homeColor={homeColor}
+            awayLineLabel={awaySpreadLabel}
+            homeLineLabel={homeSpreadLabel}
+          />
         )}
-        {hasTotalSplits && (
-          <>
-            <CompactMarketRow
-              title="Total"
-              ticketsPct={game.totalOverBetsPct}
-              handlePct={game.totalOverMoneyPct}
-              awayColor={awayColor}
-              homeColor={homeColor}
-              awayLineLabel={!isNaN(bookTotal) ? `OVER ${bookTotal}` : "OVER"}
-              homeLineLabel={!isNaN(bookTotal) ? `UNDER ${bookTotal}` : "UNDER"}
-            />
-            <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 8px" }} />
-          </>
+        {activeMarket === "total" && hasTotalSplits && (
+          <CompactMarketRow
+            title="Total"
+            ticketsPct={game.totalOverBetsPct}
+            handlePct={game.totalOverMoneyPct}
+            awayColor={awayColor}
+            homeColor={homeColor}
+            awayLineLabel={!isNaN(bookTotal) ? `OVER ${bookTotal}` : "OVER"}
+            homeLineLabel={!isNaN(bookTotal) ? `UNDER ${bookTotal}` : "UNDER"}
+          />
         )}
-        {hasMlSplits && (
+        {activeMarket === "ml" && hasMlSplits && (
           <CompactMarketRow
             title="Moneyline"
             ticketsPct={game.mlAwayBetsPct}

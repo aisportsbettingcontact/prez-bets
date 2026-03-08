@@ -730,3 +730,6 @@
 
 ## Splits Bar Label Position Fix
 - [x] Move ABBR (LINE) labels above each bar; show only % inside the pill
+
+## Mobile Splits Market Toggle
+- [x] Add 3-way toggle (SPREAD / ML / TOTAL) to mobile splits panel; show only active market's bars
