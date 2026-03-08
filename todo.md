@@ -442,4 +442,8 @@
 
 ## Fix HTTP 414 Request-URI Too Large (2026-03-08)
 - [x] Switch tRPC httpBatchLink to use maxURLLength: 2048 to auto-POST large batches (fixes 414 without breaking single-query GET)
+- [x] Save checkpoint and deliver
+
+## Remove Element at PublishProjections line 1065 (2026-03-08)
+- [x] Identify and remove the element(s) around line 1065 that user marked "you can get rid of these"
 - [ ] Save checkpoint and deliver

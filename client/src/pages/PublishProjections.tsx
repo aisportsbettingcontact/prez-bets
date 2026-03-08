@@ -1062,25 +1062,7 @@ export default function PublishProjections() {
               </>
             )}
           </div>
-          <div className="flex gap-2">
-            {(["all", "regular_season", "conference_tournament"] as const).map((f) => {
-              const count = f === "all" ? totalCount
-                : (games ?? []).filter((g) => g.gameType === f).length;
-              return (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className="px-3 py-1 rounded-full text-xs font-semibold transition-all"
-                  style={filter === f
-                    ? { background: "#39FF14", color: "#000" }
-                    : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
-                  }
-                >
-                  {f === "all" ? `All (${count})` : f === "regular_season" ? `Regular (${count})` : `Conf. Tourney (${count})`}
-                </button>
-              );
-            })}
-          </div>
+
         </div>
       </header>
 
