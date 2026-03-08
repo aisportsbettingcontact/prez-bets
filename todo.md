@@ -483,4 +483,13 @@
 - [x] Added league+date context label to stats bar header
 - [x] Refresh Now now triggers full VSiN odds + all scores (NCAAM + NBA) refresh
 - [x] Rename "Submit" for first-time save; after submit, dirty changes show "Save"
+- [x] Save checkpoint and deliver
+
+## Publish Projections: New Filter Tabs + Sort Order (2026-03-08)
+- [x] Add MISSING ODDS filter tab to status filter row (orange, shows count)
+- [x] Add MODELED filter tab to status filter row (green, shows count)
+- [x] Add NOT MODELED filter tab to status filter row (amber, shows count)
+- [x] Verified sort order: DB query already orders by startTimeEst earliest to latest
+- [x] Added date-change reset so filter resets to ALL when navigating dates
+- [x] Added contextual empty-state messages for each new filter
 - [ ] Save checkpoint and deliver

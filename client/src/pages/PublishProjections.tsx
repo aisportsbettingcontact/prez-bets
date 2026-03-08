@@ -762,7 +762,7 @@ export default function PublishProjections() {
   const [, setLocation] = useLocation();
   const { appUser, isOwner, loading: authLoading } = useAppAuth();
   const [filter, setFilter] = useState<"all" | "regular_season" | "conference_tournament">("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "upcoming" | "live" | "final">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "upcoming" | "live" | "final" | "missing_odds" | "modeled" | "not_modeled">("all");
   const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA">("NCAAM");
   const [gameDate, setGameDate] = useState(() => todayPst());
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -771,6 +771,11 @@ export default function PublishProjections() {
   useEffect(() => {
     if (selectedSport === "NBA") setStatusFilter("all");
   }, [selectedSport]);
+
+  // Reset to "all" when switching dates so stale filter doesn't hide games
+  useEffect(() => {
+    setStatusFilter("all");
+  }, [gameDate]);
 
   // ── Strict owner-only guard ─────────────────────────────────────────────────
   useEffect(() => {
@@ -840,9 +845,20 @@ export default function PublishProjections() {
 
   const filtered = (games ?? []).filter((g) => {
     const typeOk = filter === "all" ? true : g.gameType === filter;
-    const statusOk = statusFilter === "all" ? true : (g as GameRow & { gameStatus?: string }).gameStatus === statusFilter;
+    const gameStatus = (g as GameRow & { gameStatus?: string }).gameStatus;
+    let statusOk = true;
+    if (statusFilter === "all") statusOk = true;
+    else if (statusFilter === "missing_odds") statusOk = g.awayBookSpread === null || g.bookTotal === null;
+    else if (statusFilter === "modeled") statusOk = !!(g.awayModelSpread && g.modelTotal);
+    else if (statusFilter === "not_modeled") statusOk = !g.awayModelSpread || !g.modelTotal;
+    else statusOk = gameStatus === statusFilter;
     return typeOk && statusOk;
   });
+
+  // Counts for new filter badges
+  const missingOddsGames = (games ?? []).filter((g) => g.awayBookSpread === null || g.bookTotal === null).length;
+  const modeledGames     = (games ?? []).filter((g) => !!(g.awayModelSpread && g.modelTotal)).length;
+  const notModeledGames  = (games ?? []).filter((g) => !g.awayModelSpread || !g.modelTotal).length;
 
   // Stats scoped to the current league+date (games is already filtered by listStaging with {gameDate, sport})
   const publishedCount   = (games ?? []).filter((g) => g.publishedToFeed).length;
@@ -1009,52 +1025,99 @@ export default function PublishProjections() {
           </button>
         </div>
 
-        {/* Status filter tabs (NCAAM only) */}
+        {/* Status filter tabs (NCAAM only) — two rows */}
         {selectedSport === "NCAAM" && (
-          <div className="px-4 pb-1 max-w-3xl mx-auto flex items-center gap-1.5">
-            {([
-              { key: "all", label: "ALL" },
-              { key: "upcoming", label: "UPCOMING" },
-              { key: "live", label: "LIVE" },
-              { key: "final", label: "FINAL" },
-            ] as const).map(({ key, label }) => {
-              const isActive = statusFilter === key;
-              const isLive = key === "live";
-              return (
-                <button
-                  key={key}
-                  onClick={() => setStatusFilter(key)}
-                  className="relative flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide transition-all"
-                  style={isActive
-                    ? isLive
-                      ? { background: "rgba(239,68,68,0.18)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.45)" }
-                      : { background: "rgba(57,255,20,0.12)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.35)" }
-                    : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
-                  }
-                >
-                  {isLive && liveCount > 0 && (
-                    <span
-                      className="inline-block rounded-full"
-                      style={{
-                        width: 6, height: 6, flexShrink: 0,
-                        background: "#ef4444",
-                        boxShadow: isActive ? "0 0 6px #ef4444" : "none",
-                        animation: "pulse 1.5s ease-in-out infinite",
-                      }}
-                    />
-                  )}
-                  {label}
-                  {isLive && liveCount > 0 && (
-                    <span
-                      className="ml-0.5 text-[10px] font-black"
-                      style={{ color: isActive ? "#ef4444" : "hsl(var(--muted-foreground))" }}
-                    >
-                      {liveCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          <div className="px-4 pb-1.5 max-w-3xl mx-auto flex flex-col gap-1.5">
+            {/* Row 1: game-status filters */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {([
+                { key: "all", label: "ALL" },
+                { key: "upcoming", label: "UPCOMING" },
+                { key: "live", label: "LIVE" },
+                { key: "final", label: "FINAL" },
+              ] as const).map(({ key, label }) => {
+                const isActive = statusFilter === key;
+                const isLive = key === "live";
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setStatusFilter(key)}
+                    className="relative flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide transition-all"
+                    style={isActive
+                      ? isLive
+                        ? { background: "rgba(239,68,68,0.18)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.45)" }
+                        : { background: "rgba(57,255,20,0.12)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.35)" }
+                      : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+                    }
+                  >
+                    {isLive && liveCount > 0 && (
+                      <span
+                        className="inline-block rounded-full"
+                        style={{
+                          width: 6, height: 6, flexShrink: 0,
+                          background: "#ef4444",
+                          boxShadow: isActive ? "0 0 6px #ef4444" : "none",
+                          animation: "pulse 1.5s ease-in-out infinite",
+                        }}
+                      />
+                    )}
+                    {label}
+                    {isLive && liveCount > 0 && (
+                      <span className="ml-0.5 text-[10px] font-black" style={{ color: isActive ? "#ef4444" : "hsl(var(--muted-foreground))" }}>
+                        {liveCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Row 2: modeling-status filters */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* MISSING ODDS */}
+              <button
+                onClick={() => setStatusFilter("missing_odds")}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide transition-all"
+                style={statusFilter === "missing_odds"
+                  ? { background: "rgba(255,107,0,0.18)", color: "#FF6B00", border: "1px solid rgba(255,107,0,0.45)" }
+                  : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+                }
+              >
+                MISSING ODDS
+                {missingOddsGames > 0 && (
+                  <span className="ml-0.5 text-[10px] font-black" style={{ color: statusFilter === "missing_odds" ? "#FF6B00" : "hsl(var(--muted-foreground))" }}>
+                    {missingOddsGames}
+                  </span>
+                )}
+              </button>
+              {/* MODELED */}
+              <button
+                onClick={() => setStatusFilter("modeled")}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide transition-all"
+                style={statusFilter === "modeled"
+                  ? { background: "rgba(57,255,20,0.15)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.4)" }
+                  : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+                }
+              >
+                MODELED
+                <span className="ml-0.5 text-[10px] font-black" style={{ color: statusFilter === "modeled" ? "#39FF14" : "hsl(var(--muted-foreground))" }}>
+                  {modeledGames}
+                </span>
+              </button>
+              {/* NOT MODELED */}
+              <button
+                onClick={() => setStatusFilter("not_modeled")}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide transition-all"
+                style={statusFilter === "not_modeled"
+                  ? { background: "rgba(255,184,0,0.15)", color: "#FFB800", border: "1px solid rgba(255,184,0,0.4)" }
+                  : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+                }
+              >
+                NOT MODELED
+                <span className="ml-0.5 text-[10px] font-black" style={{ color: statusFilter === "not_modeled" ? "#FFB800" : "hsl(var(--muted-foreground))" }}>
+                  {notModeledGames}
+                </span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -1151,9 +1214,15 @@ export default function PublishProjections() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-2">
             <span className="text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>
-              {statusFilter !== "all"
-                ? `No ${statusFilter} ${selectedSport} games on ${formatDateNav(gameDate)}`
-                : `No games found for ${formatDateNav(gameDate)}`
+              {statusFilter === "missing_odds"
+                ? `No games missing odds on ${formatDateNav(gameDate)} — all odds are in ✓`
+                : statusFilter === "modeled"
+                  ? `No modeled games yet on ${formatDateNav(gameDate)}`
+                  : statusFilter === "not_modeled"
+                    ? `All games have been modeled on ${formatDateNav(gameDate)} ✓`
+                    : statusFilter !== "all"
+                      ? `No ${statusFilter} ${selectedSport} games on ${formatDateNav(gameDate)}`
+                      : `No games found for ${formatDateNav(gameDate)}`
               }
             </span>
           </div>
