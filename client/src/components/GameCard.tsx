@@ -72,6 +72,7 @@ function getEdgeColor(diff: number): string {
 // ── Spread sign helper ────────────────────────────────────────────────────────
 function spreadSign(n: number): string {
   if (isNaN(n)) return "—";
+  if (n === 0) return "PK";
   return n > 0 ? `+${n}` : `${n}`;
 }
 
@@ -233,15 +234,13 @@ function OddsLinesPanel({
 
   const mdlAwayMl = modelAwayML ?? '—';
   const mdlHomeMl = modelHomeML ?? '—';
-
-  // Whether model data is available (any model field populated)
   const hasModelData = !isNaN(mdlAwaySpread) || !isNaN(mdlTotal) || mdlAwayMl !== '—';
 
   // Book values
-  const bkAwaySpread = !isNaN(awaySpread) ? spreadSign(awaySpread) : '—';
-  const bkHomeSpread = !isNaN(homeSpread) ? spreadSign(homeSpread) : '—';
-  const bkOverTotal  = !isNaN(bkTotal) ? String(bkTotal) : '—';
-  const bkUnderTotal = !isNaN(bkTotal) ? String(bkTotal) : '—';
+  const bkAwaySpread  = !isNaN(awaySpread) ? spreadSign(awaySpread) : '—';
+  const bkHomeSpread  = !isNaN(homeSpread) ? spreadSign(homeSpread) : '—';
+  const bkOverTotal   = !isNaN(bkTotal) ? String(bkTotal) : '—';
+  const bkUnderTotal  = !isNaN(bkTotal) ? String(bkTotal) : '—';
 
   // Model values
   const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread) ? spreadSign(mdlAwaySpread) : '—';
@@ -251,130 +250,103 @@ function OddsLinesPanel({
   const mdlAwayMlStr     = hasModelData ? mdlAwayMl : '—';
   const mdlHomeMlStr     = hasModelData ? mdlHomeMl : '—';
 
-  const cellStyle = { fontSize: 'clamp(11px,1.8vw,14px)', color: '#D3D3D3' };
-  const modelCellStyle = { fontSize: 'clamp(10px,1.6vw,13px)', color: '#39FF14' };
+  // 6-column grid: [Spread Book | Spread Model | Total Book | Total Model | ML Book | ML Model]
+  const GRID = 'grid-cols-6';
+  const bookCell  = { fontSize: 'clamp(10px,1.5vw,13px)', color: '#D3D3D3' } as React.CSSProperties;
+  const modelCell = { fontSize: 'clamp(10px,1.5vw,13px)', color: '#39FF14' } as React.CSSProperties;
+  const dimCell   = { fontSize: 'clamp(10px,1.5vw,13px)', color: 'rgba(57,255,20,0.3)' } as React.CSSProperties;
+
+  // Helper: cell value with style
+  const Cell = ({ val, style }: { val: string; style: React.CSSProperties }) => (
+    <div className="flex items-center justify-center">
+      <span className="font-bold tabular-nums text-center" style={style}>{val}</span>
+    </div>
+  );
 
   return (
     <div className="flex flex-col h-full px-3 py-3 min-w-0">
-      {/* ODDS/LINES title + Model toggle */}
+      {/* Header: ODDS/LINES title + sliding Model toggle */}
       <div className="flex items-center gap-2 mb-2">
         <div className="flex-1" style={{ height: 1, background: 'rgba(255,255,255,0.07)' }} />
         <span className="text-[13px] font-black uppercase tracking-widest" style={{ color: '#d3d3d3', opacity: 0.85 }}>
           Odds/Lines
         </span>
         <div className="flex-1" style={{ height: 1, background: 'rgba(255,255,255,0.07)' }} />
-        {/* Show/Hide Model toggle */}
+        {/* Sliding pill toggle */}
         <button
           onClick={() => setShowModel((v) => !v)}
-          className="flex-shrink-0 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest transition-all"
+          aria-pressed={showModel}
+          className="relative flex-shrink-0 flex items-center rounded-full transition-colors duration-200"
           style={{
-            border: `1px solid ${showModel ? 'rgba(57,255,20,0.5)' : 'rgba(255,255,255,0.15)'}`,
-            background: showModel ? 'rgba(57,255,20,0.12)' : 'rgba(255,255,255,0.04)',
-            color: showModel ? '#39FF14' : 'rgba(255,255,255,0.45)',
+            width: 40, height: 22,
+            background: showModel ? 'rgba(57,255,20,0.35)' : 'rgba(255,255,255,0.12)',
+            border: `1px solid ${showModel ? 'rgba(57,255,20,0.6)' : 'rgba(255,255,255,0.2)'}`,
+            padding: 2,
           }}
         >
-          {showModel ? 'Hide Model' : 'Model'}
+          <motion.span
+            layout
+            transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+            className="block rounded-full"
+            style={{
+              width: 16, height: 16,
+              background: showModel ? '#39FF14' : 'rgba(255,255,255,0.6)',
+              marginLeft: showModel ? 'auto' : 0,
+            }}
+          />
         </button>
+        <span className="text-[9px] font-bold uppercase tracking-widest flex-shrink-0" style={{ color: showModel ? '#39FF14' : 'rgba(255,255,255,0.35)' }}>
+          Model
+        </span>
       </div>
 
-      {/* Column headers: SPREAD | TOTAL | MONEYLINE */}
+      {/* Top-level column group headers: SPREAD | TOTAL | MONEYLINE */}
+      <div className={`grid ${GRID} pb-0.5`}>
+        <span className="col-span-2 text-center text-[9px] font-extrabold uppercase tracking-widest" style={{ color: '#D3D3D3' }}>Spread</span>
+        <span className="col-span-2 text-center text-[9px] font-extrabold uppercase tracking-widest" style={{ color: '#D3D3D3' }}>Total</span>
+        <span className="col-span-2 text-center text-[9px] font-extrabold uppercase tracking-widest" style={{ color: '#D3D3D3' }}>Moneyline</span>
+      </div>
+
+      {/* Sub-headers: BOOK | MODEL per group */}
       <div
-        className="grid pb-1.5 mb-0.5"
-        style={{ gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid rgba(255,255,255,0.1)' }}
+        className={`grid ${GRID} pb-1.5 mb-0.5`}
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}
       >
-        {['Spread', 'Total', 'Moneyline'].map((col) => (
+        {['Book', 'Model', 'Book', 'Model', 'Book', 'Model'].map((lbl, i) => (
           <span
-            key={col}
-            className="text-center uppercase tracking-widest font-extrabold"
-            style={{ fontSize: 10, color: '#D3D3D3' }}
+            key={i}
+            className="text-center text-[8px] font-bold uppercase tracking-widest"
+            style={{ color: lbl === 'Model' ? (showModel ? '#39FF14' : 'rgba(57,255,20,0.25)') : 'rgba(255,255,255,0.45)' }}
           >
-            {col}
+            {lbl}
           </span>
         ))}
       </div>
 
-      {/* Away row — Book */}
-      <div className="grid py-1.5" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
-        <div className="flex items-center justify-center">
-          <span className="font-bold tabular-nums text-center" style={cellStyle}>{bkAwaySpread}</span>
-        </div>
-        <div className="flex items-center justify-center">
-          <span className="font-bold tabular-nums text-center" style={cellStyle}>O {bkOverTotal}</span>
-        </div>
-        <div className="flex items-center justify-center">
-          <span className="font-bold tabular-nums text-center" style={cellStyle}>{awayMl || '—'}</span>
-        </div>
+      {/* Away row */}
+      <div className={`grid ${GRID} py-2`}>
+        <Cell val={bkAwaySpread} style={bookCell} />
+        <Cell val={mdlAwaySpreadStr} style={showModel ? modelCell : dimCell} />
+        <Cell val={`O ${bkOverTotal}`} style={bookCell} />
+        <Cell val={`O ${mdlOverTotal}`} style={showModel ? modelCell : dimCell} />
+        <Cell val={awayMl || '—'} style={bookCell} />
+        <Cell val={mdlAwayMlStr} style={showModel ? modelCell : dimCell} />
       </div>
-
-      {/* Away row — Model (animated) */}
-      <AnimatePresence initial={false}>
-        {showModel && (
-          <motion.div
-            key="model-away"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18 }}
-            className="overflow-hidden"
-          >
-            <div className="grid py-1" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
-              <div className="flex items-center justify-center">
-                <span className="font-bold tabular-nums text-center" style={modelCellStyle}>{mdlAwaySpreadStr}</span>
-              </div>
-              <div className="flex items-center justify-center">
-                <span className="font-bold tabular-nums text-center" style={modelCellStyle}>O {mdlOverTotal}</span>
-              </div>
-              <div className="flex items-center justify-center">
-                <span className="font-bold tabular-nums text-center" style={modelCellStyle}>{mdlAwayMlStr}</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Divider */}
       <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
 
-      {/* Home row — Book */}
-      <div className="grid py-1.5" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
-        <div className="flex items-center justify-center">
-          <span className="font-bold tabular-nums text-center" style={cellStyle}>{bkHomeSpread}</span>
-        </div>
-        <div className="flex items-center justify-center">
-          <span className="font-bold tabular-nums text-center" style={cellStyle}>U {bkUnderTotal}</span>
-        </div>
-        <div className="flex items-center justify-center">
-          <span className="font-bold tabular-nums text-center" style={cellStyle}>{homeMl || '—'}</span>
-        </div>
+      {/* Home row */}
+      <div className={`grid ${GRID} py-2`}>
+        <Cell val={bkHomeSpread} style={bookCell} />
+        <Cell val={mdlHomeSpreadStr} style={showModel ? modelCell : dimCell} />
+        <Cell val={`U ${bkUnderTotal}`} style={bookCell} />
+        <Cell val={`U ${mdlUnderTotal}`} style={showModel ? modelCell : dimCell} />
+        <Cell val={homeMl || '—'} style={bookCell} />
+        <Cell val={mdlHomeMlStr} style={showModel ? modelCell : dimCell} />
       </div>
 
-      {/* Home row — Model (animated) */}
-      <AnimatePresence initial={false}>
-        {showModel && (
-          <motion.div
-            key="model-home"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18 }}
-            className="overflow-hidden"
-          >
-            <div className="grid py-1" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
-              <div className="flex items-center justify-center">
-                <span className="font-bold tabular-nums text-center" style={modelCellStyle}>{mdlHomeSpreadStr}</span>
-              </div>
-              <div className="flex items-center justify-center">
-                <span className="font-bold tabular-nums text-center" style={modelCellStyle}>U {mdlUnderTotal}</span>
-              </div>
-              <div className="flex items-center justify-center">
-                <span className="font-bold tabular-nums text-center" style={modelCellStyle}>{mdlHomeMlStr}</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Edge verdict (when model is shown and data exists) */}
+      {/* Edge verdict (when model is toggled on and data exists) */}
       {showModel && hasModelData && (!isNaN(spreadDiff) || !isNaN(totalDiff)) && (
         <EdgeVerdict
           spreadDiff={isNaN(spreadDiff) ? null : spreadDiff}
