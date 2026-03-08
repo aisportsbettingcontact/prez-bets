@@ -48,23 +48,15 @@ function timeToMinutes(time: string | null | undefined): number {
   return h * 60 + m;
 }
 
-/** Games starting at midnight (00:00) belong to the previous calendar day. */
-function effectiveGameDate(gameDate: string, startTimeEst: string | null | undefined): string {
-  const mins = timeToMinutes(startTimeEst);
-  if (mins === 0) {
-    try {
-      const d = new Date(gameDate + "T00:00:00");
-      d.setDate(d.getDate() - 1);
-      return d.toISOString().slice(0, 10);
-    } catch { return gameDate; }
-  }
+/** Games starting at midnight (00:00 ET) are stored under their correct calendar
+ * date by the backend. No frontend date adjustment needed. */
+function effectiveGameDate(gameDate: string, _startTimeEst: string | null | undefined): string {
   return gameDate;
 }
 
-/** Sort key: midnight (00:00) sorts after all other times as end of previous day */
+/** Sort key: midnight (00:00) sorts first (beginning of day = 0 minutes) */
 function sortableMinutes(time: string | null | undefined): number {
-  const m = timeToMinutes(time);
-  return m === 0 ? 1440 : m;
+  return timeToMinutes(time);
 }
 
 function formatDateHeader(dateStr: string): string {

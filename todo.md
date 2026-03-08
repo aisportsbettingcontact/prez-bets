@@ -748,3 +748,5 @@
 - [x] Replace BETTING SPLITS tab icon with money bag image
 - [x] Replace NCAAM filter icon with March Madness logo
 - [x] Replace NBA filter icon with NBA logo
+- [x] Fix midnight EST game date: remove "pull from next day" logic in vsinAutoRefresh.ts
+- [x] Fix frontend effectiveGameDate helper to not subtract a day for midnight games
