@@ -748,53 +748,24 @@ export function GameCard({ game }: GameCardProps) {
         </button>
 
         {/*
-          ── DESKTOP (≥ lg / 1024px): 3-column layout ──────────────────────────
+          ALL SCREEN SIZES: single horizontal 3-column row
           Score panel | Model table | Betting splits
-          Widths: ~26% | ~40% | ~34%
-
-          ── MOBILE (< lg): 2-row layout ───────────────────────────────────────
-          Row 1: Score panel (left ~45%) | Betting splits (right ~55%)
-          Row 2: Model table (full width)
+          The card uses overflow-x: auto so it scrolls on very small screens
+          rather than ever stacking sections vertically.
         */}
-
-        {/* DESKTOP: 3-column flex row — fills full card width */}
-        <div className="hidden lg:flex items-stretch w-full">
-          {/* Col 1: Score panel — fixed width, flush left */}
-          <div className="flex-shrink-0" style={{ width: "22%", minWidth: 200, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+        <div className="flex items-stretch w-full" style={{ overflowX: "auto" }}>
+          {/* Col 1: Score panel */}
+          <div className="flex-shrink-0" style={{ width: "22%", minWidth: 180, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
             <ScorePanel />
           </div>
 
-          {/* Col 2: Model table — grows to fill remaining space */}
-          <div className="flex-shrink-0" style={{ width: "28%", borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+          {/* Col 2: Model table */}
+          <div className="flex-shrink-0" style={{ width: "28%", minWidth: 200, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
             <ModelTablePanel />
           </div>
 
-          {/* Col 3: Betting splits — takes the rest */}
-          <div className="flex-1 px-3 py-3" style={{ minWidth: 0 }}>
-            <BettingSplitsPanel
-              game={game}
-              awayLabel={awayName}
-              homeLabel={homeName}
-              awayNickname={awayNickname}
-              homeNickname={homeNickname}
-            />
-          </div>
-        </div>
-
-        {/* MOBILE: 3-row stacked layout — Score | Model Table | Betting Splits */}
-        <div className="lg:hidden">
-          {/* Row 1: Score panel full width */}
-          <div style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}>
-            <ScorePanel />
-          </div>
-
-          {/* Row 2: Model table full width */}
-          <div style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}>
-            <ModelTablePanel />
-          </div>
-
-          {/* Row 3: Betting splits full width */}
-          <div className="px-2 py-3">
+          {/* Col 3: Betting splits */}
+          <div className="flex-1 px-3 py-3" style={{ minWidth: 220 }}>
             <BettingSplitsPanel
               game={game}
               awayLabel={awayName}

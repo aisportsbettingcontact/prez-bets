@@ -622,3 +622,10 @@
 - [x] Desktop layout confirmed correct: Score | Model Table | Betting Splits (3 columns)
 - [x] All 20 tests passing, no TypeScript errors
 - [x] Save checkpoint and deliver
+
+## GameCard Always-Horizontal Layout (2026-03-08)
+- [x] Remove all responsive stacking — single horizontal 3-column row at ALL screen sizes
+- [x] Score | Book/Model Table | Betting Splits always left-to-right, never vertical
+- [x] overflow-x: auto on the card wrapper for very small screens
+- [x] All 20 tests passing, no TypeScript errors
+- [x] Save checkpoint and deliver
