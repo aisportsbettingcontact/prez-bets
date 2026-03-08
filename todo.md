@@ -690,3 +690,8 @@
 - [x] Create /splits page (BettingSplitsPage) — score + BETTING SPLITS only
 - [x] Register both routes in App.tsx
 - [x] Page-tab navigation (Model Projections | Betting Splits) in both page headers
+
+## Prominent Tab Bar Navigation
+
+- [x] Replace small pill tabs with full-width underline tab bar in ModelProjections header
+- [x] Replace small pill tabs with full-width underline tab bar in BettingSplits header

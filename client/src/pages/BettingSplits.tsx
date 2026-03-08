@@ -279,8 +279,6 @@ export default function BettingSplitsPage() {
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
             <BarChart3 className="flex-shrink-0 text-primary" style={{ width: "clamp(14px, 2.5vw, 22px)", height: "clamp(14px, 2.5vw, 22px)" }} />
             <span className="font-black text-white whitespace-nowrap" style={{ fontSize: "clamp(13px, 3vw, 22px)", letterSpacing: "0.08em" }}>PREZ BETS</span>
-            <span className="text-border" style={{ fontSize: "clamp(10px, 2vw, 13px)" }}>|</span>
-            <span className="font-medium whitespace-nowrap" style={{ fontSize: "clamp(11px, 2.4vw, 18px)", letterSpacing: "0.1em", color: "#9CA3AF" }}>BETTING SPLITS</span>
           </div>
           <div className="flex-1" />
           {/* User menu */}
@@ -334,18 +332,26 @@ export default function BettingSplitsPage() {
           </div>
         </div>
 
-        {/* Row 2: Page tabs */}
-        <div className="px-4 pb-1 flex items-center gap-1">
-          <Link href="/projections">
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-              style={{ background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }}>
-              <TrendingUp size={12} /> Model Projections
+        {/* Row 2: Page tab bar */}
+        <div className="flex w-full" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+          <Link href="/projections" className="flex-1">
+            <button
+              className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-bold tracking-wide transition-colors"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              <TrendingUp size={14} />
+              <span>AI MODEL PROJECTIONS</span>
             </button>
           </Link>
-          <Link href="/splits">
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-              style={{ background: "rgba(57,255,20,0.15)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.4)" }}>
-              <PieChart size={12} /> Betting Splits
+          <Link href="/splits" className="flex-1">
+            <button
+              className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-bold tracking-wide transition-colors relative"
+              style={{ color: "#39FF14" }}
+            >
+              <PieChart size={14} />
+              <span>BETTING SPLITS</span>
+              {/* active underline */}
+              <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full" style={{ background: "#39FF14" }} />
             </button>
           </Link>
         </div>
