@@ -155,13 +155,28 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
     try {
       const yyyymmdd = dateStr.replace(/-/g, "");
       const ncaaGames = await fetchNcaaGames(yyyymmdd);
+
+      // Midnight ET games (e.g. Hawaii 9 PM PT = 12:00 AM ET next day) appear on
+      // the NEXT day's NCAA API schedule page. Fetch the next day and pull any
+      // midnight games (startTimeEst = '00:00') back into today's date bucket.
+      const nextDay = new Date(dateStr + "T00:00:00Z");
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      const nextDayStr = nextDay.toISOString().slice(0, 10);
+      const nextDayYyyymmdd = nextDayStr.replace(/-/g, "");
+      try {
+        const nextDayGames = await fetchNcaaGames(nextDayYyyymmdd);
+        const midnightGames = nextDayGames.filter(g => g.startTimeEst === "00:00");
+        if (midnightGames.length > 0) {
+          console.log(`[VSiNAutoRefresh] NCAA: ${midnightGames.length} midnight game(s) from ${nextDayStr} moved to ${dateStr}`);
+          ncaaGames.push(...midnightGames);
+        }
+      } catch {
+        // Non-fatal — next-day fetch is best-effort
+      }
+
       startTimeMaps.set(dateStr, buildStartTimeMap(ncaaGames));
       ncaaGamesByDate.set(dateStr, ncaaGames);
       console.log(`[VSiNAutoRefresh] NCAA: ${ncaaGames.length} games for ${dateStr}`);
-
-      // Note: midnight ET games (e.g. Hawaii 9 PM PT = 12:00 AM ET) are already
-      // returned by the NCAA API under the correct ET calendar date. No prior-day
-      // adjustment is needed — they stay under the date the API reports them.
     } catch (ncaaErr) {
       console.warn(`[VSiNAutoRefresh] NCAA fetch failed for ${dateStr} (non-fatal):`, ncaaErr);
     }
@@ -292,16 +307,15 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
         continue;
       }
 
-      // The NCAA API already places each game under the correct ET calendar date.
-      // No date adjustment is needed — use dateStr as-is.
+      // Midnight games (startTimeEst = '00:00') were already pulled from the next
+      // day's NCAA schedule and added to this date's bucket, so dateStr is always
+      // the correct gameDate to store — no further adjustment needed.
       const effectiveDateStr = dateStr;
 
       const byContestId = await getGameByNcaaContestId(contestId);
       if (byContestId) continue;
 
-      const existingForEffectiveDate = effectiveDateStr !== dateStr
-        ? await listGamesByDate(effectiveDateStr, "NCAAM")
-        : existing;
+      const existingForEffectiveDate = existing;
       const bySlug = existingForEffectiveDate.find(
         e => slugsMatch(e.awayTeam, awaySeoname) && slugsMatch(e.homeTeam, homeSeoname)
       );
@@ -614,6 +628,19 @@ async function refreshNcaamScores(): Promise<void> {
   try {
     const yyyymmdd = todayStr.replace(/-/g, "");
     const ncaaGames = await fetchNcaaGames(yyyymmdd);
+
+    // Also fetch next-day midnight games (stored under today's date in DB)
+    const nextDay = new Date(todayStr + "T00:00:00Z");
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    const nextDayYyyymmdd = nextDay.toISOString().slice(0, 10).replace(/-/g, "");
+    try {
+      const nextDayGames = await fetchNcaaGames(nextDayYyyymmdd);
+      const midnightGames = nextDayGames.filter(g => g.startTimeEst === "00:00");
+      ncaaGames.push(...midnightGames);
+    } catch {
+      // Non-fatal
+    }
+
     const existing = await listGamesByDate(todayStr, "NCAAM");
 
     let updated = 0;

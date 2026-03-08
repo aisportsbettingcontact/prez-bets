@@ -579,3 +579,12 @@
 - [x] Verified: 114 NCAAM games now visible (90 from 03/07 including 5 live + 24 from 03/08)
 - [x] All 20 tests passing
 - [x] Save checkpoint and deliver
+
+## Midnight Game Date Fix (2026-03-08)
+- [x] Delete duplicate 03/08 Long Beach State @ Hawaii record (id=930320)
+- [x] Update 03/07 record (id=1620009) with correct startTimeEst=00:00
+- [x] Fix NCAA scraper: fetch next-day midnight games and store them under current day's date
+- [x] Fix score refresh: also fetch next-day midnight games for live score updates
+- [x] Verified: long_beach_st @ hawaii now shows as date=2026-03-07 startTime=00:00 status=live
+- [x] All 20 tests passing
+- [x] Save checkpoint and deliver
