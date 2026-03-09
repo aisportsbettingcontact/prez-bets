@@ -1430,8 +1430,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     </div>
                   ))}
                 </div>
-                {/* Away row */}
-                <div className="grid grid-cols-3 py-2">
+                {/* Away row — height: 44px shared with frozen panel away row */}
+                <div className="grid grid-cols-3" style={{ height: '44px', alignItems: 'center' }}>
                   <div className="grid grid-cols-2">
                     <span className="text-center tabular-nums" style={bookStyle(awaySpreadIsEdge)}>{bkAwaySpreadStr}</span>
                     <span className="text-center tabular-nums" style={modelStyle(awaySpreadIsEdge)}>{mdlAwaySpreadStr}</span>
@@ -1447,8 +1447,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 </div>
                 {/* Divider */}
                 <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
-                {/* Home row */}
-                <div className="grid grid-cols-3 py-2">
+                {/* Home row — height: 44px shared with frozen panel home row */}
+                <div className="grid grid-cols-3" style={{ height: '44px', alignItems: 'center' }}>
                   <div className="grid grid-cols-2">
                     <span className="text-center tabular-nums" style={bookStyle(homeSpreadIsEdge)}>{bkHomeSpreadStr}</span>
                     <span className="text-center tabular-nums" style={modelStyle(homeSpreadIsEdge)}>{mdlHomeSpreadStr}</span>
@@ -1478,12 +1478,12 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   flexDirection: 'column',
                   justifyContent: 'center',  /* vertically center all team rows + status */
                   alignItems: 'stretch',
-                  padding: '8px 6px',
-                  gap: 4,
+                  padding: '0 6px',  /* no vertical padding — row heights are fixed */
+                  gap: 0,
                   alignSelf: 'stretch',  /* fill full card height so centering works */
                 }}>
-                  {/* Status row: star + time/status */}
-                  <div className="flex items-center gap-1 mb-0.5">
+                  {/* Status row: flex-1 to absorb OddsTable header height (pt-2 + col headers + sub-headers + pb-1 ≈ auto) */}
+                  <div className="flex items-center gap-1" style={{ flex: '0 0 auto', paddingTop: '8px', paddingBottom: '4px' }}>
                     {isAppAuthed && (
                       <button
                         onClick={handleStarClick}
@@ -1518,8 +1518,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     )}
                   </div>
 
-                  {/* Away row: explicit minHeight matches OddsTable away row (py-2 = 8px top+bottom + ~20px content ≈ 36px) */}
-                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', minHeight: '36px' }}>
+                  {/* Away row: height: 44px — matches OddsTable away row exactly */}
+                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', height: '44px' }}>
                     {/* Logo + name block */}
                     <div className="flex items-center gap-1 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
                       <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={18} />
@@ -1562,8 +1562,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   {/* Divider */}
                   <div style={{ height: 1, background: 'hsl(var(--border) / 0.4)' }} />
 
-                  {/* Home row: explicit minHeight matches OddsTable home row */}
-                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', minHeight: '36px' }}>
+                  {/* Home row: height: 44px — matches OddsTable home row exactly */}
+                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', height: '44px' }}>
                     {/* Logo + name block */}
                     <div className="flex items-center gap-1 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
                       <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={18} />
