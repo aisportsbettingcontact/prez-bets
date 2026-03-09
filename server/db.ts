@@ -226,7 +226,7 @@ export async function deleteOldGames(): Promise<number> {
 
 // ─── App Users (custom accounts) ─────────────────────────────────────────────────
 
-import { appUsers, type InsertAppUser } from "../drizzle/schema";
+import { appUsers, type InsertAppUser, userFavoriteGames } from "../drizzle/schema";
 export async function createAppUser(data: InsertAppUser) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -566,4 +566,38 @@ export async function getGameTeamColors(
     getTeamColors(homeDbSlug, sport),
   ]);
   return { away, home };
+}
+
+// ─── User Favorite Games ─────────────────────────────────────────────────────
+
+export async function getFavoriteGameIds(appUserId: number): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ gameId: userFavoriteGames.gameId })
+    .from(userFavoriteGames)
+    .where(eq(userFavoriteGames.appUserId, appUserId));
+  return rows.map((r) => r.gameId);
+}
+
+export async function toggleFavoriteGame(
+  appUserId: number,
+  gameId: number
+): Promise<{ favorited: boolean }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const existing = await db
+    .select({ id: userFavoriteGames.id })
+    .from(userFavoriteGames)
+    .where(and(eq(userFavoriteGames.appUserId, appUserId), eq(userFavoriteGames.gameId, gameId)))
+    .limit(1);
+  if (existing.length > 0) {
+    await db
+      .delete(userFavoriteGames)
+      .where(and(eq(userFavoriteGames.appUserId, appUserId), eq(userFavoriteGames.gameId, gameId)));
+    return { favorited: false };
+  } else {
+    await db.insert(userFavoriteGames).values({ appUserId, gameId });
+    return { favorited: true };
+  }
 }

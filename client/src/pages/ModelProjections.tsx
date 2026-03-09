@@ -205,7 +205,7 @@ export default function ModelProjections() {
     return () => obs.disconnect();
   }, []);
 
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { appUser, isOwner, loading: appAuthLoading, refetch: refetchAppUser } = useAppAuth();
 
   useEffect(() => {
@@ -279,6 +279,29 @@ export default function ModelProjections() {
   }, [allGames, selectedStatuses, selectedDate]);
 
   const { data: lastRefresh } = trpc.games.lastRefresh.useQuery(undefined, { refetchInterval: 60_000 });
+
+  // ── Favorites ────────────────────────────────────────────────────────────────
+  const { data: favData } = trpc.favorites.getMyFavorites.useQuery(undefined, {
+    enabled: isAuthenticated,
+    refetchOnWindowFocus: false,
+  });
+  const [optimisticFavIds, setOptimisticFavIds] = useState<Set<number>>(new Set());
+  const favIds = useMemo(() => {
+    const base = new Set(favData?.favoriteGameIds ?? []);
+    Array.from(optimisticFavIds).forEach(id => {
+      if (base.has(id)) base.delete(id); else base.add(id);
+    });
+    return base;
+  }, [favData, optimisticFavIds]);
+  const utils = trpc.useUtils();
+  const toggleFavMutation = trpc.favorites.toggle.useMutation({
+    onSuccess: () => { utils.favorites.getMyFavorites.invalidate(); setOptimisticFavIds(new Set()); },
+    onError: () => { setOptimisticFavIds(new Set()); },
+  });
+  const handleToggleFavorite = (gameId: number) => {
+    setOptimisticFavIds(prev => { const next = new Set(prev); if (next.has(gameId)) next.delete(gameId); else next.add(gameId); return next; });
+    toggleFavMutation.mutate({ gameId });
+  };
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
   const splitsAgoLabel = useMemo(() => {
@@ -541,7 +564,7 @@ export default function ModelProjections() {
               <div className="bg-card mx-0">
                 {gamesByDate[date]!.map((game) => (
                   <div key={game!.id} id={`game-card-${game!.id}`}>
-                    <GameCard game={game!} mode="projections" showModel={showModel} onToggleModel={toggleModel} />
+                    <GameCard game={game!} mode="projections" showModel={showModel} onToggleModel={toggleModel} favoriteGameIds={favIds} onToggleFavorite={handleToggleFavorite} />
                   </div>
                 ))}
               </div>

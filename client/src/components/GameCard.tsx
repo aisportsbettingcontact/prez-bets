@@ -19,7 +19,7 @@
  *   └─────────────────────────────┴──────────────────────────────────────┘
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { toast } from "sonner";
@@ -27,6 +27,8 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/lib/trpc";
 import { getTeamByDbSlug } from "@shared/ncaamTeams";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { BettingSplitsPanel } from "./BettingSplitsPanel";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
@@ -455,9 +457,29 @@ interface GameCardProps {
   /** When provided by a parent page, overrides internal model toggle state */
   showModel?: boolean;
   onToggleModel?: () => void;
+  /** Set of favorited game IDs from the parent — avoids per-card fetches */
+  favoriteGameIds?: Set<number>;
+  onToggleFavorite?: (gameId: number) => void;
 }
 
-export function GameCard({ game, mode = "full", showModel: showModelProp, onToggleModel: onToggleModelProp }: GameCardProps) {
+export function GameCard({ game, mode = "full", showModel: showModelProp, onToggleModel: onToggleModelProp, favoriteGameIds, onToggleFavorite }: GameCardProps) {
+  const { isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
+  const toggleFavMutation = trpc.favorites.toggle.useMutation({
+    onSuccess: () => {
+      utils.favorites.getMyFavorites.invalidate();
+    },
+  });
+  const isFavorited = favoriteGameIds?.has(game.id) ?? false;
+  const handleStarClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAuthenticated) return;
+    if (onToggleFavorite) {
+      onToggleFavorite(game.id);
+    } else {
+      toggleFavMutation.mutate({ gameId: game.id });
+    }
+  }, [isAuthenticated, onToggleFavorite, game.id, toggleFavMutation]);
   const awayBookSpread = toNum(game.awayBookSpread);
   const homeBookSpread = toNum(game.homeBookSpread);
   const awayModelSpread = toNum(game.awayModelSpread);
@@ -759,6 +781,42 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           borderLeft: `3px solid ${borderColor}`,
         }}
       >
+        {/* ── Star / Favorite button ── */}
+        {isAuthenticated && (
+          <button
+            onClick={handleStarClick}
+            aria-label={isFavorited ? "Remove from favorites" : "Add to favorites"}
+            style={{
+              position: "absolute",
+              top: 6,
+              right: 8,
+              zIndex: 20,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 2,
+              lineHeight: 1,
+              opacity: isFavorited ? 1 : 0.35,
+              transition: "opacity 0.15s, transform 0.15s",
+              color: isFavorited ? "#FFD700" : "hsl(var(--muted-foreground))",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+            onMouseLeave={e => (e.currentTarget.style.opacity = isFavorited ? "1" : "0.35")}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill={isFavorited ? "#FFD700" : "none"}
+              stroke={isFavorited ? "#FFD700" : "currentColor"}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          </button>
+        )}
         {/*
           DESKTOP (≥ lg): single horizontal 3-column row
             Score panel | Odds/Lines | Betting Splits
@@ -868,15 +926,36 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
         {/* ── Mobile layout ── */}
         <div className="flex lg:hidden flex-col w-full">
-          {/* Projections mode: Row 1 = Score | Odds/Lines, Row 2 = EdgeVerdict (full width below) */}
+          {/*
+            All mobile modes use the same sticky-left-panel pattern:
+            - The outer div is the scroll container (overflowX: auto)
+            - The score panel is sticky left (position: sticky; left: 0; z-index: 10)
+              so it stays frozen while the user scrolls Odds/Lines + Splits to the right
+            - The scrollable content (Odds/Lines, Splits) slides under the frozen panel
+          */}
+
+          {/* Projections mode */}
           {mode === "projections" && (
             <div className="flex flex-col w-full">
-              {/* Row 1: Score panel + Odds/Lines table side by side */}
-              <div className="flex items-stretch w-full" style={{ overflowX: "auto" }}>
-                <div style={{ minWidth: 140, width: "28%", borderRight: "1px solid hsl(var(--border) / 0.5)", flexShrink: 0 }}>
+              {/* Horizontal scroll row: frozen Score | scrollable Odds/Lines */}
+              <div className="flex items-stretch w-full" style={{ overflowX: "auto", position: "relative" }}>
+                {/* Frozen score panel */}
+                <div
+                  style={{
+                    position: "sticky",
+                    left: 0,
+                    zIndex: 10,
+                    flexShrink: 0,
+                    width: 130,
+                    minWidth: 130,
+                    borderRight: "1px solid hsl(var(--border) / 0.5)",
+                    background: "hsl(var(--background))",
+                  }}
+                >
                   <ScorePanel />
                 </div>
-                <div style={{ minWidth: 180, flex: "1 1 0%" }} className="flex flex-col justify-center">
+                {/* Scrollable: Odds/Lines */}
+                <div style={{ minWidth: 220, flex: "1 1 0%" }} className="flex flex-col justify-center">
                   <OddsLinesPanel
                     awayBookSpread={awayBookSpread}
                     homeBookSpread={homeBookSpread}
@@ -930,15 +1009,26 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             </div>
           )}
 
-          {/* Splits mode: CompactScore (fixed narrow left) + Splits (flex-1 right) */}
+          {/* Splits mode: frozen CompactScore + scrollable Splits */}
           {mode === "splits" && (
-            <div className="flex items-stretch w-full">
-              {/* Compact score: fixed 130px so splits get the majority of space */}
-              <div style={{ width: 130, minWidth: 130, flexShrink: 0, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+            <div className="flex items-stretch w-full" style={{ overflowX: "auto", position: "relative" }}>
+              {/* Frozen compact score */}
+              <div
+                style={{
+                  position: "sticky",
+                  left: 0,
+                  zIndex: 10,
+                  flexShrink: 0,
+                  width: 120,
+                  minWidth: 120,
+                  borderRight: "1px solid hsl(var(--border) / 0.5)",
+                  background: "hsl(var(--background))",
+                }}
+              >
                 <CompactScorePanel />
               </div>
-              {/* Splits: takes all remaining width */}
-              <div className="flex-1 min-w-0">
+              {/* Scrollable splits */}
+              <div style={{ minWidth: 260, flex: "1 1 0%" }}>
                 <BettingSplitsPanel
                   game={game}
                   awayLabel={awayName}
@@ -950,13 +1040,26 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             </div>
           )}
 
-          {/* Full mode: Score (left) | Odds+Splits (right) */}
+          {/* Full mode: frozen Score + scrollable Odds/Lines + Betting Splits */}
           {mode === "full" && (
-            <div className="flex items-stretch w-full" style={{ overflowX: "auto" }}>
-              <div style={{ width: 140, minWidth: 140, flexShrink: 0, borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+            <div className="flex items-stretch w-full" style={{ overflowX: "auto", position: "relative" }}>
+              {/* Frozen score panel */}
+              <div
+                style={{
+                  position: "sticky",
+                  left: 0,
+                  zIndex: 10,
+                  flexShrink: 0,
+                  width: 130,
+                  minWidth: 130,
+                  borderRight: "1px solid hsl(var(--border) / 0.5)",
+                  background: "hsl(var(--background))",
+                }}
+              >
                 <ScorePanel />
               </div>
-              <div style={{ minWidth: 160, flex: "1 1 0%", borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+              {/* Scrollable: Odds/Lines then Betting Splits */}
+              <div style={{ minWidth: 200, flex: "1 1 0%", borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
                 <OddsLinesPanel
                   awayBookSpread={awayBookSpread}
                   homeBookSpread={homeBookSpread}
@@ -982,7 +1085,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   onToggleModel={toggleModel}
                 />
               </div>
-              <div style={{ minWidth: 180, flex: "1 1 0%" }} className="px-3 py-2">
+              <div style={{ minWidth: 220, flex: "1 1 0%" }} className="px-3 py-2">
                 <BettingSplitsPanel
                   game={game}
                   awayLabel={awayName}

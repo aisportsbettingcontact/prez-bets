@@ -221,3 +221,21 @@ export const ncaamTeams = mysqlTable("ncaam_teams", {
 
 export type NcaamTeamRow = typeof ncaamTeams.$inferSelect;
 export type InsertNcaamTeam = typeof ncaamTeams.$inferInsert;
+
+// ─── User Favorite Games ─────────────────────────────────────────────────────
+export const userFavoriteGames = mysqlTable(
+  "user_favorite_games",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    /** The app_user who favorited the game */
+    appUserId: int("appUserId").notNull(),
+    /** The game id being favorited */
+    gameId: int("gameId").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (t) => ({
+    uniq: uniqueIndex("user_game_uniq").on(t.appUserId, t.gameId),
+  })
+);
+export type UserFavoriteGame = typeof userFavoriteGames.$inferSelect;
+export type InsertUserFavoriteGame = typeof userFavoriteGames.$inferInsert;

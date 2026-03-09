@@ -22,7 +22,7 @@ import { storagePut } from "./storage";
 import { parseFileBuffer, detectSportFromFilename, detectDateFromFilename } from "./fileParser";
 import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure } from "./routers/appUsers";
-import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById } from "./db";
+import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById, getFavoriteGameIds, toggleFavoriteGame } from "./db";
 import { getLastRefreshResult, runVsinRefresh, refreshAllScoresNow } from "./vsinAutoRefresh";
 import { syncNbaModelFromSheet, getLastNbaModelSyncResult } from "./nbaModelSync";
 import { VALID_DB_SLUGS } from "@shared/ncaamTeams";
@@ -298,6 +298,21 @@ export const appRouter = router({
       const oddsResult = result.status === 'fulfilled' ? result.value : null;
       return oddsResult ?? { refreshedAt: now, scoresRefreshedAt: now, updated: 0, inserted: 0, ncaaInserted: 0, nbaUpdated: 0, nbaInserted: 0, nbaScheduleInserted: 0, total: 0, nbaTotal: 0, gameDate: "" };
     }),
+  }),
+
+  // ─── Favorites ──────────────────────────────────────────────────────────────
+  favorites: router({
+    /** Get all favorited game IDs for the current user. */
+    getMyFavorites: protectedProcedure.query(async ({ ctx }) => {
+      const ids = await getFavoriteGameIds(ctx.user.id);
+      return { favoriteGameIds: ids };
+    }),
+    /** Toggle a game as favorited/unfavorited for the current user. */
+    toggle: protectedProcedure
+      .input(z.object({ gameId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        return toggleFavoriteGame(ctx.user.id, input.gameId);
+      }),
   }),
 
   // ─── Team Colors ─────────────────────────────────────────────────────────────
