@@ -308,7 +308,7 @@ export default function BettingSplitsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       {showAgeModal && <AgeModal onAccept={() => acceptTermsMutation.mutate()} onClose={appLogout} />}
 
       {/* ── Sticky Header ── */}
@@ -464,7 +464,7 @@ export default function BettingSplitsPage() {
       </header>
 
       {/* ── Main Feed ── */}
-      <main className="w-full pb-8">
+      <main className="w-full pb-1">
         {gamesLoading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />

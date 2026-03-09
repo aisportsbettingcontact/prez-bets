@@ -1012,7 +1012,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {mode === "projections" && (
             <div className="flex flex-col w-full">
               {/* Grid row: fixed score column | scrollable odds column */}
-              <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", width: "100%" }}>
+              {/* Score panel: 160px — wide enough for team name+score, narrow enough to give Odds/Lines full space */}
+              <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", width: "100%" }}>
                 {/* Fixed score panel — NOT inside scroll container */}
                 <div
                   style={{
@@ -1033,8 +1034,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   }}
                   className="flex flex-col justify-center"
                 >
-                  {/* minWidth = 100vw - 180px so when scrolled fully right, OddsLines is completely hidden behind score panel */}
-                  <div style={{ minWidth: "calc(100vw - 180px)" }} className="flex flex-col justify-center">
+                  {/* minWidth = calc(100vw - 160px): exactly fills scroll container so when scrolled fully right, 0px bleeds through */}
+                  <div style={{ minWidth: "calc(100vw - 160px)" }} className="flex flex-col justify-center">
                     <OddsLinesPanel
                       awayBookSpread={awayBookSpread}
                       homeBookSpread={homeBookSpread}
@@ -1126,7 +1127,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
           {/* Full mode: fixed Score column | scrollable Odds/Lines + Betting Splits side by side */}
           {mode === "full" && (
-            <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", width: "100%" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", width: "100%" }}>
               {/* Fixed score panel — NOT inside scroll container */}
               <div
                 style={{
@@ -1148,10 +1149,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   alignItems: "stretch",
                 }}
               >
-                {/* Odds/Lines — minWidth = 100vw - 180px so it fully tucks under score panel when scrolled to end */}
+                {/* Odds/Lines — minWidth = calc(100vw - 160px): exactly fills scroll container, zero bleed when fully scrolled */}
                 <div
                   style={{
-                    minWidth: "calc(100vw - 180px)",
+                    minWidth: "calc(100vw - 160px)",
                     flex: "0 0 auto",
                     borderRight: "1px solid hsl(var(--border) / 0.5)",
                   }}

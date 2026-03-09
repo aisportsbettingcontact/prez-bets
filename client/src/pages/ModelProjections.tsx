@@ -533,7 +533,7 @@ export default function ModelProjections() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       {showAgeModal && <AgeModal onAccept={() => acceptTermsMutation.mutate()} onClose={appLogout} />}
 
       {/* ── In-page favorite notifications (top-right corner) ── */}
@@ -762,7 +762,7 @@ export default function ModelProjections() {
       </header>
 
       {/* ── Main Feed ── */}
-      <main className="w-full pb-8">
+      <main className="w-full pb-1">
 
         {/* ── UNIFIED FEED (projections + splits always shown) ── */}
         <>
