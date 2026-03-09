@@ -786,3 +786,7 @@
 - [ ] Definitive fix: scrolled content must be fully hidden/clipped behind sticky score panel (no overlap/bleed-through on mobile)
 - [x] Redesign Publish Projections mobile card layout: stacked SPREAD/TOTAL/MONEYLINE sections (replaces cramped side-by-side layout that caused input overlap at 375px-428px)
 - [x] Fix /feed query error: replace unsupported CASE WHEN ORDER BY with app-level sort in listGames, listGamesByDate, listStagingGames, and listStagingGamesRange
+- [x] Mobile GameCard redesign: team abbreviations in score panel, sticky BOOK/MODEL LINES + BETTING MARKET SPLITS + EDGE tab header, date title left-aligned above score, section order EDGE→BOOK ODDS→MODEL PROJECTIONS→SPLITS, toggle dimming behavior
+- [ ] Desktop/tablet GameCard: always show full team name + nickname (two lines) in score panel for all sports (NCAAM: school + nickname, NBA: city + team name)
+- [x] Implement production-grade structured client-side logging in GameCard (render, tab switch, edge calc, data validation)
+- [x] Implement structured server-side logging in routers.ts and db.ts (request tracing, timing, error context, query diagnostics) — server/logger.ts created

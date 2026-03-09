@@ -698,30 +698,6 @@ export default function ModelProjections() {
               <span className="font-semibold hidden sm:inline" style={{ color: "#a3a3a3", letterSpacing: "0.06em", fontSize: "clamp(10px, 1.8vw, 12px)" }}>{selectedSport === "NCAAM" ? "Men's College Basketball" : "NBA Basketball"}</span>
             </div>
             <div className="flex-1" />
-            {/* Page-level Model toggle */}
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <button
-                onClick={toggleModel}
-                aria-pressed={showModel}
-                className="relative flex-shrink-0 flex items-center rounded-full transition-colors duration-200"
-                style={{
-                  width: 36, height: 20,
-                  background: showModel ? 'rgba(57,255,20,0.35)' : 'rgba(255,255,255,0.12)',
-                  border: `1px solid ${showModel ? 'rgba(57,255,20,0.6)' : 'rgba(255,255,255,0.2)'}`,
-                  padding: 2,
-                }}
-              >
-                <span
-                  className="block rounded-full transition-all duration-200"
-                  style={{
-                    width: 14, height: 14,
-                    background: showModel ? '#39FF14' : 'rgba(255,255,255,0.6)',
-                    marginLeft: showModel ? 'auto' : 0,
-                  }}
-                />
-              </button>
-              <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#ffffff' }}>Model</span>
-            </div>
           </div>
         )}
 
@@ -733,30 +709,6 @@ export default function ModelProjections() {
               FAVORITED GAMES
             </span>
             <div className="flex-1" />
-            {/* Model toggle also available in favorites tab */}
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <button
-                onClick={toggleModel}
-                aria-pressed={showModel}
-                className="relative flex-shrink-0 flex items-center rounded-full transition-colors duration-200"
-                style={{
-                  width: 36, height: 20,
-                  background: showModel ? 'rgba(57,255,20,0.35)' : 'rgba(255,255,255,0.12)',
-                  border: `1px solid ${showModel ? 'rgba(57,255,20,0.6)' : 'rgba(255,255,255,0.2)'}`,
-                  padding: 2,
-                }}
-              >
-                <span
-                  className="block rounded-full transition-all duration-200"
-                  style={{
-                    width: 14, height: 14,
-                    background: showModel ? '#39FF14' : 'rgba(255,255,255,0.6)',
-                    marginLeft: showModel ? 'auto' : 0,
-                  }}
-                />
-              </button>
-              <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#ffffff' }}>Model</span>
-            </div>
           </div>
         )}
       </header>

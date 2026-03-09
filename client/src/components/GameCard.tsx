@@ -570,6 +570,11 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const showModel = showModelProp !== undefined ? showModelProp : showModelInternal;
   const toggleModel = onToggleModelProp ?? (() => setShowModelInternal((v) => !v));
 
+  // Mobile tab state — controls which section is active on mobile full mode
+  // Tabs: 'book' | 'model' | 'splits' | 'edge'
+  type MobileTab = 'book' | 'model' | 'splits' | 'edge';
+  const [mobileTab, setMobileTab] = useState<MobileTab>('book');
+
   // Score flash animation
   const prevScoreRef = useRef<string | null>(null);
   const [scoreFlash, setScoreFlash] = useState(false);
@@ -622,6 +627,17 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const isNba = !awayNcaa && !!awayNba;
   const compactAwayLabel = isNba ? (awayNickname || awayName) : awayName;
   const compactHomeLabel = isNba ? (homeNickname || homeName) : homeName;
+
+  // Mobile abbreviations: 3-4 char uppercase label for frozen score panel
+  // Derived from nickname (first word, max 4 chars) — no DB migration needed
+  const makeAbbr = (nickname: string, name: string): string => {
+    const src = nickname || name;
+    // Use first word of nickname/name, uppercase, max 4 chars
+    const word = src.split(/\s+/)[0] ?? src;
+    return word.slice(0, 4).toUpperCase();
+  };
+  const awayAbbr = makeAbbr(awayNickname, awayName);
+  const homeAbbr = makeAbbr(homeNickname, homeName);
 
   const CompactScorePanel = () => (
     <div className="flex flex-col justify-center h-full px-2 py-3 gap-2" style={{ minWidth: 0 }}>
@@ -774,7 +790,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
       {/* Away team row — py-2 mirrors OddsLinesPanel away row height */}
       <div className="flex items-center justify-between gap-2 py-2 w-full">
-        {/* Left: logo + name/nickname */}
+        {/* Left: logo + name/nickname — always two lines for both NCAAM and NBA */}
           <div className="flex items-center gap-2 min-w-0 flex-1">
           <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={36} />
           <div className="flex flex-col min-w-0">
@@ -791,11 +807,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             >
               {awayName}
             </span>
-            {awayNickname && (
-              <span className="leading-none" style={{ fontSize: "clamp(9px, 2.2vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
-                {awayNickname}
-              </span>
-            )}
+            {/* Always show nickname/team-name on line 2 — NCAAM: nickname, NBA: team name */}
+            <span className="leading-none" style={{ fontSize: "clamp(9px, 2.2vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+              {awayNickname || "\u00A0"}
+            </span>
           </div>
         </div>
         {/* Right: score pushed to far right */}
@@ -826,7 +841,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
       {/* Home team row — py-2 mirrors OddsLinesPanel home row height */}
       <div className="flex items-center justify-between gap-2 py-2 w-full">
-        {/* Left: logo + name/nickname */}
+        {/* Left: logo + name/nickname — always two lines for both NCAAM and NBA */}
           <div className="flex items-center gap-2 min-w-0 flex-1">
           <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={36} />
           <div className="flex flex-col min-w-0">
@@ -843,11 +858,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             >
               {homeName}
             </span>
-            {homeNickname && (
-              <span className="leading-none" style={{ fontSize: "clamp(9px, 2.2vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
-                {homeNickname}
-              </span>
-            )}
+            {/* Always show nickname/team-name on line 2 — NCAAM: nickname, NBA: team name */}
+            <span className="leading-none" style={{ fontSize: "clamp(9px, 2.2vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+              {homeNickname || "\u00A0"}
+            </span>
           </div>
         </div>
         {/* Right: score pushed to far right */}
@@ -1126,77 +1140,325 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             </div>
           )}
 
-          {/* Full mode: fixed Score column | scrollable Odds/Lines + Betting Splits side by side */}
-          {mode === "full" && (
-            <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", width: "100%" }}>
-              {/* Fixed score panel — NOT inside scroll container */}
-              <div
-                style={{
-                  gridColumn: "1",
-                  borderRight: "1px solid hsl(var(--border) / 0.5)",
-                  background: "hsl(var(--card))",
-                  zIndex: 1,
-                }}
-              >
-                <ScorePanel />
-              </div>
-              {/* Scroll container — Odds/Lines + Betting Splits side by side */}
-              <div
-                style={{
-                  gridColumn: "2",
-                  overflowX: "auto",
-                  overflowY: "hidden",
-                  display: "flex",
-                  alignItems: "stretch",
-                }}
-              >
-                {/* Odds/Lines — minWidth = calc(100vw - 160px): exactly fills scroll container, zero bleed when fully scrolled */}
-                <div
-                  style={{
-                    minWidth: "calc(100vw - 160px)",
-                    flex: "0 0 auto",
-                    borderRight: "1px solid hsl(var(--border) / 0.5)",
-                  }}
-                  className="flex flex-col justify-center"
-                >
-                  <OddsLinesPanel
-                    awayBookSpread={awayBookSpread}
-                    homeBookSpread={homeBookSpread}
-                    bookTotal={bookTotal}
-                    awayML={game.awayML ?? '—'}
-                    homeML={game.homeML ?? '—'}
-                    awayModelSpread={awayModelSpread}
-                    homeModelSpread={homeModelSpread}
-                    modelTotal={modelTotal}
-                    modelAwayML={game.modelAwayML}
-                    modelHomeML={game.modelHomeML}
-                    spreadDiff={spreadDiff}
-                    totalDiff={totalDiff}
-                    computedSpreadEdge={computedSpreadEdge}
-                    computedTotalEdge={computedTotalEdge}
-                    awayLogoUrl={awayLogoUrl}
-                    homeLogoUrl={homeLogoUrl}
-                    awaySlug={game.awayTeam}
-                    homeSlug={game.homeTeam}
-                    awayDisplayName={awayDisplayName}
-                    homeDisplayName={homeDisplayName}
-                    showModel={showModel}
-                    onToggleModel={toggleModel}
-                  />
+          {/* ─────────────────────────────────────────────────────────────────────
+               MOBILE FULL MODE — Tab-based layout
+               ┌──────────────────────────────────────────────────────────────┐
+               │  FROZEN LEFT PANEL (120px)  │  RIGHT PANEL (flex-1)         │
+               │  Logo + Abbr + Score        │  [TAB BAR sticky]             │
+               │                             │  Active section content       │
+               │                             │  BOOK LINES / MODEL LINES /   │
+               │                             │  SPLITS / EDGE                │
+               └──────────────────────────────────────────────────────────────┘
+               Tabs: BOOK LINES | MODEL LINES | SPLITS | EDGE
+               Toggle dimming:
+                 BOOK active  → book values white bold, model #39FF14 40% opacity
+                 MODEL active → book values gray 40% opacity, model #39FF14 bold
+          ──────────────────────────────────────────────────────────────────── */}
+          {mode === "full" && (() => {
+            // ── Structured logging: GameCard mobile full render ──────────────
+            if (process.env.NODE_ENV === 'development') {
+              console.groupCollapsed(
+                `%c[GameCard:mobile] ${awayAbbr} @ ${homeAbbr} | tab=${mobileTab} | id=${game.id}`,
+                'color:#39FF14;font-weight:700;font-size:11px'
+              );
+              console.log('[data] spread:', { awayBookSpread, homeBookSpread, awayModelSpread, homeModelSpread, spreadDiff });
+              console.log('[data] total:', { bookTotal, modelTotal, totalDiff });
+              console.log('[data] ml:', { awayML: game.awayML, homeML: game.homeML, modelAwayML: game.modelAwayML, modelHomeML: game.modelHomeML });
+              console.log('[edge] spread:', computedSpreadEdge, '| total:', computedTotalEdge);
+              console.log('[state] showModel:', showModel, '| mobileTab:', mobileTab, '| status:', game.gameStatus);
+              console.groupEnd();
+            }
+
+            // ── Derived values for mobile odds table ─────────────────────────
+            const bkAwaySpreadStr  = !isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—';
+            const bkHomeSpreadStr  = !isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—';
+            const bkTotalStr       = !isNaN(bookTotal) ? String(bookTotal) : '—';
+            const mdlAwaySpreadStr = !isNaN(awayModelSpread) ? spreadSign(awayModelSpread) : '—';
+            const mdlHomeSpreadStr = !isNaN(homeModelSpread) ? spreadSign(homeModelSpread) : '—';
+            const mdlTotalStr      = !isNaN(modelTotal) ? String(modelTotal) : '—';
+            const bkAwayMl         = game.awayML ?? '—';
+            const bkHomeMl         = game.homeML ?? '—';
+            const mdlAwayMl        = game.modelAwayML ?? '—';
+            const mdlHomeMl        = game.modelHomeML ?? '—';
+
+            // ── Edge direction helpers ────────────────────────────────────────
+            const spreadEdgeIsAway = (() => {
+              if (isNaN(spreadDiff) || spreadDiff <= 0) return null;
+              if (!isNaN(awayModelSpread) && !isNaN(awayBookSpread)) return awayModelSpread < awayBookSpread;
+              return null;
+            })();
+            const totalEdgeIsOver = (() => {
+              if (isNaN(totalDiff) || totalDiff <= 0) return null;
+              if (!isNaN(modelTotal) && !isNaN(bookTotal)) return modelTotal > bookTotal;
+              return null;
+            })();
+
+            // ── Style factories ───────────────────────────────────────────────
+            // bookActive: BOOK LINES tab — book bold white, model green 40% opacity
+            // modelActive: MODEL LINES tab — book gray 40% opacity, model green bold
+            const isBookTab  = mobileTab === 'book';
+            const isModelTab = mobileTab === 'model';
+
+            const bookStyle  = (isEdge?: boolean): React.CSSProperties => ({
+              fontSize: 'clamp(13px, 3.5vw, 17px)',
+              fontWeight: isBookTab ? 700 : 400,
+              color: isBookTab ? '#E8E8E8' : 'rgba(232,232,232,0.38)',
+              letterSpacing: '0.02em',
+              fontVariantNumeric: 'tabular-nums',
+            });
+            const modelStyle = (isEdge?: boolean): React.CSSProperties => ({
+              fontSize: 'clamp(13px, 3.5vw, 17px)',
+              fontWeight: isModelTab ? 700 : 500,
+              color: isModelTab
+                ? (isEdge ? '#39FF14' : '#39FF14')
+                : 'rgba(57,255,20,0.38)',
+              letterSpacing: '0.02em',
+              fontVariantNumeric: 'tabular-nums',
+            });
+
+            // Per-cell edge detection
+            const awaySpreadIsEdge  = spreadEdgeIsAway === true;
+            const homeSpreadIsEdge  = spreadEdgeIsAway === false;
+            const overTotalIsEdge   = totalEdgeIsOver  === true;
+            const underTotalIsEdge  = totalEdgeIsOver  === false;
+            const awayMlIsEdge      = spreadEdgeIsAway === true;
+            const homeMlIsEdge      = spreadEdgeIsAway === false;
+
+            // ── Tab bar config ────────────────────────────────────────────────
+            const TABS: { id: MobileTab; label: string }[] = [
+              { id: 'book',   label: 'BOOK LINES' },
+              { id: 'model',  label: 'MODEL LINES' },
+              { id: 'splits', label: 'SPLITS' },
+              { id: 'edge',   label: 'EDGE' },
+            ];
+
+            // ── Shared odds table (used by both BOOK and MODEL tabs) ──────────
+            const OddsTable = () => (
+              <div className="flex flex-col w-full px-2 pt-2 pb-1">
+                {/* Column headers: SPREAD | TOTAL | MONEYLINE */}
+                <div className="grid grid-cols-3 pb-1">
+                  {['SPREAD', 'TOTAL', 'ML'].map(h => (
+                    <span key={h} className="text-center font-extrabold uppercase tracking-widest"
+                      style={{ fontSize: 'clamp(9px, 2.2vw, 11px)', color: '#E8E8E8' }}>{h}</span>
+                  ))}
                 </div>
-                {/* Betting Splits — immediately to the right of Odds/Lines */}
-                <div style={{ minWidth: 260, flex: "0 0 auto" }}>
-                  <BettingSplitsPanel
-                    game={game}
-                    awayLabel={awayName}
-                    homeLabel={homeName}
-                    awayNickname={awayNickname}
-                    homeNickname={homeNickname}
-                  />
+                {/* Sub-headers: BOOK / MODEL */}
+                <div className="grid grid-cols-3 pb-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+                  {[0,1,2].map(i => (
+                    <div key={i} className="grid grid-cols-2">
+                      <span className="text-center font-bold uppercase tracking-widest"
+                        style={{ fontSize: 'clamp(7px, 1.8vw, 9px)', color: isBookTab ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}>BK</span>
+                      <span className="text-center font-bold uppercase tracking-widest"
+                        style={{ fontSize: 'clamp(7px, 1.8vw, 9px)', color: isModelTab ? '#39FF14' : 'rgba(57,255,20,0.45)' }}>MDL</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Away row */}
+                <div className="grid grid-cols-3 py-2">
+                  <div className="grid grid-cols-2">
+                    <span className="text-center tabular-nums" style={bookStyle(awaySpreadIsEdge)}>{bkAwaySpreadStr}</span>
+                    <span className="text-center tabular-nums" style={modelStyle(awaySpreadIsEdge)}>{mdlAwaySpreadStr}</span>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <span className="text-center tabular-nums" style={bookStyle(overTotalIsEdge)}>o{bkTotalStr}</span>
+                    <span className="text-center tabular-nums" style={modelStyle(overTotalIsEdge)}>o{mdlTotalStr}</span>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <span className="text-center tabular-nums" style={bookStyle(awayMlIsEdge)}>{bkAwayMl}</span>
+                    <span className="text-center tabular-nums" style={modelStyle(awayMlIsEdge)}>{mdlAwayMl}</span>
+                  </div>
+                </div>
+                {/* Divider */}
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
+                {/* Home row */}
+                <div className="grid grid-cols-3 py-2">
+                  <div className="grid grid-cols-2">
+                    <span className="text-center tabular-nums" style={bookStyle(homeSpreadIsEdge)}>{bkHomeSpreadStr}</span>
+                    <span className="text-center tabular-nums" style={modelStyle(homeSpreadIsEdge)}>{mdlHomeSpreadStr}</span>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <span className="text-center tabular-nums" style={bookStyle(underTotalIsEdge)}>u{bkTotalStr}</span>
+                    <span className="text-center tabular-nums" style={modelStyle(underTotalIsEdge)}>u{mdlTotalStr}</span>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    <span className="text-center tabular-nums" style={bookStyle(homeMlIsEdge)}>{bkHomeMl}</span>
+                    <span className="text-center tabular-nums" style={modelStyle(homeMlIsEdge)}>{mdlHomeMl}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', width: '100%', minHeight: 0 }}>
+
+                {/* ── FROZEN LEFT PANEL: logo + abbr + score ─────────────────── */}
+                <div style={{
+                  gridColumn: '1',
+                  borderRight: '1px solid hsl(var(--border) / 0.5)',
+                  background: 'hsl(var(--card))',
+                  zIndex: 2,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  padding: '8px 6px',
+                  gap: 4,
+                }}>
+                  {/* Status row: star + time/status */}
+                  <div className="flex items-center gap-1 mb-0.5">
+                    {isAppAuthed && (
+                      <button
+                        onClick={handleStarClick}
+                        aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 2px', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center', color: isFavorited ? '#FFD700' : 'rgba(255,255,255,0.65)', filter: isFavorited ? 'drop-shadow(0 0 3px #FFD700)' : 'none', transition: 'color 0.15s' }}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill={isFavorited ? '#FFD700' : 'none'} stroke={isFavorited ? '#FFD700' : 'rgba(255,255,255,0.85)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                        </svg>
+                      </button>
+                    )}
+                    {isLive ? (
+                      <span className="flex items-center gap-0.5 text-[8px] font-black tracking-widest uppercase" style={{ color: '#39FF14' }}>
+                        <span className="w-1 h-1 rounded-full animate-pulse inline-block" style={{ background: '#39FF14' }} />
+                        LIVE
+                      </span>
+                    ) : isFinal ? (
+                      <span className="text-[8px] font-bold tracking-wide px-1 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.07)', color: 'hsl(var(--muted-foreground))' }}>FINAL</span>
+                    ) : (
+                      <span className="text-[9px] font-bold" style={{ color: 'hsl(var(--foreground))' }}>{time}</span>
+                    )}
+                  </div>
+
+                  {/* Away row: logo + abbr + score */}
+                  <div className="flex items-center justify-between gap-1 w-full">
+                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                      <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={20} />
+                      <span className="font-bold truncate" style={{
+                        fontSize: 'clamp(10px, 2.8vw, 13px)',
+                        color: awayWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
+                        fontWeight: awayWins ? 800 : 600,
+                        letterSpacing: '0.03em',
+                      }}>{awayAbbr}</span>
+                    </div>
+                    {(isLive || isFinal) && hasScores && (
+                      <span className="tabular-nums font-black flex-shrink-0 transition-colors duration-300" style={{
+                        fontSize: 'clamp(16px, 4.5vw, 22px)', lineHeight: 1,
+                        color: scoreFlash ? '#39FF14' : awayWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
+                        textShadow: scoreFlash ? '0 0 10px rgba(57,255,20,0.7)' : 'none',
+                      }}>{game.awayScore}</span>
+                    )}
+                  </div>
+
+                  {/* Divider */}
+                  <div style={{ height: 1, background: 'hsl(var(--border) / 0.4)' }} />
+
+                  {/* Home row: logo + abbr + score */}
+                  <div className="flex items-center justify-between gap-1 w-full">
+                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                      <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={20} />
+                      <span className="font-bold truncate" style={{
+                        fontSize: 'clamp(10px, 2.8vw, 13px)',
+                        color: homeWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
+                        fontWeight: homeWins ? 800 : 600,
+                        letterSpacing: '0.03em',
+                      }}>{homeAbbr}</span>
+                    </div>
+                    {(isLive || isFinal) && hasScores && (
+                      <span className="tabular-nums font-black flex-shrink-0 transition-colors duration-300" style={{
+                        fontSize: 'clamp(16px, 4.5vw, 22px)', lineHeight: 1,
+                        color: scoreFlash ? '#39FF14' : homeWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
+                        textShadow: scoreFlash ? '0 0 10px rgba(57,255,20,0.7)' : 'none',
+                      }}>{game.homeScore}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── RIGHT PANEL: tab bar + active section ──────────────────── */}
+                <div style={{ gridColumn: '2', display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+
+                  {/* Sticky tab bar */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    borderBottom: '1px solid hsl(var(--border) / 0.5)',
+                    background: 'hsl(var(--card))',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 3,
+                    flexShrink: 0,
+                  }}>
+                    {TABS.map(tab => {
+                      const isActive = mobileTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => {
+                            if (process.env.NODE_ENV === 'development') {
+                              console.log(`%c[GameCard:tab] ${game.id} ${awayAbbr}@${homeAbbr} → ${tab.id}`, 'color:#39FF14;font-size:10px');
+                            }
+                            setMobileTab(tab.id);
+                          }}
+                          style={{
+                            padding: '6px 2px',
+                            fontSize: 'clamp(7px, 1.9vw, 9px)',
+                            fontWeight: isActive ? 800 : 500,
+                            letterSpacing: '0.06em',
+                            color: isActive ? '#39FF14' : 'rgba(255,255,255,0.45)',
+                            background: 'transparent',
+                            border: 'none',
+                            borderBottom: isActive ? '2px solid #39FF14' : '2px solid transparent',
+                            cursor: 'pointer',
+                            transition: 'color 0.15s, border-color 0.15s',
+                            textTransform: 'uppercase',
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* ── BOOK LINES tab ──────────────────────────────────────── */}
+                  {mobileTab === 'book' && <OddsTable />}
+
+                  {/* ── MODEL LINES tab ─────────────────────────────────────── */}
+                  {mobileTab === 'model' && <OddsTable />}
+
+                  {/* ── SPLITS tab ──────────────────────────────────────────── */}
+                  {mobileTab === 'splits' && (
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                      <BettingSplitsPanel
+                        game={game}
+                        awayLabel={awayName}
+                        homeLabel={homeName}
+                        awayNickname={awayNickname}
+                        homeNickname={homeNickname}
+                      />
+                    </div>
+                  )}
+
+                  {/* ── EDGE tab ────────────────────────────────────────────── */}
+                  {mobileTab === 'edge' && (
+                    <div className="flex items-center justify-center w-full" style={{ minHeight: 72, padding: '8px 4px' }}>
+                      <EdgeVerdict
+                        spreadDiff={isNaN(spreadDiff) ? null : spreadDiff}
+                        spreadEdge={computedSpreadEdge}
+                        totalDiff={isNaN(totalDiff) ? null : totalDiff}
+                        totalEdge={computedTotalEdge}
+                        awayLogoUrl={awayLogoUrl}
+                        homeLogoUrl={homeLogoUrl}
+                        awaySlug={game.awayTeam}
+                        homeSlug={game.homeTeam}
+                        awayDisplayName={awayDisplayName}
+                        homeDisplayName={homeDisplayName}
+                      />
+                    </div>
+                  )}
+
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </motion.div>
 
