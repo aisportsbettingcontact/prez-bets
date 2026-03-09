@@ -97,7 +97,8 @@
 @layer utilities {
   .container {
     @apply mx-auto px-4;
-    max-width: 1280px;
+    /* No max-width — layout fills full viewport width and scales with screen size */
+    width: 100%;
   }
   .flex {
     min-width: 0;

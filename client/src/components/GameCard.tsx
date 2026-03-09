@@ -100,14 +100,19 @@ function normalizeEdgeLabel(label: string | null | undefined): string {
 // ── TeamLogo ──────────────────────────────────────────────────────────────────
 function TeamLogo({ slug, name, logoUrl, size = 36 }: { slug: string; name: string; logoUrl?: string; size?: number }) {
   const [error, setError] = useState(false);
+  // Use CSS clamp so logos scale proportionally with viewport width
+  // size prop acts as the "base" for the clamp midpoint (in vw units)
+  const vwRatio = (size / 16).toFixed(2); // convert px to approximate vw
+  const cssSize = `clamp(${Math.round(size * 0.7)}px, ${vwRatio}vw, ${Math.round(size * 1.5)}px)`;
   if (!logoUrl || error) {
     return (
       <div
-        className="rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+        className="rounded-full flex items-center justify-center font-bold flex-shrink-0"
         style={{
-          width: size, height: size,
+          width: cssSize, height: cssSize,
+          minWidth: Math.round(size * 0.7), minHeight: Math.round(size * 0.7),
           background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))",
-          fontSize: Math.max(9, size * 0.28),
+          fontSize: `clamp(${Math.max(7, Math.round(size * 0.2))}px, ${(size * 0.018).toFixed(2)}vw, ${Math.round(size * 0.32)}px)`,
         }}
       >
         {name.slice(0, 2).toUpperCase()}
@@ -118,7 +123,7 @@ function TeamLogo({ slug, name, logoUrl, size = 36 }: { slug: string; name: stri
     <img
       src={logoUrl}
       alt={name}
-      style={{ width: size, height: size, objectFit: "contain", mixBlendMode: "screen", flexShrink: 0 }}
+      style={{ width: cssSize, height: cssSize, minWidth: Math.round(size * 0.7), minHeight: Math.round(size * 0.7), objectFit: "contain", mixBlendMode: "screen", flexShrink: 0 }}
       onError={() => setError(true)}
     />
   );
@@ -375,11 +380,13 @@ function OddsLinesPanel({
   const hasTotalEdge  = totalEdgeIsOver !== null;
 
   // Base cell styles — book values are bolder when model is off (primary data), lighter when model is on (secondary)
-  const bookCell      = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: showModel ? 400 : 600, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
+  // Font sizes scale with viewport: clamp(min, preferred_vw, max)
+  const cellFontSize = 'clamp(11px, 1.2vw, 17px)';
+  const bookCell      = { fontSize: cellFontSize, fontWeight: showModel ? 400 : 600, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
   // Model cells: neon green only when this specific cell is the edge side; otherwise bold white
-  const modelGreen    = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 700, color: '#39FF14', letterSpacing: '0.02em' } as React.CSSProperties;
-  const modelWhite    = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 700, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
-  const dimCell       = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 700, color: 'rgba(57,255,20,0.28)', letterSpacing: '0.02em' } as React.CSSProperties;
+  const modelGreen    = { fontSize: cellFontSize, fontWeight: 700, color: '#39FF14', letterSpacing: '0.02em' } as React.CSSProperties;
+  const modelWhite    = { fontSize: cellFontSize, fontWeight: 700, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
+  const dimCell       = { fontSize: cellFontSize, fontWeight: 700, color: 'rgba(57,255,20,0.28)', letterSpacing: '0.02em' } as React.CSSProperties;
 
   // Per-cell model style helpers
   const awaySpreadModelStyle = showModel ? (hasSpreadEdge && spreadEdgeIsAway  ? modelGreen : modelWhite) : dimCell;
@@ -404,9 +411,9 @@ function OddsLinesPanel({
         className={`grid ${GRID} pb-0.5`}
         style={{ transition: 'grid-template-columns 200ms ease' }}
       >
-        <span className={`${showModel ? 'col-span-2' : ''} text-center text-[11px] font-extrabold uppercase tracking-widest`} style={{ color: '#E8E8E8' }}>Spread</span>
-        <span className={`${showModel ? 'col-span-2' : ''} text-center text-[11px] font-extrabold uppercase tracking-widest`} style={{ color: '#E8E8E8' }}>Total</span>
-        <span className={`${showModel ? 'col-span-2' : ''} text-center text-[11px] font-extrabold uppercase tracking-widest`} style={{ color: '#E8E8E8' }}>Moneyline</span>
+        <span className={`${showModel ? 'col-span-2' : ''} text-center font-extrabold uppercase tracking-widest`} style={{ fontSize: 'clamp(10px, 0.9vw, 14px)', color: '#E8E8E8' }}>Spread</span>
+        <span className={`${showModel ? 'col-span-2' : ''} text-center font-extrabold uppercase tracking-widest`} style={{ fontSize: 'clamp(10px, 0.9vw, 14px)', color: '#E8E8E8' }}>Total</span>
+        <span className={`${showModel ? 'col-span-2' : ''} text-center font-extrabold uppercase tracking-widest`} style={{ fontSize: 'clamp(10px, 0.9vw, 14px)', color: '#E8E8E8' }}>Moneyline</span>
       </div>
 
       {/* Sub-headers: BOOK only when model off; BOOK | MODEL when model on */}
@@ -418,8 +425,8 @@ function OddsLinesPanel({
           ? ['Book', 'Model', 'Book', 'Model', 'Book', 'Model'].map((lbl, i) => (
               <span
                 key={i}
-                className="text-center text-[9px] font-bold uppercase tracking-widest"
-                style={{ color: lbl === 'Model' ? '#39FF14' : 'rgba(255,255,255,0.5)' }}
+                className="text-center font-bold uppercase tracking-widest"
+                style={{ fontSize: 'clamp(8px, 0.75vw, 11px)', color: lbl === 'Model' ? '#39FF14' : 'rgba(255,255,255,0.5)' }}
               >
                 {lbl}
               </span>
@@ -427,8 +434,8 @@ function OddsLinesPanel({
           : ['Book', 'Book', 'Book'].map((lbl, i) => (
               <span
                 key={i}
-                className="text-center text-[9px] font-bold uppercase tracking-widest"
-                style={{ color: 'rgba(255,255,255,0.5)' }}
+                className="text-center font-bold uppercase tracking-widest"
+                style={{ fontSize: 'clamp(8px, 0.75vw, 11px)', color: 'rgba(255,255,255,0.5)' }}
               >
                 {lbl}
               </span>
@@ -769,12 +776,12 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       <div className="flex items-center justify-between gap-2 py-2 w-full">
         {/* Left: logo + name/nickname */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={30} />
+          <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={32} />
           <div className="flex flex-col min-w-0">
             <span
               className="font-semibold leading-tight truncate"
               style={{
-                fontSize: "clamp(11px, 1.5vw, 13px)",
+                fontSize: "clamp(11px, 1.1vw, 16px)",
                 color: awayWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
                 fontWeight: awayWins ? 700 : 600,
               }}
@@ -782,7 +789,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               {awayName}
             </span>
             {awayNickname && (
-              <span className="text-[9px] leading-none truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
+              <span className="leading-none truncate" style={{ fontSize: "clamp(8px, 0.75vw, 11px)", color: "hsl(var(--muted-foreground))" }}>
                 {awayNickname}
               </span>
             )}
@@ -793,7 +800,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           <span
             className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
             style={{
-              fontSize: "clamp(24px, 4vw, 38px)",
+              fontSize: "clamp(24px, 2.8vw, 48px)",
               lineHeight: 1,
               color: scoreFlash
                 ? "#39FF14"
@@ -817,12 +824,12 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       <div className="flex items-center justify-between gap-2 py-2 w-full">
         {/* Left: logo + name/nickname */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={30} />
+          <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={32} />
           <div className="flex flex-col min-w-0">
             <span
               className="font-semibold leading-tight truncate"
               style={{
-                fontSize: "clamp(11px, 1.5vw, 13px)",
+                fontSize: "clamp(11px, 1.1vw, 16px)",
                 color: homeWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
                 fontWeight: homeWins ? 700 : 600,
               }}
@@ -830,7 +837,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               {homeName}
             </span>
             {homeNickname && (
-              <span className="text-[9px] leading-none truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
+              <span className="leading-none truncate" style={{ fontSize: "clamp(8px, 0.75vw, 11px)", color: "hsl(var(--muted-foreground))" }}>
                 {homeNickname}
               </span>
             )}
@@ -841,7 +848,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           <span
             className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
             style={{
-              fontSize: "clamp(24px, 4vw, 38px)",
+              fontSize: "clamp(24px, 2.8vw, 48px)",
               lineHeight: 1,
               color: scoreFlash
                 ? "#39FF14"
@@ -887,13 +894,12 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
         */}
 
         {/* ── Desktop layout ── */}
-        <div className="hidden lg:flex items-stretch w-full" style={{ overflowX: "auto" }}>
+        <div className="hidden lg:flex items-stretch w-full">
           {/* Col 1: Score panel — always shown */}
           <div
-            className="flex-shrink-0"
             style={{
-              width: mode === "splits" ? "28%" : "20%",
-              minWidth: 180,
+              flex: mode === "splits" ? "1 1 28%" : "1 1 18%",
+              minWidth: 160,
               borderRight: "1px solid hsl(var(--border) / 0.5)",
             }}
           >
@@ -903,9 +909,9 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {/* Col 2: Odds/Lines — hidden in splits mode */}
           {mode !== "splits" && (
             <div
-              className="flex-shrink-0 flex flex-col justify-center"
+              className="flex flex-col justify-center"
               style={{
-                width: mode === "projections" ? "54%" : "28%",
+                flex: mode === "projections" ? "2 1 40%" : "1.5 1 30%",
                 minWidth: 200,
                 borderRight: "1px solid hsl(var(--border) / 0.5)",
               }}
@@ -939,7 +945,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
           {/* Col 3: Betting Splits (always shown when not splits-only mode) */}
           {mode !== "splits" && (
-            <div className="flex-1 flex flex-col" style={{ minWidth: 220, borderLeft: "1px solid hsl(var(--border) / 0.5)" }}>
+            <div className="flex flex-col" style={{ flex: "2 1 40%", minWidth: 220, borderLeft: "1px solid hsl(var(--border) / 0.5)" }}>
               {/* Edge verdict row — only in projections mode when model is on */}
               {mode === "projections" && showModel && (
                 <div

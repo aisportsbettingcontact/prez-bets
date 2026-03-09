@@ -232,16 +232,16 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
   return (
     <div className="flex flex-col gap-1 w-full">
       <span className="text-center uppercase tracking-widest font-bold"
-        style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: "0.12em" }}>
+        style={{ fontSize: 'clamp(9px, 0.75vw, 12px)', color: "rgba(255,255,255,0.45)", letterSpacing: "0.12em" }}>
         {label}
       </span>
       {hasData ? (
         <div className="relative w-full rounded-full overflow-hidden"
-          style={{ height: 30, display: "flex", border: "1.5px solid rgba(255,255,255,0.15)", boxSizing: "border-box" }}>
+          style={{ height: 'clamp(24px, 2.5vw, 40px)', display: "flex", border: "1.5px solid rgba(255,255,255,0.15)", boxSizing: "border-box" }}>
           {awayPct! > 0 && (
             <div className="flex items-center justify-start pl-2 transition-all duration-700"
               style={{ width: `${awayPct}%`, background: awayColor, minWidth: awayPct! >= 100 ? "100%" : 36, borderRadius: awayPct! >= 100 ? "9999px" : "9999px 0 0 9999px" }}>
-              <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: 13, color: awayTextColor }}>{awayPct}%</span>
+              <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: 'clamp(11px, 1vw, 16px)', color: awayTextColor }}>{awayPct}%</span>
             </div>
           )}
           {awayPct! > 0 && homePct! > 0 && (
@@ -250,7 +250,7 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
           {homePct! > 0 && (
             <div className="flex items-center justify-end pr-2 transition-all duration-700"
               style={{ width: `${homePct}%`, background: homeColor, minWidth: homePct! >= 100 ? "100%" : 36, borderRadius: homePct! >= 100 ? "9999px" : "0 9999px 9999px 0" }}>
-              <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: 13, color: homeTextColor }}>{homePct}%</span>
+              <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: 'clamp(11px, 1vw, 16px)', color: homeTextColor }}>{homePct}%</span>
             </div>
           )}
         </div>
@@ -293,19 +293,19 @@ function MarketBlock({ title, awayLabel, homeLabel, totalValue, ticketsPct, hand
       <div className="flex items-center gap-2">
         <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.08)" }} />
         <span className="uppercase tracking-widest font-extrabold whitespace-nowrap"
-          style={{ fontSize: 11, color: "#ffffff", letterSpacing: "0.14em" }}>{title}</span>
+          style={{ fontSize: 'clamp(10px, 0.9vw, 14px)', color: "#ffffff", letterSpacing: "0.14em" }}>{title}</span>
         <div className="flex-1" style={{ height: 1, background: "rgba(255,255,255,0.08)" }} />
       </div>
       {isTotalMarket ? (
         <div className="flex items-center justify-between" style={{ paddingLeft: 2, paddingRight: 2 }}>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 600, letterSpacing: "0.06em" }}>OVER</span>
-          <span style={{ fontSize: 14, color: "#ffffff", fontWeight: 700 }}>{totalValue}</span>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 600, letterSpacing: "0.06em" }}>UNDER</span>
+          <span style={{ fontSize: 'clamp(10px, 0.9vw, 14px)', color: "rgba(255,255,255,0.8)", fontWeight: 600, letterSpacing: "0.06em" }}>OVER</span>
+          <span style={{ fontSize: 'clamp(12px, 1.1vw, 18px)', color: "#ffffff", fontWeight: 700 }}>{totalValue}</span>
+          <span style={{ fontSize: 'clamp(10px, 0.9vw, 14px)', color: "rgba(255,255,255,0.8)", fontWeight: 600, letterSpacing: "0.06em" }}>UNDER</span>
         </div>
       ) : (
         <div className="flex items-center justify-between" style={{ paddingLeft: 2, paddingRight: 2 }}>
-          <span className="uppercase truncate" style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 600, maxWidth: "48%", letterSpacing: "0.04em" }}>{awayLabel}</span>
-          <span className="uppercase truncate text-right" style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 600, maxWidth: "48%", letterSpacing: "0.04em" }}>{homeLabel}</span>
+          <span className="uppercase truncate" style={{ fontSize: 'clamp(10px, 0.9vw, 14px)', color: "rgba(255,255,255,0.8)", fontWeight: 600, maxWidth: "48%", letterSpacing: "0.04em" }}>{awayLabel}</span>
+          <span className="uppercase truncate text-right" style={{ fontSize: 'clamp(10px, 0.9vw, 14px)', color: "rgba(255,255,255,0.8)", fontWeight: 600, maxWidth: "48%", letterSpacing: "0.04em" }}>{homeLabel}</span>
         </div>
       )}
       <SplitBar label="Tickets" awayPct={awayTickets} homePct={homeTickets} awayColor={awayColor} homeColor={homeColor} />
