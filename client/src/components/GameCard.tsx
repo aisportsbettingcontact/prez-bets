@@ -351,8 +351,8 @@ function OddsLinesPanel({
   const mdlAwayMlStr     = hasModelData ? mdlAwayMl : '—';
   const mdlHomeMlStr     = hasModelData ? mdlHomeMl : '—';
 
-  // 6-column grid: [Spread Book | Spread Model | Total Book | Total Model | ML Book | ML Model]
-  const GRID = 'grid-cols-6';
+  // Grid: 6 columns when model is ON (Book|Model per group), 3 columns when model is OFF (Book only)
+  const GRID = showModel ? 'grid-cols-6' : 'grid-cols-3';
 
   // Determine which side has the spread edge (away or home)
   const spreadEdgeIsAway = (() => {
@@ -400,35 +400,46 @@ function OddsLinesPanel({
     <div className="flex flex-col pl-2 pr-0 pt-0 pb-0 min-w-0">
       {/* Top-level column group headers: SPREAD | TOTAL | MONEYLINE */}
       <div className={`grid ${GRID} pb-0.5`}>
-        <span className="col-span-2 text-center text-[11px] font-extrabold uppercase tracking-widest" style={{ color: '#E8E8E8' }}>Spread</span>
-        <span className="col-span-2 text-center text-[11px] font-extrabold uppercase tracking-widest" style={{ color: '#E8E8E8' }}>Total</span>
-        <span className="col-span-2 text-center text-[11px] font-extrabold uppercase tracking-widest" style={{ color: '#E8E8E8' }}>Moneyline</span>
+        <span className={`${showModel ? 'col-span-2' : ''} text-center text-[11px] font-extrabold uppercase tracking-widest`} style={{ color: '#E8E8E8' }}>Spread</span>
+        <span className={`${showModel ? 'col-span-2' : ''} text-center text-[11px] font-extrabold uppercase tracking-widest`} style={{ color: '#E8E8E8' }}>Total</span>
+        <span className={`${showModel ? 'col-span-2' : ''} text-center text-[11px] font-extrabold uppercase tracking-widest`} style={{ color: '#E8E8E8' }}>Moneyline</span>
       </div>
 
-      {/* Sub-headers: BOOK | MODEL per group */}
+      {/* Sub-headers: BOOK only when model off; BOOK | MODEL when model on */}
       <div
         className={`grid ${GRID} pb-1 mb-0.5`}
         style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}
       >
-        {['Book', 'Model', 'Book', 'Model', 'Book', 'Model'].map((lbl, i) => (
-          <span
-            key={i}
-            className="text-center text-[9px] font-bold uppercase tracking-widest"
-            style={{ color: lbl === 'Model' ? (showModel ? '#39FF14' : 'rgba(57,255,20,0.22)') : 'rgba(255,255,255,0.5)' }}
-          >
-            {lbl}
-          </span>
-        ))}
+        {showModel
+          ? ['Book', 'Model', 'Book', 'Model', 'Book', 'Model'].map((lbl, i) => (
+              <span
+                key={i}
+                className="text-center text-[9px] font-bold uppercase tracking-widest"
+                style={{ color: lbl === 'Model' ? '#39FF14' : 'rgba(255,255,255,0.5)' }}
+              >
+                {lbl}
+              </span>
+            ))
+          : ['Book', 'Book', 'Book'].map((lbl, i) => (
+              <span
+                key={i}
+                className="text-center text-[9px] font-bold uppercase tracking-widest"
+                style={{ color: 'rgba(255,255,255,0.5)' }}
+              >
+                {lbl}
+              </span>
+            ))
+        }
       </div>
 
       {/* Away row */}
       <div className={`grid ${GRID} py-2`}>
         <Cell val={bkAwaySpread} style={bookCell} />
-        <Cell val={mdlAwaySpreadStr} style={awaySpreadModelStyle} />
+        {showModel && <Cell val={mdlAwaySpreadStr} style={awaySpreadModelStyle} />}
         <Cell val={`o${bkOverTotal}`} style={bookCell} />
-        <Cell val={`o${mdlOverTotal}`} style={overTotalModelStyle} />
+        {showModel && <Cell val={`o${mdlOverTotal}`} style={overTotalModelStyle} />}
         <Cell val={awayMl || '—'} style={bookCell} />
-        <Cell val={mdlAwayMlStr} style={awayMlModelStyle} />
+        {showModel && <Cell val={mdlAwayMlStr} style={awayMlModelStyle} />}
       </div>
 
       {/* Divider */}
@@ -437,11 +448,11 @@ function OddsLinesPanel({
       {/* Home row */}
       <div className={`grid ${GRID} py-2`}>
         <Cell val={bkHomeSpread} style={bookCell} />
-        <Cell val={mdlHomeSpreadStr} style={homeSpreadModelStyle} />
+        {showModel && <Cell val={mdlHomeSpreadStr} style={homeSpreadModelStyle} />}
         <Cell val={`u${bkUnderTotal}`} style={bookCell} />
-        <Cell val={`u${mdlUnderTotal}`} style={underTotalModelStyle} />
+        {showModel && <Cell val={`u${mdlUnderTotal}`} style={underTotalModelStyle} />}
         <Cell val={homeMl || '—'} style={bookCell} />
-        <Cell val={mdlHomeMlStr} style={homeMlModelStyle} />
+        {showModel && <Cell val={mdlHomeMlStr} style={homeMlModelStyle} />}
       </div>
 
     </div>
