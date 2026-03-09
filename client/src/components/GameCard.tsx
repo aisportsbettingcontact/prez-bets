@@ -705,7 +705,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   // Score sits immediately after the team name, not pushed to the far right.
   // For upcoming games: shows start time instead of scores.
   const ScorePanel = () => (
-    <div className="flex flex-col pl-2 pr-1 pt-0 pb-0 min-w-0" style={{ minWidth: 0 }}>
+    <div className="flex flex-col pl-2 pr-2 pt-0 pb-0 min-w-0" style={{ minWidth: 0 }}>
       {/* Status row: [star] [clock/status] [LIVE badge] */}
       <div className="flex items-center gap-1.5 mb-0.5">
         {/* Star / Favorite button — always left of status */}
@@ -776,12 +776,12 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       <div className="flex items-center justify-between gap-2 py-2 w-full">
         {/* Left: logo + name/nickname */}
           <div className="flex items-center gap-2 min-w-0 flex-1">
-          <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={32} />
+          <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={36} />
           <div className="flex flex-col min-w-0">
             <span
               className="font-semibold leading-tight"
               style={{
-                fontSize: "clamp(10px, 1vw, 15px)",
+                fontSize: "clamp(11px, 3vw, 15px)",
                 color: awayWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
                 fontWeight: awayWins ? 700 : 600,
                 wordBreak: "break-word",
@@ -792,7 +792,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               {awayName}
             </span>
             {awayNickname && (
-              <span className="leading-none" style={{ fontSize: "clamp(8px, 0.7vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+              <span className="leading-none" style={{ fontSize: "clamp(9px, 2.2vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
                 {awayNickname}
               </span>
             )}
@@ -803,7 +803,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           <span
             className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
             style={{
-              fontSize: "clamp(20px, 2.2vw, 40px)",
+              fontSize: "clamp(22px, 2.5vw, 44px)",
               lineHeight: 1,
               color: scoreFlash
                 ? "#39FF14"
@@ -827,12 +827,12 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       <div className="flex items-center justify-between gap-2 py-2 w-full">
         {/* Left: logo + name/nickname */}
           <div className="flex items-center gap-2 min-w-0 flex-1">
-          <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={32} />
+          <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={36} />
           <div className="flex flex-col min-w-0">
             <span
               className="font-semibold leading-tight"
               style={{
-                fontSize: "clamp(10px, 1vw, 15px)",
+                fontSize: "clamp(11px, 3vw, 15px)",
                 color: homeWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
                 fontWeight: homeWins ? 700 : 600,
                 wordBreak: "break-word",
@@ -843,7 +843,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               {homeName}
             </span>
             {homeNickname && (
-              <span className="leading-none" style={{ fontSize: "clamp(8px, 0.7vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+              <span className="leading-none" style={{ fontSize: "clamp(9px, 2.2vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
                 {homeNickname}
               </span>
             )}
@@ -854,7 +854,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           <span
             className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
             style={{
-              fontSize: "clamp(20px, 2.2vw, 40px)",
+              fontSize: "clamp(22px, 2.5vw, 44px)",
               lineHeight: 1,
               color: scoreFlash
                 ? "#39FF14"
@@ -1012,7 +1012,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {mode === "projections" && (
             <div className="flex flex-col w-full">
               {/* Grid row: fixed score column | scrollable odds column */}
-              <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", width: "100%" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", width: "100%" }}>
                 {/* Fixed score panel — NOT inside scroll container */}
                 <div
                   style={{
@@ -1033,7 +1033,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   }}
                   className="flex flex-col justify-center"
                 >
-                  <div style={{ minWidth: 220 }} className="flex flex-col justify-center">
+                  {/* minWidth = 100vw - 180px so when scrolled fully right, OddsLines is completely hidden behind score panel */}
+                  <div style={{ minWidth: "calc(100vw - 180px)" }} className="flex flex-col justify-center">
                     <OddsLinesPanel
                       awayBookSpread={awayBookSpread}
                       homeBookSpread={homeBookSpread}
@@ -1090,7 +1091,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
           {/* Splits mode: fixed CompactScore column | scrollable Splits column */}
           {mode === "splits" && (
-            <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", width: "100%" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", width: "100%" }}>
               {/* Fixed compact score — NOT inside scroll container */}
               <div
                 style={{
@@ -1125,7 +1126,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
           {/* Full mode: fixed Score column | scrollable Odds/Lines + Betting Splits side by side */}
           {mode === "full" && (
-            <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", width: "100%" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", width: "100%" }}>
               {/* Fixed score panel — NOT inside scroll container */}
               <div
                 style={{
@@ -1147,10 +1148,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   alignItems: "stretch",
                 }}
               >
-                {/* Odds/Lines */}
+                {/* Odds/Lines — minWidth = 100vw - 180px so it fully tucks under score panel when scrolled to end */}
                 <div
                   style={{
-                    minWidth: 220,
+                    minWidth: "calc(100vw - 180px)",
                     flex: "0 0 auto",
                     borderRight: "1px solid hsl(var(--border) / 0.5)",
                   }}
