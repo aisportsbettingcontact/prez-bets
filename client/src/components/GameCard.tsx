@@ -373,8 +373,8 @@ function OddsLinesPanel({
   const hasSpreadEdge = spreadEdgeIsAway !== null;
   const hasTotalEdge  = totalEdgeIsOver !== null;
 
-  // Base cell styles
-  const bookCell      = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 400, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
+  // Base cell styles — book values are bolder when model is off (primary data), lighter when model is on (secondary)
+  const bookCell      = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: showModel ? 400 : 600, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
   // Model cells: neon green only when this specific cell is the edge side; otherwise bold white
   const modelGreen    = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 700, color: '#39FF14', letterSpacing: '0.02em' } as React.CSSProperties;
   const modelWhite    = { fontSize: 'clamp(11px,1.6vw,13px)', fontWeight: 700, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
@@ -399,7 +399,10 @@ function OddsLinesPanel({
   return (
     <div className="flex flex-col pl-2 pr-0 pt-0 pb-0 min-w-0">
       {/* Top-level column group headers: SPREAD | TOTAL | MONEYLINE */}
-      <div className={`grid ${GRID} pb-0.5`}>
+      <div
+        className={`grid ${GRID} pb-0.5`}
+        style={{ transition: 'grid-template-columns 200ms ease' }}
+      >
         <span className={`${showModel ? 'col-span-2' : ''} text-center text-[11px] font-extrabold uppercase tracking-widest`} style={{ color: '#E8E8E8' }}>Spread</span>
         <span className={`${showModel ? 'col-span-2' : ''} text-center text-[11px] font-extrabold uppercase tracking-widest`} style={{ color: '#E8E8E8' }}>Total</span>
         <span className={`${showModel ? 'col-span-2' : ''} text-center text-[11px] font-extrabold uppercase tracking-widest`} style={{ color: '#E8E8E8' }}>Moneyline</span>
@@ -408,7 +411,7 @@ function OddsLinesPanel({
       {/* Sub-headers: BOOK only when model off; BOOK | MODEL when model on */}
       <div
         className={`grid ${GRID} pb-1 mb-0.5`}
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', transition: 'grid-template-columns 200ms ease' }}
       >
         {showModel
           ? ['Book', 'Model', 'Book', 'Model', 'Book', 'Model'].map((lbl, i) => (
@@ -433,7 +436,7 @@ function OddsLinesPanel({
       </div>
 
       {/* Away row */}
-      <div className={`grid ${GRID} py-2`}>
+      <div className={`grid ${GRID} py-2`} style={{ transition: 'grid-template-columns 200ms ease' }}>
         <Cell val={bkAwaySpread} style={bookCell} />
         {showModel && <Cell val={mdlAwaySpreadStr} style={awaySpreadModelStyle} />}
         <Cell val={`o${bkOverTotal}`} style={bookCell} />
@@ -446,7 +449,7 @@ function OddsLinesPanel({
       <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
 
       {/* Home row */}
-      <div className={`grid ${GRID} py-2`}>
+      <div className={`grid ${GRID} py-2`} style={{ transition: 'grid-template-columns 200ms ease' }}>
         <Cell val={bkHomeSpread} style={bookCell} />
         {showModel && <Cell val={mdlHomeSpreadStr} style={homeSpreadModelStyle} />}
         <Cell val={`u${bkUnderTotal}`} style={bookCell} />
