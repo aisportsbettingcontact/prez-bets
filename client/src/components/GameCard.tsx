@@ -1101,9 +1101,12 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             </div>
           )}
 
-          {/* Full mode: frozen Score + scrollable Odds/Lines + Betting Splits */}
+          {/* Full mode: frozen Score | scrollable Odds/Lines + Betting Splits side by side */}
           {mode === "full" && (
-            <div className="flex items-stretch w-full" style={{ overflowX: "auto", position: "relative" }}>
+            <div
+              className="flex items-stretch w-full"
+              style={{ overflowX: "auto", position: "relative" }}
+            >
               {/* Frozen score panel */}
               <div
                 style={{
@@ -1119,8 +1122,15 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               >
                 <ScorePanel />
               </div>
-              {/* Scrollable: Odds/Lines then Betting Splits */}
-              <div style={{ minWidth: 200, flex: "1 1 0%", borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+              {/* Scrollable: Odds/Lines */}
+              <div
+                style={{
+                  minWidth: 220,
+                  flex: "0 0 auto",
+                  borderRight: "1px solid hsl(var(--border) / 0.5)",
+                }}
+                className="flex flex-col justify-center"
+              >
                 <OddsLinesPanel
                   awayBookSpread={awayBookSpread}
                   homeBookSpread={homeBookSpread}
@@ -1146,7 +1156,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   onToggleModel={toggleModel}
                 />
               </div>
-              <div style={{ minWidth: 220, flex: "1 1 0%" }} className="px-3 py-2">
+              {/* Scrollable: Betting Splits — immediately to the right of Odds/Lines */}
+              <div style={{ minWidth: 260, flex: "0 0 auto" }}>
                 <BettingSplitsPanel
                   game={game}
                   awayLabel={awayName}
