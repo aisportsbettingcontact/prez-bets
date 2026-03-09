@@ -775,21 +775,24 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       {/* Away team row — py-2 mirrors OddsLinesPanel away row height */}
       <div className="flex items-center justify-between gap-2 py-2 w-full">
         {/* Left: logo + name/nickname */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
           <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={32} />
           <div className="flex flex-col min-w-0">
             <span
-              className="font-semibold leading-tight truncate"
+              className="font-semibold leading-tight"
               style={{
-                fontSize: "clamp(11px, 1.1vw, 16px)",
+                fontSize: "clamp(10px, 1vw, 15px)",
                 color: awayWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
                 fontWeight: awayWins ? 700 : 600,
+                wordBreak: "break-word",
+                overflowWrap: "anywhere",
+                lineHeight: 1.15,
               }}
             >
               {awayName}
             </span>
             {awayNickname && (
-              <span className="leading-none truncate" style={{ fontSize: "clamp(8px, 0.75vw, 11px)", color: "hsl(var(--muted-foreground))" }}>
+              <span className="leading-none" style={{ fontSize: "clamp(8px, 0.7vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
                 {awayNickname}
               </span>
             )}
@@ -800,7 +803,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           <span
             className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
             style={{
-              fontSize: "clamp(24px, 2.8vw, 48px)",
+              fontSize: "clamp(20px, 2.2vw, 40px)",
               lineHeight: 1,
               color: scoreFlash
                 ? "#39FF14"
@@ -823,21 +826,24 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       {/* Home team row — py-2 mirrors OddsLinesPanel home row height */}
       <div className="flex items-center justify-between gap-2 py-2 w-full">
         {/* Left: logo + name/nickname */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
           <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={32} />
           <div className="flex flex-col min-w-0">
             <span
-              className="font-semibold leading-tight truncate"
+              className="font-semibold leading-tight"
               style={{
-                fontSize: "clamp(11px, 1.1vw, 16px)",
+                fontSize: "clamp(10px, 1vw, 15px)",
                 color: homeWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
                 fontWeight: homeWins ? 700 : 600,
+                wordBreak: "break-word",
+                overflowWrap: "anywhere",
+                lineHeight: 1.15,
               }}
             >
               {homeName}
             </span>
             {homeNickname && (
-              <span className="leading-none truncate" style={{ fontSize: "clamp(8px, 0.75vw, 11px)", color: "hsl(var(--muted-foreground))" }}>
+              <span className="leading-none" style={{ fontSize: "clamp(8px, 0.7vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
                 {homeNickname}
               </span>
             )}
@@ -848,7 +854,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           <span
             className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
             style={{
-              fontSize: "clamp(24px, 2.8vw, 48px)",
+              fontSize: "clamp(20px, 2.2vw, 40px)",
               lineHeight: 1,
               color: scoreFlash
                 ? "#39FF14"

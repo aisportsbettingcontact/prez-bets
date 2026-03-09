@@ -140,6 +140,10 @@ function LabeledBar({ awayPct, homePct, awayColor, homeColor, awayLineLabel, hom
     );
   }
 
+  const LABEL_THRESHOLD = 15;
+  const awayShowInside = (awayPct ?? 0) >= LABEL_THRESHOLD;
+  const homeShowInside = (homePct ?? 0) >= LABEL_THRESHOLD;
+
   return (
     <div className="w-full flex flex-col gap-0.5">
       {/* Header row: AWAY_LABEL  [rowLabel]  HOME_LABEL */}
@@ -148,23 +152,61 @@ function LabeledBar({ awayPct, homePct, awayColor, homeColor, awayLineLabel, hom
         <span style={{ fontSize: 8, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{rowLabel}</span>
         <span style={{ fontSize: 9, color: "rgba(255,255,255,0.7)", fontWeight: 700, letterSpacing: "0.03em" }}>{homeLineLabel}</span>
       </div>
-      {/* Bar — only % inside the pill */}
-      <div className="relative w-full rounded-md overflow-hidden flex"
-        style={{ height: 20, border: "1px solid rgba(255,255,255,0.12)", boxSizing: "border-box", minWidth: 0 }}>
-        {awayPct! > 0 && (
-          <div className="flex items-center justify-start px-1.5 transition-all duration-700"
-            style={{ width: `${awayPct}%`, background: awayColor, minWidth: awayPct! >= 100 ? "100%" : 32, borderRadius: awayPct! >= 100 ? "4px" : "4px 0 0 4px", flexShrink: 0, overflow: "visible" }}>
-            <span className="font-extrabold leading-none whitespace-nowrap" style={{ fontSize: 10, color: awayTextColor }}>{awayPct}%</span>
-          </div>
+      {/* Bar — overflow:hidden on container, % labels inside or outside based on threshold */}
+      <div className="relative w-full rounded-md"
+        style={{ height: 20, minWidth: 0 }}>
+        <div className="absolute inset-0 rounded-md overflow-hidden flex"
+          style={{ border: "1px solid rgba(255,255,255,0.12)", boxSizing: "border-box" }}>
+          {(awayPct ?? 0) > 0 && (
+            <div className="flex items-center justify-start px-1.5 transition-all duration-700 flex-shrink-0"
+              style={{ width: `${awayPct}%`, background: awayColor, borderRadius: (awayPct ?? 0) >= 100 ? "4px" : "4px 0 0 4px" }}>
+              {awayShowInside && (
+                <span className="font-extrabold leading-none whitespace-nowrap" style={{ fontSize: 10, color: awayTextColor }}>{awayPct}%</span>
+              )}
+            </div>
+          )}
+          {(awayPct ?? 0) > 0 && (homePct ?? 0) > 0 && (
+            <div style={{ width: 1, background: "rgba(255,255,255,0.25)", flexShrink: 0, alignSelf: "stretch" }} />
+          )}
+          {(homePct ?? 0) > 0 && (
+            <div className="flex items-center justify-end px-1.5 transition-all duration-700 flex-shrink-0"
+              style={{ width: `${homePct}%`, background: homeColor, borderRadius: (homePct ?? 0) >= 100 ? "4px" : "0 4px 4px 0" }}>
+              {homeShowInside && (
+                <span className="font-extrabold leading-none whitespace-nowrap" style={{ fontSize: 10, color: homeTextColor }}>{homePct}%</span>
+              )}
+            </div>
+          )}
+        </div>
+        {/* Outside labels for narrow segments — always white with shadow for visibility on dark bg */}
+        {!awayShowInside && (awayPct ?? 0) > 0 && (
+          <span
+            className="absolute font-extrabold leading-none whitespace-nowrap"
+            style={{
+              fontSize: 9,
+              color: "#ffffff",
+              left: `calc(${awayPct}% / 2)`,
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+              textShadow: "0 0 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9), 1px 1px 2px rgba(0,0,0,1)",
+              zIndex: 2,
+              pointerEvents: "none",
+            }}
+          >{awayPct}%</span>
         )}
-        {awayPct! > 0 && homePct! > 0 && (
-          <div style={{ width: 1, background: "rgba(255,255,255,0.25)", flexShrink: 0, alignSelf: "stretch" }} />
-        )}
-        {homePct! > 0 && (
-          <div className="flex items-center justify-end px-1.5 transition-all duration-700"
-            style={{ width: `${homePct}%`, background: homeColor, minWidth: homePct! >= 100 ? "100%" : 32, borderRadius: homePct! >= 100 ? "4px" : "0 4px 4px 0", flexShrink: 0, overflow: "visible" }}>
-            <span className="font-extrabold leading-none whitespace-nowrap" style={{ fontSize: 10, color: homeTextColor }}>{homePct}%</span>
-          </div>
+        {!homeShowInside && (homePct ?? 0) > 0 && (
+          <span
+            className="absolute font-extrabold leading-none whitespace-nowrap"
+            style={{
+              fontSize: 9,
+              color: "#ffffff",
+              right: `calc(${homePct}% / 2)`,
+              top: "50%",
+              transform: "translate(50%, -50%)",
+              textShadow: "0 0 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9), 1px 1px 2px rgba(0,0,0,1)",
+              zIndex: 2,
+              pointerEvents: "none",
+            }}
+          >{homePct}%</span>
         )}
       </div>
     </div>
@@ -229,6 +271,12 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
   const awayTextColor = bestTextColor(awayColor);
   const homeTextColor = bestTextColor(homeColor);
 
+  // Determine if a segment is too narrow to show the % label inside
+  // Threshold: if the segment is < 15% wide, show label outside (absolute positioned)
+  const LABEL_THRESHOLD = 15;
+  const awayShowInside = (awayPct ?? 0) >= LABEL_THRESHOLD;
+  const homeShowInside = (homePct ?? 0) >= LABEL_THRESHOLD;
+
   return (
     <div className="flex flex-col gap-1 w-full">
       <span className="text-center uppercase tracking-widest font-bold"
@@ -236,22 +284,69 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
         {label}
       </span>
       {hasData ? (
-        <div className="relative w-full rounded-full overflow-hidden"
-          style={{ height: 'clamp(24px, 2.5vw, 40px)', display: "flex", border: "1.5px solid rgba(255,255,255,0.15)", boxSizing: "border-box" }}>
-          {awayPct! > 0 && (
-            <div className="flex items-center justify-start pl-2 transition-all duration-700"
-              style={{ width: `${awayPct}%`, background: awayColor, minWidth: awayPct! >= 100 ? "100%" : 36, borderRadius: awayPct! >= 100 ? "9999px" : "9999px 0 0 9999px" }}>
-              <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: 'clamp(11px, 1vw, 16px)', color: awayTextColor }}>{awayPct}%</span>
-            </div>
+        <div className="relative w-full"
+          style={{ height: 'clamp(24px, 2.5vw, 40px)' }}>
+          {/* Pill container — overflow:hidden clips segments cleanly */}
+          <div className="absolute inset-0 rounded-full overflow-hidden flex"
+            style={{ border: "1.5px solid rgba(255,255,255,0.15)", boxSizing: "border-box" }}>
+            {(awayPct ?? 0) > 0 && (
+              <div className="flex items-center justify-start pl-2 transition-all duration-700 flex-shrink-0"
+                style={{
+                  width: `${awayPct}%`,
+                  background: awayColor,
+                  borderRadius: (awayPct ?? 0) >= 100 ? "9999px" : "9999px 0 0 9999px",
+                }}>
+                {awayShowInside && (
+                  <span className="font-extrabold tabular-nums leading-none whitespace-nowrap" style={{ fontSize: 'clamp(11px, 1vw, 16px)', color: awayTextColor }}>{awayPct}%</span>
+                )}
+              </div>
+            )}
+            {(awayPct ?? 0) > 0 && (homePct ?? 0) > 0 && (
+              <div style={{ width: 1.5, background: "rgba(255,255,255,0.3)", flexShrink: 0, alignSelf: "stretch" }} />
+            )}
+            {(homePct ?? 0) > 0 && (
+              <div className="flex items-center justify-end pr-2 transition-all duration-700 flex-shrink-0"
+                style={{
+                  width: `${homePct}%`,
+                  background: homeColor,
+                  borderRadius: (homePct ?? 0) >= 100 ? "9999px" : "0 9999px 9999px 0",
+                }}>
+                {homeShowInside && (
+                  <span className="font-extrabold tabular-nums leading-none whitespace-nowrap" style={{ fontSize: 'clamp(11px, 1vw, 16px)', color: homeTextColor }}>{homePct}%</span>
+                )}
+              </div>
+            )}
+          </div>
+          {/* Outside labels for narrow segments — always white with shadow for visibility on dark bg */}
+          {!awayShowInside && (awayPct ?? 0) > 0 && (
+            <span
+              className="absolute font-extrabold tabular-nums leading-none whitespace-nowrap"
+              style={{
+                fontSize: 'clamp(9px, 0.8vw, 13px)',
+                color: "#ffffff",
+                left: `calc(${awayPct}% / 2)`,
+                top: "50%",
+                transform: "translate(-50%, -50%)",
+                textShadow: "0 0 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9), 1px 1px 2px rgba(0,0,0,1)",
+                zIndex: 2,
+                pointerEvents: "none",
+              }}
+            >{awayPct}%</span>
           )}
-          {awayPct! > 0 && homePct! > 0 && (
-            <div style={{ width: 1.5, background: "rgba(255,255,255,0.3)", flexShrink: 0, alignSelf: "stretch" }} />
-          )}
-          {homePct! > 0 && (
-            <div className="flex items-center justify-end pr-2 transition-all duration-700"
-              style={{ width: `${homePct}%`, background: homeColor, minWidth: homePct! >= 100 ? "100%" : 36, borderRadius: homePct! >= 100 ? "9999px" : "0 9999px 9999px 0" }}>
-              <span className="font-extrabold tabular-nums leading-none" style={{ fontSize: 'clamp(11px, 1vw, 16px)', color: homeTextColor }}>{homePct}%</span>
-            </div>
+          {!homeShowInside && (homePct ?? 0) > 0 && (
+            <span
+              className="absolute font-extrabold tabular-nums leading-none whitespace-nowrap"
+              style={{
+                fontSize: 'clamp(9px, 0.8vw, 13px)',
+                color: "#ffffff",
+                right: `calc(${homePct}% / 2)`,
+                top: "50%",
+                transform: "translate(50%, -50%)",
+                textShadow: "0 0 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9), 1px 1px 2px rgba(0,0,0,1)",
+                zIndex: 2,
+                pointerEvents: "none",
+              }}
+            >{homePct}%</span>
           )}
         </div>
       ) : (
@@ -280,7 +375,7 @@ interface MarketBlockProps {
 function MarketBlock({ title, awayLabel, homeLabel, totalValue, ticketsPct, handlePct, awayColor, homeColor }: MarketBlockProps) {
   const hasTickets = ticketsPct != null;
   const hasHandle  = handlePct  != null;
-  if (!hasTickets && !hasHandle) return null;
+  // Never return null — always render the column so all 3 fill the full width
 
   const awayTickets = hasTickets ? ticketsPct! : null;
   const homeTickets = hasTickets ? 100 - ticketsPct! : null;
@@ -454,39 +549,29 @@ export function BettingSplitsPanel({
       </div>
 
       {/* ── Desktop (≥ lg): full-size horizontal 3-column layout ── */}
+      {/* Always render all 3 columns so the panel fills 100% width with no whitespace */}
       <div className="hidden lg:flex items-stretch w-full">
-        {hasSpreadSplits && (
-          <>
-            <div className="flex-1 min-w-0">
-              <MarketBlock title="Spread" awayLabel={awaySpreadLabel} homeLabel={homeSpreadLabel}
-                ticketsPct={game.spreadAwayBetsPct} handlePct={game.spreadAwayMoneyPct}
-                awayColor={awayColor} homeColor={homeColor} />
-            </div>
-            {(hasTotalSplits || hasMlSplits) && (
-              <div style={{ width: 1, background: "rgba(255,255,255,0.07)", flexShrink: 0, alignSelf: "stretch", margin: "8px 0" }} />
-            )}
-          </>
-        )}
-        {hasTotalSplits && (
-          <>
-            <div className="flex-1 min-w-0">
-              <MarketBlock title="Total" awayLabel="" homeLabel=""
-                totalValue={isNaN(bookTotal) ? undefined : bookTotal}
-                ticketsPct={game.totalOverBetsPct} handlePct={game.totalOverMoneyPct}
-                awayColor={awayColor} homeColor={homeColor} />
-            </div>
-            {hasMlSplits && (
-              <div style={{ width: 1, background: "rgba(255,255,255,0.07)", flexShrink: 0, alignSelf: "stretch", margin: "8px 0" }} />
-            )}
-          </>
-        )}
-        {hasMlSplits && (
-          <div className="flex-1 min-w-0">
-            <MarketBlock title="Moneyline" awayLabel={awayMlLabel} homeLabel={homeMlLabel}
-              ticketsPct={game.mlAwayBetsPct} handlePct={game.mlAwayMoneyPct}
-              awayColor={awayColor} homeColor={homeColor} />
-          </div>
-        )}
+        {/* Spread column — always rendered */}
+        <div className="flex-1 min-w-0">
+          <MarketBlock title="Spread" awayLabel={awaySpreadLabel} homeLabel={homeSpreadLabel}
+            ticketsPct={game.spreadAwayBetsPct} handlePct={game.spreadAwayMoneyPct}
+            awayColor={awayColor} homeColor={homeColor} />
+        </div>
+        <div style={{ width: 1, background: "rgba(255,255,255,0.07)", flexShrink: 0, alignSelf: "stretch", margin: "8px 0" }} />
+        {/* Total column — always rendered */}
+        <div className="flex-1 min-w-0">
+          <MarketBlock title="Total" awayLabel="" homeLabel=""
+            totalValue={isNaN(bookTotal) ? undefined : bookTotal}
+            ticketsPct={game.totalOverBetsPct} handlePct={game.totalOverMoneyPct}
+            awayColor={awayColor} homeColor={homeColor} />
+        </div>
+        <div style={{ width: 1, background: "rgba(255,255,255,0.07)", flexShrink: 0, alignSelf: "stretch", margin: "8px 0" }} />
+        {/* Moneyline column — always rendered */}
+        <div className="flex-1 min-w-0">
+          <MarketBlock title="Moneyline" awayLabel={awayMlLabel} homeLabel={homeMlLabel}
+            ticketsPct={game.mlAwayBetsPct} handlePct={game.mlAwayMoneyPct}
+            awayColor={awayColor} homeColor={homeColor} />
+        </div>
       </div>
     </>
   );
