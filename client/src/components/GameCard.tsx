@@ -1223,10 +1223,26 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             const mdlAwaySpreadStr = !isNaN(awayModelSpread) ? spreadSign(awayModelSpread) : '—';
             const mdlHomeSpreadStr = !isNaN(homeModelSpread) ? spreadSign(homeModelSpread) : '—';
             const mdlTotalStr      = !isNaN(modelTotal) ? String(modelTotal) : '—';
-            const bkAwayMl         = game.awayML ?? '—';
-            const bkHomeMl         = game.homeML ?? '—';
-            const mdlAwayMl        = game.modelAwayML ?? '—';
-            const mdlHomeMl        = game.modelHomeML ?? '—';
+            // ML values — always show + prefix for positive (underdog) values
+            // LOG: [GameCard:ML] logs raw→formatted for every game in dev
+            const formatMl = (raw: string | number | null | undefined): string => {
+              if (raw == null || raw === '' || raw === '—') return '—';
+              const n = typeof raw === 'number' ? raw : Number(String(raw).replace(/[^\d.-]/g, ''));
+              if (isNaN(n)) return String(raw);
+              if (n > 0) return `+${n}`;
+              return String(n);
+            };
+            const bkAwayMl  = formatMl(game.awayML);
+            const bkHomeMl  = formatMl(game.homeML);
+            const mdlAwayMl = formatMl(game.modelAwayML);
+            const mdlHomeMl = formatMl(game.modelHomeML);
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log(
+                `%c[GameCard:ML] game=${game.id} bkAway=${bkAwayMl} bkHome=${bkHomeMl} mdlAway=${mdlAwayMl} mdlHome=${mdlHomeMl}`,
+                'color:#39FF14;font-size:9px'
+              );
+            }
 
             // ── Edge direction helpers ────────────────────────────────────────
             const spreadEdgeIsAway = (() => {
@@ -1240,31 +1256,55 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               return null;
             })();
 
-            // ── Style factories ───────────────────────────────────────────────
-            // bookActive: BOOK LINES tab — book bold white, model green 40% opacity
-            // modelActive: MODEL LINES tab — book gray 40% opacity, model green bold
+            // ── Tab state ─────────────────────────────────────────────────────
             const isBookTab  = mobileTab === 'book';
             const isModelTab = mobileTab === 'model';
 
-            // ── Value style factories ────────────────────────────────────────────
-            // BOOK LINES tab active  → book = white bold full opacity; model = light gray 20% opacity
-            // MODEL LINES tab active → book = light gray 20% opacity; model = #39FF14 bold full opacity
-            // Neither tab (SPLITS/EDGE) → both at 20% opacity (background context)
-            const bookStyle  = (_isEdge?: boolean): React.CSSProperties => ({
-              fontSize: 'clamp(11px, 3vw, 15px)',  // -2pt from previous 13px base
-              fontWeight: isBookTab ? 700 : 400,
+            // ── Value style factories (reference image spec) ──────────────────
+            // The table is ALWAYS visible. Tab controls which column is "primary":
+            //
+            // BOOK tab active:
+            //   book  = white bold full opacity (primary)
+            //   model = #39FF14 bold if edge, else white 40% opacity (secondary, always visible)
+            //
+            // MODEL tab active (default / reference image):
+            //   book  = gray 50% opacity, unbolded (reference, always visible)
+            //   model = #39FF14 bold if edge, else white bold full opacity (primary)
+            //
+            // Neither tab (SPLITS/EDGE):
+            //   book  = gray 35% opacity, unbolded
+            //   model = #39FF14 if edge, else white 40% opacity, unbolded
+            //
+            // LOG: [GameCard:OddsStyle] logs active tab + edge flags in dev
+            if (process.env.NODE_ENV === 'development') {
+              console.log(
+                `%c[GameCard:OddsStyle] game=${game.id} tab=${mobileTab} spreadEdge=${spreadEdgeIsAway} totalEdge=${totalEdgeIsOver}`,
+                'color:#aaa;font-size:9px'
+              );
+            }
+
+            const bookStyle = (_isEdge?: boolean): React.CSSProperties => ({
+              fontSize: 'clamp(11px, 3vw, 15px)',
+              fontWeight: isBookTab ? 700 : 400,  // bold only when BOOK tab active
               color: isBookTab
-                ? 'rgba(232,232,232,1)'         // active: white bold
-                : 'rgba(232,232,232,0.20)',      // inactive: light gray 20% opacity
+                ? 'rgba(232,232,232,1)'            // BOOK active: white full opacity
+                : isModelTab
+                  ? 'rgba(232,232,232,0.50)'       // MODEL active: gray 50% (visible for reference)
+                  : 'rgba(232,232,232,0.35)',       // SPLITS/EDGE: gray 35%
               letterSpacing: '0.02em',
               fontVariantNumeric: 'tabular-nums',
             });
+
             const modelStyle = (isEdge?: boolean): React.CSSProperties => ({
-              fontSize: 'clamp(11px, 3vw, 15px)',  // -2pt from previous 13px base
-              fontWeight: isModelTab ? 700 : 400,
-              color: isModelTab
-                ? (isEdge ? '#39FF14' : 'rgba(255,255,255,0.55)')  // edge=neon green; non-edge=white 55% opacity (more visible)
-                : 'rgba(232,232,232,0.20)',           // inactive tab: light gray 20% opacity
+              fontSize: 'clamp(11px, 3vw, 15px)',
+              fontWeight: (isModelTab || isEdge) ? 700 : 400,  // bold when MODEL active OR edge
+              color: isEdge
+                ? '#39FF14'                          // ALWAYS neon green for edge values
+                : isModelTab
+                  ? 'rgba(255,255,255,1)'            // MODEL active, no edge: white bold full opacity
+                  : isBookTab
+                    ? 'rgba(255,255,255,0.40)'       // BOOK active: model dimmed but visible
+                    : 'rgba(255,255,255,0.35)',       // SPLITS/EDGE: dimmed
               letterSpacing: '0.02em',
               fontVariantNumeric: 'tabular-nums',
             });
@@ -1295,22 +1335,22 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       style={{ fontSize: 'clamp(9px, 2.2vw, 11px)', color: '#E8E8E8' }}>{h}</span>
                   ))}
                 </div>
-                {/* Sub-headers: BOOK / MODEL — active=bold white/neon, inactive=light gray unbolded */}
+                {/* Sub-headers: BOOK always gray unbolded | MODEL always neon green bold (reference image) */}
                 <div className="grid grid-cols-3 pb-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
                   {[0,1,2].map(i => (
                     <div key={i} className="grid grid-cols-2">
                       <span className="text-center uppercase tracking-widest"
                         style={{
                           fontSize: 'clamp(7px, 1.9vw, 10px)',
-                          fontWeight: isBookTab ? 700 : 400,
-                          color: isBookTab ? 'rgba(232,232,232,0.9)' : 'rgba(232,232,232,0.30)',
+                          fontWeight: 400,                         // always unbolded
+                          color: 'rgba(232,232,232,0.55)',         // always gray
                           letterSpacing: '0.05em',
                         }}>BOOK</span>
                       <span className="text-center uppercase tracking-widest"
                         style={{
                           fontSize: 'clamp(7px, 1.9vw, 10px)',
-                          fontWeight: isModelTab ? 700 : 400,
-                          color: isModelTab ? '#39FF14' : 'rgba(232,232,232,0.30)',
+                          fontWeight: 700,                         // always bold
+                          color: '#39FF14',                        // always neon green
                           letterSpacing: '0.05em',
                         }}>MODEL</span>
                     </div>
@@ -1535,17 +1575,14 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                         </button>
                       );
                     })}
-                  </div>
+                  </div>                  {/* ── OddsTable: ALWAYS visible ────────────────────────────────────── */}
+                  {/* Tab controls which column is primary (bold/highlighted)     */}
+                  {/* SPLITS/EDGE tabs show OddsTable dimmed above their content   */}
+                  <OddsTable />
 
-                  {/* ── BOOK LINES tab ──────────────────────────────────────── */}
-                  {mobileTab === 'book' && <OddsTable />}
-
-                  {/* ── MODEL LINES tab ─────────────────────────────────────── */}
-                  {mobileTab === 'model' && <OddsTable />}
-
-                  {/* ── SPLITS tab ──────────────────────────────────────────── */}
+                  {/* ── SPLITS tab (additional content below OddsTable) ──────── */}
                   {mobileTab === 'splits' && (
-                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                       <BettingSplitsPanel
                         game={game}
                         awayLabel={awayName}
@@ -1556,9 +1593,9 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     </div>
                   )}
 
-                  {/* ── EDGE tab ────────────────────────────────────────────── */}
+                  {/* ── EDGE tab (additional content below OddsTable) ────────── */}
                   {mobileTab === 'edge' && (
-                    <div className="flex items-center justify-center w-full" style={{ minHeight: 72, padding: '8px 4px' }}>
+                    <div className="flex items-center justify-center w-full" style={{ minHeight: 72, padding: '8px 4px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                       <EdgeVerdict
                         spreadDiff={isNaN(spreadDiff) ? null : spreadDiff}
                         spreadEdge={computedSpreadEdge}
@@ -1573,7 +1610,6 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       />
                     </div>
                   )}
-
                 </div>
               </div>
             );

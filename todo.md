@@ -803,3 +803,4 @@
 - [x] Mobile OddsTable: non-edge active model values white 55% opacity (was 10%)
 - [x] Mobile tab bar: active tab = white bold + neon green underline; inactive = gray 45%
 - [x] Mobile frozen panel: justifyContent center + alignSelf stretch for full-height vertical centering
+- [x] Rebuild mobile OddsTable: always-visible combined table, BOOK gray unbolded, MODEL neon green header, edge=#39FF14, non-edge model=white bold, book=gray 50%, ML underdog + prefix via formatMl()
