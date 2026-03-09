@@ -1197,7 +1197,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               if (/^2nd$/i.test(s)) return '2H';
               if (/^1st\s+half$/i.test(s)) return '1H';
               if (/^2nd\s+half$/i.test(s)) return '2H';
-              if (/^half(time)?$/i.test(s)) return isNba ? 'HALFTIME' : 'HT';
+              if (/^half(time)?$/i.test(s)) return 'HALFTIME';  // always HALFTIME for all sports
               // NBA quarter labels
               if (/^q?1(st)?$/i.test(s)) return 'Q1';
               if (/^q?2(nd)?$/i.test(s)) return 'Q2';
@@ -1327,7 +1327,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               //
               // MODEL tab active:
               //   model edge   = #39FF14 BOLD — edge highlight (primary)
-              //   model no-edge = light gray BOLD — primary non-edge
+              //   model no-edge = white BOLD — primary non-edge (user request: white not gray)
               //
               // SPLITS/EDGE tabs:
               //   model (any)  = dimmed 30%
@@ -1335,7 +1335,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               // LOG: [GameCard:modelStyle] isEdge + tab in dev
               if (process.env.NODE_ENV === 'development' && isEdge) {
                 console.log(
-                  `%c[GameCard:modelStyle] edge=true tab=${mobileTab} → ${isModelTab ? '#39FF14' : 'white 70%'}`,
+                  `%c[GameCard:modelStyle] edge=true tab=${mobileTab} → ${isModelTab ? '#39FF14 bold' : 'white 70% unbolded'}`,
                   'color:#aaa;font-size:9px'
                 );
               }
@@ -1354,7 +1354,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 return {
                   fontSize: 'clamp(11px, 3vw, 15px)',
                   fontWeight: 700,
-                  color: isEdge ? '#39FF14' : 'rgba(200,200,200,0.90)',
+                  color: isEdge ? '#39FF14' : 'rgba(255,255,255,1)',  // non-edge = white bold (not light gray)
                   letterSpacing: '0.02em',
                   fontVariantNumeric: 'tabular-nums',
                 };
@@ -1518,8 +1518,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     )}
                   </div>
 
-                  {/* Away row: logo + two-line name + score — items-center ensures score aligns with team row */}
-                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center' }}>
+                  {/* Away row: explicit minHeight matches OddsTable away row (py-2 = 8px top+bottom + ~20px content ≈ 36px) */}
+                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', minHeight: '36px' }}>
                     {/* Logo + name block */}
                     <div className="flex items-center gap-1 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
                       <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={18} />
@@ -1562,8 +1562,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   {/* Divider */}
                   <div style={{ height: 1, background: 'hsl(var(--border) / 0.4)' }} />
 
-                  {/* Home row: logo + two-line name + score — items-center ensures score aligns with team row */}
-                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center' }}>
+                  {/* Home row: explicit minHeight matches OddsTable home row */}
+                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', minHeight: '36px' }}>
                     {/* Logo + name block */}
                     <div className="flex items-center gap-1 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
                       <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={18} />
