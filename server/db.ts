@@ -137,6 +137,27 @@ export async function deleteModelFile(id: number) {
 
 // ─── Games ───────────────────────────────────────────────────────────────────
 
+/**
+ * Sort game rows by start time, treating '00:00' as midnight (sort last).
+ * This replaces the CASE WHEN ORDER BY SQL expression which is not supported
+ * by the TiDB driver. DB-level sort by sortOrder is done first, then this
+ * stable sort applies start-time ordering on top.
+ */
+function sortGamesByStartTime<T extends { gameDate: string; startTimeEst: string | null; sortOrder: number | null }>(rows: T[]): T[] {
+  return rows.slice().sort((a, b) => {
+    // Primary: gameDate ascending
+    if (a.gameDate < b.gameDate) return -1;
+    if (a.gameDate > b.gameDate) return 1;
+    // Secondary: start time ascending, '00:00' sorts last (midnight)
+    const timeA = (!a.startTimeEst || a.startTimeEst === '00:00') ? '24:00' : a.startTimeEst;
+    const timeB = (!b.startTimeEst || b.startTimeEst === '00:00') ? '24:00' : b.startTimeEst;
+    if (timeA < timeB) return -1;
+    if (timeA > timeB) return 1;
+    // Tertiary: sortOrder ascending (VSiN page order)
+    return (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999);
+  });
+}
+
 export async function insertGames(rows: InsertGame[]) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -176,11 +197,13 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }) {
   // Public feed: show all games that have live VSiN odds (regardless of publishedToFeed)
   conditions.push(or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!);
 
-  return db
+  const rows = await db
     .select()
     .from(games)
     .where(and(...conditions))
-    .orderBy(games.gameDate, sql`CASE WHEN ${games.startTimeEst} = '00:00' THEN '24:00' ELSE ${games.startTimeEst} END`, games.sortOrder);
+    .orderBy(games.gameDate, games.sortOrder);
+  // Sort by start time in Node.js: treat '00:00' as midnight (sort last within each date)
+  return sortGamesByStartTime(rows);
 }
 
 export async function deleteGamesByFileId(fileId: number) {
@@ -286,11 +309,12 @@ export async function listGamesByDate(gameDate: string, sport?: string) {
   if (!db) throw new Error("Database not available");
   const conditions = [eq(games.gameDate, gameDate)];
   if (sport) conditions.push(eq(games.sport, sport));
-  return db
+  const rows = await db
     .select()
     .from(games)
     .where(and(...conditions))
-    .orderBy(sql`CASE WHEN ${games.startTimeEst} = '00:00' THEN '24:00' ELSE ${games.startTimeEst} END`, games.sortOrder);
+    .orderBy(games.sortOrder);
+  return sortGamesByStartTime(rows);
 }
 
 /** List all staging games for a given date (fileId = 0, unpublished), optionally filtered by sport */
@@ -299,11 +323,12 @@ export async function listStagingGames(gameDate: string, sport?: string) {
   if (!db) throw new Error("Database not available");
   const conditions: ReturnType<typeof eq>[] = [eq(games.gameDate, gameDate), eq(games.fileId, 0)];
   if (sport) conditions.push(eq(games.sport, sport));
-  return db
+  const rows = await db
     .select()
     .from(games)
     .where(and(...conditions))
-    .orderBy(sql`CASE WHEN ${games.startTimeEst} = '00:00' THEN '24:00' ELSE ${games.startTimeEst} END`, games.sortOrder);
+    .orderBy(games.sortOrder);
+  return sortGamesByStartTime(rows);
 }
 /** Update model projections and edge labels for a single game */
 export async function updateGameProjections(
@@ -398,11 +423,12 @@ export async function listStagingGamesRange(fromDate: string, toDate: string, sp
     lte(games.gameDate, toDate),
   ];
   if (sport) conditions.push(eq(games.sport, sport));
-  return db
+  const rows = await db
     .select()
     .from(games)
     .where(and(...conditions))
-    .orderBy(games.gameDate, sql`CASE WHEN ${games.startTimeEst} = '00:00' THEN '24:00' ELSE ${games.startTimeEst} END`, games.sortOrder);
+    .orderBy(games.gameDate, games.sortOrder);
+  return sortGamesByStartTime(rows);
 }
 
 /** Look up a game by its NCAA contest ID (for dedup during NCAA-only insert) */
