@@ -328,6 +328,18 @@ export default function ModelProjections() {
     { refetchOnWindowFocus: false, refetchInterval: 15 * 1000 }
   );
 
+  // Cross-sport game lists for the Favorites tab (needs ALL sports regardless of selectedSport)
+  // NOTE: isAppAuthedForFav is defined below — we use a lazy ref pattern to avoid forward-ref issues.
+  // These queries are enabled after isAppAuthedForFav is computed (see below).
+  const { data: allNcaamGames } = trpc.games.list.useQuery(
+    { sport: "NCAAM" },
+    { refetchOnWindowFocus: false, refetchInterval: 30 * 1000 }
+  );
+  const { data: allNbaGames } = trpc.games.list.useQuery(
+    { sport: "NBA" },
+    { refetchOnWindowFocus: false, refetchInterval: 30 * 1000 }
+  );
+
   const liveCount = useMemo(() =>
     (allGames ?? []).filter(g => g?.gameStatus === "live").length,
     [allGames]
@@ -428,11 +440,21 @@ export default function ModelProjections() {
     return active;
   }, [favWithDatesData]);
 
+  // Merged pool of all games across all sports — used exclusively for the Favorites tab
+  type GameItem = NonNullable<NonNullable<typeof allGames>[number]>;
+  const allGamesPool = useMemo((): GameItem[] => {
+    const pool: GameItem[] = [];
+    if (allNcaamGames) for (const g of allNcaamGames) { if (g) pool.push(g as GameItem); }
+    if (allNbaGames) for (const g of allNbaGames) { if (g) pool.push(g as GameItem); }
+    return pool;
+  }, [allNcaamGames, allNbaGames]);
+
   // Games to show in the Favorites tab (all sports, all dates, filtered by active favs)
-  const favoritesTabGames = useMemo(() => {
-    if (!allGames || activeFavGameIds.size === 0) return [];
-    return allGames.filter(g => g && activeFavGameIds.has(g.id)).sort(compareGames);
-  }, [allGames, activeFavGameIds]);
+  const favoritesTabGames = useMemo((): GameItem[] => {
+    if (activeFavGameIds.size === 0) return [];
+    const pool: GameItem[] = allGamesPool.length > 0 ? allGamesPool : (allGames ?? []).filter((g): g is GameItem => !!g);
+    return pool.filter(g => activeFavGameIds.has(g.id)).sort(compareGames);
+  }, [allGamesPool, allGames, activeFavGameIds]);
 
   // Count of active favorites for the badge
   const activeFavCount = activeFavGameIds.size;
@@ -609,26 +631,20 @@ export default function ModelProjections() {
         {/* Row 3: Unified filter bar — FAVORITES | DATE | NCAAM | NBA | Search */}
         <div ref={searchRef} className="relative px-3 pt-1 pb-0 flex items-center gap-2">
 
-          {/* FAVORITES tab — only shown when authenticated */}
-          {isAuthenticated && (
+          {/* FAVORITES tab — shown when user is authenticated AND has ≥1 active favorite */}
+          {/* NOTE: must use isAppAuthedForFav (Boolean(appUser)) — NOT isAuthenticated (Manus OAuth always null) */}
+          {isAppAuthedForFav && activeFavCount >= 1 && (
             <button
               onClick={() => setShowFavoritesTab(v => !v)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide transition-all flex-shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide transition-all flex-shrink-0"
               style={showFavoritesTab
-                ? { background: "rgba(255,215,0,0.15)", color: "#FFD700", border: "1px solid rgba(255,215,0,0.5)" }
-                : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }
+                ? { background: "rgba(255,215,0,0.18)", color: "#FFD700", border: "1px solid rgba(255,215,0,0.55)", boxShadow: "0 0 8px rgba(255,215,0,0.15)" }
+                : { background: "hsl(var(--card))", color: "rgba(255,215,0,0.75)", border: "1px solid rgba(255,215,0,0.35)" }
               }
-              title="Favorites"
+              title={`Favorites (${activeFavCount})`}
             >
-              <Star style={{ width: 12, height: 12, fill: showFavoritesTab ? "#FFD700" : "none", color: showFavoritesTab ? "#FFD700" : "rgba(255,255,255,0.45)" }} />
-              {activeFavCount > 0 && (
-                <span
-                  className="ml-0.5 text-[10px] font-black"
-                  style={{ color: showFavoritesTab ? "#FFD700" : "rgba(255,255,255,0.6)" }}
-                >
-                  {activeFavCount}
-                </span>
-              )}
+              <Star style={{ width: 12, height: 12, fill: showFavoritesTab ? "#FFD700" : "rgba(255,215,0,0.75)", color: showFavoritesTab ? "#FFD700" : "rgba(255,215,0,0.75)", flexShrink: 0 }} />
+              <span>Favorites</span>
             </button>
           )}
 
