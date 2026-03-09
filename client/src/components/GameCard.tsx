@@ -1319,20 +1319,55 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               fontVariantNumeric: 'tabular-nums',
             });
 
-            const modelStyle = (isEdge?: boolean): React.CSSProperties => ({
-              fontSize: 'clamp(11px, 3vw, 15px)',
-              // Edge values always bold; MODEL tab active = bold; BOOK tab = unbolded
-              fontWeight: (isEdge || isModelTab) ? 700 : 400,
-              color: isEdge
-                ? '#39FF14'                          // ALWAYS neon green bold for edge (both tabs)
-                : isModelTab
-                  ? 'rgba(200,200,200,0.90)'         // MODEL active, no edge: light gray bold
-                  : isBookTab
-                    ? 'rgba(255,255,255,0.70)'       // BOOK active: model white unbolded (secondary)
-                    : 'rgba(255,255,255,0.30)',       // SPLITS/EDGE: dimmed
-              letterSpacing: '0.02em',
-              fontVariantNumeric: 'tabular-nums',
-            });
+            const modelStyle = (isEdge?: boolean): React.CSSProperties => {
+              // ── MODEL value color/weight rules ────────────────────────────────
+              // BOOK tab active:
+              //   model (any)  = white unbolded 70% — secondary, visible but NOT primary
+              //   edge does NOT trigger neon green when BOOK tab is active
+              //
+              // MODEL tab active:
+              //   model edge   = #39FF14 BOLD — edge highlight (primary)
+              //   model no-edge = light gray BOLD — primary non-edge
+              //
+              // SPLITS/EDGE tabs:
+              //   model (any)  = dimmed 30%
+              //
+              // LOG: [GameCard:modelStyle] isEdge + tab in dev
+              if (process.env.NODE_ENV === 'development' && isEdge) {
+                console.log(
+                  `%c[GameCard:modelStyle] edge=true tab=${mobileTab} → ${isModelTab ? '#39FF14' : 'white 70%'}`,
+                  'color:#aaa;font-size:9px'
+                );
+              }
+              if (isBookTab) {
+                // BOOK tab: model is always secondary — white unbolded, no edge highlight
+                return {
+                  fontSize: 'clamp(11px, 3vw, 15px)',
+                  fontWeight: 400,
+                  color: 'rgba(255,255,255,0.70)',
+                  letterSpacing: '0.02em',
+                  fontVariantNumeric: 'tabular-nums',
+                };
+              }
+              if (isModelTab) {
+                // MODEL tab: edge = neon green bold; no-edge = light gray bold
+                return {
+                  fontSize: 'clamp(11px, 3vw, 15px)',
+                  fontWeight: 700,
+                  color: isEdge ? '#39FF14' : 'rgba(200,200,200,0.90)',
+                  letterSpacing: '0.02em',
+                  fontVariantNumeric: 'tabular-nums',
+                };
+              }
+              // SPLITS/EDGE tabs: dimmed
+              return {
+                fontSize: 'clamp(11px, 3vw, 15px)',
+                fontWeight: 400,
+                color: 'rgba(255,255,255,0.30)',
+                letterSpacing: '0.02em',
+                fontVariantNumeric: 'tabular-nums',
+              };
+            };
 
             // Per-cell edge detection
             const awaySpreadIsEdge  = spreadEdgeIsAway === true;
