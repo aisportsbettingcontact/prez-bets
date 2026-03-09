@@ -162,24 +162,38 @@ function EditablePill({
   placeholder,
   prefix,
   inputRef,
+  allowNegative = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   prefix?: string;   // "O" or "U" shown before the number
   inputRef?: React.RefObject<HTMLInputElement | null>;
+  allowNegative?: boolean;
 }) {
-  const hasValue = value !== "" && !isNaN(parseFloat(value));
+  const hasValue = value !== "" && value !== "-" && !isNaN(parseFloat(value));
+
+  // Allow typing negative numbers: permit "-", "-.", "-0", etc. as intermediate states
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    // Strip anything that isn't a digit, dot, or leading minus
+    const cleaned = raw.replace(/[^\d.\-]/g, "");
+    // Allow at most one minus (only at start) and one dot
+    const normalized = cleaned
+      .replace(/(?!^)-/g, "")   // remove any minus not at position 0
+      .replace(/(\..*)\./g, "$1"); // remove duplicate dots
+    onChange(normalized);
+  };
 
   return (
     <div
       className="flex items-center justify-center rounded-lg"
       style={{
         background: "rgba(255,255,255,0.08)",
-        minWidth: prefix ? "64px" : "48px",
+        minWidth: prefix ? "64px" : "52px",
         width: "auto",
-        maxWidth: "90px",
-        padding: "0 10px",
+        maxWidth: allowNegative ? "80px" : "90px",
+        padding: "0 8px",
         height: "36px",
         cursor: "text",
       }}
@@ -199,13 +213,14 @@ function EditablePill({
       <input
         ref={inputRef}
         type="text"
-        inputMode="decimal"
+        inputMode="text"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={handleChange}
         placeholder={placeholder ?? "—"}
         className="bg-transparent border-none outline-none text-center font-bold w-full"
         style={{
-          fontSize: "clamp(13px, 3.5vw, 15px)",
+          // 16px minimum prevents iOS Safari from auto-zooming on input focus
+          fontSize: "clamp(16px, 3.5vw, 17px)",
           color: hasValue ? "#FFFFFF" : "hsl(var(--muted-foreground))",
           caretColor: "#39FF14",
           minWidth: 0,
@@ -455,7 +470,7 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
   const handleAwaySpreadChange = (val: string) => {
     setAwaySpread(val);
     const n = parseFloat(val);
-    if (!isNaN(n)) setHomeSpread(n === 0 ? "0" : String(-n));
+    if (!isNaN(n)) setHomeSpread(n === 0 ? "0" : n > 0 ? String(-n) : `+${-n}`);
     setDirty(true);
   };
 
@@ -463,13 +478,67 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
   const handleHomeSpreadChange = (val: string) => {
     setHomeSpread(val);
     const n = parseFloat(val);
-    if (!isNaN(n)) setAwaySpread(n === 0 ? "0" : String(-n));
+    if (!isNaN(n)) setAwaySpread(n === 0 ? "0" : n > 0 ? String(-n) : `+${-n}`);
     setDirty(true);
   };
 
   const handleTotalChange = (val: string) => {
     setModelTotal(val);
     setDirty(true);
+  };
+
+  // ML inverse: straight sign flip, always show + on positive
+  const mlInverse = (val: string): string => {
+    const n = parseFloat(val);
+    if (isNaN(n) || val === "" || val === "-") return "";
+    const inv = -n;
+    return inv > 0 ? `+${inv}` : String(inv);
+  };
+
+  const handleAwayMLChange = (val: string) => {
+    setAwayML(val);
+    const inv = mlInverse(val);
+    if (inv !== "") setHomeML(inv);
+    setDirty(true);
+  };
+
+  const handleHomeMLChange = (val: string) => {
+    setHomeML(val);
+    const inv = mlInverse(val);
+    if (inv !== "") setAwayML(inv);
+    setDirty(true);
+  };
+
+  // Reset all model projections and auto-save
+  const handleReset = async () => {
+    setAwaySpread("");
+    setHomeSpread("");
+    setModelTotal("");
+    setAwayML("");
+    setHomeML("");
+    setDirty(false);
+    setSaving(true);
+    try {
+      await updateMutation.mutateAsync({
+        id: game.id,
+        awayModelSpread: null,
+        homeModelSpread: null,
+        modelTotal: null,
+        modelAwayML: null,
+        modelHomeML: null,
+        spreadEdge: null,
+        spreadDiff: null,
+        totalEdge: null,
+        totalDiff: null,
+      });
+      setHasBeenSubmitted(false);
+      toast.success("Projections reset");
+      onSaved();
+    } catch {
+      toast.error("Reset failed");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Compute edge labels live from current input values
@@ -740,7 +809,8 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
       </div>
 
       {/* ── Two-column body: model inputs left (50%), splits right (50%) ── */}
-      <div className="flex flex-col sm:flex-row min-h-0" style={{ borderTop: "1px solid hsl(var(--border))" }}>
+      {/* Always flex-row (never flex-col) to prevent layout shift when inputs are focused on mobile */}
+      <div className="flex flex-row min-h-0" style={{ borderTop: "1px solid hsl(var(--border))" }}>
 
         {/* LEFT: model inputs */}
         <div className="flex-1 min-w-0 px-3 pt-2 pb-3 flex flex-col justify-between" style={{ borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
@@ -791,29 +861,46 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
               <div className="flex-shrink-0 flex items-center justify-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
                 <EditablePill value={modelTotal} onChange={handleTotalChange} placeholder="—" />
               </div>
-              {/* Model ML pills — one per team row */}
-              <div className="flex-shrink-0 flex flex-col justify-around" style={{ width: "clamp(52px, 13vw, 76px)", gap: 4 }}>
+              {/* Model ML pills — one per team row, with inverse auto-population */}
+              <div className="flex-shrink-0 flex flex-col justify-around" style={{ width: "clamp(60px, 14vw, 80px)", gap: 4 }}>
                 <div className="flex items-center justify-center" style={{ flex: 1 }}>
                   <EditablePill
                     value={awayML}
-                    onChange={(v) => { setAwayML(v); setDirty(true); }}
+                    onChange={handleAwayMLChange}
                     placeholder="—"
+                    allowNegative
                   />
                 </div>
                 <div style={{ height: 1, background: "hsl(var(--border))" }} />
                 <div className="flex items-center justify-center" style={{ flex: 1 }}>
                   <EditablePill
                     value={homeML}
-                    onChange={(v) => { setHomeML(v); setDirty(true); }}
+                    onChange={handleHomeMLChange}
                     placeholder="—"
+                    allowNegative
                   />
                 </div>
               </div>
             </div>
           </div>
-          {/* Save button + edge verdict */}
+          {/* Save + Reset buttons + edge verdict */}
           <div>
-            <div className="mt-2 flex justify-end">
+            <div className="mt-2 flex items-center justify-between gap-2">
+              {/* Reset button — only shown when game has model data */}
+              {hasAnyModel ? (
+                <button
+                  onClick={handleReset}
+                  disabled={saving}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all"
+                  style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
+                  title="Clear all model projections and save"
+                >
+                  {saving ? <Loader2 size={9} className="animate-spin" /> : null}
+                  Reset
+                </button>
+              ) : (
+                <div />
+              )}
               <Button
                 size="sm"
                 onClick={handleSave}
@@ -1044,7 +1131,7 @@ export default function PublishProjections() {
       {/* Sticky header — mirrors Dashboard header style */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
         {/* Top row: back + brand + publish all */}
-        <div className="relative flex items-center px-4 py-2 max-w-3xl mx-auto">
+        <div className="relative flex items-center px-4 py-2 max-w-5xl mx-auto">
 
           {/* Back button */}
           <button
@@ -1091,7 +1178,7 @@ export default function PublishProjections() {
         </div>
 
         {/* Date navigation row */}
-        <div className="px-4 pb-1.5 max-w-3xl mx-auto flex items-center gap-2">
+        <div className="px-4 pb-1.5 max-w-5xl mx-auto flex items-center gap-2">
           {/* Prev day */}
           <button
             onClick={() => setGameDate(d => addDays(d, -1))}
@@ -1145,7 +1232,7 @@ export default function PublishProjections() {
         </div>
 
         {/* Sport filter toggle */}
-        <div className="px-4 pb-1 max-w-3xl mx-auto flex items-center gap-2">
+        <div className="px-4 pb-1 max-w-5xl mx-auto flex items-center gap-2">
           {/* NCAAM button */}
           <button
             onClick={() => setSelectedSport("NCAAM")}
@@ -1186,7 +1273,7 @@ export default function PublishProjections() {
 
         {/* Status filter tabs (NCAAM only) — two rows */}
         {selectedSport === "NCAAM" && (
-          <div className="px-4 pb-1.5 max-w-3xl mx-auto flex flex-col gap-1.5">
+          <div className="px-4 pb-1.5 max-w-5xl mx-auto flex flex-col gap-1.5">
             {/* Row 1: game-status filters */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {([
@@ -1281,7 +1368,7 @@ export default function PublishProjections() {
         )}
 
         {/* Stats bar — slate completeness + refresh timestamps */}
-        <div className="px-4 pb-3 max-w-3xl mx-auto">
+        <div className="px-4 pb-3 max-w-5xl mx-auto">
           <div
             className="rounded-lg px-4 py-2.5 grid gap-x-4 gap-y-1.5"
             style={{
@@ -1404,7 +1491,7 @@ export default function PublishProjections() {
       </header>
 
       {/* Game cards — same max-width and padding as Dashboard */}
-      <main className="max-w-3xl mx-auto px-4 pb-8 pt-3 space-y-3">
+      <main className="max-w-5xl mx-auto px-4 pb-8 pt-3 space-y-3">
         {isLoading ? (
           <div className="flex items-center justify-center py-24">
             <Loader2 className="animate-spin" style={{ color: "#39FF14" }} />

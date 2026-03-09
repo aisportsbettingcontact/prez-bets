@@ -803,7 +803,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           <span
             className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
             style={{
-              fontSize: "clamp(22px, 2.5vw, 44px)",
+              /* NBA scores are 3 digits (100-130) — use smaller clamp to prevent overflow in 160px panel */
+              fontSize: isNba ? "clamp(18px, 2vw, 38px)" : "clamp(22px, 2.5vw, 44px)",
               lineHeight: 1,
               color: scoreFlash
                 ? "#39FF14"
@@ -854,7 +855,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           <span
             className="tabular-nums font-black flex-shrink-0 transition-colors duration-300"
             style={{
-              fontSize: "clamp(22px, 2.5vw, 44px)",
+              fontSize: isNba ? "clamp(18px, 2vw, 38px)" : "clamp(22px, 2.5vw, 44px)",
               lineHeight: 1,
               color: scoreFlash
                 ? "#39FF14"
