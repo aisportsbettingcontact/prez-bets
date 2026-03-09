@@ -1283,28 +1283,53 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               );
             }
 
+            // ── Value style factories (matches both reference images exactly) ──
+            //
+            // BOOK LINES tab active (ref image 1):
+            //   book  = white BOLD full opacity     (primary)
+            //   model = white unbolded 70% opacity  (secondary, visible)
+            //   model edge = #39FF14 BOLD            (edge highlight always wins)
+            //
+            // MODEL LINES tab active (ref image 2):
+            //   book  = white unbolded 70% opacity  (secondary, visible for reference)
+            //   model non-edge = light gray BOLD     (primary, not edge)
+            //   model edge = #39FF14 BOLD            (edge highlight always wins)
+            //
+            // SPLITS / EDGE tabs:
+            //   both dimmed for context
+            //
+            // LOG: [GameCard:OddsStyle] logs tab + edge state in dev
+            if (process.env.NODE_ENV === 'development') {
+              console.log(
+                `%c[GameCard:OddsStyle] game=${game.id} tab=${mobileTab} spreadEdge=${spreadEdgeIsAway} totalEdge=${totalEdgeIsOver}`,
+                'color:#aaa;font-size:9px'
+              );
+            }
+
             const bookStyle = (_isEdge?: boolean): React.CSSProperties => ({
               fontSize: 'clamp(11px, 3vw, 15px)',
-              fontWeight: isBookTab ? 700 : 400,  // bold only when BOOK tab active
+              // BOOK tab: bold white (primary) | MODEL tab: unbolded white (secondary) | other: dimmed
+              fontWeight: isBookTab ? 700 : 400,
               color: isBookTab
-                ? 'rgba(232,232,232,1)'            // BOOK active: white full opacity
+                ? 'rgba(255,255,255,1)'             // BOOK active: white bold (primary)
                 : isModelTab
-                  ? 'rgba(232,232,232,0.50)'       // MODEL active: gray 50% (visible for reference)
-                  : 'rgba(232,232,232,0.35)',       // SPLITS/EDGE: gray 35%
+                  ? 'rgba(255,255,255,0.70)'        // MODEL active: white unbolded (secondary, visible)
+                  : 'rgba(255,255,255,0.30)',        // SPLITS/EDGE: dimmed
               letterSpacing: '0.02em',
               fontVariantNumeric: 'tabular-nums',
             });
 
             const modelStyle = (isEdge?: boolean): React.CSSProperties => ({
               fontSize: 'clamp(11px, 3vw, 15px)',
-              fontWeight: (isModelTab || isEdge) ? 700 : 400,  // bold when MODEL active OR edge
+              // Edge values always bold; MODEL tab active = bold; BOOK tab = unbolded
+              fontWeight: (isEdge || isModelTab) ? 700 : 400,
               color: isEdge
-                ? '#39FF14'                          // ALWAYS neon green for edge values
+                ? '#39FF14'                          // ALWAYS neon green bold for edge (both tabs)
                 : isModelTab
-                  ? 'rgba(255,255,255,1)'            // MODEL active, no edge: white bold full opacity
+                  ? 'rgba(200,200,200,0.90)'         // MODEL active, no edge: light gray bold
                   : isBookTab
-                    ? 'rgba(255,255,255,0.40)'       // BOOK active: model dimmed but visible
-                    : 'rgba(255,255,255,0.35)',       // SPLITS/EDGE: dimmed
+                    ? 'rgba(255,255,255,0.70)'       // BOOK active: model white unbolded (secondary)
+                    : 'rgba(255,255,255,0.30)',       // SPLITS/EDGE: dimmed
               letterSpacing: '0.02em',
               fontVariantNumeric: 'tabular-nums',
             });
@@ -1342,8 +1367,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       <span className="text-center uppercase tracking-widest"
                         style={{
                           fontSize: 'clamp(7px, 1.9vw, 10px)',
-                          fontWeight: 400,                         // always unbolded
-                          color: 'rgba(232,232,232,0.55)',         // always gray
+                          fontWeight: 400,                         // always unbolded (ref image)
+                          color: 'rgba(255,255,255,0.75)',         // white unbolded (ref image)
                           letterSpacing: '0.05em',
                         }}>BOOK</span>
                       <span className="text-center uppercase tracking-widest"
