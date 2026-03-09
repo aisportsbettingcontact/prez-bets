@@ -790,3 +790,6 @@
 - [ ] Desktop/tablet GameCard: always show full team name + nickname (two lines) in score panel for all sports (NCAAM: school + nickname, NBA: city + team name)
 - [x] Implement production-grade structured client-side logging in GameCard (render, tab switch, edge calc, data validation)
 - [x] Implement structured server-side logging in routers.ts and db.ts (request tracing, timing, error context, query diagnostics) — server/logger.ts created
+- [x] Mobile GameCard OddsTable: BK→BOOK, MDL→MODEL sub-headers; active=white bold, inactive=light gray unbolded
+- [x] Mobile GameCard OddsTable: inactive values use light gray 20% opacity (not neon green); active model values use #39FF14 bold full opacity; active book values use white bold
+- [x] Mobile GameCard frozen left panel: two-line school+nickname layout (140px panel), ellipsis fallback for long names, score fixed-width 28px column

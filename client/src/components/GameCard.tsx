@@ -1199,19 +1199,25 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             const isBookTab  = mobileTab === 'book';
             const isModelTab = mobileTab === 'model';
 
-            const bookStyle  = (isEdge?: boolean): React.CSSProperties => ({
+            // ── Value style factories ────────────────────────────────────────────
+            // BOOK LINES tab active  → book = white bold full opacity; model = light gray 20% opacity
+            // MODEL LINES tab active → book = light gray 20% opacity; model = #39FF14 bold full opacity
+            // Neither tab (SPLITS/EDGE) → both at 20% opacity (background context)
+            const bookStyle  = (_isEdge?: boolean): React.CSSProperties => ({
               fontSize: 'clamp(13px, 3.5vw, 17px)',
               fontWeight: isBookTab ? 700 : 400,
-              color: isBookTab ? '#E8E8E8' : 'rgba(232,232,232,0.38)',
+              color: isBookTab
+                ? 'rgba(232,232,232,1)'         // active: white bold
+                : 'rgba(232,232,232,0.20)',      // inactive: light gray 20% opacity
               letterSpacing: '0.02em',
               fontVariantNumeric: 'tabular-nums',
             });
-            const modelStyle = (isEdge?: boolean): React.CSSProperties => ({
+            const modelStyle = (_isEdge?: boolean): React.CSSProperties => ({
               fontSize: 'clamp(13px, 3.5vw, 17px)',
-              fontWeight: isModelTab ? 700 : 500,
+              fontWeight: isModelTab ? 700 : 400,
               color: isModelTab
-                ? (isEdge ? '#39FF14' : '#39FF14')
-                : 'rgba(57,255,20,0.38)',
+                ? '#39FF14'                      // active: neon green bold full opacity
+                : 'rgba(232,232,232,0.20)',      // inactive: light gray 20% opacity
               letterSpacing: '0.02em',
               fontVariantNumeric: 'tabular-nums',
             });
@@ -1242,14 +1248,24 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       style={{ fontSize: 'clamp(9px, 2.2vw, 11px)', color: '#E8E8E8' }}>{h}</span>
                   ))}
                 </div>
-                {/* Sub-headers: BOOK / MODEL */}
+                {/* Sub-headers: BOOK / MODEL — active=bold white/neon, inactive=light gray unbolded */}
                 <div className="grid grid-cols-3 pb-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
                   {[0,1,2].map(i => (
                     <div key={i} className="grid grid-cols-2">
-                      <span className="text-center font-bold uppercase tracking-widest"
-                        style={{ fontSize: 'clamp(7px, 1.8vw, 9px)', color: isBookTab ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}>BK</span>
-                      <span className="text-center font-bold uppercase tracking-widest"
-                        style={{ fontSize: 'clamp(7px, 1.8vw, 9px)', color: isModelTab ? '#39FF14' : 'rgba(57,255,20,0.45)' }}>MDL</span>
+                      <span className="text-center uppercase tracking-widest"
+                        style={{
+                          fontSize: 'clamp(7px, 1.9vw, 10px)',
+                          fontWeight: isBookTab ? 700 : 400,
+                          color: isBookTab ? 'rgba(232,232,232,0.9)' : 'rgba(232,232,232,0.30)',
+                          letterSpacing: '0.05em',
+                        }}>BOOK</span>
+                      <span className="text-center uppercase tracking-widest"
+                        style={{
+                          fontSize: 'clamp(7px, 1.9vw, 10px)',
+                          fontWeight: isModelTab ? 700 : 400,
+                          color: isModelTab ? '#39FF14' : 'rgba(232,232,232,0.30)',
+                          letterSpacing: '0.05em',
+                        }}>MODEL</span>
                     </div>
                   ))}
                 </div>
@@ -1289,7 +1305,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             );
 
             return (
-              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', width: '100%', minHeight: 0 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', width: '100%', minHeight: 0 }}>
 
                 {/* ── FROZEN LEFT PANEL: logo + abbr + score ─────────────────── */}
                 <div style={{
@@ -1328,20 +1344,41 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     )}
                   </div>
 
-                  {/* Away row: logo + abbr + score */}
+                  {/* Away row: logo + two-line name + score */}
                   <div className="flex items-center justify-between gap-1 w-full">
-                    <div className="flex items-center gap-1 min-w-0 flex-1">
-                      <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={20} />
-                      <span className="font-bold truncate" style={{
-                        fontSize: 'clamp(10px, 2.8vw, 13px)',
-                        color: awayWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
-                        fontWeight: awayWins ? 800 : 600,
-                        letterSpacing: '0.03em',
-                      }}>{awayAbbr}</span>
+                    {/* Logo + name block */}
+                    <div className="flex items-center gap-1 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
+                      <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={18} />
+                      <div className="flex flex-col min-w-0" style={{ lineHeight: 1.15 }}>
+                        <span style={{
+                          fontSize: 'clamp(8px, 2.2vw, 10px)',
+                          fontWeight: awayWins ? 800 : 600,
+                          color: awayWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
+                          letterSpacing: '0.02em',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          maxWidth: '72px',
+                        }}>{awayName}</span>
+                        {awayNickname && (
+                          <span style={{
+                            fontSize: 'clamp(7px, 1.9vw, 9px)',
+                            fontWeight: 400,
+                            color: awayWins ? 'rgba(232,232,232,0.75)' : 'rgba(232,232,232,0.45)',
+                            letterSpacing: '0.02em',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '72px',
+                          }}>{awayNickname}</span>
+                        )}
+                      </div>
                     </div>
+                    {/* Score — fixed width so it never squeezes the name */}
                     {(isLive || isFinal) && hasScores && (
                       <span className="tabular-nums font-black flex-shrink-0 transition-colors duration-300" style={{
-                        fontSize: 'clamp(16px, 4.5vw, 22px)', lineHeight: 1,
+                        fontSize: 'clamp(15px, 4vw, 20px)', lineHeight: 1,
+                        minWidth: '28px', textAlign: 'right',
                         color: scoreFlash ? '#39FF14' : awayWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
                         textShadow: scoreFlash ? '0 0 10px rgba(57,255,20,0.7)' : 'none',
                       }}>{game.awayScore}</span>
@@ -1351,20 +1388,41 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   {/* Divider */}
                   <div style={{ height: 1, background: 'hsl(var(--border) / 0.4)' }} />
 
-                  {/* Home row: logo + abbr + score */}
+                  {/* Home row: logo + two-line name + score */}
                   <div className="flex items-center justify-between gap-1 w-full">
-                    <div className="flex items-center gap-1 min-w-0 flex-1">
-                      <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={20} />
-                      <span className="font-bold truncate" style={{
-                        fontSize: 'clamp(10px, 2.8vw, 13px)',
-                        color: homeWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
-                        fontWeight: homeWins ? 800 : 600,
-                        letterSpacing: '0.03em',
-                      }}>{homeAbbr}</span>
+                    {/* Logo + name block */}
+                    <div className="flex items-center gap-1 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
+                      <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={18} />
+                      <div className="flex flex-col min-w-0" style={{ lineHeight: 1.15 }}>
+                        <span style={{
+                          fontSize: 'clamp(8px, 2.2vw, 10px)',
+                          fontWeight: homeWins ? 800 : 600,
+                          color: homeWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
+                          letterSpacing: '0.02em',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          maxWidth: '72px',
+                        }}>{homeName}</span>
+                        {homeNickname && (
+                          <span style={{
+                            fontSize: 'clamp(7px, 1.9vw, 9px)',
+                            fontWeight: 400,
+                            color: homeWins ? 'rgba(232,232,232,0.75)' : 'rgba(232,232,232,0.45)',
+                            letterSpacing: '0.02em',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '72px',
+                          }}>{homeNickname}</span>
+                        )}
+                      </div>
                     </div>
+                    {/* Score — fixed width so it never squeezes the name */}
                     {(isLive || isFinal) && hasScores && (
                       <span className="tabular-nums font-black flex-shrink-0 transition-colors duration-300" style={{
-                        fontSize: 'clamp(16px, 4.5vw, 22px)', lineHeight: 1,
+                        fontSize: 'clamp(15px, 4vw, 20px)', lineHeight: 1,
+                        minWidth: '28px', textAlign: 'right',
                         color: scoreFlash ? '#39FF14' : homeWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
                         textShadow: scoreFlash ? '0 0 10px rgba(57,255,20,0.7)' : 'none',
                       }}>{game.homeScore}</span>
