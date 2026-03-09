@@ -808,85 +808,369 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
         )}
       </div>
 
-      {/* ── Two-column body: model inputs left (50%), splits right (50%) ── */}
-      {/* Always flex-row (never flex-col) to prevent layout shift when inputs are focused on mobile */}
-      <div className="flex flex-row min-h-0" style={{ borderTop: "1px solid hsl(var(--border))" }}>
+      {/* ── Card body: responsive layout ── */}
+      {/* MOBILE (<lg): stacked vertical sections — SPREAD / TOTAL / ML / Splits */}
+      {/* DESKTOP (lg+): two-column side-by-side — inputs left | splits right */}
+      <div style={{ borderTop: "1px solid hsl(var(--border))" }}>
 
-        {/* LEFT: model inputs */}
-        <div className="flex-1 min-w-0 px-3 pt-2 pb-3 flex flex-col justify-between" style={{ borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
-          {/* Column labels */}
-          <div>
-            <div
-              className="flex items-center gap-1.5 pb-1.5"
-              style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}
-            >
-              <div className="w-8 flex-shrink-0" />
-              <div className="flex-shrink-0" style={{ width: "clamp(90px, 22vw, 120px)" }} />
-              <div className="flex-1 grid text-center" style={{ gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
-                <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>Books</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>Model Line</span>
+        {/* ── DESKTOP layout (lg+): side-by-side ── */}
+        <div className="hidden lg:flex flex-row min-h-0">
+
+          {/* LEFT: model inputs */}
+          <div className="flex-1 min-w-0 px-3 pt-2 pb-3 flex flex-col justify-between" style={{ borderRight: "1px solid hsl(var(--border) / 0.5)" }}>
+            {/* Column labels */}
+            <div>
+              <div
+                className="flex items-center gap-1.5 pb-1.5"
+                style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}
+              >
+                <div className="w-8 flex-shrink-0" />
+                <div className="flex-shrink-0" style={{ width: "clamp(90px, 22vw, 120px)" }} />
+                <div className="flex-1 grid text-center" style={{ gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
+                  <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>Books</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>Model Line</span>
+                </div>
+                <div className="flex-shrink-0 text-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>O/U</span>
+                </div>
+                <div className="flex-shrink-0 text-center" style={{ width: "clamp(52px, 13vw, 76px)" }}>
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>Model ML</span>
+                </div>
               </div>
-              <div className="flex-shrink-0 text-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
-                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>O/U</span>
-              </div>
-              <div className="flex-shrink-0 text-center" style={{ width: "clamp(52px, 13vw, 76px)" }}>
-                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>Model ML</span>
+              {/* Team rows */}
+              <div className="flex gap-1.5 min-w-0 mt-1">
+                <div className="flex-1 min-w-0 flex flex-col">
+                  <EditableTeamRow
+                    slug={game.awayTeam}
+                    name={awayName}
+                    nickname={awayNickname}
+                    consensus={awayConsensus}
+                    modelSpread={awaySpread}
+                    logoUrl={awayLogoUrl}
+                    onSpreadChange={handleAwaySpreadChange}
+                    spreadInputRef={awaySpreadRef}
+                  />
+                  <div className="my-0.5" style={{ height: 1, background: "hsl(var(--border))" }} />
+                  <EditableTeamRow
+                    slug={game.homeTeam}
+                    name={homeName}
+                    nickname={homeNickname}
+                    consensus={homeConsensus}
+                    modelSpread={homeSpread}
+                    logoUrl={homeLogoUrl}
+                    onSpreadChange={handleHomeSpreadChange}
+                  />
+                </div>
+                {/* O/U pill */}
+                <div className="flex-shrink-0 flex items-center justify-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
+                  <EditablePill value={modelTotal} onChange={handleTotalChange} placeholder="—" />
+                </div>
+                {/* Model ML pills */}
+                <div className="flex-shrink-0 flex flex-col justify-around" style={{ width: "clamp(60px, 14vw, 80px)", gap: 4 }}>
+                  <div className="flex items-center justify-center" style={{ flex: 1 }}>
+                    <EditablePill value={awayML} onChange={handleAwayMLChange} placeholder="—" allowNegative />
+                  </div>
+                  <div style={{ height: 1, background: "hsl(var(--border))" }} />
+                  <div className="flex items-center justify-center" style={{ flex: 1 }}>
+                    <EditablePill value={homeML} onChange={handleHomeMLChange} placeholder="—" allowNegative />
+                  </div>
+                </div>
               </div>
             </div>
-            {/* Team rows */}
-            <div className="flex gap-1.5 min-w-0 mt-1">
-              <div className="flex-1 min-w-0 flex flex-col">
-                <EditableTeamRow
-                  slug={game.awayTeam}
-                  name={awayName}
-                  nickname={awayNickname}
-                  consensus={awayConsensus}
-                  modelSpread={awaySpread}
-                  logoUrl={awayLogoUrl}
-                  onSpreadChange={handleAwaySpreadChange}
-                  spreadInputRef={awaySpreadRef}
+            {/* Save + Reset + edge verdict */}
+            <div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                {hasAnyModel ? (
+                  <button
+                    onClick={handleReset}
+                    disabled={saving}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all"
+                    style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
+                    title="Clear all model projections and save"
+                  >
+                    {saving ? <Loader2 size={9} className="animate-spin" /> : null}
+                    Reset
+                  </button>
+                ) : (
+                  <div />
+                )}
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving || !dirty}
+                  className="h-7 px-4 text-xs gap-1.5 font-bold transition-all"
+                  style={dirty
+                    ? { background: "#39FF14", color: "#000" }
+                    : { background: "rgba(57,255,20,0.12)", color: "rgba(57,255,20,0.45)", border: "1px solid rgba(57,255,20,0.2)" }
+                  }
+                >
+                  {saving && <Loader2 size={10} className="animate-spin" />}
+                  {saving
+                    ? (hasBeenSubmitted ? "Saving…" : "Submitting…")
+                    : dirty
+                      ? (hasBeenSubmitted ? "Save" : "Submit")
+                      : (hasBeenSubmitted ? "Saved" : "Submit")
+                  }
+                </Button>
+              </div>
+              {hasAnyModel && (
+                <EdgeVerdictLive
+                  spreadDiff={previewSpreadDiff}
+                  spreadEdge={edges.spreadEdge ?? "PASS"}
+                  totalDiff={previewTotalDiff}
+                  totalEdge={edges.totalEdge ?? "PASS"}
                 />
-                <div className="my-0.5" style={{ height: 1, background: "hsl(var(--border))" }} />
-                <EditableTeamRow
-                  slug={game.homeTeam}
-                  name={homeName}
-                  nickname={homeNickname}
-                  consensus={homeConsensus}
-                  modelSpread={homeSpread}
-                  logoUrl={homeLogoUrl}
-                  onSpreadChange={handleHomeSpreadChange}
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: betting splits */}
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <BettingSplitsPanel game={game} awayLabel={awayName} homeLabel={homeName} />
+          </div>
+        </div>
+
+        {/* ── MOBILE layout (<lg): stacked vertical sections ── */}
+        <div className="lg:hidden flex flex-col">
+
+          {/* ── SPREAD SECTION ── */}
+          <div className="px-3 pt-3 pb-2" style={{ borderBottom: "1px solid hsl(var(--border) / 0.6)" }}>
+            {/* Section header */}
+            <div className="flex items-center justify-between mb-2">
+              <span
+                className="text-[10px] font-black uppercase tracking-[0.18em]"
+                style={{ color: "#39FF14" }}
+              >
+                SPREAD
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>BOOK</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14", minWidth: 64, textAlign: 'center' }}>MODEL</span>
+              </div>
+            </div>
+
+            {/* Away team spread row */}
+            <div className="flex items-center gap-2 py-1.5">
+              {/* Logo */}
+              <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center">
+                <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} />
+              </div>
+              {/* Team name */}
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <span
+                  className="font-bold leading-tight"
+                  style={{ fontSize: "clamp(13px, 3.5vw, 15px)", color: "hsl(var(--foreground))" }}
+                >
+                  {awayName}
+                </span>
+                {awayNickname && (
+                  <span
+                    className="font-medium leading-tight"
+                    style={{ fontSize: "clamp(11px, 2.8vw, 13px)", color: "hsl(var(--muted-foreground))" }}
+                  >
+                    {awayNickname}
+                  </span>
+                )}
+              </div>
+              {/* Book value */}
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ minWidth: 44 }}>
+                <span
+                  className="font-bold tabular-nums"
+                  style={{ fontSize: "clamp(15px, 4vw, 18px)", color: "#D3D3D3" }}
+                >
+                  {awayConsensus}
+                </span>
+              </div>
+              {/* Model input */}
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ minWidth: 64 }}>
+                <EditablePill
+                  value={awaySpread}
+                  onChange={handleAwaySpreadChange}
+                  placeholder="—"
+                  inputRef={awaySpreadRef}
                 />
               </div>
-              {/* O/U pill */}
-              <div className="flex-shrink-0 flex items-center justify-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
-                <EditablePill value={modelTotal} onChange={handleTotalChange} placeholder="—" />
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: "hsl(var(--border) / 0.5)", margin: "0 0" }} />
+
+            {/* Home team spread row */}
+            <div className="flex items-center gap-2 py-1.5">
+              <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center">
+                <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} />
               </div>
-              {/* Model ML pills — one per team row, with inverse auto-population */}
-              <div className="flex-shrink-0 flex flex-col justify-around" style={{ width: "clamp(60px, 14vw, 80px)", gap: 4 }}>
-                <div className="flex items-center justify-center" style={{ flex: 1 }}>
-                  <EditablePill
-                    value={awayML}
-                    onChange={handleAwayMLChange}
-                    placeholder="—"
-                    allowNegative
-                  />
-                </div>
-                <div style={{ height: 1, background: "hsl(var(--border))" }} />
-                <div className="flex items-center justify-center" style={{ flex: 1 }}>
-                  <EditablePill
-                    value={homeML}
-                    onChange={handleHomeMLChange}
-                    placeholder="—"
-                    allowNegative
-                  />
-                </div>
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <span
+                  className="font-bold leading-tight"
+                  style={{ fontSize: "clamp(13px, 3.5vw, 15px)", color: "hsl(var(--foreground))" }}
+                >
+                  {homeName}
+                </span>
+                {homeNickname && (
+                  <span
+                    className="font-medium leading-tight"
+                    style={{ fontSize: "clamp(11px, 2.8vw, 13px)", color: "hsl(var(--muted-foreground))" }}
+                  >
+                    {homeNickname}
+                  </span>
+                )}
+              </div>
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ minWidth: 44 }}>
+                <span
+                  className="font-bold tabular-nums"
+                  style={{ fontSize: "clamp(15px, 4vw, 18px)", color: "#D3D3D3" }}
+                >
+                  {homeConsensus}
+                </span>
+              </div>
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ minWidth: 64 }}>
+                <EditablePill
+                  value={homeSpread}
+                  onChange={handleHomeSpreadChange}
+                  placeholder="—"
+                />
               </div>
             </div>
           </div>
-          {/* Save + Reset buttons + edge verdict */}
-          <div>
-            <div className="mt-2 flex items-center justify-between gap-2">
-              {/* Reset button — only shown when game has model data */}
+
+          {/* ── TOTAL SECTION ── */}
+          <div className="px-3 pt-2.5 pb-2.5" style={{ borderBottom: "1px solid hsl(var(--border) / 0.6)" }}>
+            {/* Section header */}
+            <div className="flex items-center justify-between mb-2">
+              <span
+                className="text-[10px] font-black uppercase tracking-[0.18em]"
+                style={{ color: "#39FF14" }}
+              >
+                TOTAL
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>BOOK O/U</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14", minWidth: 64, textAlign: 'center' }}>MODEL O/U</span>
+              </div>
+            </div>
+            {/* Single row: OVER / UNDER label + book total + model input */}
+            <div className="flex items-center gap-2 py-1">
+              <div className="flex-1 min-w-0">
+                <span
+                  className="font-semibold"
+                  style={{ fontSize: "clamp(12px, 3vw, 14px)", color: "hsl(var(--muted-foreground))" }}
+                >
+                  OVER / UNDER
+                </span>
+              </div>
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ minWidth: 44 }}>
+                <span
+                  className="font-bold tabular-nums"
+                  style={{ fontSize: "clamp(15px, 4vw, 18px)", color: "#D3D3D3" }}
+                >
+                  {isNaN(bookTotal) ? "—" : String(bookTotal)}
+                </span>
+              </div>
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ minWidth: 64 }}>
+                <EditablePill value={modelTotal} onChange={handleTotalChange} placeholder="—" />
+              </div>
+            </div>
+          </div>
+
+          {/* ── MONEYLINE SECTION ── */}
+          <div className="px-3 pt-2.5 pb-2.5" style={{ borderBottom: "1px solid hsl(var(--border) / 0.6)" }}>
+            {/* Section header */}
+            <div className="flex items-center justify-between mb-2">
+              <span
+                className="text-[10px] font-black uppercase tracking-[0.18em]"
+                style={{ color: "#39FF14" }}
+              >
+                MONEYLINE
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>BOOK ML</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14", minWidth: 64, textAlign: 'center' }}>MODEL ML</span>
+              </div>
+            </div>
+
+            {/* Away ML row */}
+            <div className="flex items-center gap-2 py-1.5">
+              <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center">
+                <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} />
+              </div>
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <span
+                  className="font-bold leading-tight"
+                  style={{ fontSize: "clamp(13px, 3.5vw, 15px)", color: "hsl(var(--foreground))" }}
+                >
+                  {awayName}
+                </span>
+                {awayNickname && (
+                  <span
+                    className="font-medium leading-tight"
+                    style={{ fontSize: "clamp(11px, 2.8vw, 13px)", color: "hsl(var(--muted-foreground))" }}
+                  >
+                    {awayNickname}
+                  </span>
+                )}
+              </div>
+              {/* Book ML */}
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ minWidth: 44 }}>
+                <span
+                  className="font-bold tabular-nums"
+                  style={{ fontSize: "clamp(15px, 4vw, 18px)", color: "#D3D3D3" }}
+                >
+                  {game.awayML ?? "—"}
+                </span>
+              </div>
+              {/* Model ML input */}
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ minWidth: 64 }}>
+                <EditablePill value={awayML} onChange={handleAwayMLChange} placeholder="—" allowNegative />
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: "hsl(var(--border) / 0.5)" }} />
+
+            {/* Home ML row */}
+            <div className="flex items-center gap-2 py-1.5">
+              <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center">
+                <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} />
+              </div>
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <span
+                  className="font-bold leading-tight"
+                  style={{ fontSize: "clamp(13px, 3.5vw, 15px)", color: "hsl(var(--foreground))" }}
+                >
+                  {homeName}
+                </span>
+                {homeNickname && (
+                  <span
+                    className="font-medium leading-tight"
+                    style={{ fontSize: "clamp(11px, 2.8vw, 13px)", color: "hsl(var(--muted-foreground))" }}
+                  >
+                    {homeNickname}
+                  </span>
+                )}
+              </div>
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ minWidth: 44 }}>
+                <span
+                  className="font-bold tabular-nums"
+                  style={{ fontSize: "clamp(15px, 4vw, 18px)", color: "#D3D3D3" }}
+                >
+                  {game.homeML ?? "—"}
+                </span>
+              </div>
+              <div className="flex-shrink-0 flex items-center justify-center" style={{ minWidth: 64 }}>
+                <EditablePill value={homeML} onChange={handleHomeMLChange} placeholder="—" allowNegative />
+              </div>
+            </div>
+          </div>
+
+          {/* ── BETTING SPLITS (mobile) ── */}
+          <div style={{ borderBottom: "1px solid hsl(var(--border) / 0.6)" }}>
+            <BettingSplitsPanel game={game} awayLabel={awayName} homeLabel={homeName} />
+          </div>
+
+          {/* ── SAVE / RESET / EDGE VERDICT (mobile) ── */}
+          <div className="px-3 pt-2 pb-3">
+            <div className="flex items-center justify-between gap-2">
               {hasAnyModel ? (
                 <button
                   onClick={handleReset}
@@ -905,7 +1189,7 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
                 size="sm"
                 onClick={handleSave}
                 disabled={saving || !dirty}
-                className="h-7 px-4 text-xs gap-1.5 font-bold transition-all"
+                className="h-8 px-5 text-xs gap-1.5 font-bold transition-all"
                 style={dirty
                   ? { background: "#39FF14", color: "#000" }
                   : { background: "rgba(57,255,20,0.12)", color: "rgba(57,255,20,0.45)", border: "1px solid rgba(57,255,20,0.2)" }
@@ -929,16 +1213,8 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
               />
             )}
           </div>
-        </div>
 
-        {/* RIGHT: betting splits — always visible */}
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <BettingSplitsPanel
-            game={game}
-            awayLabel={awayName}
-            homeLabel={homeName}
-          />
-        </div>
+        </div>{/* end MOBILE layout */}
 
       </div>
     </motion.div>
