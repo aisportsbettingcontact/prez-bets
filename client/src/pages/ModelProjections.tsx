@@ -271,6 +271,10 @@ export default function ModelProjections() {
   // ── Favorites tab ──────────────────────────────────────────────────────────
   const [showFavoritesTab, setShowFavoritesTab] = useState(false);
 
+  // Auto-dismiss Favorites tab when activeFavCount drops to 0 (user unfavorited all games)
+  // This runs after activeFavCount is computed (defined later via useMemo), so we use useEffect
+  // to react to its changes and return the user to the main feed automatically.
+
   // ── In-page favorite notifications ────────────────────────────────────────
   const [favNotifications, setFavNotifications] = useState<FavNotification[]>([]);
   const notifCounterRef = useRef(0);
@@ -458,6 +462,13 @@ export default function ModelProjections() {
 
   // Count of active favorites for the badge
   const activeFavCount = activeFavGameIds.size;
+
+  // Auto-dismiss Favorites tab when count drops to 0 — return user to main feed immediately
+  useEffect(() => {
+    if (showFavoritesTab && activeFavCount === 0) {
+      setShowFavoritesTab(false);
+    }
+  }, [activeFavCount, showFavoritesTab]);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
@@ -648,54 +659,39 @@ export default function ModelProjections() {
             </button>
           )}
 
-          {/* DATE picker — calendar dropdown */}
-          {!showFavoritesTab && (
-            <CalendarPicker
-              selectedDate={selectedDate}
-              onSelect={setSelectedDate}
-              availableDates={new Set(allDates)}
-              isAdmin={isOwner || user?.role === "admin"}
-            />
-          )}
+          {/* DATE picker — always visible, even in favorites tab */}
+          <CalendarPicker
+            selectedDate={selectedDate}
+            onSelect={setSelectedDate}
+            availableDates={new Set(allDates)}
+            isAdmin={isOwner || user?.role === "admin"}
+          />
 
-          {/* NCAAM pill — hidden in favorites tab */}
-          {!showFavoritesTab && (
-            <button onClick={() => setSelectedSport("NCAAM")} className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide transition-all flex-shrink-0"
-              style={selectedSport === "NCAAM" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }}>
-              <img src={CDN_MARCH_MADNESS} alt="NCAAM" width={14} height={10} style={{ objectFit: "contain", filter: selectedSport === "NCAAM" ? "invert(1)" : "invert(0.45)", flexShrink: 0 }} />
-              NCAAM
-            </button>
-          )}
+          {/* NCAAM pill — always visible, even in favorites tab */}
+          <button onClick={() => setSelectedSport("NCAAM")} className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide transition-all flex-shrink-0"
+            style={selectedSport === "NCAAM" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }}>
+            <img src={CDN_MARCH_MADNESS} alt="NCAAM" width={14} height={10} style={{ objectFit: "contain", filter: selectedSport === "NCAAM" ? "invert(1)" : "invert(0.45)", flexShrink: 0 }} />
+            NCAAM
+          </button>
 
-          {/* NBA pill — hidden in favorites tab */}
-          {!showFavoritesTab && (
-            <button onClick={() => setSelectedSport("NBA")} className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide transition-all flex-shrink-0"
-              style={selectedSport === "NBA" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }}>
-              <img src={CDN_NBA} alt="NBA" width={12} height={12} style={{ objectFit: "contain", opacity: selectedSport === "NBA" ? 1 : 0.5, flexShrink: 0 }} />
-              NBA
-            </button>
-          )}
+          {/* NBA pill — always visible, even in favorites tab */}
+          <button onClick={() => setSelectedSport("NBA")} className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide transition-all flex-shrink-0"
+            style={selectedSport === "NBA" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }}>
+            <img src={CDN_NBA} alt="NBA" width={12} height={12} style={{ objectFit: "contain", opacity: selectedSport === "NBA" ? 1 : 0.5, flexShrink: 0 }} />
+            NBA
+          </button>
 
-          {/* Search bar — takes remaining space, hidden in favorites tab */}
-          {!showFavoritesTab && (
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-full border transition-all duration-150"
-                style={{ background: "hsl(var(--secondary))", borderColor: searchFocused ? "rgba(34,197,94,0.5)" : "hsl(var(--border))", boxShadow: searchFocused ? "0 0 0 1px rgba(34,197,94,0.15)" : "none" }}>
-                <Search className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                <input ref={inputRef} type="text" placeholder="Search…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setSearchFocused(true)} className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none" />
-                {searchQuery && <button onMouseDown={(e) => e.preventDefault()} onClick={() => { setSearchQuery(""); inputRef.current?.focus(); }} className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"><X className="w-3 h-3" /></button>}
-              </div>
+          {/* Search bar — always visible, shrinks when Favorites button is present */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-full border transition-all duration-150"
+              style={{ background: "hsl(var(--secondary))", borderColor: searchFocused ? "rgba(34,197,94,0.5)" : "hsl(var(--border))", boxShadow: searchFocused ? "0 0 0 1px rgba(34,197,94,0.15)" : "none" }}>
+              <Search className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <input ref={inputRef} type="text" placeholder="Search…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setSearchFocused(true)} className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none" />
+              {searchQuery && <button onMouseDown={(e) => e.preventDefault()} onClick={() => { setSearchQuery(""); inputRef.current?.focus(); }} className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"><X className="w-3 h-3" /></button>}
             </div>
-          )}
+          </div>
 
-          {/* Favorites tab label — shown instead of search when favorites is active */}
-          {showFavoritesTab && (
-            <div className="flex-1 min-w-0 flex items-center">
-              <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: "#FFD700" }}>
-                ⭐ MY FAVORITES
-              </span>
-            </div>
-          )}
+
 
           {/* Search dropdown */}
           {showDropdown && (

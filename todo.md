@@ -770,3 +770,6 @@
 - [x] getMyFavoritesWithDates tRPC procedure added to favorites router
 - [x] Favorites tab hides calendar/sport/search filters and shows "MY FAVORITES" label instead
 - [x] Model toggle available in both normal and favorites tab modes
+- [x] Remove '⭐ MY FAVORITES' header from Favorites tab feed
+- [x] Keep NCAAM/NBA sport buttons and search bar visible when Favorites tab is active (calendar also always visible)
+- [x] Auto-dismiss Favorites tab and return user to main feed when activeFavCount drops to 0
