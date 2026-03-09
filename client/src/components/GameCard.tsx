@@ -571,8 +571,9 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const toggleModel = onToggleModelProp ?? (() => setShowModelInternal((v) => !v));
 
   // Mobile tab state — controls which section is active on mobile full mode
-  // Tabs: 'book' | 'model' | 'splits' | 'edge'
-  type MobileTab = 'book' | 'model' | 'splits' | 'edge';
+  // Tabs: 'book' | 'model' | 'splits' | 'edge' | 'dual' (BOOK+MODEL both selected)
+  // Dual mode: clicking BOOK when MODEL active (or vice versa) activates dual
+  type MobileTab = 'book' | 'model' | 'splits' | 'edge' | 'dual';
   const [mobileTab, setMobileTab] = useState<MobileTab>('book');
 
   // Per-team score flash — only the team whose score increased flashes neon green
@@ -1257,8 +1258,11 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             })();
 
             // ── Tab state ─────────────────────────────────────────────────────
-            const isBookTab  = mobileTab === 'book';
-            const isModelTab = mobileTab === 'model';
+            // isDualTab: BOOK + MODEL both active simultaneously
+            // isBookTab / isModelTab: true when that tab is active OR dual is active
+            const isDualTab  = mobileTab === 'dual';
+            const isBookTab  = mobileTab === 'book'  || isDualTab;
+            const isModelTab = mobileTab === 'model' || isDualTab;
 
             // ── Value style factories (reference image spec) ──────────────────
             // The table is ALWAYS visible. Tab controls which column is "primary":
@@ -1308,13 +1312,18 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
             const bookStyle = (_isEdge?: boolean): React.CSSProperties => ({
               fontSize: 'clamp(11px, 3vw, 15px)',
-              // BOOK tab: bold white (primary) | MODEL tab: unbolded white (secondary) | other: dimmed
-              fontWeight: isBookTab ? 700 : 400,
-              color: isBookTab
-                ? 'rgba(255,255,255,1)'             // BOOK active: white bold (primary)
-                : isModelTab
-                  ? 'rgba(255,255,255,0.70)'        // MODEL active: white unbolded (secondary, visible)
-                  : 'rgba(255,255,255,0.30)',        // SPLITS/EDGE: dimmed
+              // DUAL mode: book = light gray unbolded (secondary to model primary)
+              // BOOK-only: book = white bold (primary)
+              // MODEL-only: book = white unbolded 70% (secondary, visible for reference)
+              // SPLITS/EDGE: dimmed
+              fontWeight: isDualTab ? 400 : isBookTab ? 700 : 400,
+              color: isDualTab
+                ? 'rgba(200,200,200,0.65)'          // DUAL: light gray unbolded
+                : isBookTab
+                  ? 'rgba(255,255,255,1)'           // BOOK-only: white bold (primary)
+                  : isModelTab
+                    ? 'rgba(255,255,255,0.70)'      // MODEL-only: white unbolded (secondary)
+                    : 'rgba(255,255,255,0.30)',      // SPLITS/EDGE: dimmed
               letterSpacing: '0.02em',
               fontVariantNumeric: 'tabular-nums',
             });
@@ -1339,8 +1348,18 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   'color:#aaa;font-size:9px'
                 );
               }
+              if (isDualTab) {
+                // DUAL mode: model is primary — edge = neon green bold, non-edge = white bold
+                return {
+                  fontSize: 'clamp(11px, 3vw, 15px)',
+                  fontWeight: 700,
+                  color: isEdge ? '#39FF14' : 'rgba(255,255,255,1)',
+                  letterSpacing: '0.02em',
+                  fontVariantNumeric: 'tabular-nums',
+                };
+              }
               if (isBookTab) {
-                // BOOK tab: model is always secondary — white unbolded, no edge highlight
+                // BOOK-only tab: model is always secondary — white unbolded, no edge highlight
                 return {
                   fontSize: 'clamp(11px, 3vw, 15px)',
                   fontWeight: 400,
@@ -1350,11 +1369,11 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 };
               }
               if (isModelTab) {
-                // MODEL tab: edge = neon green bold; no-edge = light gray bold
+                // MODEL-only tab: edge = neon green bold; non-edge = white bold
                 return {
                   fontSize: 'clamp(11px, 3vw, 15px)',
                   fontWeight: 700,
-                  color: isEdge ? '#39FF14' : 'rgba(255,255,255,1)',  // non-edge = white bold (not light gray)
+                  color: isEdge ? '#39FF14' : 'rgba(255,255,255,1)',
                   letterSpacing: '0.02em',
                   fontVariantNumeric: 'tabular-nums',
                 };
@@ -1396,9 +1415,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   ))}
                 </div>
                 {/* Sub-headers: BOOK and MODEL are tab-responsive
-                     BOOK tab active:  BOOK = white BOLD,    MODEL = white unbolded
-                     MODEL tab active: BOOK = white unbolded, MODEL = neon green BOLD
-                     Other tabs:       BOOK = gray 50%,      MODEL = gray 50%
+                     BOOK-only:  BOOK = white BOLD,    MODEL = white unbolded
+                     MODEL-only: BOOK = white unbolded, MODEL = neon green BOLD
+                     DUAL:       BOOK = white BOLD,    MODEL = neon green BOLD (both active)
+                     Other tabs: BOOK = gray 50%,      MODEL = gray 50%
                 */}
                 <div className="grid grid-cols-3 pb-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
                   {[0,1,2].map(i => (
@@ -1406,24 +1426,24 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       <span className="text-center uppercase tracking-widest"
                         style={{
                           fontSize: 'clamp(7px, 1.9vw, 10px)',
-                          // BOOK tab: white bold (primary) | MODEL tab: white unbolded | other: gray
-                          fontWeight: isBookTab ? 700 : 400,
-                          color: isBookTab
-                            ? 'rgba(255,255,255,1)'          // BOOK active: white bold
+                          // DUAL: white bold | BOOK-only: white bold | MODEL-only: white unbolded | other: gray
+                          fontWeight: (isDualTab || isBookTab) ? 700 : 400,
+                          color: (isDualTab || isBookTab)
+                            ? 'rgba(255,255,255,1)'          // DUAL or BOOK active: white bold
                             : isModelTab
-                              ? 'rgba(255,255,255,0.75)'     // MODEL active: white unbolded
+                              ? 'rgba(255,255,255,0.75)'     // MODEL-only: white unbolded
                               : 'rgba(255,255,255,0.40)',     // SPLITS/EDGE: gray
                           letterSpacing: '0.05em',
                         }}>BOOK</span>
                       <span className="text-center uppercase tracking-widest"
                         style={{
                           fontSize: 'clamp(7px, 1.9vw, 10px)',
-                          // MODEL tab: neon green bold (primary) | BOOK tab: white unbolded | other: gray
-                          fontWeight: isModelTab ? 700 : 400,
-                          color: isModelTab
-                            ? '#39FF14'                      // MODEL active: neon green bold
+                          // DUAL: neon green bold | MODEL-only: neon green bold | BOOK-only: white unbolded | other: gray
+                          fontWeight: (isDualTab || isModelTab) ? 700 : 400,
+                          color: (isDualTab || isModelTab)
+                            ? '#39FF14'                      // DUAL or MODEL active: neon green bold
                             : isBookTab
-                              ? 'rgba(255,255,255,0.75)'     // BOOK active: white unbolded
+                              ? 'rgba(255,255,255,0.75)'     // BOOK-only: white unbolded
                               : 'rgba(255,255,255,0.40)',     // SPLITS/EDGE: gray
                           letterSpacing: '0.05em',
                         }}>MODEL</span>
@@ -1619,22 +1639,43 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     flexShrink: 0,
                   }}>
                     {TABS.map(tab => {
-                      const isActive = mobileTab === tab.id;
+                      // Dual-select: BOOK and MODEL can both be active simultaneously
+                      // Clicking BOOK when MODEL is active (or vice versa) → dual mode
+                      // Clicking BOOK/MODEL when already dual → deselect that tab (go to the other)
+                      // Clicking SPLITS/EDGE always sets that single tab (clears dual)
+                      const isActive = mobileTab === tab.id ||
+                        (isDualTab && (tab.id === 'book' || tab.id === 'model'));
+                      const handleTabClick = () => {
+                        if (process.env.NODE_ENV === 'development') {
+                          console.log(`%c[GameCard:tab] ${game.id} ${awayAbbr}@${homeAbbr} current=${mobileTab} clicked=${tab.id} → ${(
+                            tab.id === 'book' && mobileTab === 'model' ? 'dual' :
+                            tab.id === 'model' && mobileTab === 'book' ? 'dual' :
+                            tab.id === 'book' && isDualTab ? 'model' :
+                            tab.id === 'model' && isDualTab ? 'book' :
+                            tab.id
+                          )}`, 'color:#39FF14;font-size:10px');
+                        }
+                        if (tab.id === 'book') {
+                          if (mobileTab === 'model') setMobileTab('dual');       // BOOK + MODEL → dual
+                          else if (isDualTab) setMobileTab('model');              // deselect BOOK from dual
+                          else setMobileTab('book');                              // normal select
+                        } else if (tab.id === 'model') {
+                          if (mobileTab === 'book') setMobileTab('dual');        // MODEL + BOOK → dual
+                          else if (isDualTab) setMobileTab('book');               // deselect MODEL from dual
+                          else setMobileTab('model');                             // normal select
+                        } else {
+                          setMobileTab(tab.id);                                   // SPLITS/EDGE: always single
+                        }
+                      };
                       return (
                         <button
                           key={tab.id}
-                          onClick={() => {
-                            if (process.env.NODE_ENV === 'development') {
-                              console.log(`%c[GameCard:tab] ${game.id} ${awayAbbr}@${homeAbbr} → ${tab.id}`, 'color:#39FF14;font-size:10px');
-                            }
-                            setMobileTab(tab.id);
-                          }}
+                          onClick={handleTabClick}
                           style={{
                             padding: '6px 2px',
                             fontSize: 'clamp(7px, 1.9vw, 9px)',
                             fontWeight: isActive ? 800 : 500,
                             letterSpacing: '0.06em',
-                            /* Active: white text + neon green underline; inactive: gray */
                             color: isActive ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.45)',
                             background: 'transparent',
                             border: 'none',

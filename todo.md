@@ -812,3 +812,4 @@
 - [x] Frozen panel: away/home rows have minHeight: 36px to match OddsTable py-2 rows for precise vertical alignment
 - [x] Revert incorrect hardcoded color on away spread model span (restored modelStyle factory call)
 - [x] Sync frozen panel team rows and OddsTable rows to identical height: both use height: 44px, frozen panel padding: '0 6px', status row paddingTop: 8px paddingBottom: 4px to match OddsTable header height
+- [x] Mobile tab bar dual-select: BOOK LINES + MODEL LINES can both be active simultaneously; dual mode = book light gray unbolded + model white bold (non-edge) / neon green bold (edge); sub-headers: BOOK white bold + MODEL neon green bold in dual
