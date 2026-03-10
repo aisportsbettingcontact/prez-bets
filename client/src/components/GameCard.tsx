@@ -261,9 +261,9 @@ function MobileTeamNameBlock({
   // Display name is already abbreviated in the registry — no St.→State transform needed
   const displayName = schoolName;
 
-  // Uniform font sizes — same for every team
-  const NAME_FONT = 'clamp(9px, 2.4vw, 11px)';
-  const NICK_FONT = 'clamp(8px, 2.1vw, 10px)';
+  // Uniform font sizes — same for every team (+2pt school name, +1pt nickname)
+  const NAME_FONT = 'clamp(11px, 2.9vw, 13px)';
+  const NICK_FONT = 'clamp(9px, 2.4vw, 11px)';
 
   // Debug log on mount (dev only) — use useEffect directly, not React.useEffect
   useEffect(() => {
@@ -279,7 +279,7 @@ function MobileTeamNameBlock({
     >
       <span style={{
         fontSize: NAME_FONT,
-        fontWeight: 600,
+        fontWeight: 700,
         color: '#ffffff',
         letterSpacing: '0.04em',
         textTransform: 'uppercase',
@@ -293,9 +293,10 @@ function MobileTeamNameBlock({
         <span
           style={{
             fontSize: NICK_FONT,
-            fontWeight: 400,
+            fontWeight: 600,
             color: '#ffffff',
             letterSpacing: '0.02em',
+            textTransform: 'none',
             whiteSpace: 'nowrap',
             overflow: 'visible',
             display: 'block',
