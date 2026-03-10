@@ -233,19 +233,16 @@ function useAutoFontSize(
 
 // ── MobileTeamNameBlock ─────────────────────────────────────────────────────
 /**
- * Renders the school name + nickname stacked vertically inside the mobile
- * frozen left panel. Uses UNIFORM font sizes across all teams so every card
- * looks consistent — school names are all the same size, nicknames are all
- * the same size (and always smaller than school names).
+ * Renders the school name + nickname stacked vertically inside the frozen
+ * left panel (used on both mobile and desktop).
  *
- * Font size system (panel width 170px, available for text ~96px with score):
- *   School name: clamp(9px, 2.4vw, 11px) — fits all 395 names incl. longest
- *   Nickname:    clamp(8px, 2.1vw, 10px) — always < school name
+ * School name: uses useAutoFontSize so it auto-shrinks to fit the container
+ *   width at any viewport. Max=18px (desktop), min=9px (very long names).
+ *   Font weight 700, uppercase, Barlow Condensed.
  *
- * The longest names after abbreviation are "ST. BONAVENTURE" and
- * "MISS VALLEY ST." (15 chars). At 9px they measure ~87px in 96px available.
+ * Nickname: fixed clamp(11px, 0.9vw, 15px) — always smaller than school name.
  *
- * Debug: [MobileTeamName] logs fire on mount with the resolved font sizes.
+ * Debug: [AutoFontSize] console groups fire when scaling kicks in.
  */
 function MobileTeamNameBlock({
   schoolName,
@@ -258,35 +255,35 @@ function MobileTeamNameBlock({
   isWinner: boolean;
   isFinalGame: boolean;
 }) {
-  // Display name is already abbreviated in the registry — no St.→State transform needed
   const displayName = schoolName;
 
-  // Fluid font sizes: scale from mobile (13px/11px) up to desktop (18px/15px)
-  // At 1440px: school=15.8px, nick=13px — visibly larger than mobile 13px/11px
-  // At 375px (mobile): school=13px (min), nick=11px (min) — unchanged from before
-  const NAME_FONT = 'clamp(13px, 1.1vw, 18px)';
-  const NICK_FONT = 'clamp(11px, 0.9vw, 15px)';
+  // useAutoFontSize: starts at 18px, shrinks to fit container, never below 9px
+  const [nameContainerRef, nameFontSize] = useAutoFontSize(
+    displayName,
+    700,
+    18,
+    9,
+    `panel:${displayName}`
+  );
 
-  // Debug log on mount (dev only)
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.debug(`[MobileTeamName] "${displayName}" name=${NAME_FONT} nick=${NICK_FONT}`);
-    }
-  }, [displayName]);
+  // Nickname: fluid clamp — 11px on mobile, up to 15px on desktop
+  const NICK_FONT = 'clamp(11px, 0.9vw, 15px)';
 
   return (
     <div
+      ref={nameContainerRef}
       className="flex flex-col min-w-0"
       style={{ lineHeight: 1.25, width: '100%' }}
     >
       <span style={{
-        fontSize: NAME_FONT,
+        fontSize: `${nameFontSize}px`,
         fontWeight: 700,
         color: '#ffffff',
         letterSpacing: '0.04em',
         textTransform: 'uppercase',
         whiteSpace: 'nowrap',
-        overflow: 'visible',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
         display: 'block',
       }} title={displayName}>
         {displayName}
@@ -300,7 +297,8 @@ function MobileTeamNameBlock({
             letterSpacing: '0.02em',
             textTransform: 'none',
             whiteSpace: 'nowrap',
-            overflow: 'visible',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
             display: 'block',
           }}
         >
@@ -1051,7 +1049,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           <div className="flex items-center gap-2 min-w-0 flex-1">
           <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={36} />
           {/* awayNameRef: ResizeObserver measures this div's width to auto-scale font */}
-          <div ref={awayNameRef} className="flex flex-col min-w-0" style={{ overflow: 'hidden' }}>
+          <div ref={awayNameRef} className="flex flex-col min-w-0 flex-1" style={{ overflow: 'hidden' }}>
             <span
               className="font-semibold leading-tight"
               style={{
@@ -1103,7 +1101,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           <div className="flex items-center gap-2 min-w-0 flex-1">
           <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={36} />
           {/* homeNameRef: ResizeObserver measures this div's width to auto-scale font */}
-          <div ref={homeNameRef} className="flex flex-col min-w-0" style={{ overflow: 'hidden' }}>
+          <div ref={homeNameRef} className="flex flex-col min-w-0 flex-1" style={{ overflow: 'hidden' }}>
             <span
               className="font-semibold leading-tight"
               style={{

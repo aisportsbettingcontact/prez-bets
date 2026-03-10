@@ -902,3 +902,6 @@
 - [x] Phase 10: react-window virtualized game list rendering
 - [x] Phase 11: Validation vitest against 25-device viewport database
 - [x] GameCard desktop: widen left panel from 170px to clamp(170px,14vw,220px); bump useAutoFontSize max to 20px; nickname clamp(13px,1.3vw,17px) so names scale visibly larger on desktop
+- [ ] GameCard desktop: diagnose and fix font size inconsistency — some names appear smaller than others; ensure all team name paths use consistent fluid clamp() sizing
+- [x] Fix team name font scaling: MobileTeamNameBlock now uses useAutoFontSize (max=18px, min=9px) instead of fixed clamp() — long names like "UMass Lowell" auto-shrink to fit container
+- [x] Fix awayNameRef/homeNameRef containers in ScorePanel: added flex-1 so useAutoFontSize measures full available width (was 68.6px, now 124.6px) — "UMass Lowell" now renders at 19.5px instead of 10.5px
