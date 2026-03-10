@@ -106,6 +106,11 @@ function pickBarColor(
 }
 
 // ── LabeledBar — compact inline split bar with ABBR (LINE) - XX% labels ────────
+//
+// Design rules (non-negotiable):
+//   1. Labels ALWAYS appear INSIDE their pill segment — never outside.
+//   2. 100%/0% → single full-width segment, only the 100% label shown, 0% hidden entirely.
+//   3. Any value 1–99% → segment gets a minWidth guarantee so the label always fits.
 
 interface LabeledBarProps {
   awayPct: number | null;
@@ -117,10 +122,22 @@ interface LabeledBarProps {
   rowLabel: string;       // e.g. "Tickets" or "Money"
 }
 
+// Minimum pixel width for a segment that must show a label (e.g. "1%" = ~18px at 10px font)
+// We use a CSS min-width in px so even 1% segments expand to fit their label.
+const MOBILE_SEGMENT_MIN_PX = 28; // px — enough for "1%" at font-size 10 with 4px padding each side
+
+const INSIDE_LABEL_STYLE: React.CSSProperties = {
+  fontSize: 10,
+  color: '#ffffff',
+  fontWeight: 800,
+  letterSpacing: '0.04em',
+  lineHeight: 1,
+  whiteSpace: 'nowrap',
+  textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 6px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.8)',
+};
+
 function LabeledBar({ awayPct, homePct, awayColor, homeColor, awayLineLabel, homeLineLabel, rowLabel }: LabeledBarProps) {
   const hasData = awayPct != null && homePct != null;
-  const awayTextColor = bestTextColor(awayColor);
-  const homeTextColor = bestTextColor(homeColor);
 
   if (!hasData) {
     return (
@@ -140,9 +157,32 @@ function LabeledBar({ awayPct, homePct, awayColor, homeColor, awayLineLabel, hom
     );
   }
 
-  const LABEL_THRESHOLD = 15;
-  const awayShowInside = (awayPct ?? 0) >= LABEL_THRESHOLD;
-  const homeShowInside = (homePct ?? 0) >= LABEL_THRESHOLD;
+  const away = awayPct ?? 0;
+  const home = homePct ?? 0;
+
+  // 100%/0% special case — render a single full-width segment, hide the zero side entirely
+  const isAwayFull = away >= 100;
+  const isHomeFull = home >= 100;
+
+  // For non-100% splits: each segment that is >0 gets a minWidth so the label always fits inside
+  // We use a flex layout where the flex-basis is the percentage but minWidth prevents collapse
+  const awaySegStyle: React.CSSProperties = isAwayFull
+    ? { width: '100%', background: awayColor, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', flexShrink: 0 }
+    : isHomeFull
+    ? { display: 'none' }
+    : away > 0
+    ? { flexBasis: `${away}%`, minWidth: MOBILE_SEGMENT_MIN_PX, background: awayColor, borderRadius: '4px 0 0 4px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '0 4px', flexShrink: 0, overflow: 'hidden' }
+    : { display: 'none' };
+
+  const homeSegStyle: React.CSSProperties = isHomeFull
+    ? { width: '100%', background: homeColor, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', flexShrink: 0 }
+    : isAwayFull
+    ? { display: 'none' }
+    : home > 0
+    ? { flexBasis: `${home}%`, minWidth: MOBILE_SEGMENT_MIN_PX, background: homeColor, borderRadius: '0 4px 4px 0', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 4px', flexShrink: 0, overflow: 'hidden' }
+    : { display: 'none' };
+
+  const showDivider = !isAwayFull && !isHomeFull && away > 0 && home > 0;
 
   return (
     <div className="w-full flex flex-col gap-0.5">
@@ -152,61 +192,45 @@ function LabeledBar({ awayPct, homePct, awayColor, homeColor, awayLineLabel, hom
         <span style={{ fontSize: 9, color: "rgba(255,255,255,0.85)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.10em" }}>{rowLabel}</span>
         <span style={{ fontSize: 9, color: "rgba(255,255,255,0.7)", fontWeight: 700, letterSpacing: "0.03em" }}>{homeLineLabel}</span>
       </div>
-      {/* Bar — overflow:hidden on container, % labels inside or outside based on threshold */}
-      <div className="relative w-full rounded-md"
-        style={{ height: 20, minWidth: 0 }}>
-        <div className="absolute inset-0 rounded-md overflow-hidden flex"
-          style={{ border: "1px solid rgba(255,255,255,0.12)", boxSizing: "border-box" }}>
-          {(awayPct ?? 0) > 0 && (
-            <div className="flex items-center justify-start px-1.5 transition-all duration-700 flex-shrink-0"
-              style={{ width: `${awayPct}%`, background: awayColor, borderRadius: (awayPct ?? 0) >= 100 ? "4px" : "4px 0 0 4px" }}>
-              {awayShowInside && (
-                <span className="font-extrabold leading-none whitespace-nowrap" style={{ fontSize: 10, color: '#ffffff', letterSpacing: '0.04em', textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 6px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.8)' }}>{awayPct}%</span>
-              )}
-            </div>
-          )}
-          {(awayPct ?? 0) > 0 && (homePct ?? 0) > 0 && (
-            <div style={{ width: 1, background: "rgba(255,255,255,0.25)", flexShrink: 0, alignSelf: "stretch" }} />
-          )}
-          {(homePct ?? 0) > 0 && (
-            <div className="flex items-center justify-end px-1.5 transition-all duration-700 flex-shrink-0"
-              style={{ width: `${homePct}%`, background: homeColor, borderRadius: (homePct ?? 0) >= 100 ? "4px" : "0 4px 4px 0" }}>
-              {homeShowInside && (
-                <span className="font-extrabold leading-none whitespace-nowrap" style={{ fontSize: 10, color: '#ffffff', letterSpacing: '0.04em', textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 6px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.8)' }}>{homePct}%</span>
-              )}
-            </div>
-          )}
-        </div>
-        {/* Outside labels for narrow segments — always white with shadow for visibility on dark bg */}
-        {!awayShowInside && (awayPct ?? 0) > 0 && (
-          <span
-            className="absolute font-extrabold leading-none whitespace-nowrap"
-            style={{
-              fontSize: 9,
-              color: "#ffffff",
-              left: `calc(${awayPct}% / 2)`,
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              textShadow: "0 0 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9), 1px 1px 2px rgba(0,0,0,1)",
-              zIndex: 2,
-              pointerEvents: "none",
-            }}
-          >{awayPct}%</span>
+      {/* Bar — flex row, no overflow:hidden on outer container so minWidth can expand segments */}
+      <div
+        style={{
+          height: 20,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'row',
+          borderRadius: 4,
+          overflow: 'hidden',
+          border: '1px solid rgba(255,255,255,0.12)',
+          boxSizing: 'border-box',
+        }}
+      >
+        {/* Away segment */}
+        {away > 0 && !isHomeFull && (
+          <div style={awaySegStyle} className="transition-all duration-700">
+            <span style={INSIDE_LABEL_STYLE}>{away}%</span>
+          </div>
         )}
-        {!homeShowInside && (homePct ?? 0) > 0 && (
-          <span
-            className="absolute font-extrabold leading-none whitespace-nowrap"
-            style={{
-              fontSize: 9,
-              color: "#ffffff",
-              right: `calc(${homePct}% / 2)`,
-              top: "50%",
-              transform: "translate(50%, -50%)",
-              textShadow: "0 0 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9), 1px 1px 2px rgba(0,0,0,1)",
-              zIndex: 2,
-              pointerEvents: "none",
-            }}
-          >{homePct}%</span>
+        {/* Divider */}
+        {showDivider && (
+          <div style={{ width: 1, background: 'rgba(255,255,255,0.25)', flexShrink: 0, alignSelf: 'stretch' }} />
+        )}
+        {/* Home segment */}
+        {home > 0 && !isAwayFull && (
+          <div style={homeSegStyle} className="transition-all duration-700">
+            <span style={INSIDE_LABEL_STYLE}>{home}%</span>
+          </div>
+        )}
+        {/* 100% full-bar cases */}
+        {isAwayFull && (
+          <div style={{ flex: 1, background: awayColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4 }} className="transition-all duration-700">
+            <span style={INSIDE_LABEL_STYLE}>100%</span>
+          </div>
+        )}
+        {isHomeFull && (
+          <div style={{ flex: 1, background: homeColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4 }} className="transition-all duration-700">
+            <span style={INSIDE_LABEL_STYLE}>100%</span>
+          </div>
         )}
       </div>
     </div>
@@ -266,16 +290,27 @@ interface SplitBarProps {
   homeColor: string;
 }
 
+// Desktop SplitBar label style — same rules as mobile, just larger
+const DESKTOP_INSIDE_LABEL_STYLE: React.CSSProperties = {
+  fontSize: 'clamp(11px, 1vw, 16px)',
+  color: '#ffffff',
+  fontWeight: 800,
+  letterSpacing: '0.04em',
+  lineHeight: 1,
+  whiteSpace: 'nowrap',
+  textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 6px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.8)',
+};
+
+// Minimum pixel width for a desktop segment so the label always fits inside
+const DESKTOP_SEGMENT_MIN_PX = 38; // px — enough for "1%" at clamp(11px,1vw,16px) with 8px padding
+
 function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarProps) {
   const hasData = awayPct != null && homePct != null;
-  const awayTextColor = bestTextColor(awayColor);
-  const homeTextColor = bestTextColor(homeColor);
 
-  // Determine if a segment is too narrow to show the % label inside
-  // Threshold: if the segment is < 15% wide, show label outside (absolute positioned)
-  const LABEL_THRESHOLD = 15;
-  const awayShowInside = (awayPct ?? 0) >= LABEL_THRESHOLD;
-  const homeShowInside = (homePct ?? 0) >= LABEL_THRESHOLD;
+  // Design rules (non-negotiable):
+  //   1. Labels ALWAYS appear INSIDE their pill segment — never outside.
+  //   2. 100%/0% → single full-width segment, only the 100% label shown, 0% hidden entirely.
+  //   3. Any value 1–99% → segment gets a minWidth guarantee so the label always fits.
 
   return (
     <div className="flex flex-col gap-1 w-full">
@@ -283,73 +318,68 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
         style={{ fontSize: 'clamp(9px, 0.75vw, 12px)', color: "rgba(255,255,255,0.45)", letterSpacing: "0.12em" }}>
         {label}
       </span>
-      {hasData ? (
-        <div className="relative w-full"
-          style={{ height: 'clamp(24px, 2.5vw, 40px)' }}>
-          {/* Pill container — overflow:hidden clips segments cleanly */}
-          <div className="absolute inset-0 rounded-full overflow-hidden flex"
-            style={{ border: "1.5px solid rgba(255,255,255,0.15)", boxSizing: "border-box" }}>
-            {(awayPct ?? 0) > 0 && (
-              <div className="flex items-center justify-start pl-2 transition-all duration-700 flex-shrink-0"
-                style={{
-                  width: `${awayPct}%`,
-                  background: awayColor,
-                  borderRadius: (awayPct ?? 0) >= 100 ? "9999px" : "9999px 0 0 9999px",
-                }}>
-                {awayShowInside && (
-                  <span className="font-extrabold tabular-nums leading-none whitespace-nowrap" style={{ fontSize: 'clamp(11px, 1vw, 16px)', color: '#ffffff', letterSpacing: '0.04em', textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 6px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.8)' }}>{awayPct}%</span>
-                )}
+      {hasData ? (() => {
+        const away = awayPct ?? 0;
+        const home = homePct ?? 0;
+        const isAwayFull = away >= 100;
+        const isHomeFull = home >= 100;
+        const showDivider = !isAwayFull && !isHomeFull && away > 0 && home > 0;
+
+        const awaySegStyle: React.CSSProperties = isAwayFull
+          ? { flex: 1, background: awayColor, borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px' }
+          : away > 0
+          ? { flexBasis: `${away}%`, minWidth: DESKTOP_SEGMENT_MIN_PX, background: awayColor, borderRadius: '9999px 0 0 9999px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '0 8px', flexShrink: 0, overflow: 'hidden' }
+          : { display: 'none' };
+
+        const homeSegStyle: React.CSSProperties = isHomeFull
+          ? { flex: 1, background: homeColor, borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px' }
+          : home > 0
+          ? { flexBasis: `${home}%`, minWidth: DESKTOP_SEGMENT_MIN_PX, background: homeColor, borderRadius: '0 9999px 9999px 0', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 8px', flexShrink: 0, overflow: 'hidden' }
+          : { display: 'none' };
+
+        return (
+          <div
+            style={{
+              height: 'clamp(24px, 2.5vw, 40px)',
+              display: 'flex',
+              flexDirection: 'row',
+              borderRadius: '9999px',
+              overflow: 'hidden',
+              border: '1.5px solid rgba(255,255,255,0.15)',
+              boxSizing: 'border-box',
+              width: '100%',
+            }}
+          >
+            {/* Away segment (hidden when home is 100%) */}
+            {away > 0 && !isHomeFull && (
+              <div style={awaySegStyle} className="transition-all duration-700">
+                <span style={DESKTOP_INSIDE_LABEL_STYLE}>{away}%</span>
               </div>
             )}
-            {(awayPct ?? 0) > 0 && (homePct ?? 0) > 0 && (
-              <div style={{ width: 1.5, background: "rgba(255,255,255,0.3)", flexShrink: 0, alignSelf: "stretch" }} />
+            {/* Divider */}
+            {showDivider && (
+              <div style={{ width: 1.5, background: 'rgba(255,255,255,0.3)', flexShrink: 0, alignSelf: 'stretch' }} />
             )}
-            {(homePct ?? 0) > 0 && (
-              <div className="flex items-center justify-end pr-2 transition-all duration-700 flex-shrink-0"
-                style={{
-                  width: `${homePct}%`,
-                  background: homeColor,
-                  borderRadius: (homePct ?? 0) >= 100 ? "9999px" : "0 9999px 9999px 0",
-                }}>
-                {homeShowInside && (
-                  <span className="font-extrabold tabular-nums leading-none whitespace-nowrap" style={{ fontSize: 'clamp(11px, 1vw, 16px)', color: '#ffffff', letterSpacing: '0.04em', textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 6px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.8)' }}>{homePct}%</span>
-                )}
+            {/* Home segment (hidden when away is 100%) */}
+            {home > 0 && !isAwayFull && (
+              <div style={homeSegStyle} className="transition-all duration-700">
+                <span style={DESKTOP_INSIDE_LABEL_STYLE}>{home}%</span>
+              </div>
+            )}
+            {/* 100% full-bar cases */}
+            {isAwayFull && (
+              <div style={{ flex: 1, background: awayColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px' }} className="transition-all duration-700">
+                <span style={DESKTOP_INSIDE_LABEL_STYLE}>100%</span>
+              </div>
+            )}
+            {isHomeFull && (
+              <div style={{ flex: 1, background: homeColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px' }} className="transition-all duration-700">
+                <span style={DESKTOP_INSIDE_LABEL_STYLE}>100%</span>
               </div>
             )}
           </div>
-          {/* Outside labels for narrow segments — always white with shadow for visibility on dark bg */}
-          {!awayShowInside && (awayPct ?? 0) > 0 && (
-            <span
-              className="absolute font-extrabold tabular-nums leading-none whitespace-nowrap"
-              style={{
-                fontSize: 'clamp(9px, 0.8vw, 13px)',
-                color: "#ffffff",
-                left: `calc(${awayPct}% / 2)`,
-                top: "50%",
-                transform: "translate(-50%, -50%)",
-                textShadow: "0 0 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9), 1px 1px 2px rgba(0,0,0,1)",
-                zIndex: 2,
-                pointerEvents: "none",
-              }}
-            >{awayPct}%</span>
-          )}
-          {!homeShowInside && (homePct ?? 0) > 0 && (
-            <span
-              className="absolute font-extrabold tabular-nums leading-none whitespace-nowrap"
-              style={{
-                fontSize: 'clamp(9px, 0.8vw, 13px)',
-                color: "#ffffff",
-                right: `calc(${homePct}% / 2)`,
-                top: "50%",
-                transform: "translate(50%, -50%)",
-                textShadow: "0 0 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9), 1px 1px 2px rgba(0,0,0,1)",
-                zIndex: 2,
-                pointerEvents: "none",
-              }}
-            >{homePct}%</span>
-          )}
-        </div>
-      ) : (
+        );
+      })() : (
         <div className="w-full rounded-full flex items-center justify-center"
           style={{ height: 30, background: "rgba(255,255,255,0.05)" }}>
           <span style={{ fontSize: 10, color: "hsl(var(--muted-foreground))", opacity: 0.35 }}>—</span>
