@@ -859,3 +859,5 @@
 - [x] Confirm no wrong-school mapping errors exist (Northwestern St. incident was caught — audit all 30)
 - [x] Mobile game card school name: +2pt (clamp 11→13px), ALL CAPS, bold (700)
 - [x] Mobile game card nickname: +1pt (clamp 9→11px), lowercase, semi-bold (600)
+- [x] Mobile game card school name: +3pt more (clamp 14→16px), ALL CAPS bold
+- [x] Mobile game card nickname: +1.5pt more (clamp 10.5→12.5px), lowercase semi-bold
