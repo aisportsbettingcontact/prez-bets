@@ -830,3 +830,5 @@
 - [x] Start time: display EST instead of ET
 - [x] Tab bar button text: +1pt font size
 - [x] Team logo: add gap/padding between logo and name, center logo vertically between school+nickname, slightly bigger
+- [x] ModelProjections date title: +6pt font size, white, bold
+- [x] CalendarPicker: show "TODAY" for the active feed date (user local time + 11:00 UTC gate), with timezone debug logging

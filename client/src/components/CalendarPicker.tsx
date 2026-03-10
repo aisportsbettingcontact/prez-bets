@@ -2,39 +2,174 @@
  * CalendarPicker
  *
  * A compact date-picker button that opens a month-view calendar dropdown.
- * - Today's UTC date is selected by default and highlighted with a neon green ring
- * - Past dates are locked (dimmed, unclickable) for standard users
- * - Admin users (isAdmin=true) can select any date including past ones
- * - Only today and future dates show green game-dot indicators
- * - Month name is always displayed in ALL CAPS
+ *
+ * ── "TODAY" label logic ───────────────────────────────────────────────────────
+ * The button label shows "TODAY" when the selected date matches the "effective
+ * feed date" for the current user.  The effective feed date is determined as:
+ *
+ *   1. Compute the user's local calendar date (YYYY-MM-DD) from their system
+ *      clock.  This is timezone-aware — a user in PST at 9 PM sees March 9
+ *      while a user in EST at midnight sees March 10.
+ *
+ *   2. Apply the 11:00 UTC gate: if the current UTC time is before 11:00 UTC,
+ *      the effective feed date is (UTC calendar date − 1 day), regardless of
+ *      the user's local date.  This keeps the feed on the previous night's
+ *      slate until the morning refresh window.
+ *
+ *   3. If the user's local calendar date is AHEAD of the effective feed date
+ *      (i.e. they are already in "tomorrow" locally but the 11:00 UTC gate
+ *      has not fired yet), the calendar button shows the effective feed date
+ *      formatted as "MONTH DAY" — NOT "TODAY" — because their local "today"
+ *      is not yet the active feed date.
+ *
+ *   4. If the user's local calendar date MATCHES the effective feed date, the
+ *      button shows "TODAY".
+ *
+ * ── Debug logging ─────────────────────────────────────────────────────────────
+ * All timezone/date computations are logged to the browser console under the
+ * [CalendarPicker:tz] group at component mount and whenever the clock ticks
+ * past the 11:00 UTC boundary.  The log includes:
+ *   - UTC wall-clock time
+ *   - User local date (from Intl.DateTimeFormat)
+ *   - Effective feed date
+ *   - Whether the 11:00 UTC gate is open
+ *   - Whether "TODAY" label is shown
+ *   - Simulated results for HST, PST, MST, CST, EST at the current UTC instant
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+/** UTC hour at which the feed rolls over to the new calendar day's slate */
+const FEED_CUTOFF_UTC_HOUR = 11;
+
+/** IANA timezone IDs used for the 5-timezone debug simulation */
+const DEBUG_TIMEZONES = [
+  { label: "HST", iana: "Pacific/Honolulu" },
+  { label: "PST", iana: "America/Los_Angeles" },
+  { label: "MST", iana: "America/Denver" },
+  { label: "CST", iana: "America/Chicago" },
+  { label: "EST", iana: "America/New_York" },
+] as const;
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
 
 /**
- * Returns the "effective" game date as a YYYY-MM-DD string.
- * Games are considered to belong to the previous calendar day until 11:00 UTC
- * (equivalent to 3:00 AM PST / 6:00 AM EST), so the default date stays on
- * the previous day until the morning slate is well underway.
+ * Returns the YYYY-MM-DD calendar date for a given IANA timezone at a given
+ * UTC instant (defaults to now).
  */
-export function todayUTC(): string {
-  const now = new Date();
-  // If before 11:00 UTC, treat it as the previous calendar day
-  const CUTOFF_HOUR_UTC = 11;
-  const effectiveMs = now.getUTCHours() < CUTOFF_HOUR_UTC
-    ? now.getTime() - 24 * 60 * 60 * 1000  // subtract one day
-    : now.getTime();
-  const d = new Date(effectiveMs);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function localDateInTz(ianaTimezone: string, atMs?: number): string {
+  const ms = atMs ?? Date.now();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ianaTimezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(ms));
+  const y = parts.find(p => p.type === "year")?.value ?? "0000";
+  const m = parts.find(p => p.type === "month")?.value ?? "01";
+  const d = parts.find(p => p.type === "day")?.value ?? "01";
+  return `${y}-${m}-${d}`;
 }
 
-function formatButtonLabel(dateStr: string): string {
+/**
+ * Returns the user's local calendar date (YYYY-MM-DD) using the browser's
+ * own timezone (Intl.DateTimeFormat resolvedOptions).
+ */
+function userLocalDate(atMs?: number): string {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return localDateInTz(tz, atMs);
+}
+
+/**
+ * Returns the effective feed date as YYYY-MM-DD.
+ *
+ * Rule:
+ *   - If UTC hour < 11 → effective date = (UTC calendar date − 1 day)
+ *   - Otherwise        → effective date = UTC calendar date
+ *
+ * This is the same logic used by `todayUTC()` (exported for consumers that
+ * need the raw effective date without the "TODAY" label decision).
+ */
+export function todayUTC(atMs?: number): string {
+  const ms = atMs ?? Date.now();
+  const now = new Date(ms);
+  const isBeforeCutoff = now.getUTCHours() < FEED_CUTOFF_UTC_HOUR;
+  const effectiveMs = isBeforeCutoff ? ms - 24 * 60 * 60 * 1000 : ms;
+  const d = new Date(effectiveMs);
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${mo}-${day}`;
+}
+
+/**
+ * Decides whether to show "TODAY" for a given selectedDate.
+ *
+ * Returns true only when:
+ *   - selectedDate === effectiveFeedDate, AND
+ *   - user's local calendar date === effectiveFeedDate
+ *     (i.e. the user has NOT rolled into "tomorrow" locally yet)
+ *
+ * If the user is locally ahead (e.g. EST midnight while UTC gate hasn't
+ * fired), we show the formatted date instead of "TODAY".
+ */
+function shouldShowToday(selectedDate: string, atMs?: number): boolean {
+  const ms = atMs ?? Date.now();
+  const effectiveDate = todayUTC(ms);
+  if (selectedDate !== effectiveDate) return false;
+  const localDate = userLocalDate(ms);
+  return localDate === effectiveDate;
+}
+
+/**
+ * Emits a comprehensive timezone debug log to the browser console.
+ * Simulates the effective feed date and "TODAY" decision for all 5 US
+ * timezones at the given UTC instant.
+ */
+function emitTzDebugLog(atMs?: number): void {
+  const ms = atMs ?? Date.now();
+  const now = new Date(ms);
+  const utcStr = now.toISOString();
+  const effectiveDate = todayUTC(ms);
+  const isBeforeCutoff = now.getUTCHours() < FEED_CUTOFF_UTC_HOUR;
+  const userTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const localDate = userLocalDate(ms);
+  const showToday = shouldShowToday(effectiveDate, ms);
+
+  console.groupCollapsed(
+    `%c[CalendarPicker:tz] ${utcStr}`,
+    "color:#39FF14;font-weight:700;font-size:11px"
+  );
+  console.log(`UTC wall clock  : ${utcStr}`);
+  console.log(`UTC hour        : ${now.getUTCHours()} (cutoff=${FEED_CUTOFF_UTC_HOUR}, gate open=${!isBeforeCutoff})`);
+  console.log(`Effective date  : ${effectiveDate}`);
+  console.log(`User timezone   : ${userTz}`);
+  console.log(`User local date : ${localDate}`);
+  console.log(`Show "TODAY"    : ${showToday}`);
+  console.log("── 5-timezone simulation ──────────────────────────────────────");
+  DEBUG_TIMEZONES.forEach(({ label, iana }) => {
+    const tzLocalDate = localDateInTz(iana, ms);
+    const tzLocalTime = new Intl.DateTimeFormat("en-US", {
+      timeZone: iana,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }).format(new Date(ms));
+    const tzShowToday = tzLocalDate === effectiveDate;
+    const tzLabel = tzShowToday ? "TODAY" : `${tzLocalDate} (no TODAY)`;
+    console.log(`  ${label.padEnd(4)} | local=${tzLocalDate} ${tzLocalTime} | feed=${effectiveDate} | label=${tzLabel}`);
+  });
+  console.groupEnd();
+}
+
+// ── Formatting helpers ────────────────────────────────────────────────────────
+
+function formatButtonLabel(dateStr: string, atMs?: number): string {
+  if (shouldShowToday(dateStr, atMs)) return "TODAY";
   try {
     const d = new Date(dateStr + "T00:00:00Z");
     const month = d.toLocaleDateString("en-US", { month: "long", timeZone: "UTC" }).toUpperCase();
@@ -80,7 +215,34 @@ const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
 export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin = false }: CalendarPickerProps) {
-  const today = todayUTC();
+  // Reactive "now" — re-computed every minute so the label updates when the
+  // 11:00 UTC gate fires without requiring a page reload.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    // Emit initial debug log on mount
+    emitTzDebugLog(nowMs);
+
+    // Tick every 60 seconds; emit a new debug log each tick
+    const id = setInterval(() => {
+      const ms = Date.now();
+      setNowMs(ms);
+      // Only emit a full debug log when crossing the UTC cutoff boundary
+      const prev = new Date(ms - 60_000);
+      const curr = new Date(ms);
+      const crossedCutoff =
+        prev.getUTCHours() < FEED_CUTOFF_UTC_HOUR &&
+        curr.getUTCHours() >= FEED_CUTOFF_UTC_HOUR;
+      if (crossedCutoff) {
+        console.log("%c[CalendarPicker:tz] 11:00 UTC gate FIRED — feed rolling to new date", "color:#39FF14;font-weight:700");
+        emitTzDebugLog(ms);
+      }
+    }, 60_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const today = todayUTC(nowMs);
 
   // Calendar view state — default to the month of the selected date (or today)
   const displayBase = selectedDate ?? today;
@@ -112,15 +274,7 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin
   const daysInMonth = getDaysInMonth(viewYear, viewMonth);
   const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
 
-  // Prevent navigating to months entirely in the past for standard users
-  const isViewingPastMonth =
-    !isAdmin &&
-    (viewYear < parseInt(today.slice(0, 4)) ||
-      (viewYear === parseInt(today.slice(0, 4)) &&
-        viewMonth < parseInt(today.slice(5, 7)) - 1));
-
   function prevMonth() {
-    // Standard users: don't go before current month
     if (!isAdmin) {
       const todayYear = parseInt(today.slice(0, 4));
       const todayMon = parseInt(today.slice(5, 7)) - 1;
@@ -136,18 +290,16 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin
     else setViewMonth(m => m + 1);
   }
 
-  function handleDayClick(day: number) {
+  const handleDayClick = useCallback((day: number) => {
     const dateStr = toDateStr(viewYear, viewMonth, day);
     const isPast = compareDates(dateStr, today) < 0;
-    // Block past dates for standard users
     if (isPast && !isAdmin) return;
     onSelect(dateStr);
     setOpen(false);
-  }
+  }, [viewYear, viewMonth, today, isAdmin, onSelect]);
 
-  const buttonLabel = formatButtonLabel(selectedDate ?? today);
+  const buttonLabel = formatButtonLabel(selectedDate ?? today, nowMs);
 
-  // Is the prev-month arrow disabled for standard users?
   const prevDisabled = !isAdmin && (() => {
     const todayYear = parseInt(today.slice(0, 4));
     const todayMon = parseInt(today.slice(5, 7)) - 1;
@@ -212,35 +364,24 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin
 
           {/* Day grid */}
           <div className="grid grid-cols-7 px-2 pb-2 gap-y-0.5">
-            {/* Empty cells before first day */}
             {Array.from({ length: firstDay }).map((_, i) => (
               <div key={`empty-${i}`} />
             ))}
-            {/* Day cells */}
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1;
               const dateStr = toDateStr(viewYear, viewMonth, day);
               const isToday = dateStr === today;
               const isSelected = dateStr === selectedDate;
               const isPast = compareDates(dateStr, today) < 0;
-              // Past dates are locked for standard users
               const isLocked = isPast && !isAdmin;
-              // Only show game dots on today and future dates (or admin viewing past)
               const hasGames = (availableDates?.has(dateStr) ?? false) && (!isPast || isAdmin);
 
-              // Style priority:
-              // 1. locked (past, standard user) → very dim, no interaction
-              // 2. selected + today             → white fill, black text, neon green ring
-              // 3. selected only                → white fill, black text
-              // 4. today only                   → neon green ring, green text, subtle bg
-              // 5. has games (future)            → white text
-              // 6. future no games              → dim white
               const dayStyle: React.CSSProperties = (() => {
-                if (isLocked)                  return { color: "rgba(255,255,255,0.12)", cursor: "not-allowed" };
-                if (isSelected && isToday)     return { background: "#ffffff", color: "#000000", outline: "2px solid #39FF14", outlineOffset: "1px" };
-                if (isSelected)                return { background: "#ffffff", color: "#000000" };
-                if (isToday)                   return { background: "rgba(57,255,20,0.12)", color: "#39FF14", outline: "1.5px solid #39FF14", outlineOffset: "-1px" };
-                if (hasGames)                  return { color: "#ffffff" };
+                if (isLocked)              return { color: "rgba(255,255,255,0.12)", cursor: "not-allowed" };
+                if (isSelected && isToday) return { background: "#ffffff", color: "#000000", outline: "2px solid #39FF14", outlineOffset: "1px" };
+                if (isSelected)            return { background: "#ffffff", color: "#000000" };
+                if (isToday)               return { background: "rgba(57,255,20,0.12)", color: "#39FF14", outline: "1.5px solid #39FF14", outlineOffset: "-1px" };
+                if (hasGames)              return { color: "#ffffff" };
                 return { color: "rgba(255,255,255,0.3)" };
               })();
 
@@ -253,7 +394,6 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin
                   style={dayStyle}
                 >
                   {day}
-                  {/* Game dot indicator — only on today/future, hide when selected */}
                   {hasGames && !isSelected && (
                     <span
                       className="absolute bottom-0.5 left-1/2 -translate-x-1/2 rounded-full"

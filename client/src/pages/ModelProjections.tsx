@@ -693,7 +693,7 @@ export default function ModelProjections() {
           <div className="flex items-center px-4 py-1 border-b border-border bg-background/95 gap-2">
             <div className="flex-1" />
             <div className="flex items-center gap-2 whitespace-nowrap">
-              <span className="font-bold text-foreground tracking-widest uppercase" style={{ fontSize: "clamp(11px, 2vw, 13px)" }}>{formatDateHeader(selectedDate)}</span>
+              <span className="font-bold tracking-widest uppercase" style={{ fontSize: "clamp(17px, 3.2vw, 19px)", color: '#ffffff' }}>{formatDateHeader(selectedDate)}</span>
               <span className="text-muted-foreground/40" style={{ fontSize: "10px" }}>·</span>
               <span className="font-semibold hidden sm:inline" style={{ color: "#a3a3a3", letterSpacing: "0.06em", fontSize: "clamp(10px, 1.8vw, 12px)" }}>{selectedSport === "NCAAM" ? "Men's College Basketball" : "NBA Basketball"}</span>
             </div>
