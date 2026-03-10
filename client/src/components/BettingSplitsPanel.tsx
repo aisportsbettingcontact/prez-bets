@@ -330,9 +330,10 @@ interface SplitBarProps {
 }
 
 // Desktop SplitBar label styles — directional, same black stroke as mobile
+// Font scales proportionally with bar height: bar = clamp(28px,3vw,44px), font ≈ 40% of bar height
 // Away label: flush LEFT
 const DESKTOP_AWAY_LABEL_STYLE: React.CSSProperties = {
-  fontSize: 'clamp(11px, 1vw, 16px)',
+  fontSize: 'clamp(11px, 1.2vw, 17px)',
   color: '#ffffff',
   fontWeight: 800,
   letterSpacing: '0.04em',
@@ -345,7 +346,7 @@ const DESKTOP_AWAY_LABEL_STYLE: React.CSSProperties = {
 
 // Home label: flush RIGHT
 const DESKTOP_HOME_LABEL_STYLE: React.CSSProperties = {
-  fontSize: 'clamp(11px, 1vw, 16px)',
+  fontSize: 'clamp(11px, 1.2vw, 17px)',
   color: '#ffffff',
   fontWeight: 800,
   letterSpacing: '0.04em',
@@ -358,7 +359,7 @@ const DESKTOP_HOME_LABEL_STYLE: React.CSSProperties = {
 
 // 100% full-bar label: centered
 const DESKTOP_FULL_LABEL_STYLE: React.CSSProperties = {
-  fontSize: 'clamp(11px, 1vw, 16px)',
+  fontSize: 'clamp(11px, 1.2vw, 17px)',
   color: '#ffffff',
   fontWeight: 800,
   letterSpacing: '0.04em',
@@ -369,13 +370,18 @@ const DESKTOP_FULL_LABEL_STYLE: React.CSSProperties = {
   textShadow: LABEL_STROKE,
 };
 
+// Proportional padding for desktop segments — scales with font/bar size
+// clamp(6px, 0.6vw, 10px) keeps padding proportional at all viewport widths
+const DESKTOP_SEG_PADDING = 'clamp(6px, 0.6vw, 10px)';
+
 // Minimum pixel width for a desktop segment so the label always fits inside.
 // Dynamic: single-digit values need more room due to rounded pill corners.
+// At clamp(11px,1.2vw,17px) font + clamp(6px,0.6vw,10px) padding each side:
+//   1-9%:  "X%"  = 2 chars @ ~11px each + 12px padding + 6px corners = ~51px min
+//   10-99%: "XX%" = 3 chars @ ~11px each + 12px padding = ~45px min
+// We use slightly larger values to be safe across all viewport widths.
 function desktopSegMinPx(pct: number): number {
-  // At clamp(11px,1vw,16px) font + 10px padding each side:
-  // 1-9%:  "X%"  = 2 chars @ ~10px each + 20px padding + 8px corners = 58px
-  // 10-99%: "XX%" = 3 chars @ ~10px each + 20px padding = 50px
-  return pct < 10 ? 58 : 50;
+  return pct < 10 ? 54 : 46;
 }
 
 function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarProps) {
@@ -402,22 +408,23 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
         // Use flex-grow proportional sizing so segments always fill the container
         // without exceeding it. minWidth ensures even 1% segments show their label.
         // overflow:hidden is on each segment (not the container) to preserve pill shape.
+        // Padding uses DESKTOP_SEG_PADDING (clamp) so it scales with viewport width.
         const awaySegStyle: React.CSSProperties = isAwayFull
-          ? { flex: 1, background: awayColor, borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '0 10px', overflow: 'hidden' }
+          ? { flex: 1, background: awayColor, borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: DESKTOP_SEG_PADDING, paddingRight: DESKTOP_SEG_PADDING, overflow: 'hidden' }
           : away > 0
-          ? { flexGrow: away, flexShrink: 1, flexBasis: 0, minWidth: desktopSegMinPx(away), background: awayColor, borderRadius: '9999px 0 0 9999px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '0 10px', overflow: 'hidden' }
+          ? { flexGrow: away, flexShrink: 1, flexBasis: 0, minWidth: desktopSegMinPx(away), background: awayColor, borderRadius: '9999px 0 0 9999px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: DESKTOP_SEG_PADDING, paddingRight: DESKTOP_SEG_PADDING, overflow: 'hidden' }
           : { display: 'none' };
 
         const homeSegStyle: React.CSSProperties = isHomeFull
-          ? { flex: 1, background: homeColor, borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 10px', overflow: 'hidden' }
+          ? { flex: 1, background: homeColor, borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingLeft: DESKTOP_SEG_PADDING, paddingRight: DESKTOP_SEG_PADDING, overflow: 'hidden' }
           : home > 0
-          ? { flexGrow: home, flexShrink: 1, flexBasis: 0, minWidth: desktopSegMinPx(home), background: homeColor, borderRadius: '0 9999px 9999px 0', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 10px', overflow: 'hidden' }
+          ? { flexGrow: home, flexShrink: 1, flexBasis: 0, minWidth: desktopSegMinPx(home), background: homeColor, borderRadius: '0 9999px 9999px 0', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingLeft: DESKTOP_SEG_PADDING, paddingRight: DESKTOP_SEG_PADDING, overflow: 'hidden' }
           : { display: 'none' };
 
         return (
           <div
             style={{
-              height: 'clamp(24px, 2.5vw, 40px)',
+              height: 'clamp(28px, 3vw, 44px)',
               display: 'flex',
               flexDirection: 'row',
               borderRadius: '9999px',

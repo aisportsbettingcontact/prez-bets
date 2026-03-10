@@ -964,11 +964,13 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
     // maxFont=15px, minFont=8px, step=0.5px; Canvas measureText (no DOM reflow)
     const awayFontWeight = awayWins ? 700 : 600;
     const homeFontWeight = homeWins ? 700 : 600;
+    // Desktop school name: max 16px (matches mobile 13px fixed but with room to breathe at wider widths)
+    // min 9px so even the longest names (15+ chars) always fit in the panel
     const [awayNameRef, awayNameFontSize] = useAutoFontSize(
-      awayName, awayFontWeight, 15, 8, `away:${game.awayTeam}`
+      awayName, awayFontWeight, 16, 9, `away:${game.awayTeam}`
     );
     const [homeNameRef, homeNameFontSize] = useAutoFontSize(
-      homeName, homeFontWeight, 15, 8, `home:${game.homeTeam}`
+      homeName, homeFontWeight, 16, 9, `home:${game.homeTeam}`
     );
     return (
     <div className="flex flex-col pl-2 pr-2 pt-0 pb-0 min-w-0" style={{ minWidth: 0, height: '100%' }}>
@@ -1061,7 +1063,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               {awayName}
             </span>
             {/* Always show nickname/team-name on line 2 — NCAAM: nickname, NBA: team name */}
-            <span className="leading-none" style={{ fontSize: "clamp(9px, 2.2vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+            {/* Nickname: clamp(11px,0.95vw,13px) — matches mobile 11px fixed, scales up on wider screens */}
+            <span className="leading-none" style={{ fontSize: "clamp(11px, 0.95vw, 13px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
               {awayNickname || "\u00A0"}
             </span>
           </div>
@@ -1112,7 +1115,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               {homeName}
             </span>
             {/* Always show nickname/team-name on line 2 — NCAAM: nickname, NBA: team name */}
-            <span className="leading-none" style={{ fontSize: "clamp(9px, 2.2vw, 11px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+            {/* Nickname: clamp(11px,0.95vw,13px) — matches mobile 11px fixed, scales up on wider screens */}
+            <span className="leading-none" style={{ fontSize: "clamp(11px, 0.95vw, 13px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
               {homeNickname || "\u00A0"}
             </span>
           </div>

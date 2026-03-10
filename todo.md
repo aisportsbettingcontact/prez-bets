@@ -890,3 +890,5 @@
 - [x] Desktop GameCard: vertically center left panel (team names/scores) with OddsTable rows
 - [x] Feed tab bar (BOOK/MODEL/SPLITS/EDGE): hide on desktop/tablet (lg+), show only on mobile
 - [x] BettingSplitsPanel: universal black stroke on ALL % labels every screen/code path; increase minWidth so single-digit values (1-9%) always have enough room inside pill on all screens
+- [x] SplitBar desktop: dynamic proportional font+segment scaling with clamp() so % values scale with bar height at all viewport widths; single-digit always fully visible; 100% rule intact
+- [x] GameCard desktop/tablet: consistent team name font sizes (school name + nickname) scaled with clamp() matching mobile hierarchy
