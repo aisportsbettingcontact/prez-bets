@@ -236,13 +236,11 @@ function useAutoFontSize(
  * Renders the school name + nickname stacked vertically inside the frozen
  * left panel (used on both mobile and desktop).
  *
- * School name: uses useAutoFontSize so it auto-shrinks to fit the container
- *   width at any viewport. Max=18px (desktop), min=9px (very long names).
- *   Font weight 700, uppercase, Barlow Condensed.
+ * Font sizes are UNIFORM across all teams — based on viewport width only.
+ * No truncation — full name always visible. Container expands to fit content.
  *
- * Nickname: fixed clamp(11px, 0.9vw, 15px) — always smaller than school name.
- *
- * Debug: [AutoFontSize] console groups fire when scaling kicks in.
+ * School name: clamp(13px, 1.1vw, 18px) — 13px mobile, ~15.8px at 1440px, 18px max
+ * Nickname:    clamp(11px, 0.9vw, 15px) — always smaller than school name
  */
 function MobileTeamNameBlock({
   schoolName,
@@ -257,35 +255,23 @@ function MobileTeamNameBlock({
 }) {
   const displayName = schoolName;
 
-  // useAutoFontSize: starts at 18px, shrinks to fit container, never below 9px
-  const [nameContainerRef, nameFontSize] = useAutoFontSize(
-    displayName,
-    700,
-    18,
-    9,
-    `panel:${displayName}`
-  );
-
-  // Nickname: fluid clamp — 11px on mobile, up to 15px on desktop
+  // Uniform fluid font sizes — same for every team, scale with viewport width
+  const NAME_FONT = 'clamp(13px, 1.1vw, 18px)';
   const NICK_FONT = 'clamp(11px, 0.9vw, 15px)';
 
   return (
     <div
-      ref={nameContainerRef}
-      className="flex flex-col min-w-0"
-      style={{ lineHeight: 1.25, width: '100%' }}
+      className="flex flex-col"
+      style={{ lineHeight: 1.25 }}
     >
       <span style={{
-        fontSize: `${nameFontSize}px`,
+        fontSize: NAME_FONT,
         fontWeight: 700,
         color: '#ffffff',
         letterSpacing: '0.04em',
         textTransform: 'uppercase',
         whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        display: 'block',
-      }} title={displayName}>
+      }}>
         {displayName}
       </span>
       {nickname && (
@@ -297,9 +283,6 @@ function MobileTeamNameBlock({
             letterSpacing: '0.02em',
             textTransform: 'none',
             whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: 'block',
           }}
         >
           {nickname}
@@ -960,20 +943,16 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   // Score sits immediately after the team name, not pushed to the far right.
   // For upcoming games: shows start time instead of scores.
   function ScorePanel() {
-    // Auto-scaling font hooks — measure container width, shrink font until name fits
-    // maxFont=15px, minFont=8px, step=0.5px; Canvas measureText (no DOM reflow)
+    // Uniform font sizes — same for every team, scale with viewport width only
+    // No per-name auto-scaling; no truncation allowed
     const awayFontWeight = awayWins ? 700 : 600;
     const homeFontWeight = homeWins ? 700 : 600;
-    // Desktop school name: max 20px (scales up on wider screens), min 9px for longest names
-    // At 1440px viewport with clamp(170px,14vw,220px) panel: ~130px for text → 18-20px fits
-    const [awayNameRef, awayNameFontSize] = useAutoFontSize(
-      awayName, awayFontWeight, 20, 9, `away:${game.awayTeam}`
-    );
-    const [homeNameRef, homeNameFontSize] = useAutoFontSize(
-      homeName, homeFontWeight, 20, 9, `home:${game.homeTeam}`
-    );
+    // School name: clamp(13px, 1.1vw, 18px) — 13px mobile, ~15.8px at 1440px, 18px max
+    const NAME_FONT_SIZE = 'clamp(13px, 1.1vw, 18px)';
+    // Nickname: clamp(11px, 0.9vw, 15px) — always smaller than school name
+    const NICK_FONT_SIZE = 'clamp(11px, 0.9vw, 15px)';
     return (
-    <div className="flex flex-col pl-2 pr-2 pt-0 pb-0 min-w-0" style={{ minWidth: 0, height: '100%' }}>
+    <div className="flex flex-col pl-2 pr-2 pt-0 pb-0" style={{ height: '100%' }}>
       {/* Status row: [star] [clock/status] [LIVE badge]
           This row acts as the header spacer to align away/home rows with OddsTable.
           The OddsLinesPanel header (SPREAD/TOTAL/MONEYLINE + BOOK/MODEL rows) takes
@@ -1046,14 +1025,14 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       {/* Away team row — flex-1 so it fills equal space with home row, centering content vertically */}
       <div className="flex flex-1 items-center justify-between gap-2 py-2 w-full">
         {/* Left: logo + name/nickname — always two lines for both NCAAM and NBA */}
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="flex items-center gap-2">
           <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={36} />
-          {/* awayNameRef: ResizeObserver measures this div's width to auto-scale font */}
-          <div ref={awayNameRef} className="flex flex-col min-w-0 flex-1" style={{ overflow: 'hidden' }}>
+          {/* Uniform font size — no auto-scaling, no truncation */}
+          <div className="flex flex-col">
             <span
               className="font-semibold leading-tight"
               style={{
-                fontSize: awayNameFontSize,
+                fontSize: NAME_FONT_SIZE,
                 color: awayWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
                 fontWeight: awayFontWeight,
                 whiteSpace: 'nowrap',
@@ -1062,9 +1041,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             >
               {awayName}
             </span>
-            {/* Always show nickname/team-name on line 2 — NCAAM: nickname, NBA: team name */}
-            {/* Nickname: clamp(11px,1.3vw,17px) — scales from mobile 11px up to 17px on desktop */}
-            <span className="leading-none" style={{ fontSize: "clamp(11px, 1.3vw, 17px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+            {/* Nickname line 2 */}
+            <span className="leading-none" style={{ fontSize: NICK_FONT_SIZE, color: "hsl(var(--muted-foreground))", whiteSpace: 'nowrap' }}>
               {awayNickname || "\u00A0"}
             </span>
           </div>
@@ -1098,14 +1076,14 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       {/* Home team row — flex-1 so it fills equal space with away row */}
       <div className="flex flex-1 items-center justify-between gap-2 py-2 w-full">
         {/* Left: logo + name/nickname — always two lines for both NCAAM and NBA */}
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="flex items-center gap-2">
           <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={36} />
-          {/* homeNameRef: ResizeObserver measures this div's width to auto-scale font */}
-          <div ref={homeNameRef} className="flex flex-col min-w-0 flex-1" style={{ overflow: 'hidden' }}>
+          {/* Uniform font size — no auto-scaling, no truncation */}
+          <div className="flex flex-col">
             <span
               className="font-semibold leading-tight"
               style={{
-                fontSize: homeNameFontSize,
+                fontSize: NAME_FONT_SIZE,
                 color: homeWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))",
                 fontWeight: homeFontWeight,
                 whiteSpace: 'nowrap',
@@ -1114,9 +1092,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             >
               {homeName}
             </span>
-            {/* Always show nickname/team-name on line 2 — NCAAM: nickname, NBA: team name */}
-            {/* Nickname: clamp(11px,1.3vw,17px) — scales from mobile 11px up to 17px on desktop */}
-            <span className="leading-none" style={{ fontSize: "clamp(11px, 1.3vw, 17px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+            {/* Nickname line 2 */}
+            <span className="leading-none" style={{ fontSize: NICK_FONT_SIZE, color: "hsl(var(--muted-foreground))", whiteSpace: 'nowrap' }}>
               {homeNickname || "\u00A0"}
             </span>
           </div>
@@ -1177,9 +1154,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {/* Col 1: Score panel — always shown */}
           <div
             style={{
-              flex: mode === "splits" ? "1 1 30%" : "0 0 220px",
+              flex: mode === "splits" ? "1 1 30%" : "0 0 auto",
               minWidth: 220,
-              maxWidth: mode === "splits" ? undefined : 260,
               borderRight: "1px solid hsl(var(--border) / 0.5)",
             }}
           >
