@@ -278,7 +278,7 @@ function MobileTeamNameBlock({
       style={{ lineHeight: 1.25, width: '100%' }}
     >
       <span style={{
-        fontSize: NAME_FONT,
+        fontSize: '13px',
         fontWeight: 700,
         color: '#ffffff',
         letterSpacing: '0.04em',
@@ -292,7 +292,7 @@ function MobileTeamNameBlock({
       {nickname && (
         <span
           style={{
-            fontSize: NICK_FONT,
+            fontSize: '11px',
             fontWeight: 600,
             color: '#ffffff',
             letterSpacing: '0.02em',
@@ -1699,7 +1699,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     <div key={i} className="grid grid-cols-2">
                       <span className="text-center uppercase tracking-widest"
                         style={{
-                          fontSize: 'clamp(7.25px, 2.0vw, 10.25px)',
+                          fontSize: '7.5px',
                           // DUAL: white bold | BOOK-only: white bold | MODEL-only: white unbolded | other: gray
                           fontWeight: (isDualTab || isBookTab) ? 700 : 400,
                           color: (isDualTab || isBookTab)
@@ -1711,7 +1711,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                         }}>BOOK</span>
                       <span className="text-center uppercase tracking-widest"
                         style={{
-                          fontSize: 'clamp(7.25px, 2.0vw, 10.25px)',
+                          fontSize: '7.5px',
                           // DUAL: neon green bold | MODEL-only: neon green bold | BOOK-only: white unbolded | other: gray
                           fontWeight: (isDualTab || isModelTab) ? 700 : 400,
                           color: (isDualTab || isModelTab)
@@ -1797,7 +1797,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                         {formattedClock && (
                           <span style={{
                             color: 'rgba(255,255,255,0.90)',
-                            fontWeight: 400,
+                            fontWeight: 600,
                             fontSize: 'clamp(10.5px, 2.6vw, 13.5px)',
                             letterSpacing: '0.03em',
                             fontVariantNumeric: 'tabular-nums',
@@ -1834,7 +1834,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     {(isLive || isFinal) && hasScores && (
                       <span className="tabular-nums font-black flex-shrink-0 transition-colors duration-300" style={{
                         fontSize: 'clamp(15px, 4vw, 20px)', lineHeight: 1,
-                        minWidth: '28px', textAlign: 'left',
+                        minWidth: '28px', textAlign: 'center',
                         color: awayScoreFlash ? '#39FF14' : awayWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
                         textShadow: awayScoreFlash ? '0 0 10px rgba(57,255,20,0.7)' : 'none',
                       }}>{game.awayScore}</span>
@@ -1863,7 +1863,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     {(isLive || isFinal) && hasScores && (
                       <span className="tabular-nums font-black flex-shrink-0 transition-colors duration-300" style={{
                         fontSize: 'clamp(15px, 4vw, 20px)', lineHeight: 1,
-                        minWidth: '28px', textAlign: 'left',
+                        minWidth: '28px', textAlign: 'center',
                         color: homeScoreFlash ? '#39FF14' : homeWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
                         textShadow: homeScoreFlash ? '0 0 10px rgba(57,255,20,0.7)' : 'none',
                       }}>{game.homeScore}</span>
@@ -1926,7 +1926,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                           onClick={handleTabClick}
                           style={{
                             padding: '6px 2px',
-                            fontSize: 'clamp(9px, 2.3vw, 11px)',  /* +1pt from clamp(8px,2.1vw,10px) */
+                            fontSize: '8.5px',
                             fontWeight: isActive ? 800 : 500,
                             letterSpacing: '0.06em',
                             color: isActive ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.45)',
