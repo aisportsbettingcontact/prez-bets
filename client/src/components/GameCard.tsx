@@ -958,8 +958,9 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {/* Col 1: Score panel — always shown */}
           <div
             style={{
-              flex: mode === "splits" ? "1 1 28%" : "1 1 18%",
-              minWidth: 160,
+              flex: mode === "splits" ? "1 1 30%" : "0 0 220px",
+              minWidth: 220,
+              maxWidth: mode === "splits" ? undefined : 260,
               borderRight: "1px solid hsl(var(--border) / 0.5)",
             }}
           >
@@ -970,11 +971,11 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {mode !== "splits" && (
             <div
               className="flex flex-col justify-center"
-              style={{
-                flex: mode === "projections" ? "2 1 40%" : "1.5 1 30%",
-                minWidth: 200,
-                borderRight: "1px solid hsl(var(--border) / 0.5)",
-              }}
+            style={{
+              flex: mode === "projections" ? "2 1 38%" : "1.5 1 28%",
+              minWidth: 190,
+              borderRight: "1px solid hsl(var(--border) / 0.5)",
+            }}
             >
               <OddsLinesPanel
                 awayBookSpread={awayBookSpread}

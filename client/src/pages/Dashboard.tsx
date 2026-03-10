@@ -685,9 +685,9 @@ export default function Dashboard() {
                   <span className="font-bold text-foreground tracking-widest uppercase" style={{ fontSize: "clamp(11px, 2vw, 13px)" }}>
                     {formatDateHeader(date)}
                   </span>
-                  <span className="text-muted-foreground/40" style={{ fontSize: "10px" }}>·</span>
-                  <span className="font-semibold hidden sm:inline" style={{ color: "#a3a3a3", letterSpacing: "0.06em", fontSize: "clamp(10px, 1.8vw, 12px)" }}>
-                    {selectedSport === "NCAAM" ? "Men's College Basketball" : "NBA"}
+                  <span style={{ fontSize: '22px', color: '#ffffff', fontWeight: 800, lineHeight: 1 }}>·</span>
+                  <span className="font-semibold hidden sm:inline" style={{ color: "#a3a3a3", letterSpacing: "0.06em", fontSize: '15px', textTransform: 'uppercase' }}>
+                    {selectedSport === "NCAAM" ? "Men's College Basketball" : "NBA Basketball"}
                   </span>
                 </div>
                 <div className="flex-1" />
