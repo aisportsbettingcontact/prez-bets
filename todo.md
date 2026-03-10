@@ -875,3 +875,4 @@
 - [x] Feed tab bar buttons: fix duplicate fontSize, set to 13px (single clean declaration)
 - [x] OddsTable: SPREAD/TOTAL/ML headers +1pt (now clamp(10.25px,2.5vw,12.25px)), BOOK/MODEL sub-headers +0.75pt (now 8.25px), value cells +0.5pt (now 10.25-10.5px)
 - [x] GameCard mobile: move per-card status row (star/LIVE/FINAL/time) into frozen left panel above home team row; text matches SPREAD/TOTAL/ML size; 30px height aligns with OddsTable header block
+- [x] GameCard mobile: move status row (star/LIVE/FINAL/time) to above the away team row (above away, not between away and home)

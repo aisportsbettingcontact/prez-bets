@@ -1785,10 +1785,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: 0 }}>
 
                 {/* ── TWO-COLUMN TEAM GRID: frozen left + scrollable right ─────── */}
-                {/* Status row (star/LIVE/FINAL/time) is now inside the frozen left panel, above the home team row */}
+                {/* Status row (star/LIVE/FINAL/time) is inside the frozen left panel, ABOVE the away team row */}
                 <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', width: '100%', minHeight: 0 }}>
 
-                {/* ── FROZEN LEFT PANEL: logo + team rows only (no status row) ── */}
+                {/* ── FROZEN LEFT PANEL: status row + team rows ── */}
                 <div style={{
                   gridColumn: '1',
                   borderRight: '1px solid hsl(var(--border) / 0.5)',
@@ -1803,37 +1803,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   alignSelf: 'stretch',
                 }}>
 
-                  {/* Away row: height: 44px — matches OddsTable away row exactly */}
-                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', height: '44px' }}>
-                    {/* Logo + name block */}
-                    <div className="flex items-center gap-2 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
-                      {/* Logo centered between school+nickname lines */}
-                      <div className="flex-shrink-0 flex items-center justify-center" style={{ width: 33, height: 44 }}>
-                        <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={33} />
-                      </div>
-                      <MobileTeamNameBlock
-                        schoolName={awayName}
-                        nickname={awayNickname}
-                        isWinner={awayWins}
-                        isFinalGame={isFinal}
-                      />
-                    </div>
-                    {/* Score — fixed width so it never squeezes the name */}
-                    {(isLive || isFinal) && hasScores && (
-                      <span className="tabular-nums font-black flex-shrink-0 transition-colors duration-300" style={{
-                        fontSize: 'clamp(15px, 4vw, 20px)', lineHeight: 1,
-                        minWidth: '28px', textAlign: 'center',
-                        color: awayScoreFlash ? '#39FF14' : awayWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
-                        textShadow: awayScoreFlash ? '0 0 10px rgba(57,255,20,0.7)' : 'none',
-                      }}>{game.awayScore}</span>
-                    )}
-                  </div>
-
-                  {/* Divider */}
-                  <div style={{ height: 1, background: 'hsl(var(--border) / 0.4)' }} />
-
-                  {/* Status row: star + LIVE/FINAL/time — sits above home team row, aligned with OddsTable header rows */}
-                  {/* Height matches the two OddsTable header rows (SPREAD/TOTAL/ML + BOOK/MODEL sub-headers) */}
+                  {/* Status row: star + LIVE/FINAL/time — sits ABOVE the away team row, aligned with OddsTable header block */}
                   <div style={{
                     display: 'flex',
                     flexDirection: 'row',
@@ -1878,6 +1848,35 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       <span style={{ fontSize: 'clamp(10.25px, 2.5vw, 12.25px)', fontWeight: 400, color: 'hsl(var(--foreground))', whiteSpace: 'nowrap' }}>{time}</span>
                     )}
                   </div>
+
+                  {/* Away row: height: 44px — matches OddsTable away row exactly */}
+                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', height: '44px' }}>
+                    {/* Logo + name block */}
+                    <div className="flex items-center gap-2 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
+                      {/* Logo centered between school+nickname lines */}
+                      <div className="flex-shrink-0 flex items-center justify-center" style={{ width: 33, height: 44 }}>
+                        <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={33} />
+                      </div>
+                      <MobileTeamNameBlock
+                        schoolName={awayName}
+                        nickname={awayNickname}
+                        isWinner={awayWins}
+                        isFinalGame={isFinal}
+                      />
+                    </div>
+                    {/* Score — fixed width so it never squeezes the name */}
+                    {(isLive || isFinal) && hasScores && (
+                      <span className="tabular-nums font-black flex-shrink-0 transition-colors duration-300" style={{
+                        fontSize: 'clamp(15px, 4vw, 20px)', lineHeight: 1,
+                        minWidth: '28px', textAlign: 'center',
+                        color: awayScoreFlash ? '#39FF14' : awayWins ? 'hsl(var(--foreground))' : isFinal ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
+                        textShadow: awayScoreFlash ? '0 0 10px rgba(57,255,20,0.7)' : 'none',
+                      }}>{game.awayScore}</span>
+                    )}
+                  </div>
+
+                  {/* Divider */}
+                  <div style={{ height: 1, background: 'hsl(var(--border) / 0.4)' }} />
 
                   {/* Home row: height: 44px — matches OddsTable home row exactly */}
                   <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', height: '44px' }}>
