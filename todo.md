@@ -901,3 +901,4 @@
 - [x] Phase 7-9: Mobile/tablet/desktop layout verified with scale engine
 - [x] Phase 10: react-window virtualized game list rendering
 - [x] Phase 11: Validation vitest against 25-device viewport database
+- [x] GameCard desktop: widen left panel from 170px to clamp(170px,14vw,220px); bump useAutoFontSize max to 20px; nickname clamp(13px,1.3vw,17px) so names scale visibly larger on desktop

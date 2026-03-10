@@ -261,11 +261,13 @@ function MobileTeamNameBlock({
   // Display name is already abbreviated in the registry — no St.→State transform needed
   const displayName = schoolName;
 
-  // Uniform font sizes — same for every team (+3pt more school name, +1.5pt more nickname)
-  const NAME_FONT = 'clamp(14px, 3.7vw, 16px)';
-  const NICK_FONT = 'clamp(10.5px, 2.8vw, 12.5px)';
+  // Fluid font sizes: scale from mobile (13px/11px) up to desktop (18px/15px)
+  // At 1440px: school=15.8px, nick=13px — visibly larger than mobile 13px/11px
+  // At 375px (mobile): school=13px (min), nick=11px (min) — unchanged from before
+  const NAME_FONT = 'clamp(13px, 1.1vw, 18px)';
+  const NICK_FONT = 'clamp(11px, 0.9vw, 15px)';
 
-  // Debug log on mount (dev only) — use useEffect directly, not React.useEffect
+  // Debug log on mount (dev only)
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
       console.debug(`[MobileTeamName] "${displayName}" name=${NAME_FONT} nick=${NICK_FONT}`);
@@ -278,7 +280,7 @@ function MobileTeamNameBlock({
       style={{ lineHeight: 1.25, width: '100%' }}
     >
       <span style={{
-        fontSize: '13px',
+        fontSize: NAME_FONT,
         fontWeight: 700,
         color: '#ffffff',
         letterSpacing: '0.04em',
@@ -292,7 +294,7 @@ function MobileTeamNameBlock({
       {nickname && (
         <span
           style={{
-            fontSize: '11px',
+            fontSize: NICK_FONT,
             fontWeight: 600,
             color: '#ffffff',
             letterSpacing: '0.02em',
@@ -964,13 +966,13 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
     // maxFont=15px, minFont=8px, step=0.5px; Canvas measureText (no DOM reflow)
     const awayFontWeight = awayWins ? 700 : 600;
     const homeFontWeight = homeWins ? 700 : 600;
-    // Desktop school name: max 16px (matches mobile 13px fixed but with room to breathe at wider widths)
-    // min 9px so even the longest names (15+ chars) always fit in the panel
+    // Desktop school name: max 20px (scales up on wider screens), min 9px for longest names
+    // At 1440px viewport with clamp(170px,14vw,220px) panel: ~130px for text → 18-20px fits
     const [awayNameRef, awayNameFontSize] = useAutoFontSize(
-      awayName, awayFontWeight, 16, 9, `away:${game.awayTeam}`
+      awayName, awayFontWeight, 20, 9, `away:${game.awayTeam}`
     );
     const [homeNameRef, homeNameFontSize] = useAutoFontSize(
-      homeName, homeFontWeight, 16, 9, `home:${game.homeTeam}`
+      homeName, homeFontWeight, 20, 9, `home:${game.homeTeam}`
     );
     return (
     <div className="flex flex-col pl-2 pr-2 pt-0 pb-0 min-w-0" style={{ minWidth: 0, height: '100%' }}>
@@ -1063,8 +1065,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               {awayName}
             </span>
             {/* Always show nickname/team-name on line 2 — NCAAM: nickname, NBA: team name */}
-            {/* Nickname: clamp(11px,0.95vw,13px) — matches mobile 11px fixed, scales up on wider screens */}
-            <span className="leading-none" style={{ fontSize: "clamp(11px, 0.95vw, 13px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+            {/* Nickname: clamp(11px,1.3vw,17px) — scales from mobile 11px up to 17px on desktop */}
+            <span className="leading-none" style={{ fontSize: "clamp(11px, 1.3vw, 17px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
               {awayNickname || "\u00A0"}
             </span>
           </div>
@@ -1115,8 +1117,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               {homeName}
             </span>
             {/* Always show nickname/team-name on line 2 — NCAAM: nickname, NBA: team name */}
-            {/* Nickname: clamp(11px,0.95vw,13px) — matches mobile 11px fixed, scales up on wider screens */}
-            <span className="leading-none" style={{ fontSize: "clamp(11px, 0.95vw, 13px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+            {/* Nickname: clamp(11px,1.3vw,17px) — scales from mobile 11px up to 17px on desktop */}
+            <span className="leading-none" style={{ fontSize: "clamp(11px, 1.3vw, 17px)", color: "hsl(var(--muted-foreground))", wordBreak: "break-word", overflowWrap: "anywhere" }}>
               {homeNickname || "\u00A0"}
             </span>
           </div>
@@ -1308,8 +1310,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   }}
                   className="flex flex-col justify-center"
                 >
-                  {/* minWidth = calc(100vw - 160px): exactly fills scroll container so when scrolled fully right, 0px bleeds through */}
-                  <div style={{ minWidth: "calc(100vw - 160px)" }} className="flex flex-col justify-center">
+                   {/* minWidth = calc(100vw - clamp(170px,14vw,220px)): exactly fills scroll container so when scrolled fully right, 0px bleeds through */}
+                   <div style={{ minWidth: "calc(100vw - clamp(170px, 14vw, 220px))" }} className="flex flex-col justify-center">
                     <OddsLinesPanel
                       awayBookSpread={awayBookSpread}
                       homeBookSpread={homeBookSpread}
@@ -1366,7 +1368,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
           {/* Splits mode: fixed CompactScore column | scrollable Splits column */}
           {mode === "splits" && (
-            <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", width: "100%" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "clamp(170px, 14vw, 220px) 1fr", width: "100%" }}>
               {/* Fixed compact score — NOT inside scroll container */}
               <div
                 style={{
@@ -1795,7 +1797,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
                 {/* ── TWO-COLUMN TEAM GRID: frozen left + scrollable right ─────── */}
                 {/* Status row (star/LIVE/FINAL/time) is inside the frozen left panel, ABOVE the away team row */}
-                <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', width: '100%', minHeight: 0 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'clamp(170px, 14vw, 220px) 1fr', width: '100%', minHeight: 0 }}>
 
                 {/* ── FROZEN LEFT PANEL: status row + team rows ── */}
                 <div style={{
