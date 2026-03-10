@@ -231,6 +231,79 @@ function useAutoFontSize(
   return [containerRef, fontSize];
 }
 
+// ── MobileTeamNameBlock ─────────────────────────────────────────────────────
+/**
+ * Renders the school name + nickname stacked vertically inside the mobile
+ * frozen left panel. Uses two independent useAutoFontSize instances so each
+ * line independently shrinks to the largest px that fits the container.
+ *
+ * Key design decisions:
+ *   - NO maxWidth on the spans — the container ref measures true available px
+ *   - NO overflow:hidden / textOverflow:ellipsis on spans — text never clips
+ *   - whiteSpace: nowrap so the hook always measures single-line width
+ *   - The outer div is `min-w-0` so flex layout doesn't give it infinite width
+ *   - ResizeObserver fires on every panel resize (orientation change, zoom, etc.)
+ *
+ * Debug: every scaling event emits a [AutoFontSize] console group with:
+ *   container width, text width at each tried size, and chosen font size.
+ */
+function MobileTeamNameBlock({
+  schoolName,
+  nickname,
+  isWinner,
+  isFinalGame,
+}: {
+  schoolName: string;
+  nickname?: string;
+  isWinner: boolean;
+  isFinalGame: boolean;
+}) {
+  const displayName = schoolName.replace(/\bSt\.?\b/g, 'State');
+  const [nameRef, nameFontSize] = useAutoFontSize(
+    displayName, 600, 14, 7,
+    `mobile-school:${displayName}`
+  );
+  const [nickRef, nickFontSize] = useAutoFontSize(
+    nickname ?? '', 400, 12, 7,
+    `mobile-nick:${nickname}`
+  );
+
+  return (
+    <div
+      ref={nameRef as React.RefObject<HTMLDivElement>}
+      className="flex flex-col min-w-0"
+      style={{ lineHeight: 1.25, width: '100%' }}
+    >
+      <span style={{
+        fontSize: `${nameFontSize}px`,
+        fontWeight: 600,
+        color: '#ffffff',
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+        display: 'block',
+      }} title={displayName}>
+        {displayName}
+      </span>
+      {nickname && (
+        <span
+          ref={nickRef as React.RefObject<HTMLSpanElement>}
+          style={{
+            fontSize: `${nickFontSize}px`,
+            fontWeight: 400,
+            color: '#ffffff',
+            letterSpacing: '0.02em',
+            whiteSpace: 'nowrap',
+            display: 'block',
+          }}
+        >
+          {nickname}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── VerdictSide ───────────────────────────────────────────────────────────────
 function VerdictSide({ diff, label, isStrong, logoUrl, teamSlug, teamName, compact = false }: {
   diff: number | null;
@@ -1721,34 +1794,12 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       <div className="flex-shrink-0 flex items-center justify-center" style={{ width: 22, height: 44 }}>
                         <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={22} />
                       </div>
-                      <div className="flex flex-col min-w-0" style={{ lineHeight: 1.2 }}>
-                        {/* School name: all-caps, semi-bold (600), white, State spelled out; fallback to abbr on mobile if truncated */}
-                        <span style={{
-                          fontSize: 'clamp(14px, 3.6vw, 16px)',
-                          fontWeight: 600,
-                          color: '#ffffff',
-                          letterSpacing: '0.04em',
-                          textTransform: 'uppercase',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          maxWidth: '72px',
-                        }} title={awayName.replace(/\bSt\.?\b/g, 'State')}>
-                          {awayName.replace(/\bSt\.?\b/g, 'State')}
-                        </span>
-                        {awayNickname && (
-                          <span style={{
-                            fontSize: 'clamp(11px, 2.8vw, 13px)',  /* +1pt from previous 10px base */
-                            fontWeight: 400,
-                            color: '#ffffff',
-                            letterSpacing: '0.02em',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: '72px',
-                          }}>{awayNickname}</span>
-                        )}
-                      </div>
+                      <MobileTeamNameBlock
+                        schoolName={awayName}
+                        nickname={awayNickname}
+                        isWinner={awayWins}
+                        isFinalGame={isFinal}
+                      />
                     </div>
                     {/* Score — fixed width so it never squeezes the name */}
                     {(isLive || isFinal) && hasScores && (
@@ -1772,34 +1823,12 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       <div className="flex-shrink-0 flex items-center justify-center" style={{ width: 22, height: 44 }}>
                         <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={22} />
                       </div>
-                      <div className="flex flex-col min-w-0" style={{ lineHeight: 1.2 }}>
-                        {/* School name: all-caps, semi-bold (600), white, State spelled out; fallback to abbr on mobile if truncated */}
-                        <span style={{
-                          fontSize: 'clamp(14px, 3.6vw, 16px)',
-                          fontWeight: 600,
-                          color: '#ffffff',
-                          letterSpacing: '0.04em',
-                          textTransform: 'uppercase',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          maxWidth: '72px',
-                        }} title={homeName.replace(/\bSt\.?\b/g, 'State')}>
-                          {homeName.replace(/\bSt\.?\b/g, 'State')}
-                        </span>
-                        {homeNickname && (
-                          <span style={{
-                            fontSize: 'clamp(11px, 2.8vw, 13px)',  /* +1pt from previous 10px base */
-                            fontWeight: 400,
-                            color: '#ffffff',
-                            letterSpacing: '0.02em',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: '72px',
-                          }}>{homeNickname}</span>
-                        )}
-                      </div>
+                      <MobileTeamNameBlock
+                        schoolName={homeName}
+                        nickname={homeNickname}
+                        isWinner={homeWins}
+                        isFinalGame={isFinal}
+                      />
                     </div>
                     {/* Score — fixed width so it never squeezes the name */}
                     {(isLive || isFinal) && hasScores && (
