@@ -862,7 +862,8 @@ function DesktopMergedPanel({
         {/* ── Section title ── */}
         <div className="flex items-center gap-1.5" style={{ marginBottom: 4 }}>
           <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
-          <span style={{ fontSize: TITLE_FS, fontWeight: 900, color: '#fff', letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+          {/* Change 5: SPREAD/TOTAL/MONEYLINE title fontWeight reduced by 50 (900→850) */}
+          <span style={{ fontSize: TITLE_FS, fontWeight: 850, color: '#fff', letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
             {title}
           </span>
           <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
@@ -1602,11 +1603,14 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
     const NICK_FONT_SIZE = 'clamp(11px, 0.9vw, 15px)';
     // Desktop-specific sizes: 1.5× the NAME_FONT_SIZE (clamp(13px,1.1vw,18px))
     // → clamp(19.5px, 1.65vw, 27px) for star/clock/LIVE/FINAL/time
-    const HEADER_ICON_SIZE = isDesktop ? 24 : 16; // star SVG px
-    const CLOCK_FONT_SIZE = isDesktop ? 'clamp(16px, 1.35vw, 20px)' : '11px';
-    const LIVE_FONT_SIZE  = isDesktop ? 'clamp(14px, 1.1vw, 18px)'  : '9px';
-    const FINAL_FONT_SIZE = isDesktop ? 'clamp(16px, 1.35vw, 20px)' : '10px';
-    const TIME_FONT_SIZE  = isDesktop ? 'clamp(16px, 1.35vw, 20px)' : '13px';
+  // ── Change 3: reduce gameClock/LIVE/FINAL/star by 25% ──────────────────────
+  // Before: desktop 24px star → now 18px (×0.75); clamp values ×0.75
+  // Before: CLOCK 16-20px → now 12-15px; LIVE 14-18px → 10.5-13.5px; FINAL 16-20px → 12-15px
+  const HEADER_ICON_SIZE = isDesktop ? 18 : 12; // star SVG px — was 24/16, now ×0.75
+  const CLOCK_FONT_SIZE = isDesktop ? 'clamp(12px, 1.01vw, 15px)' : '8.25px';  // was clamp(16,1.35vw,20)/11px
+  const LIVE_FONT_SIZE  = isDesktop ? 'clamp(10.5px, 0.83vw, 13.5px)' : '6.75px'; // was clamp(14,1.1vw,18)/9px
+  const FINAL_FONT_SIZE = isDesktop ? 'clamp(12px, 1.01vw, 15px)' : '7.5px';   // was clamp(16,1.35vw,20)/10px
+  const TIME_FONT_SIZE  = isDesktop ? 'clamp(12px, 1.01vw, 15px)' : '9.75px';  // was clamp(16,1.35vw,20)/13px
     // Desktop: teams pushed toward top (justify-start + small paddingTop)
     // Mobile: teams vertically centered (justify-center)
     const teamGroupJustify = isDesktop ? 'flex-start' : 'center';
@@ -1637,7 +1641,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               color: isFavorited ? "#FFD700" : "rgba(255,255,255,0.65)",
               opacity: 1,
               transition: "color 0.15s, transform 0.15s, filter 0.15s",
-              filter: isFavorited ? "drop-shadow(0 0 4px #FFD700)" : "none",
+              // ── Change 6: reduce star glow by ~50% (4px→2px radius, opacity 0.6) ──
+              filter: isFavorited ? "drop-shadow(0 0 2px rgba(255,215,0,0.6))" : "none",
             }}
             onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.25)"; if (!isFavorited) e.currentTarget.style.color = "rgba(255,255,255,0.95)"; }}
             onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; if (!isFavorited) e.currentTarget.style.color = "rgba(255,255,255,0.65)"; }}
@@ -1658,14 +1663,17 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             {/* LIVE indicator — same pill format as FINAL badge, fully rounded, LEFT of clock */}
             {/* Desktop: clamp(14px,1.1vw,18px) — 1.5× mobile 9px */}
             <span
-              className="px-1.5 py-0.5 font-bold tracking-wide flex-shrink-0 flex items-center gap-1"
+              className="px-1.5 py-0.5 font-bold tracking-wide flex-shrink-0 flex items-center"
               style={{
                 fontSize: LIVE_FONT_SIZE,
                 background: "rgba(57,255,20,0.12)",
                 color: "#39FF14",
                 border: "1px solid rgba(57,255,20,0.4)",
                 letterSpacing: "0.08em",
-                borderRadius: '9999px',
+                // ── Change 1: borderRadius halved (9999px → 12px) ──────────────
+                borderRadius: '12px',
+                // ── Change 2: gap between dot and LIVE text increased (gap-1=4px → 8px) ──
+                gap: '8px',
               }}
             >
               <span
@@ -1689,12 +1697,14 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
         ) : isFinal ? (
           /* Desktop: neon green FINAL badge — 1.5× mobile 10px */
           <span
-            className="px-1.5 py-0.5 rounded font-bold tracking-wide"
+            className="px-1.5 py-0.5 font-bold tracking-wide"
             style={{
               fontSize: FINAL_FONT_SIZE,
               background: isDesktop ? "rgba(57,255,20,0.12)" : "rgba(255,255,255,0.07)",
               color: isDesktop ? "#39FF14" : "hsl(var(--muted-foreground))",
               border: isDesktop ? "1px solid rgba(57,255,20,0.4)" : "none",
+              // ── Change 1: FINAL pill borderRadius matches LIVE (12px) ──────
+              borderRadius: '12px',
             }}
           >
             FINAL
@@ -1742,8 +1752,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               /* NBA scores are 3 digits (100-130) — use smaller clamp to prevent overflow in 160px panel */
               fontSize: isNba ? "clamp(18px, 2vw, 38px)" : "clamp(22px, 2.5vw, 44px)",
               lineHeight: 1,
-              /* Winner: 900; loser: 600 (500+100 = back up by 100 from previous iteration) */
-              fontWeight: awayScoreFlash ? 900 : awayWins ? 900 : isFinal ? 600 : 900,
+              /* Change 4: winner fontWeight 900→850 for FINAL and LIVE games only; pregame stays 900 */
+              fontWeight: awayScoreFlash ? 900 : awayWins ? (isFinal || isLive ? 850 : 900) : isFinal ? 600 : 900,
               color: awayScoreFlash
                 ? "#39FF14"
                 : awayWins
@@ -1794,8 +1804,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             style={{
               fontSize: isNba ? "clamp(18px, 2vw, 38px)" : "clamp(22px, 2.5vw, 44px)",
               lineHeight: 1,
-              /* Winner: 900; loser: 600 (500+100 = back up by 100 from previous iteration) */
-              fontWeight: homeScoreFlash ? 900 : homeWins ? 900 : isFinal ? 600 : 900,
+              /* Change 4: winner fontWeight 900→850 for FINAL and LIVE games only; pregame stays 900 */
+              fontWeight: homeScoreFlash ? 900 : homeWins ? (isFinal || isLive ? 850 : 900) : isFinal ? 600 : 900,
               color: homeScoreFlash
                 ? "#39FF14"
                 : homeWins

@@ -956,3 +956,9 @@
 - [x] LIVE pill: increase border-radius to be more rounded (full pill shape)
 - [x] LIVE pill: move to LEFT of gameClock/gameStatus text
 - [x] Betting split pill %%: decrease letterSpacing by 0.2, then add 0.1 gap before % symbol via thin-space
+- [x] LIVE/FINAL pill: halve border-radius (9999px → ~6px)
+- [x] LIVE pill: add gap/space between dot and LIVE text
+- [x] gameClock/LIVE/FINAL/star buttons: reduce size by 25%
+- [x] Winning score fontWeight: reduce by 50 (900→850) for FINAL and LIVE games
+- [x] SPREAD/TOTAL/MONEYLINE titles: reduce fontWeight by 50 (800→750)
+- [x] Star favorite glow: reduce shine/glow intensity when toggled
