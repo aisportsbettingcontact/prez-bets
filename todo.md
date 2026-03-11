@@ -976,3 +976,6 @@
 - [ ] Fix: ncaaScoreboard merge should update startTimeEst on existing VSiN row, not insert new
 - [ ] Clean up all current DB duplicates after pipeline fix
 - [ ] Add comprehensive pipeline logging for every insert/update/skip decision
+- [ ] Full pipeline audit: cross-reference VSiN source, NCAA schedule, NBA schedule against DB
+- [ ] Fix all odds/splits mapping mismatches found in audit
+- [x] Fix reversed-team odds mapping bug in vsinAutoRefresh.ts (VSiN home/away order vs NCAA order mismatch causes inverted spreads/ML/splits — e.g. Bethune-Cookman @ Prairie View, isReversedMatch swap logic added)

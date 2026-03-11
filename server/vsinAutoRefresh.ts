@@ -181,14 +181,19 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
       const awaySlug = scraped.awaySlug;
       const homeSlug = scraped.homeSlug;
 
-      const existingGame = existing.find(
+      const existingGameCanonical = existing.find(
         e => e.awayTeam === awaySlug && e.homeTeam === homeSlug
       ) ?? existing.find(
         e => slugsMatch(e.awayTeam, awaySlug) && slugsMatch(e.homeTeam, homeSlug)
-      ) ?? existing.find(
-        // VSiN sometimes lists teams in reversed order vs NCAA.com — treat as same game
-        e => slugsMatch(e.awayTeam, homeSlug) && slugsMatch(e.homeTeam, awaySlug)
       );
+      // VSiN sometimes lists teams in reversed order vs NCAA.com — track if reversed
+      const existingGameReversed = !existingGameCanonical ? existing.find(
+        e => slugsMatch(e.awayTeam, homeSlug) && slugsMatch(e.homeTeam, awaySlug)
+      ) : undefined;
+      const existingGame = existingGameCanonical ?? existingGameReversed;
+      // isReversedMatch=true means DB stores [bethune_cookman @ prairie_view] but VSiN scraped [prairie_view @ bethune_cookman]
+      // In this case we MUST swap all team-directional odds before writing to DB
+      const isReversedMatch = !existingGameCanonical && !!existingGameReversed;
 
       const startTimeKey = `${awaySlug}@${homeSlug}`;
       const startTimeEst = startTimeMap?.get(startTimeKey);
@@ -225,7 +230,37 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
       );
 
       if (existingGame) {
-        await updateBookOdds(existingGame.id, {
+        // ─── REVERSED-MATCH ODDS SWAP ────────────────────────────────────────────
+        // When VSiN lists teams in opposite order vs DB (which uses NCAA ordering),
+        // the scraped "away" odds actually belong to the DB "home" team and vice versa.
+        // Example: DB has bethune_cookman(AWAY) @ prairie_view(HOME)
+        //          VSiN has prairie_view(AWAY, +5.5) @ bethune_cookman(HOME, -5.5)
+        //          Without swap: bethune_cookman gets +5.5 ← WRONG (they are the favorite)
+        //          With swap:    bethune_cookman gets -5.5 ← CORRECT
+        //
+        // Swap logic:
+        //   awaySpread ↔ homeSpread  (spread is team-directional)
+        //   awayML ↔ homeML          (ML is team-directional)
+        //   spreadAwayBetsPct → 100 - value (VSiN away% becomes DB home%)
+        //   spreadAwayMoneyPct → 100 - value
+        //   mlAwayBetsPct → 100 - value
+        //   mlAwayMoneyPct → 100 - value
+        //   totalOverBetsPct, totalOverMoneyPct → unchanged (not team-specific)
+        const oddsToWrite = isReversedMatch ? {
+          awayBookSpread: scraped.homeSpread,   // VSiN home spread → DB away spread
+          homeBookSpread: scraped.awaySpread,   // VSiN away spread → DB home spread
+          bookTotal: scraped.total,
+          sortOrder: scraped.vsinRowIndex,
+          ...(startTimeEst ? { startTimeEst } : {}),
+          spreadAwayBetsPct: scraped.spreadAwayBetsPct !== null ? 100 - scraped.spreadAwayBetsPct : null,
+          spreadAwayMoneyPct: scraped.spreadAwayMoneyPct !== null ? 100 - scraped.spreadAwayMoneyPct : null,
+          totalOverBetsPct: scraped.totalOverBetsPct,
+          totalOverMoneyPct: scraped.totalOverMoneyPct,
+          awayML: scraped.homeML,               // VSiN home ML → DB away ML
+          homeML: scraped.awayML,               // VSiN away ML → DB home ML
+          mlAwayBetsPct: scraped.mlAwayBetsPct !== null ? 100 - scraped.mlAwayBetsPct : null,
+          mlAwayMoneyPct: scraped.mlAwayMoneyPct !== null ? 100 - scraped.mlAwayMoneyPct : null,
+        } : {
           awayBookSpread: scraped.awaySpread,
           homeBookSpread: scraped.homeSpread,
           bookTotal: scraped.total,
@@ -240,7 +275,17 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
           homeML: scraped.homeML,
           mlAwayBetsPct: scraped.mlAwayBetsPct,
           mlAwayMoneyPct: scraped.mlAwayMoneyPct,
-        });
+        };
+        if (isReversedMatch) {
+          console.log(
+            `[VSiNAutoRefresh][REVERSED_SWAP] ${awaySlug}@${homeSlug} → DB is ${existingGame.awayTeam}@${existingGame.homeTeam} | ` +
+            `Swapping: awaySpread ${scraped.awaySpread}→${oddsToWrite.awayBookSpread}, homeSpread ${scraped.homeSpread}→${oddsToWrite.homeBookSpread} | ` +
+            `awayML ${scraped.awayML}→${oddsToWrite.awayML}, homeML ${scraped.homeML}→${oddsToWrite.homeML} | ` +
+            `spreadAwayBets% ${scraped.spreadAwayBetsPct}→${oddsToWrite.spreadAwayBetsPct} | ` +
+            `mlAwayBets% ${scraped.mlAwayBetsPct}→${oddsToWrite.mlAwayBetsPct}`
+          );
+        }
+        await updateBookOdds(existingGame.id, oddsToWrite);
         // Always update gameStatus, scores, and clock when we have NCAA data
         await updateNcaaStartTime(existingGame.id, {
           startTimeEst: startTimeEst ?? existingGame.startTimeEst,
