@@ -910,3 +910,4 @@
 - [x] Desktop DesktopMergedPanel refinement: per-column vertical stack = section header → BOOK row → TICKETS bar → HANDLE bar → MODEL row; EdgeVerdict pinned right; full screen width; desktop only
 - [x] Desktop SectionCol: split bars show team labels flanking left/right of each bar (away label left, home label right), TICKETS/MONEY centered above bar — matching reference screenshots
 - [x] Desktop SectionCol restructure: top = team labels + BOOK/MODEL column headers + values in same row; bottom = TICKETS bar + MONEY bar completely below the odds table
+- [x] Desktop SectionCol exact layout: section title → 2-col grid (BOOK header | MODEL header → away book | away model → home book | home model) → separator → TICKETS bar → MONEY bar
