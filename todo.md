@@ -915,3 +915,12 @@
 - [x] Desktop: uniform game card height — all cards same fixed height, all section columns same dimensions
 - [x] Desktop SectionCol: team logos in SPREAD and MONEYLINE row labels (away logo left of away values, home logo left of home values)
 - [x] Desktop SectionCol TOTAL: spell out "OVER" and "UNDER" as row labels instead of blank/o/u prefix
+- [x] Desktop: remove team abbreviation text from SPREAD/ML row labels — logos only, no text
+- [x] Desktop: fix OVER/UNDER in TOTAL section — text directly next to values, no separate label column
+- [x] Desktop: enforce uniform fixed card height across all game cards (no minHeight variance)
+- [x] Desktop: enforce uniform splits bar height and width across all 3 sections (SPREAD/TOTAL/ML) and all game cards
+- [x] Desktop: logos must be immediately adjacent (right next to) the BOOK and MODEL spread/ML values — no gap between logo and number
+- [x] Desktop: logos appear in BOTH BOOK and MODEL cells for SPREAD/ML rows (not just BOOK)
+- [x] Desktop: TOTAL section — show plain "OVER" / "UNDER" text only, no o{total}/u{total} prefix notation
+- [ ] Desktop: uniform splits bar height and width across all 3 sections (TICKETS and MONEY bars identical size)
+- [ ] Desktop: OVER/UNDER rows show "OVER {bookTotal}" and "UNDER {bookTotal}" in BOOK cell, "OVER {modelTotal}" and "UNDER {modelTotal}" in MODEL cell

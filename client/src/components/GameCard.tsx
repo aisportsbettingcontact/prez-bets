@@ -778,7 +778,8 @@ function DesktopMergedPanel({
     awayModelStyle, homeModelStyle,
     ticketsPct, handlePct,
     totalLine,
-    awayRowLabel, homeRowLabel,
+    awayLogoUrl: sectionAwayLogoUrl,
+    homeLogoUrl: sectionHomeLogoUrl,
   }: {
     title: string;
     awayLabel: string; homeLabel: string;
@@ -789,13 +790,9 @@ function DesktopMergedPanel({
     ticketsPct: number | null;
     handlePct: number | null;
     totalLine?: string;
-    /** Short label prefixed to each value in the away row (e.g. "PSU" or "OVER") */
-    awayRowLabel?: string;
-    /** Short label prefixed to each value in the home row (e.g. "NW" or "UNDER") */
-    homeRowLabel?: string;
-    /** Team logo URL for the away row (shown left of values in SPREAD/ML) */
+    /** Team logo URL for the away row (shown left of values in SPREAD/ML, NOT for TOTAL) */
     awayLogoUrl?: string;
-    /** Team logo URL for the home row (shown left of values in SPREAD/ML) */
+    /** Team logo URL for the home row (shown left of values in SPREAD/ML, NOT for TOTAL) */
     homeLogoUrl?: string;
   }) => {
     const awayTickets = ticketsPct != null ? ticketsPct : null;
@@ -832,7 +829,8 @@ function DesktopMergedPanel({
     const valFontSize = 'clamp(13px,1.05vw,17px)';
 
     return (
-      <div className="flex flex-col" style={{ flex: 1, minWidth: 0, padding: '8px 10px 10px' }}>
+      /* flex: 1 1 0% ensures all three SectionCols grow equally from 0 base — identical width regardless of content */
+      <div className="flex flex-col" style={{ flex: '1 1 0%', minWidth: 0, width: 0, padding: '8px 10px 10px', overflow: 'hidden' }}>
 
         {/* ── Section title ── */}
         <div className="flex items-center gap-1.5" style={{ marginBottom: 4 }}>
@@ -844,41 +842,95 @@ function DesktopMergedPanel({
         </div>
 
         {/* ── TOTAL line header (OVER / total# / UNDER) ── */}
-        {totalLine && (
-          <div className="flex items-center justify-between" style={{ marginBottom: 3 }}>
-            <span style={{ fontSize: 'clamp(9px,0.72vw,11px)', color: 'rgba(255,255,255,0.45)', fontWeight: 600, letterSpacing: '0.06em' }}>OVER</span>
-            <span style={{ fontSize: 'clamp(11px,0.9vw,14px)', color: '#fff', fontWeight: 700 }}>{totalLine}</span>
-            <span style={{ fontSize: 'clamp(9px,0.72vw,11px)', color: 'rgba(255,255,255,0.45)', fontWeight: 600, letterSpacing: '0.06em' }}>UNDER</span>
-          </div>
-        )}
+        {/* All three sections get the same fixed-height slot here so the odds grid and splits bars align uniformly */}
+        <div style={{ height: 'clamp(16px,1.4vw,22px)', marginBottom: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {totalLine ? (
+            <>
+              <span style={{ fontSize: 'clamp(9px,0.72vw,11px)', color: 'rgba(255,255,255,0.45)', fontWeight: 600, letterSpacing: '0.06em' }}>OVER</span>
+              <span style={{ fontSize: 'clamp(11px,0.9vw,14px)', color: '#fff', fontWeight: 700 }}>{totalLine}</span>
+              <span style={{ fontSize: 'clamp(9px,0.72vw,11px)', color: 'rgba(255,255,255,0.45)', fontWeight: 600, letterSpacing: '0.06em' }}>UNDER</span>
+            </>
+          ) : (
+            /* Invisible spacer — same height as TOTAL header to keep all sections aligned */
+            <span style={{ visibility: 'hidden', fontSize: 'clamp(11px,0.9vw,14px)' }}> </span>
+          )}
+        </div>
 
-        {/* ── Odds grid: 3 columns — ROW LABEL | BOOK | MODEL ── */}
-        {/*   Row 1: header (blank | BOOK | MODEL)               */}
-        {/*   Row 2: away   (ABBR  | book  | model)              */}
-        {/*   Row 3: home   (ABBR  | book  | model)              */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: '2px 6px', marginBottom: 8 }}>
+        {/* ── Odds grid: 2 columns — BOOK | MODEL ── */}
+        {/*
+          SPREAD/ML: logo immediately left of value in BOTH BOOK and MODEL cells.
+          TOTAL:     "OVER"/"UNDER" text only — no o{}/u{} prefix, no logos.
+        */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 6px', marginBottom: 8, alignItems: 'center' }}>
           {/* Header row */}
-          <span />
           <span className="text-center" style={colHdrStyle('rgba(255,255,255,0.35)')}>BOOK</span>
           <span className="text-center" style={colHdrStyle('#39FF14')}>MODEL</span>
-          {/* Away row */}
-          <span className="flex items-center gap-1" style={{ ...rowLabelStyle, marginRight: 0 }}>
-            {awayLogoUrl && (
-              <img src={awayLogoUrl} alt="" style={{ width: 'clamp(12px,1vw,16px)', height: 'clamp(12px,1vw,16px)', objectFit: 'contain', flexShrink: 0 }} />
-            )}
-            {awayRowLabel && <span>{awayRowLabel}</span>}
-          </span>
-          <span className="tabular-nums text-center" style={{ ...bookCell, fontSize: valFontSize }}>{awayBook}</span>
-          <span className="tabular-nums text-center" style={{ ...awayModelStyle, fontSize: valFontSize }}>{awayModel}</span>
-          {/* Home row */}
-          <span className="flex items-center gap-1" style={{ ...rowLabelStyle, marginRight: 0 }}>
-            {homeLogoUrl && (
-              <img src={homeLogoUrl} alt="" style={{ width: 'clamp(12px,1vw,16px)', height: 'clamp(12px,1vw,16px)', objectFit: 'contain', flexShrink: 0 }} />
-            )}
-            {homeRowLabel && <span>{homeRowLabel}</span>}
-          </span>
-          <span className="tabular-nums text-center" style={{ ...bookCell, fontSize: valFontSize }}>{homeBook}</span>
-          <span className="tabular-nums text-center" style={{ ...homeModelStyle, fontSize: valFontSize }}>{homeModel}</span>
+
+          {/* Away / OVER — BOOK cell */}
+          {totalLine ? (
+            /* TOTAL: "OVER" label + book over total value */
+            <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
+              <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.06em', flexShrink: 0 }}>OVER</span>
+              <span className="tabular-nums">{awayBook}</span>
+            </span>
+          ) : (
+            /* SPREAD/ML: logo immediately left of book value */
+            <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
+              {sectionAwayLogoUrl && (
+                <img src={sectionAwayLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
+              )}
+              <span className="tabular-nums">{awayBook}</span>
+            </span>
+          )}
+          {/* Away — MODEL cell */}
+          {totalLine ? (
+            /* TOTAL: "OVER" label + model over total value */
+            <span className="flex items-center justify-center gap-1" style={{ ...awayModelStyle, fontSize: valFontSize }}>
+              <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.06em', flexShrink: 0 }}>OVER</span>
+              <span className="tabular-nums">{awayModel}</span>
+            </span>
+          ) : (
+            /* SPREAD/ML: logo immediately left of model value */
+            <span className="flex items-center justify-center gap-1" style={{ ...awayModelStyle, fontSize: valFontSize }}>
+              {sectionAwayLogoUrl && (
+                <img src={sectionAwayLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
+              )}
+              <span className="tabular-nums">{awayModel}</span>
+            </span>
+          )}
+
+          {/* Home / UNDER — BOOK cell */}
+          {totalLine ? (
+            /* TOTAL: "UNDER" label + book under total value */
+            <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
+              <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.06em', flexShrink: 0 }}>UNDER</span>
+              <span className="tabular-nums">{homeBook}</span>
+            </span>
+          ) : (
+            /* SPREAD/ML: logo immediately left of book value */
+            <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
+              {sectionHomeLogoUrl && (
+                <img src={sectionHomeLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
+              )}
+              <span className="tabular-nums">{homeBook}</span>
+            </span>
+          )}
+          {/* Home — MODEL cell */}
+          {totalLine ? (
+            /* TOTAL: "UNDER" label + model under total value */
+            <span className="flex items-center justify-center gap-1" style={{ ...homeModelStyle, fontSize: valFontSize }}>
+              <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.06em', flexShrink: 0 }}>UNDER</span>
+              <span className="tabular-nums">{homeModel}</span>
+            </span>
+          ) : (
+            /* SPREAD/ML: logo immediately left of model value */
+            <span className="flex items-center justify-center gap-1" style={{ ...homeModelStyle, fontSize: valFontSize }}>
+              {sectionHomeLogoUrl && (
+                <img src={sectionHomeLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
+              )}
+              <span className="tabular-nums">{homeModel}</span>
+            </span>
+          )}
         </div>
 
         {/* ── Thin separator ── */}
@@ -927,21 +979,19 @@ function DesktopMergedPanel({
         awayModel={mdlAwaySpreadStr} homeModel={mdlHomeSpreadStr}
         awayModelStyle={awaySpreadModelStyle} homeModelStyle={homeSpreadModelStyle}
         ticketsPct={spreadTicketsPct} handlePct={spreadHandlePct}
-        awayRowLabel={awayAbbr} homeRowLabel={homeAbbr}
         awayLogoUrl={awayLogoUrl} homeLogoUrl={homeLogoUrl}
       />
       {/* Divider */}
       <div style={{ width: 1, background: 'rgba(255,255,255,0.07)', flexShrink: 0, alignSelf: 'stretch', margin: '8px 0' }} />
-      {/* TOTAL section */}
+      {/* TOTAL section — no logos, OVER/UNDER baked into value cells */}
       <SectionCol
         title="Over/Under"
         awayLabel="OVER" homeLabel="UNDER"
-        awayBook={`o${bkOver}`} homeBook={`u${bkUnder}`}
-        awayModel={`o${mdlOver}`} homeModel={`u${mdlUnder}`}
+        awayBook={String(bkOver)} homeBook={String(bkUnder)}
+        awayModel={String(mdlOver)} homeModel={String(mdlUnder)}
         awayModelStyle={overTotalModelStyle} homeModelStyle={underTotalModelStyle}
         ticketsPct={totalTicketsPct} handlePct={totalHandlePct}
         totalLine={!isNaN(bkTotal) ? String(bkTotal) : undefined}
-        awayRowLabel="OVER" homeRowLabel="UNDER"
       />
       {/* Divider */}
       <div style={{ width: 1, background: 'rgba(255,255,255,0.07)', flexShrink: 0, alignSelf: 'stretch', margin: '8px 0' }} />
@@ -953,7 +1003,6 @@ function DesktopMergedPanel({
         awayModel={mdlAwayMlStr} homeModel={mdlHomeMlStr}
         awayModelStyle={awayMlModelStyle} homeModelStyle={homeMlModelStyle}
         ticketsPct={mlTicketsPct} handlePct={mlHandlePct}
-        awayRowLabel={awayAbbr} homeRowLabel={homeAbbr}
         awayLogoUrl={awayLogoUrl} homeLogoUrl={homeLogoUrl}
       />
       {/* Divider */}
@@ -1702,7 +1751,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
         */}
 
         {/* ── Desktop layout ── */}
-        <div className="hidden lg:flex items-stretch w-full" style={{ minHeight: 'clamp(160px,14vw,220px)' }}>
+        {/* UNIFORM HEIGHT: fixed clamp height so every card is identical regardless of content */}
+        <div className="hidden lg:flex items-stretch w-full" style={{ height: 'clamp(160px,14vw,220px)', overflow: 'hidden' }}>
           {/* Col 1: Score panel — always shown */}
           <div
             style={{
