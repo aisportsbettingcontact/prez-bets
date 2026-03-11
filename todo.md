@@ -925,3 +925,8 @@
 - [ ] Desktop: uniform splits bar height and width across all 3 sections (TICKETS and MONEY bars identical size)
 - [ ] Desktop: OVER/UNDER rows show "OVER {bookTotal}" and "UNDER {bookTotal}" in BOOK cell, "OVER {modelTotal}" and "UNDER {modelTotal}" in MODEL cell
 - [ ] Desktop: strip ALL o/u prefix from OVER/UNDER total values — format must be exactly "OVER {number}" / "UNDER {number}" with no o or u characters anywhere
+- [x] Desktop: TICKETS and MONEY split bars same height (MONEY pill is currently taller than TICKETS)
+- [x] Desktop: TOTAL section title must say "TOTAL" not "OVER/UNDER" (section header text fix)
+- [x] Desktop: show team abbreviation next to logo in SPREAD and ML sections — {LOGO} {ABBR}
+- [x] Desktop: uniform column widths — all section borders align at same horizontal positions across all game cards
+- [x] Desktop: uniform height for every game card row (GAME/MATCHUP | SPREAD | TOTAL | MONEYLINE | EDGE all same height)

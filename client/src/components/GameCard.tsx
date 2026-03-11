@@ -780,6 +780,8 @@ function DesktopMergedPanel({
     totalLine,
     awayLogoUrl: sectionAwayLogoUrl,
     homeLogoUrl: sectionHomeLogoUrl,
+    awayAbbr: sectionAwayAbbr,
+    homeAbbr: sectionHomeAbbr,
   }: {
     title: string;
     awayLabel: string; homeLabel: string;
@@ -794,6 +796,10 @@ function DesktopMergedPanel({
     awayLogoUrl?: string;
     /** Team logo URL for the home row (shown left of values in SPREAD/ML, NOT for TOTAL) */
     homeLogoUrl?: string;
+    /** Team abbreviation for the away row (shown right of logo in SPREAD/ML) */
+    awayAbbr?: string;
+    /** Team abbreviation for the home row (shown right of logo in SPREAD/ML) */
+    homeAbbr?: string;
   }) => {
     const awayTickets = ticketsPct != null ? ticketsPct : null;
     const homeTickets = ticketsPct != null ? 100 - ticketsPct : null;
@@ -874,10 +880,13 @@ function DesktopMergedPanel({
               <span className="tabular-nums">{awayBook}</span>
             </span>
           ) : (
-            /* SPREAD/ML: logo immediately left of book value */
+            /* SPREAD/ML: logo + abbreviation immediately left of book value */
             <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
               {sectionAwayLogoUrl && (
                 <img src={sectionAwayLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
+              )}
+              {sectionAwayAbbr && (
+                <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionAwayAbbr}</span>
               )}
               <span className="tabular-nums">{awayBook}</span>
             </span>
@@ -890,10 +899,13 @@ function DesktopMergedPanel({
               <span className="tabular-nums">{awayModel}</span>
             </span>
           ) : (
-            /* SPREAD/ML: logo immediately left of model value */
+            /* SPREAD/ML: logo + abbreviation immediately left of model value */
             <span className="flex items-center justify-center gap-1" style={{ ...awayModelStyle, fontSize: valFontSize }}>
               {sectionAwayLogoUrl && (
                 <img src={sectionAwayLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
+              )}
+              {sectionAwayAbbr && (
+                <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionAwayAbbr}</span>
               )}
               <span className="tabular-nums">{awayModel}</span>
             </span>
@@ -907,10 +919,13 @@ function DesktopMergedPanel({
               <span className="tabular-nums">{homeBook}</span>
             </span>
           ) : (
-            /* SPREAD/ML: logo immediately left of book value */
+            /* SPREAD/ML: logo + abbreviation immediately left of book value */
             <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
               {sectionHomeLogoUrl && (
                 <img src={sectionHomeLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
+              )}
+              {sectionHomeAbbr && (
+                <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionHomeAbbr}</span>
               )}
               <span className="tabular-nums">{homeBook}</span>
             </span>
@@ -923,10 +938,13 @@ function DesktopMergedPanel({
               <span className="tabular-nums">{homeModel}</span>
             </span>
           ) : (
-            /* SPREAD/ML: logo immediately left of model value */
+            /* SPREAD/ML: logo + abbreviation immediately left of model value */
             <span className="flex items-center justify-center gap-1" style={{ ...homeModelStyle, fontSize: valFontSize }}>
               {sectionHomeLogoUrl && (
                 <img src={sectionHomeLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
+              )}
+              {sectionHomeAbbr && (
+                <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionHomeAbbr}</span>
               )}
               <span className="tabular-nums">{homeModel}</span>
             </span>
@@ -936,16 +954,18 @@ function DesktopMergedPanel({
         {/* ── Thin separator ── */}
         <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 7 }} />
 
-        {/* ── TICKETS split bar — completely below odds table ── */}
-        <MergedSplitBar
-          awayPct={awayTickets} homePct={homeTickets}
-          awayColor={awayColor} homeColor={homeColor}
-          rowLabel="TICKETS"
-          awayLabel={barAwayLabel} homeLabel={barHomeLabel}
-        />
+        {/* ── TICKETS split bar — fixed-height wrapper so TICKETS and MONEY bars are identical size ── */}
+        <div style={{ flex: '1 1 0%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+          <MergedSplitBar
+            awayPct={awayTickets} homePct={homeTickets}
+            awayColor={awayColor} homeColor={homeColor}
+            rowLabel="TICKETS"
+            awayLabel={barAwayLabel} homeLabel={barHomeLabel}
+          />
+        </div>
 
-        {/* ── MONEY split bar — completely below odds table ── */}
-        <div style={{ marginTop: 5 }}>
+        {/* ── MONEY split bar — same fixed-height wrapper as TICKETS ── */}
+        <div style={{ flex: '1 1 0%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
           <MergedSplitBar
             awayPct={awayHandle} homePct={homeHandle}
             awayColor={awayColor} homeColor={homeColor}
@@ -980,12 +1000,13 @@ function DesktopMergedPanel({
         awayModelStyle={awaySpreadModelStyle} homeModelStyle={homeSpreadModelStyle}
         ticketsPct={spreadTicketsPct} handlePct={spreadHandlePct}
         awayLogoUrl={awayLogoUrl} homeLogoUrl={homeLogoUrl}
+        awayAbbr={awayAbbr} homeAbbr={homeAbbr}
       />
       {/* Divider */}
       <div style={{ width: 1, background: 'rgba(255,255,255,0.07)', flexShrink: 0, alignSelf: 'stretch', margin: '8px 0' }} />
       {/* TOTAL section — no logos, OVER/UNDER baked into value cells */}
       <SectionCol
-        title="Over/Under"
+        title="Total"
         awayLabel="OVER" homeLabel="UNDER"
         awayBook={String(bkOver)} homeBook={String(bkUnder)}
         awayModel={String(mdlOver)} homeModel={String(mdlUnder)}
@@ -1004,6 +1025,7 @@ function DesktopMergedPanel({
         awayModelStyle={awayMlModelStyle} homeModelStyle={homeMlModelStyle}
         ticketsPct={mlTicketsPct} handlePct={mlHandlePct}
         awayLogoUrl={awayLogoUrl} homeLogoUrl={homeLogoUrl}
+        awayAbbr={awayAbbr} homeAbbr={homeAbbr}
       />
       {/* Divider */}
       <div style={{ width: 1, background: 'rgba(255,255,255,0.12)', flexShrink: 0, alignSelf: 'stretch' }} />
@@ -1753,12 +1775,13 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
         {/* ── Desktop layout ── */}
         {/* UNIFORM HEIGHT: fixed clamp height so every card is identical regardless of content */}
         <div className="hidden lg:flex items-stretch w-full" style={{ height: 'clamp(160px,14vw,220px)', overflow: 'hidden' }}>
-          {/* Col 1: Score panel — always shown */}
+          {/* Col 1: Score panel — fixed width so all SPREAD/TOTAL/ML/EDGE borders align at same horizontal position */}
           <div
             style={{
-              flex: mode === "splits" ? "1 1 30%" : "0 0 auto",
-              minWidth: 220,
+              flex: mode === "splits" ? "1 1 30%" : "0 0 clamp(200px,16vw,260px)",
+              width: mode === "splits" ? undefined : 'clamp(200px,16vw,260px)',
               borderRight: "1px solid hsl(var(--border) / 0.5)",
+              overflow: 'hidden',
             }}
           >
             <ScorePanel />
