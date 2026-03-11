@@ -1,0 +1,1 @@
+ALTER TABLE `ncaam_teams` ADD `kenpomSlug` varchar(255);

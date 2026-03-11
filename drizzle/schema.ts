@@ -208,6 +208,8 @@ export const ncaamTeams = mysqlTable("ncaam_teams", {
   conference: varchar("conference", { length: 128 }).notNull(),
   /** NCAA.com SVG logo URL */
   logoUrl: text("logoUrl").notNull(),
+  /** KenPom.com team name for team.php?team= lookups, e.g. "Duke", "VCU", "Prairie View A&M" */
+  kenpomSlug: varchar("kenpomSlug", { length: 255 }),
   /** Short abbreviation used by NCAA/VSiN, e.g. "DUKE", "UNC", "GONZ" */
   abbrev: varchar("abbrev", { length: 16 }),
   /** Primary brand hex color, e.g. "#9D2235" */

@@ -979,3 +979,6 @@
 - [ ] Full pipeline audit: cross-reference VSiN source, NCAA schedule, NBA schedule against DB
 - [ ] Fix all odds/splits mapping mismatches found in audit
 - [x] Fix reversed-team odds mapping bug in vsinAutoRefresh.ts (VSiN home/away order vs NCAA order mismatch causes inverted spreads/ML/splits — e.g. Bethune-Cookman @ Prairie View, isReversedMatch swap logic added)
+- [x] Add kenpomSlug field to NcaamTeam interface and all 365 registry entries in ncaamTeams.ts
+- [x] Push DB migration for kenpomSlug column in ncaam_teams table
+- [x] Seed kenpomSlug values for all 365 ncaam_teams rows with full cross-validation
