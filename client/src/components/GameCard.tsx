@@ -728,14 +728,26 @@ function DesktopMergedPanel({
   const hasSpreadEdge = !isNaN(spreadDiff) && spreadDiff > 0;
   const hasTotalEdge  = !isNaN(totalDiff)  && totalDiff  > 0;
 
-  // ── Style helpers ─────────────────────────────────────────────────────────
-  const CELL_FS = 'clamp(12px, 1.05vw, 17px)';
-  const HDR_FS  = 'clamp(10px, 0.85vw, 13px)';
-  const bookCell: React.CSSProperties = { fontSize: CELL_FS, fontWeight: 700, color: '#E8E8E8', letterSpacing: '0.02em', tabularNums: true } as React.CSSProperties;
-  const modelGreen: React.CSSProperties = { fontSize: CELL_FS, fontWeight: 700, color: '#39FF14', letterSpacing: '0.02em' };
-  const modelWhite: React.CSSProperties = { fontSize: CELL_FS, fontWeight: 700, color: '#E8E8E8', letterSpacing: '0.02em' };
-  const dimCell:    React.CSSProperties = { fontSize: CELL_FS, fontWeight: 700, color: 'rgba(57,255,20,0.28)', letterSpacing: '0.02em' };
-
+  // ── Style helpers ────────────────────────────────────────────────────────────────────────────────────
+  // Typography hierarchy (desktop):
+  //   BOOK/MODEL column headers: HDR_FS (the largest)
+  //   Value rows: VAL_FS = HDR_FS - 4pt
+  //   Abbreviation/OVER/UNDER prefix labels: ABBR_FS = VAL_FS - 1pt
+  //   Section title (SPREAD/TOTAL/MONEYLINE): TITLE_FS
+  //
+  // Using clamp: HDR_FS = clamp(14px,1.15vw,18px), VAL_FS = clamp(10px,0.85vw,14px), ABBR_FS = clamp(9px,0.78vw,13px)
+  const HDR_FS  = 'clamp(14px,1.15vw,18px)';  // BOOK / MODEL column header labels
+  const VAL_FS  = 'clamp(10px,0.85vw,14px)';  // Value rows (spread, total, ML numbers) — 4pt below HDR
+  const ABBR_FS = 'clamp(9px,0.78vw,13px)';   // Abbreviation / OVER / UNDER prefix — 1pt below VAL
+  const TITLE_FS = 'clamp(10px,0.85vw,13px)'; // Section title (SPREAD / TOTAL / MONEYLINE)
+  // Colors:
+  //   Book values: #D3D3D3 (light gray), weight 500
+  //   Model non-edge values: #FFFFFF (white), weight 600
+  //   Model edge values: #39FF14 (neon green), weight 700
+  const bookCell: React.CSSProperties = { fontSize: VAL_FS, fontWeight: 500, color: '#D3D3D3', letterSpacing: '0.02em' } as React.CSSProperties;
+  const modelGreen: React.CSSProperties = { fontSize: VAL_FS, fontWeight: 700, color: '#39FF14', letterSpacing: '0.02em' };
+  const modelWhite: React.CSSProperties = { fontSize: VAL_FS, fontWeight: 600, color: '#FFFFFF', letterSpacing: '0.02em' };
+  const dimCell:    React.CSSProperties = { fontSize: VAL_FS, fontWeight: 500, color: 'rgba(57,255,20,0.28)', letterSpacing: '0.02em' };
   const awaySpreadModelStyle = showModel ? (hasSpreadEdge && spreadEdgeIsAway  ? modelGreen : modelWhite) : dimCell;
   const homeSpreadModelStyle = showModel ? (hasSpreadEdge && !spreadEdgeIsAway ? modelGreen : modelWhite) : dimCell;
   const overTotalModelStyle  = showModel ? (hasTotalEdge  && totalEdgeIsOver   ? modelGreen : modelWhite) : dimCell;
@@ -810,9 +822,9 @@ function DesktopMergedPanel({
     const barAwayLabel = totalLine ? 'OVER' : awayLabel;
     const barHomeLabel = totalLine ? 'UNDER' : homeLabel;
 
-    // Column header style
+    // Column header style — HDR_FS (largest in hierarchy, 4pt above value rows)
     const colHdrStyle = (color: string): React.CSSProperties => ({
-      fontSize: 'clamp(7px,0.55vw,9px)',
+      fontSize: HDR_FS,
       fontWeight: 700,
       letterSpacing: '0.12em',
       textTransform: 'uppercase' as const,
@@ -820,19 +832,20 @@ function DesktopMergedPanel({
       whiteSpace: 'nowrap' as const,
     });
 
-    // Row label style (team abbreviation prefix)
-    const rowLabelStyle: React.CSSProperties = {
-      fontSize: 'clamp(7px,0.55vw,9px)',
-      fontWeight: 700,
-      color: 'rgba(255,255,255,0.45)',
+    // Row label style — ABBR_FS (1pt below value rows)
+    // Used for team abbreviations (SPREAD/ML) and OVER/UNDER labels (TOTAL)
+    const _rowLabelStyle: React.CSSProperties = {
+      fontSize: ABBR_FS,
+      fontWeight: 600,
+      color: 'rgba(255,255,255,0.55)',
       letterSpacing: '0.06em',
       textTransform: 'uppercase' as const,
       whiteSpace: 'nowrap' as const,
-      marginRight: 3,
+      marginRight: 2,
     };
 
-    // Value font size
-    const valFontSize = 'clamp(13px,1.05vw,17px)';
+    // Value font size — VAL_FS (4pt below HDR_FS)
+    const valFontSize = VAL_FS;
 
     return (
       /* flex: 1 1 0% ensures all three SectionCols grow equally from 0 base — identical width regardless of content */
@@ -841,26 +854,16 @@ function DesktopMergedPanel({
         {/* ── Section title ── */}
         <div className="flex items-center gap-1.5" style={{ marginBottom: 4 }}>
           <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
-          <span style={{ fontSize: HDR_FS, fontWeight: 900, color: '#fff', letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: TITLE_FS, fontWeight: 900, color: '#fff', letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
             {title}
           </span>
           <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
         </div>
 
-        {/* ── TOTAL line header (OVER / total# / UNDER) ── */}
-        {/* All three sections get the same fixed-height slot here so the odds grid and splits bars align uniformly */}
-        <div style={{ height: 'clamp(16px,1.4vw,22px)', marginBottom: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {totalLine ? (
-            <>
-              <span style={{ fontSize: 'clamp(9px,0.72vw,11px)', color: 'rgba(255,255,255,0.45)', fontWeight: 600, letterSpacing: '0.06em' }}>OVER</span>
-              <span style={{ fontSize: 'clamp(11px,0.9vw,14px)', color: '#fff', fontWeight: 700 }}>{totalLine}</span>
-              <span style={{ fontSize: 'clamp(9px,0.72vw,11px)', color: 'rgba(255,255,255,0.45)', fontWeight: 600, letterSpacing: '0.06em' }}>UNDER</span>
-            </>
-          ) : (
-            /* Invisible spacer — same height as TOTAL header to keep all sections aligned */
-            <span style={{ visibility: 'hidden', fontSize: 'clamp(11px,0.9vw,14px)' }}> </span>
-          )}
-        </div>
+        {/* ── Uniform spacer row — same fixed height for ALL three sections ── */}
+        {/* TOTAL previously showed OVER / 139.5 / UNDER here — now removed per spec */}
+        {/* All three sections show an invisible spacer to keep the odds grid and splits bars aligned */}
+        <div style={{ height: 'clamp(16px,1.4vw,22px)', marginBottom: 3 }} />
 
         {/* ── Odds grid: 2 columns — BOOK | MODEL ── */}
         {/*
@@ -876,7 +879,7 @@ function DesktopMergedPanel({
           {totalLine ? (
             /* TOTAL: "OVER" label + book over total value */
             <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
-              <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.06em', flexShrink: 0 }}>OVER</span>
+              <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0 }}>OVER</span>
               <span className="tabular-nums">{awayBook}</span>
             </span>
           ) : (
@@ -886,7 +889,7 @@ function DesktopMergedPanel({
                 <img src={sectionAwayLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
               )}
               {sectionAwayAbbr && (
-                <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionAwayAbbr}</span>
+                <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionAwayAbbr}</span>
               )}
               <span className="tabular-nums">{awayBook}</span>
             </span>
@@ -895,7 +898,7 @@ function DesktopMergedPanel({
           {totalLine ? (
             /* TOTAL: "OVER" label + model over total value */
             <span className="flex items-center justify-center gap-1" style={{ ...awayModelStyle, fontSize: valFontSize }}>
-              <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.06em', flexShrink: 0 }}>OVER</span>
+              <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0 }}>OVER</span>
               <span className="tabular-nums">{awayModel}</span>
             </span>
           ) : (
@@ -905,7 +908,7 @@ function DesktopMergedPanel({
                 <img src={sectionAwayLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
               )}
               {sectionAwayAbbr && (
-                <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionAwayAbbr}</span>
+                <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionAwayAbbr}</span>
               )}
               <span className="tabular-nums">{awayModel}</span>
             </span>
@@ -915,7 +918,7 @@ function DesktopMergedPanel({
           {totalLine ? (
             /* TOTAL: "UNDER" label + book under total value */
             <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
-              <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.06em', flexShrink: 0 }}>UNDER</span>
+              <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0 }}>UNDER</span>
               <span className="tabular-nums">{homeBook}</span>
             </span>
           ) : (
@@ -925,7 +928,7 @@ function DesktopMergedPanel({
                 <img src={sectionHomeLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
               )}
               {sectionHomeAbbr && (
-                <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionHomeAbbr}</span>
+                <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionHomeAbbr}</span>
               )}
               <span className="tabular-nums">{homeBook}</span>
             </span>
@@ -934,7 +937,7 @@ function DesktopMergedPanel({
           {totalLine ? (
             /* TOTAL: "UNDER" label + model under total value */
             <span className="flex items-center justify-center gap-1" style={{ ...homeModelStyle, fontSize: valFontSize }}>
-              <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.06em', flexShrink: 0 }}>UNDER</span>
+              <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0 }}>UNDER</span>
               <span className="tabular-nums">{homeModel}</span>
             </span>
           ) : (
@@ -944,7 +947,7 @@ function DesktopMergedPanel({
                 <img src={sectionHomeLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
               )}
               {sectionHomeAbbr && (
-                <span style={{ fontSize: 'clamp(7px,0.55vw,9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionHomeAbbr}</span>
+                <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionHomeAbbr}</span>
               )}
               <span className="tabular-nums">{homeModel}</span>
             </span>

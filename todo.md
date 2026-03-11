@@ -930,3 +930,10 @@
 - [x] Desktop: show team abbreviation next to logo in SPREAD and ML sections — {LOGO} {ABBR}
 - [x] Desktop: uniform column widths — all section borders align at same horizontal positions across all game cards
 - [x] Desktop: uniform height for every game card row (GAME/MATCHUP | SPREAD | TOTAL | MONEYLINE | EDGE all same height)
+- [x] Desktop: TOTAL section header — remove OVER/UNDER corner texts and remove total value line beneath title
+- [x] Desktop: enforce perfectly uniform SPREAD/TOTAL/ML/EDGE panel widths (grid-based, not flex)
+- [x] Desktop: BOOK/MODEL column headers 4pt larger than value rows beneath them
+- [x] Desktop: value rows 4pt smaller than BOOK/MODEL headers; abbreviations/OVER/UNDER labels 1pt smaller than values
+- [x] Desktop: ALL BOOK values — light gray #D3D3D3, font-weight 500
+- [x] Desktop: ALL MODEL non-edge values — white #FFFFFF, font-weight 600
+- [x] Desktop: ALL MODEL edge values — neon green #39FF14, font-weight 700
