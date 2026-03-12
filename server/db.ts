@@ -343,6 +343,17 @@ export async function updateGameProjections(
     spreadDiff?: string | null;
     totalEdge?: string | null;
     totalDiff?: string | null;
+    // v9 model extended fields
+    modelAwayScore?: string | null;
+    modelHomeScore?: string | null;
+    modelOverRate?: string | null;
+    modelUnderRate?: string | null;
+    modelAwayWinPct?: string | null;
+    modelHomeWinPct?: string | null;
+    modelSpreadClamped?: boolean | null;
+    modelTotalClamped?: boolean | null;
+    modelCoverDirection?: string | null;
+    modelRunAt?: number | null;
   }
 ) {
   const db = await getDb();

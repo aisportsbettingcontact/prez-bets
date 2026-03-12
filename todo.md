@@ -982,3 +982,15 @@
 - [x] Add kenpomSlug field to NcaamTeam interface and all 365 registry entries in ncaamTeams.ts
 - [x] Push DB migration for kenpomSlug column in ncaam_teams table
 - [x] Seed kenpomSlug values for all 365 ncaam_teams rows with full cross-validation
+
+## Model v9 Backend Integration
+- [x] Add modelAwayScore and modelHomeScore columns to games schema
+- [x] Run db:push to sync new schema columns
+- [x] Write server/model_v9_engine.py — headless Python engine (stdin JSON → stdout JSON)
+- [x] Write server/ncaamModelEngine.ts — TS wrapper spawning Python engine per game
+- [x] Write server/ncaamModelSync.ts — orchestrator: fetch games → lookup kenpomSlug/conf → parallel model runs → write to DB
+- [x] Add conference→KenPom short code mapping (ncaamTeams conference names → model CONF_AVG_DE keys)
+- [x] Add tRPC procedure model.runForDate (owner-only) — triggers manual model run
+- [x] Auto-trigger model sync after VSiN refresh completes in vsinAutoRefresh.ts
+- [x] Write vitest test for ncaamModelEngine (12 tests passing)
+- [x] Save checkpoint after integration

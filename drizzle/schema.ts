@@ -129,6 +129,26 @@ export const games = mysqlTable("games", {
   modelAwayML: varchar("modelAwayML", { length: 16 }),
   /** Model fair value moneyline for the home team, e.g. "-225" or "+670" */
   modelHomeML: varchar("modelHomeML", { length: 16 }),
+  /** Model projected score for the away team (decimal, hundredths precision) */
+  modelAwayScore: decimal("modelAwayScore", { precision: 6, scale: 2 }),
+  /** Model projected score for the home team (decimal, hundredths precision) */
+  modelHomeScore: decimal("modelHomeScore", { precision: 6, scale: 2 }),
+  /** Model over rate from 50k simulations (0-100) */
+  modelOverRate: decimal("modelOverRate", { precision: 5, scale: 2 }),
+  /** Model under rate from 50k simulations (0-100) */
+  modelUnderRate: decimal("modelUnderRate", { precision: 5, scale: 2 }),
+  /** Away team win probability from model (0-100) */
+  modelAwayWinPct: decimal("modelAwayWinPct", { precision: 5, scale: 2 }),
+  /** Home team win probability from model (0-100) */
+  modelHomeWinPct: decimal("modelHomeWinPct", { precision: 5, scale: 2 }),
+  /** Whether the model spread was clamped to band limit */
+  modelSpreadClamped: boolean("modelSpreadClamped").default(false),
+  /** Whether the model total was clamped to band limit */
+  modelTotalClamped: boolean("modelTotalClamped").default(false),
+  /** Cover/total correlation direction: 'OVER', 'UNDER', or 'NONE' */
+  modelCoverDirection: varchar("modelCoverDirection", { length: 8 }),
+  /** UTC timestamp (ms) when the model last ran for this game */
+  modelRunAt: bigint("modelRunAt", { mode: "number" }),
   /** WagerTalk rotation numbers e.g. '689/690' (away/home) */
   rotNums: varchar("rotNums", { length: 32 }),
   /** WagerTalk display order — lower number appears first */

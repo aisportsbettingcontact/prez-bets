@@ -169,6 +169,13 @@
       "when": 1773269289863,
       "tag": "0023_cold_jetstream",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1773308056813,
+      "tag": "0024_giant_joystick",
+      "breakpoints": true
     }
   ]
 }

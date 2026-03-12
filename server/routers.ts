@@ -25,6 +25,7 @@ import { appUsersRouter, ownerProcedure, appUserProcedure } from "./routers/appU
 import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById, getFavoriteGameIds, getFavoriteGamesWithDates, toggleFavoriteGame } from "./db";
 import { getLastRefreshResult, runVsinRefresh, refreshAllScoresNow } from "./vsinAutoRefresh";
 import { syncNbaModelFromSheet, getLastNbaModelSyncResult } from "./nbaModelSync";
+import { syncModelForDate, type ModelSyncResult } from "./ncaamModelSync";
 import { VALID_DB_SLUGS } from "@shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS } from "@shared/nbaTeams";
 
@@ -337,6 +338,28 @@ export const appRouter = router({
       }))
       .query(async ({ input }) => {
         return getGameTeamColors(input.awayTeam, input.homeTeam, input.sport);
+      }),
+  }),
+  // ─── NCAAM Model v9 ─────────────────────────────────────────────────────────
+  model: router({
+    /**
+     * Manually trigger model v9 for a specific date.
+     * Owner-only — runs KenPom fetches + 50k Monte Carlo for all games on the date.
+     * Concurrency: 3 games in parallel (respects KenPom rate limits).
+     */
+    runForDate: ownerProcedure
+      .input(
+        z.object({
+          date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+          skipExisting: z.boolean().optional().default(false),
+          concurrency: z.number().int().min(1).max(5).optional().default(3),
+        })
+      )
+      .mutation(async ({ input }): Promise<ModelSyncResult> => {
+        return syncModelForDate(input.date, {
+          skipExisting: input.skipExisting,
+          concurrency: input.concurrency,
+        });
       }),
   }),
 });
