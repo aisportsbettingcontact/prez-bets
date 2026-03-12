@@ -2248,12 +2248,20 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               return null;
             })();
 
-            // ── ML edge detection via implied probability ───────────────────────────
-            // Implied probability: p = 100 / (|ML| + 100) for positive ML (underdog)
-            //                      p = |ML| / (|ML| + 100) for negative ML (favorite)
-            // +100 (EV) → implied prob = 0.50 exactly
-            // Edge exists when model implied prob > book implied prob for the same team
-            // (i.e., model thinks team is more likely to win than book does)
+            // ── ML edge detection — unified with spread edge direction ──────────────
+            //
+            // PRIMARY RULE: ML edge direction MUST match spread edge direction.
+            //   spreadEdgeIsAway === true  → away team ML is the edge (same team covers spread)
+            //   spreadEdgeIsAway === false → home team ML is the edge
+            //   spreadEdgeIsAway === null  → no spread edge; fall back to implied-probability
+            //
+            // SECONDARY FALLBACK (only when no spread edge exists):
+            //   Implied probability: p = 100 / (|ML| + 100) for positive ML (underdog)
+            //                        p = |ML| / (|ML| + 100) for negative ML (favorite)
+            //   Edge exists when model implied prob > book implied prob by >= 2%
+            //
+            // GUARANTEE: zero contradictions — you cannot have UCLA spread edge AND
+            // Rutgers ML edge simultaneously; they always point to the same team.
             const mlImpliedProb = (ml: string | number | null | undefined): number => {
               if (ml == null || ml === '' || ml === '—') return NaN;
               const n = typeof ml === 'number' ? ml : Number(String(ml).replace(/[^\d.-]/g, ''));
@@ -2266,20 +2274,30 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             const mdlAwayMlProb = mlImpliedProb(game.modelAwayML);
             const bkHomeMlProb  = mlImpliedProb(game.homeML);
             const mdlHomeMlProb = mlImpliedProb(game.modelHomeML);
-            // ML edge: model implies higher win probability than book (threshold: 2% difference)
             const ML_EDGE_THRESHOLD = 0.02;
-            const awayMlEdgeDetected = !isNaN(bkAwayMlProb) && !isNaN(mdlAwayMlProb)
+            // Implied-probability fallback (only used when no spread edge exists)
+            const awayMlProbEdge = !isNaN(bkAwayMlProb) && !isNaN(mdlAwayMlProb)
               ? (mdlAwayMlProb - bkAwayMlProb) >= ML_EDGE_THRESHOLD
               : false;
-            const homeMlEdgeDetected = !isNaN(bkHomeMlProb) && !isNaN(mdlHomeMlProb)
+            const homeMlProbEdge = !isNaN(bkHomeMlProb) && !isNaN(mdlHomeMlProb)
               ? (mdlHomeMlProb - bkHomeMlProb) >= ML_EDGE_THRESHOLD
               : false;
+            // Unified ML edge: spread direction takes priority; prob fallback only when no spread edge
+            const awayMlEdgeDetected: boolean = spreadEdgeIsAway !== null
+              ? spreadEdgeIsAway === true    // spread edge → away team wins ML too
+              : awayMlProbEdge;              // no spread edge → use implied prob
+            const homeMlEdgeDetected: boolean = spreadEdgeIsAway !== null
+              ? spreadEdgeIsAway === false   // spread edge → home team wins ML too
+              : homeMlProbEdge;              // no spread edge → use implied prob
             if (process.env.NODE_ENV === 'development') {
               console.log(
-                `%c[GameCard:MLEdge] game=${game.id} away: bkProb=${bkAwayMlProb?.toFixed(3)} mdlProb=${mdlAwayMlProb?.toFixed(3)} edge=${awayMlEdgeDetected} | home: bkProb=${bkHomeMlProb?.toFixed(3)} mdlProb=${mdlHomeMlProb?.toFixed(3)} edge=${homeMlEdgeDetected}`,
+                `%c[GameCard:MLEdge:UNIFIED] game=${game.id}` +
+                ` spreadEdgeIsAway=${spreadEdgeIsAway}` +
+                ` | away: bkProb=${bkAwayMlProb?.toFixed(3)} mdlProb=${mdlAwayMlProb?.toFixed(3)} probEdge=${awayMlProbEdge} → finalEdge=${awayMlEdgeDetected}` +
+                ` | home: bkProb=${bkHomeMlProb?.toFixed(3)} mdlProb=${mdlHomeMlProb?.toFixed(3)} probEdge=${homeMlProbEdge} → finalEdge=${homeMlEdgeDetected}`,
                 'color:#39FF14;font-size:9px'
               );
-            };
+            }
 
             // ── Tab state ─────────────────────────────────────────────────────
             // isDualTab: BOOK + MODEL both active simultaneously
@@ -2418,7 +2436,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             const homeSpreadIsEdge  = spreadEdgeIsAway === false;
             const overTotalIsEdge   = totalEdgeIsOver  === true;
             const underTotalIsEdge  = totalEdgeIsOver  === false;
-            // ML edge uses independent implied-probability detection (not spread-derived)
+            // ML edge: unified with spread direction (awayMlEdgeDetected / homeMlEdgeDetected
+            // are already computed above using spread-first logic with prob fallback)
             const awayMlIsEdge      = awayMlEdgeDetected;
             const homeMlIsEdge      = homeMlEdgeDetected;
 

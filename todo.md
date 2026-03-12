@@ -1083,3 +1083,9 @@
 - [x] Fix GameCard: frozen left panel correct width, horizontal scroll table correct column widths on all mobile sizes
 - [x] Fix feed main area: height = 100dvh - headerHeight, no vertical scroll bleed, safe area bottom padding
 - [x] Verify no overflow:hidden clipping on any interactive element (search dropdown, calendar picker)
+
+## Edge Detection Fix (2026-03-12)
+- [x] Audit spread, total, and ML edge detection algorithms in GameCard
+- [x] Fix ML edge: must be directionally consistent with spread edge (if UCLA spread is edge, Rutgers ML cannot also be edge)
+- [x] Implement unified edge direction model: spread-first with implied-prob fallback when no spread edge
+- [x] Write vitest tests for edge consistency across all scenarios (17 tests passing)
