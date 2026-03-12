@@ -1044,3 +1044,9 @@
 - [x] Add setModelPublished tRPC procedure (ownerProcedure) in routers.ts
 - [x] Add Approve Model / Model Live button to EditableGameCard in PublishProjections (NCAAM only, only when model data exists)
 - [x] Scope publishedModel gate to NCAAM games only in listGames
+
+## Login Error Investigation (2026-03-12)
+- [x] Diagnose "string did not match expected pattern" login error — caused by missing app_session cookie (session cookie cleared during server crash window)
+- [x] Fix slow site load issue — caused by publishedmodel column missing from DB during brief migration window
+- [x] Fix "Failed to update model approval status" error on Publish Projections page — root cause: sameSite:none cookie without secure:true silently dropped by browser; fixed with trust proxy + conditional sameSite
+- [x] Fix feed loading screen crash (happening simultaneously with model approval error) — same root cause as above
