@@ -16,7 +16,7 @@ import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Trophy, RefreshCw, Trash2, CheckCheck } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1331,6 +1331,21 @@ export default function PublishProjections() {
     },
     onError: () => toast.error("Failed to publish all games"),
   });
+  const bulkApproveModelsMutation = trpc.games.bulkApproveModels.useMutation({
+    onSuccess: (data) => {
+      if (data.approved === 0) {
+        toast.info("No pending model projections to approve — all are already live or missing model data.");
+      } else {
+        toast.success(`Approved ${data.approved} model projection${data.approved === 1 ? '' : 's'} ✔`);
+      }
+      refetch();
+    },
+    onError: (e) => toast.error(`Bulk approve failed: ${e.message}`),
+  });
+  // Count games with model data that are not yet approved (pending approval)
+  const pendingApprovalCount = (games ?? []).filter(
+    (g) => !!(g.awayModelSpread && g.modelTotal) && !g.publishedModel
+  ).length;
 
   const triggerRefreshMutation = trpc.games.triggerRefresh.useMutation({
     onMutate: () => setIsRefreshing(true),
@@ -1467,9 +1482,36 @@ export default function PublishProjections() {
             </span>
           </div>
 
-          {/* Right: Publish All */}
+          {/* Right: Approve All Models + Publish All */}
           <div className="flex-1" />
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Approve All Models — only shown when there are pending model approvals */}
+            {pendingApprovalCount > 0 && (
+              <Button
+                size="sm"
+                onClick={() => bulkApproveModelsMutation.mutate({ gameDate, sport: selectedSport })}
+                disabled={bulkApproveModelsMutation.isPending}
+                className="gap-1.5 text-xs h-8 font-bold border"
+                style={{
+                  background: "rgba(57,255,20,0.12)",
+                  color: "#39FF14",
+                  borderColor: "rgba(57,255,20,0.4)",
+                }}
+                title={`Approve all ${pendingApprovalCount} pending model projection${pendingApprovalCount === 1 ? '' : 's'}`}
+              >
+                {bulkApproveModelsMutation.isPending
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <CheckCheck size={12} />
+                }
+                Approve All Models
+                <span
+                  className="ml-0.5 px-1 py-0 rounded text-[10px] font-bold"
+                  style={{ background: "rgba(57,255,20,0.25)", color: "#39FF14" }}
+                >
+                  {pendingApprovalCount}
+                </span>
+              </Button>
+            )}
             <Button
               size="sm"
               onClick={() => publishAllMutation.mutate({ gameDate, sport: selectedSport })}

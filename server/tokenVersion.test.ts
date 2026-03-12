@@ -176,6 +176,56 @@ describe("tokenVersion mismatch detection", () => {
   });
 });
 
+// ── bulkApproveModels logic tests ────────────────────────────────────────────
+
+describe("pendingApprovalCount logic", () => {
+  type GameLike = { awayModelSpread: string | null; modelTotal: string | null; publishedModel: boolean };
+
+  function countPending(games: GameLike[]): number {
+    return games.filter((g) => !!(g.awayModelSpread && g.modelTotal) && !g.publishedModel).length;
+  }
+
+  it("counts games with model data that are not yet approved", () => {
+    const games: GameLike[] = [
+      { awayModelSpread: "-3.5", modelTotal: "140", publishedModel: false }, // pending
+      { awayModelSpread: "-1.0", modelTotal: "145", publishedModel: true },  // already approved
+      { awayModelSpread: null,   modelTotal: "138", publishedModel: false }, // no model spread
+      { awayModelSpread: "-2.0", modelTotal: null,  publishedModel: false }, // no model total
+      { awayModelSpread: "-5.0", modelTotal: "150", publishedModel: false }, // pending
+    ];
+    expect(countPending(games)).toBe(2);
+  });
+
+  it("returns 0 when all modeled games are already approved", () => {
+    const games: GameLike[] = [
+      { awayModelSpread: "-3.5", modelTotal: "140", publishedModel: true },
+      { awayModelSpread: "-1.0", modelTotal: "145", publishedModel: true },
+    ];
+    expect(countPending(games)).toBe(0);
+  });
+
+  it("returns 0 when no games have model data", () => {
+    const games: GameLike[] = [
+      { awayModelSpread: null, modelTotal: null, publishedModel: false },
+      { awayModelSpread: null, modelTotal: null, publishedModel: false },
+    ];
+    expect(countPending(games)).toBe(0);
+  });
+
+  it("counts all games as pending when none are approved", () => {
+    const games: GameLike[] = [
+      { awayModelSpread: "-3.5", modelTotal: "140", publishedModel: false },
+      { awayModelSpread: "-1.0", modelTotal: "145", publishedModel: false },
+      { awayModelSpread: "-7.0", modelTotal: "155", publishedModel: false },
+    ];
+    expect(countPending(games)).toBe(3);
+  });
+
+  it("handles empty game list", () => {
+    expect(countPending([])).toBe(0);
+  });
+});
+
 // ── Token content integrity tests ──────────────────────────────────────────────
 
 describe("token content integrity", () => {

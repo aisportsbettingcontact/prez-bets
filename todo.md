@@ -1063,3 +1063,9 @@
 - [x] Add admin UI controls for force-logout in User Management page
 - [x] Run DB migration and verify end-to-end
 - [x] Write vitest tests for tokenVersion system (16 tests passing)
+
+## Bulk Approve Models (2026-03-12)
+- [x] Add bulkApproveModels DB helper (approves all pending games with model data for a date)
+- [x] Add games.bulkApproveModels tRPC procedure (owner-only)
+- [x] Add "Approve All Models" button to Publish Projections header (neon green ghost style, shows pending count badge, hidden when count=0)
+- [x] Add 5 vitest tests for pendingApprovalCount logic (168/169 total passing)

@@ -469,6 +469,30 @@ export async function setGameModelPublished(id: number, published: boolean): Pro
   await db.update(games).set({ publishedModel: published }).where(eq(games.id, id));
 }
 
+/**
+ * Bulk-approve all pending model projections for a given date and sport.
+ * Only approves games that have model data (awayModelSpread + modelTotal not null)
+ * and are not yet approved (publishedModel = false).
+ * Returns the number of rows updated.
+ */
+export async function bulkApproveModels(gameDate: string, sport?: string): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conditions = [
+    eq(games.gameDate, gameDate),
+    eq(games.publishedModel, false),
+    isNotNull(games.awayModelSpread),
+    isNotNull(games.modelTotal),
+  ];
+  if (sport) conditions.push(eq(games.sport, sport));
+  const result = await db.update(games)
+    .set({ publishedModel: true })
+    .where(and(...conditions));
+  const affected = (result as unknown as { rowsAffected?: number }[])[0]?.rowsAffected ?? 0;
+  console.log(`[DB] bulkApproveModels: gameDate=${gameDate} sport=${sport ?? "all"} — approved ${affected} games`);
+  return affected;
+}
+
 export async function setGamePublished(id: number, published: boolean) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

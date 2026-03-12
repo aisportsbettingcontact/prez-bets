@@ -17,6 +17,7 @@ import {
   updateGameProjections,
   setGamePublished,
   setGameModelPublished,
+  bulkApproveModels,
   publishAllStagingGames,
 } from "./db";
 import { storagePut } from "./storage";
@@ -242,6 +243,20 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         await setGameModelPublished(input.id, input.published);
         return { success: true };
+      }),
+
+    /**
+     * Bulk-approve all pending model projections for a date.
+     * Only approves games that have model data (awayModelSpread + modelTotal not null)
+     * and are not yet approved (publishedModel = false).
+     * Owner-only.
+     */
+    bulkApproveModels: ownerProcedure
+      .input(z.object({ gameDate: z.string(), sport: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const count = await bulkApproveModels(input.gameDate, input.sport);
+        console.log(`[tRPC] games.bulkApproveModels: gameDate=${input.gameDate} sport=${input.sport ?? 'all'} — approved ${count} games`);
+        return { success: true, approved: count };
       }),
 
     /**
