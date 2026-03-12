@@ -17,6 +17,8 @@ import {
   updateAppUser,
   deleteAppUser,
   updateAppUserLastSignedIn,
+  incrementTokenVersion,
+  incrementAllTokenVersions,
 } from "../db";
 
 const APP_USER_COOKIE = "app_session";
@@ -26,53 +28,91 @@ function getAppCookie(req: Request): string | undefined {
   return cookies[APP_USER_COOKIE];
 }
 
-// Helper: sign a JWT for an app user session
-async function signAppUserToken(userId: number, role: string) {
+// Helper: sign a JWT for an app user session — embeds tokenVersion (tv) for invalidation
+async function signAppUserToken(userId: number, role: string, tokenVersion: number) {
   const secret = new TextEncoder().encode(ENV.cookieSecret);
-  return new SignJWT({ sub: String(userId), role, type: "app_user" })
+  console.log(`[AppAuth] signAppUserToken: userId=${userId} role=${role} tv=${tokenVersion}`);
+  return new SignJWT({ sub: String(userId), role, type: "app_user", tv: tokenVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("30d")
+    .setExpirationTime("90d")
     .sign(secret);
 }
 
-// Helper: verify app user JWT from cookie
+// Helper: verify app user JWT from cookie — returns userId, role, and tv (tokenVersion)
 export async function verifyAppUserToken(token: string) {
   try {
     const secret = new TextEncoder().encode(ENV.cookieSecret);
     const { payload } = await jwtVerify(token, secret);
-    if (payload.type !== "app_user") return null;
-    return { userId: Number(payload.sub), role: payload.role as string };
-  } catch {
+    if (payload.type !== "app_user") {
+      console.log(`[AppAuth] verifyAppUserToken: rejected — wrong type: ${payload.type}`);
+      return null;
+    }
+    const tv = typeof payload.tv === "number" ? payload.tv : null;
+    console.log(`[AppAuth] verifyAppUserToken: userId=${payload.sub} role=${payload.role} tv=${tv}`);
+    return { userId: Number(payload.sub), role: payload.role as string, tv };
+  } catch (e) {
+    console.log(`[AppAuth] verifyAppUserToken: JWT verification failed — ${(e as Error).message}`);
     return null;
   }
 }
 
-// Owner-only middleware
+// Owner-only middleware — validates tokenVersion against DB to support force-logout
 export const ownerProcedure = publicProcedure.use(async ({ ctx, next }) => {
   const token = getAppCookie(ctx.req);
-  if (!token) throw new TRPCError({ code: "UNAUTHORIZED", message: "Not authenticated" });
+  if (!token) {
+    console.log(`[AppAuth] ownerProcedure: REJECTED — no app_session cookie`);
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Not authenticated" });
+  }
   const payload = await verifyAppUserToken(token);
   if (!payload) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid session" });
-  if (payload.role !== "owner") throw new TRPCError({ code: "FORBIDDEN", message: "Owner access required" });
+  if (payload.role !== "owner") {
+    console.log(`[AppAuth] ownerProcedure: REJECTED — role=${payload.role} (not owner)`);
+    throw new TRPCError({ code: "FORBIDDEN", message: "Owner access required" });
+  }
   const user = await getAppUserById(payload.userId);
-  if (!user || !user.hasAccess) throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+  if (!user || !user.hasAccess) {
+    console.log(`[AppAuth] ownerProcedure: REJECTED — user not found or no access`);
+    throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+  }
+  // tokenVersion check: if tv in JWT doesn't match DB, the session was force-invalidated
+  if (payload.tv !== null && payload.tv !== user.tokenVersion) {
+    console.log(`[AppAuth] ownerProcedure: REJECTED — tokenVersion mismatch: jwt.tv=${payload.tv} db.tv=${user.tokenVersion} userId=${user.id}`);
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Session invalidated. Please log in again." });
+  }
+  console.log(`[AppAuth] ownerProcedure: GRANTED — userId=${user.id} username=${user.username} tv=${user.tokenVersion}`);
   return next({ ctx: { ...ctx, appUser: user } });
 });
 
-// Authenticated app user middleware — exported so other routers can use custom app auth
+// Authenticated app user middleware — validates tokenVersion against DB to support force-logout
 export const appUserProcedure = publicProcedure.use(async ({ ctx, next }) => {
   const token = getAppCookie(ctx.req);
-  if (!token) throw new TRPCError({ code: "UNAUTHORIZED", message: "Not authenticated" });
+  if (!token) {
+    console.log(`[AppAuth] appUserProcedure: REJECTED — no app_session cookie`);
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Not authenticated" });
+  }
   const payload = await verifyAppUserToken(token);
   if (!payload) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid session" });
   const user = await getAppUserById(payload.userId);
-  if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "User not found" });
-  if (!user.hasAccess) throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+  if (!user) {
+    console.log(`[AppAuth] appUserProcedure: REJECTED — userId=${payload.userId} not found`);
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "User not found" });
+  }
+  if (!user.hasAccess) {
+    console.log(`[AppAuth] appUserProcedure: REJECTED — userId=${user.id} hasAccess=false`);
+    throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+  }
+  // tokenVersion check: if tv in JWT doesn't match DB, the session was force-invalidated
+  if (payload.tv !== null && payload.tv !== user.tokenVersion) {
+    console.log(`[AppAuth] appUserProcedure: REJECTED — tokenVersion mismatch: jwt.tv=${payload.tv} db.tv=${user.tokenVersion} userId=${user.id}`);
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Session invalidated. Please log in again." });
+  }
   // Check expiry
   if (user.expiryDate && Date.now() > user.expiryDate) {
+    console.log(`[AppAuth] appUserProcedure: REJECTED — userId=${user.id} account expired`);
     throw new TRPCError({ code: "FORBIDDEN", message: "Account expired" });
   }
+  console.log(`[AppAuth] appUserProcedure: GRANTED — userId=${user.id} username=${user.username} tv=${user.tokenVersion}`);
   return next({ ctx: { ...ctx, appUser: user } });
 });
 
@@ -109,9 +149,11 @@ export const appUsersRouter = router({
 
       await updateAppUserLastSignedIn(user.id);
 
+      console.log(`[AppAuth] login: userId=${user.id} username=${user.username} role=${user.role} tv=${user.tokenVersion} stayLoggedIn=${input.stayLoggedIn}`);
+
       // stayLoggedIn = 90 days; otherwise session cookie (expires on browser close)
       const sessionDays = input.stayLoggedIn ? 90 : 1;
-      const token = await signAppUserToken(user.id, user.role);
+      const token = await signAppUserToken(user.id, user.role, user.tokenVersion);
       const cookieOptions = getSessionCookieOptions(ctx.req);
       if (input.stayLoggedIn) {
         ctx.res.cookie(APP_USER_COOKIE, token, {
@@ -269,5 +311,37 @@ export const appUsersRouter = router({
       }
       await deleteAppUser(input.id);
       return { success: true };
+    }),
+
+  // ─── Session Invalidation ──────────────────────────────────────────────────
+
+  /**
+   * Force-logout a specific user by incrementing their tokenVersion.
+   * Their existing JWT will be rejected on next request (tv mismatch).
+   * The owner's own session is NOT affected.
+   */
+  forceLogoutUser: ownerProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.id === ctx.appUser.id) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot force-logout your own account" });
+      }
+      const user = await getAppUserById(input.id);
+      if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      const newTv = await incrementTokenVersion(input.id);
+      console.log(`[AppAuth] forceLogoutUser: userId=${input.id} username=${user.username} — tokenVersion incremented to ${newTv}`);
+      return { success: true, newTokenVersion: newTv };
+    }),
+
+  /**
+   * Force-logout ALL users EXCEPT the current owner.
+   * Increments tokenVersion for every user whose id != ctx.appUser.id.
+   * The owner stays logged in; all other sessions are immediately invalidated.
+   */
+  forceLogoutAll: ownerProcedure
+    .mutation(async ({ ctx }) => {
+      const count = await incrementAllTokenVersions(ctx.appUser.id);
+      console.log(`[AppAuth] forceLogoutAll: invalidated sessions for ${count} users (excluded owner userId=${ctx.appUser.id})`);
+      return { success: true, usersAffected: count };
     }),
 });

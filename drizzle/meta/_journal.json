@@ -183,6 +183,13 @@
       "when": 1773314254627,
       "tag": "0025_ancient_sue_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1773346509466,
+      "tag": "0026_sleepy_zaladane",
+      "breakpoints": true
     }
   ]
 }

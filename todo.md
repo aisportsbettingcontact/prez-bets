@@ -1050,3 +1050,16 @@
 - [x] Fix slow site load issue — caused by publishedmodel column missing from DB during brief migration window
 - [x] Fix "Failed to update model approval status" error on Publish Projections page — root cause: sameSite:none cookie without secure:true silently dropped by browser; fixed with trust proxy + conditional sameSite
 - [x] Fix feed loading screen crash (happening simultaneously with model approval error) — same root cause as above
+
+## Slow Load + No Games Found Investigation (2026-03-12)
+- [x] Diagnose site taking very long to load — caused by polling storm (5 simultaneous games.list polls at 15s intervals); fixed by raising all to 60s with 30s staleTime
+- [x] Diagnose "no games found" after refresh — all 44 NCAAM games had publishedToFeed=0 (temporary state); re-published all 44 games
+- [ ] Investigate whether all user sessions need to be invalidated
+
+## Session Invalidation System (2026-03-12)
+- [x] Deep analysis: trace full auth lifecycle to determine best invalidation strategy
+- [x] Implement tokenVersion field in app_users table for per-user JWT invalidation
+- [x] Add forceLogout (individual) and forceLogoutAll (bulk) procedures
+- [x] Add admin UI controls for force-logout in User Management page
+- [x] Run DB migration and verify end-to-end
+- [x] Write vitest tests for tokenVersion system (16 tests passing)

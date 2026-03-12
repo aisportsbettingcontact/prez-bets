@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, lte, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, lte, lt, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { games, modelFiles, users, nbaTeams, ncaamTeams, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -319,6 +319,41 @@ export async function updateAppUserLastSignedIn(id: number) {
   const db = await getDb();
   if (!db) return;
   await db.update(appUsers).set({ lastSignedIn: new Date() }).where(eq(appUsers.id, id));
+}
+
+/**
+ * Increment tokenVersion for a single user, immediately invalidating all their existing JWTs.
+ * Returns the new tokenVersion value.
+ */
+export async function incrementTokenVersion(id: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(appUsers)
+    .set({ tokenVersion: sql`${appUsers.tokenVersion} + 1`, updatedAt: new Date() })
+    .where(eq(appUsers.id, id));
+  const rows = await db.select({ tv: appUsers.tokenVersion }).from(appUsers).where(eq(appUsers.id, id)).limit(1);
+  const newTv = rows[0]?.tv ?? 1;
+  console.log(`[DB] incrementTokenVersion: userId=${id} newTokenVersion=${newTv}`);
+  return newTv;
+}
+
+/**
+ * Increment tokenVersion for ALL users EXCEPT the excluded owner.
+ * Used for "force logout all" — the owner stays logged in.
+ * Returns the count of affected users.
+ */
+export async function incrementAllTokenVersions(excludeOwnerId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db
+    .update(appUsers)
+    .set({ tokenVersion: sql`${appUsers.tokenVersion} + 1`, updatedAt: new Date() })
+    .where(ne(appUsers.id, excludeOwnerId));
+  // result[0] is OkPacket with affectedRows
+  const count = (result[0] as any)?.affectedRows ?? 0;
+  console.log(`[DB] incrementAllTokenVersions: excluded ownerId=${excludeOwnerId} — invalidated ${count} user sessions`);
+  return count;
 }
 
 // ─── Publish / Model Projection helpers ──────────────────────────────────────

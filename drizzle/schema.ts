@@ -52,6 +52,13 @@ export const appUsers = mysqlTable("app_users", {
   termsAccepted: boolean("termsAccepted").default(false).notNull(),
   /** UTC timestamp (ms) when the user accepted the terms; NULL if not yet accepted */
   termsAcceptedAt: bigint("termsAcceptedAt", { mode: "number" }),
+  /**
+   * Session invalidation version. Incremented on force-logout.
+   * JWT payload must carry a matching `tv` claim — mismatches are rejected immediately.
+   * forceLogout(userId): increment this user's tokenVersion
+   * forceLogoutAll(): increment ALL users' tokenVersion in one SQL UPDATE
+   */
+  tokenVersion: int("tokenVersion").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn"),

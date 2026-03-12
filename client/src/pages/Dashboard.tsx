@@ -192,7 +192,8 @@ export default function Dashboard() {
     { sport: selectedSport },
     {
       refetchOnWindowFocus: false,
-      refetchInterval: 15 * 1000, // always poll — scores update even when no LIVE filter active
+      refetchInterval: 60 * 1000, // poll every 60s — server-side score cron runs every 5 min; 60s is sufficient
+      staleTime: 30 * 1000,
     }
   );
 

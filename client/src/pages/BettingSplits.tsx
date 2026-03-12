@@ -183,7 +183,7 @@ export default function BettingSplitsPage() {
 
   const { data: allGames, isLoading: gamesLoading } = trpc.games.list.useQuery(
     { sport: selectedSport },
-    { refetchOnWindowFocus: false, refetchInterval: 15 * 1000 }
+    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
   );
 
   const liveCount = useMemo(() => (allGames ?? []).filter(g => g?.gameStatus === "live").length, [allGames]);

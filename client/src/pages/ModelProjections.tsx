@@ -355,7 +355,7 @@ export default function ModelProjections() {
 
   const { data: allGames, isLoading: gamesLoading } = trpc.games.list.useQuery(
     { sport: selectedSport },
-    { refetchOnWindowFocus: false, refetchInterval: 15 * 1000 }
+    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
   );
 
   // Cross-sport game lists for the Favorites tab (needs ALL sports regardless of selectedSport)
@@ -363,11 +363,11 @@ export default function ModelProjections() {
   // These queries are enabled after isAppAuthedForFav is computed (see below).
   const { data: allNcaamGames } = trpc.games.list.useQuery(
     { sport: "NCAAM" },
-    { refetchOnWindowFocus: false, refetchInterval: 30 * 1000 }
+    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
   );
   const { data: allNbaGames } = trpc.games.list.useQuery(
     { sport: "NBA" },
-    { refetchOnWindowFocus: false, refetchInterval: 30 * 1000 }
+    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
   );
 
   const liveCount = useMemo(() =>

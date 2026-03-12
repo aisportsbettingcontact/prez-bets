@@ -31,7 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Shield, User, Crown, RefreshCw,
-  Eye, EyeOff, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, X,
+  Eye, EyeOff, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, X, LogOut,
 } from "lucide-react";
 
 type AppUserRow = {
@@ -328,6 +328,22 @@ export default function UserManagement() {
     onError: (e) => toast.error(e.message),
   });
 
+  const forceLogoutUserMutation = trpc.appUsers.forceLogoutUser.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success(`Session invalidated — @${rawUsers.find(u => u.id === vars.id)?.username ?? vars.id} will be logged out on next request.`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const forceLogoutAllMutation = trpc.appUsers.forceLogoutAll.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Force logout complete — ${data.usersAffected} session(s) invalidated. Your session is unaffected.`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const [forceLogoutAllConfirm, setForceLogoutAllConfirm] = useState(false);
+
   // Redirect if not owner
   if (!loading && (!appUser || appUser.role !== "owner")) {
     navigate("/dashboard");
@@ -467,6 +483,20 @@ export default function UserManagement() {
             <span className="text-sm font-semibold tracking-wider text-white">USER MANAGEMENT</span>
           </div>
           <div className="flex-1" />
+          <Button
+            onClick={() => setForceLogoutAllConfirm(true)}
+            size="sm"
+            variant="outline"
+            className="gap-1.5 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300 hover:border-red-500/50"
+            disabled={forceLogoutAllMutation.isPending}
+          >
+            {forceLogoutAllMutation.isPending ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <LogOut className="w-4 h-4" />
+            )}
+            Force Logout All
+          </Button>
           <Button onClick={openCreate} size="sm" className="gap-1.5">
             <Plus className="w-4 h-4" />
             New Account
@@ -618,6 +648,14 @@ export default function UserManagement() {
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button
+                          onClick={() => forceLogoutUserMutation.mutate({ id: user.id })}
+                          className="p-1.5 rounded hover:bg-orange-500/15 text-zinc-400 hover:text-orange-400 transition-colors"
+                          disabled={user.id === appUser?.id || forceLogoutUserMutation.isPending}
+                          title="Force logout this user"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                           onClick={() => setDeleteConfirm(user)}
                           className="p-1.5 rounded hover:bg-red-500/15 text-zinc-400 hover:text-red-400 transition-colors"
                           disabled={user.id === appUser?.id}
@@ -752,6 +790,39 @@ export default function UserManagement() {
               {createMutation.isPending || updateMutation.isPending ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
               ) : editUser ? "Save Changes" : "Create Account"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Force Logout All Confirm Dialog */}
+      <Dialog open={forceLogoutAllConfirm} onOpenChange={(open) => { if (!open) setForceLogoutAllConfirm(false); }}>
+        <DialogContent className="bg-[#111] border-white/10 text-white max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="tracking-wider text-orange-400 flex items-center gap-2">
+              <LogOut className="w-4 h-4" />
+              FORCE LOGOUT ALL
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-zinc-400 text-sm py-2">
+            This will immediately invalidate all active sessions for <span className="text-white font-semibold">every user except you</span>. They will be logged out on their next request.
+          </p>
+          <p className="text-zinc-500 text-xs">
+            Your own session will not be affected. Users can log back in normally.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setForceLogoutAllConfirm(false)} className="border-white/10 text-zinc-400 hover:text-white">
+              Cancel
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-500 text-white"
+              onClick={() => {
+                forceLogoutAllMutation.mutate();
+                setForceLogoutAllConfirm(false);
+              }}
+              disabled={forceLogoutAllMutation.isPending}
+            >
+              {forceLogoutAllMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Confirm Force Logout"}
             </Button>
           </DialogFooter>
         </DialogContent>
