@@ -1140,3 +1140,11 @@
 - [x] routers.ts: confirmed isValidGame() handles sport='NHL' via NHL_VALID_DB_SLUGS
 - [x] TypeScript: 0 errors after all changes
 - [x] Test suite: 185/186 passing (1 pre-existing KenPom credentials failure)
+
+## NHL Feed + Publish Projections Display Fixes (2026-03-13)
+- [x] Remove "NHL MODEL / COMING SOON..." placeholder from ModelProjections.tsx NHL tab — show real game cards
+- [x] Fix Publish Projections ML display: add BOOK ML column to desktop layout showing awayML/homeML from DB
+- [x] Confirmed publishedToFeed: all 14 today's NHL games are published (0 unpublished)
+- [x] Advanced debug audit: 14/14 games with spread, total, ML, published — 0 missing fields
+- [x] Mobile tab filter: removed NHL gate so mobile tab bar shows for NHL too
+- [x] TypeScript: 0 errors; 185/186 tests passing (1 pre-existing KenPom env failure)

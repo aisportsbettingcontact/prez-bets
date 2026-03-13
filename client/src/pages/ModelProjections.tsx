@@ -802,8 +802,7 @@ export default function ModelProjections() {
 
         {/* Row 5: Feed-wide mobile tab filter — BOOK LINES | MODEL LINES | SPLITS | EDGE */}
         {/* Only shown on mobile (< lg). Hidden on desktop where the full 3-panel layout is used. */}
-        {selectedSport !== 'NHL' && (
-          <div className="grid lg:hidden" style={{
+        <div className="grid lg:hidden" style={{
             gridTemplateColumns: 'repeat(4, 1fr)',
             borderBottom: '2px solid hsl(var(--border) / 0.5)',
             background: 'hsl(var(--card))',
@@ -851,7 +850,6 @@ export default function ModelProjections() {
               );
             })}
           </div>
-        )}
       </header>
 
       {/* ── Main Feed ── */}
@@ -860,21 +858,8 @@ export default function ModelProjections() {
            -webkit-overflow-scrolling: touch — enables iOS momentum scrolling. */}
       <main className="w-full feed-pb-safe" style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
 
-        {/* ── NHL COMING SOON ── */}
-        {selectedSport === 'NHL' && (
-          <div className="flex flex-col items-center justify-center py-20 gap-6 text-center px-6">
-            <img
-              src="https://media.d3.nhle.com/image/private/t_q-best/prd/assets/nhl/logos/nhl_shield_wm_on_dark_fqkbph"
-              alt="NHL"
-              style={{ width: 120, height: 'auto', objectFit: 'contain' }}
-            />
-            <div style={{ fontWeight: 700, fontSize: 48, color: '#ffffff', letterSpacing: '0.04em', lineHeight: 1.1 }}>NHL MODEL</div>
-            <div style={{ fontWeight: 400, fontSize: 36, color: '#a3a3a3', letterSpacing: '0.06em', lineHeight: 1.2 }}>COMING SOON...</div>
-          </div>
-        )}
-
         {/* ── UNIFIED FEED (projections + splits always shown) ── */}
-        {selectedSport !== 'NHL' && (
+        {true && (
           <>
             {/* FAVORITES TAB FEED */}
             {showFavoritesTab ? (

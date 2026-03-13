@@ -866,6 +866,9 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
                   <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>Books</span>
                   <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>Model Line</span>
                 </div>
+                <div className="flex-shrink-0 text-center" style={{ width: "clamp(48px, 12vw, 60px)" }}>
+                  <span className="text-[10px] uppercase tracking-widest" style={{ color: "#D3D3D3" }}>Book ML</span>
+                </div>
                 <div className="flex-shrink-0 text-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
                   <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#39FF14" }}>O/U</span>
                 </div>
@@ -896,6 +899,20 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
                     logoUrl={homeLogoUrl}
                     onSpreadChange={handleHomeSpreadChange}
                   />
+                </div>
+                {/* Book ML column */}
+                <div className="flex-shrink-0 flex flex-col justify-around" style={{ width: "clamp(48px, 12vw, 60px)", gap: 4 }}>
+                  <div className="flex items-center justify-center" style={{ flex: 1 }}>
+                    <span className="font-bold tabular-nums" style={{ fontSize: "clamp(12px, 3vw, 15px)", color: "#D3D3D3" }}>
+                      {game.awayML ?? "—"}
+                    </span>
+                  </div>
+                  <div style={{ height: 1, background: "hsl(var(--border))" }} />
+                  <div className="flex items-center justify-center" style={{ flex: 1 }}>
+                    <span className="font-bold tabular-nums" style={{ fontSize: "clamp(12px, 3vw, 15px)", color: "#D3D3D3" }}>
+                      {game.homeML ?? "—"}
+                    </span>
+                  </div>
                 </div>
                 {/* O/U pill */}
                 <div className="flex-shrink-0 flex items-center justify-center" style={{ width: "clamp(48px, 12vw, 72px)" }}>
