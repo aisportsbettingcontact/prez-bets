@@ -623,6 +623,10 @@ interface DesktopMergedPanelProps {
     mlAwayMoneyPct: number | null | undefined;
     awayML: string | null | undefined;
     homeML: string | null | undefined;
+    awaySpreadOdds?: string | null;
+    homeSpreadOdds?: string | null;
+    overOdds?: string | null;
+    underOdds?: string | null;
   };
 }
 
@@ -707,10 +711,25 @@ function DesktopMergedPanel({
   // ── Book / Model value strings ────────────────────────────────────────────
   const hasModelData = !isNaN(mdlAwaySpread) || !isNaN(mdlTotal) || (modelAwayML != null && modelAwayML !== '—');
 
-  const bkAwaySpread  = !isNaN(awaySpread) ? spreadSign(awaySpread) : '—';
-  const bkHomeSpread  = !isNaN(homeSpread) ? spreadSign(homeSpread) : '—';
-  const bkOver        = !isNaN(bkTotal) ? String(bkTotal) : '—';
-  const bkUnder       = !isNaN(bkTotal) ? String(bkTotal) : '—';
+  // Spread odds in parentheses, e.g. "+1.5 (-225)" / "-1.5 (+185)"
+  // Only append odds when they exist; omit if null (standard -110 assumed)
+  const awaySpreadOddsStr = game.awaySpreadOdds ?? null;
+  const homeSpreadOddsStr = game.homeSpreadOdds ?? null;
+  const overOddsStr  = game.overOdds ?? null;
+  const underOddsStr = game.underOdds ?? null;
+
+  const bkAwaySpread  = !isNaN(awaySpread)
+    ? (awaySpreadOddsStr ? `${spreadSign(awaySpread)} (${awaySpreadOddsStr})` : spreadSign(awaySpread))
+    : '—';
+  const bkHomeSpread  = !isNaN(homeSpread)
+    ? (homeSpreadOddsStr ? `${spreadSign(homeSpread)} (${homeSpreadOddsStr})` : spreadSign(homeSpread))
+    : '—';
+  const bkOver  = !isNaN(bkTotal)
+    ? (overOddsStr  ? `${String(bkTotal)} (${overOddsStr})`  : String(bkTotal))
+    : '—';
+  const bkUnder = !isNaN(bkTotal)
+    ? (underOddsStr ? `${String(bkTotal)} (${underOddsStr})` : String(bkTotal))
+    : '—';
 
   const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread) ? spreadSign(mdlAwaySpread) : '—';
   const mdlHomeSpreadStr = hasModelData && !isNaN(mdlHomeSpread) ? spreadSign(mdlHomeSpread) : '—';
@@ -2209,10 +2228,26 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             };
             const formattedClock = formatGameClock(game.gameClock);
 
-            // ── Derived values for mobile odds table ─────────────────────────
-            const bkAwaySpreadStr  = !isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—';
-            const bkHomeSpreadStr  = !isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—';
+               // ── Derived values for mobile odds table ─────────────────
+            // Spread odds in parentheses, e.g. "+1.5 (-225)" / "-1.5 (+185)"
+            const mbAwaySpreadOdds = game.awaySpreadOdds ?? null;
+            const mbHomeSpreadOdds = game.homeSpreadOdds ?? null;
+            const mbOverOdds  = game.overOdds ?? null;
+            const mbUnderOdds = game.underOdds ?? null;
+            const bkAwaySpreadStr  = !isNaN(awayBookSpread)
+              ? (mbAwaySpreadOdds ? `${spreadSign(awayBookSpread)} (${mbAwaySpreadOdds})` : spreadSign(awayBookSpread))
+              : '—';
+            const bkHomeSpreadStr  = !isNaN(homeBookSpread)
+              ? (mbHomeSpreadOdds ? `${spreadSign(homeBookSpread)} (${mbHomeSpreadOdds})` : spreadSign(homeBookSpread))
+              : '—';
             const bkTotalStr       = !isNaN(bookTotal) ? String(bookTotal) : '—';
+            // Over/Under strings with odds, e.g. "o5.5 (-107)" / "u5.5 (-113)"
+            const bkOverStr  = !isNaN(bookTotal)
+              ? (mbOverOdds  ? `o${bkTotalStr} (${mbOverOdds})`  : `o${bkTotalStr}`)
+              : 'o—';
+            const bkUnderStr = !isNaN(bookTotal)
+              ? (mbUnderOdds ? `u${bkTotalStr} (${mbUnderOdds})` : `u${bkTotalStr}`)
+              : 'u—';
             const mdlAwaySpreadStr = !isNaN(awayModelSpread) ? spreadSign(awayModelSpread) : '—';
             const mdlHomeSpreadStr = !isNaN(homeModelSpread) ? spreadSign(homeModelSpread) : '—';
             const mdlTotalStr      = !isNaN(modelTotal) ? String(modelTotal) : '—';
@@ -2508,7 +2543,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     <span className="text-center tabular-nums" style={modelStyle(awaySpreadIsEdge)}>{mdlAwaySpreadStr}</span>
                   </div>
                   <div className="grid grid-cols-2">
-                    <span className="text-center tabular-nums" style={bookStyle(overTotalIsEdge)}>o{bkTotalStr}</span>
+                    <span className="text-center tabular-nums" style={bookStyle(overTotalIsEdge)}>{bkOverStr}</span>
                     <span className="text-center tabular-nums" style={modelStyle(overTotalIsEdge)}>o{mdlTotalStr}</span>
                   </div>
                   <div className="grid grid-cols-2">
@@ -2525,7 +2560,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     <span className="text-center tabular-nums" style={modelStyle(homeSpreadIsEdge)}>{mdlHomeSpreadStr}</span>
                   </div>
                   <div className="grid grid-cols-2">
-                    <span className="text-center tabular-nums" style={bookStyle(underTotalIsEdge)}>u{bkTotalStr}</span>
+                    <span className="text-center tabular-nums" style={bookStyle(underTotalIsEdge)}>{bkUnderStr}</span>
                     <span className="text-center tabular-nums" style={modelStyle(underTotalIsEdge)}>u{mdlTotalStr}</span>
                   </div>
                   <div className="grid grid-cols-2">

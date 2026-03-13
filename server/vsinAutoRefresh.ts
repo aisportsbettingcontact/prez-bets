@@ -24,7 +24,9 @@ import { fetchNbaGamesForDate, buildNbaStartTimeMap, fetchNbaLiveScores } from "
 import { fetchNhlGamesForRange, buildNhlStartTimeMap, buildNhlGameMap, fetchNhlLiveScores, type NhlScheduleGame } from "./nhlSchedule";
 import { VALID_DB_SLUGS, BY_DB_SLUG } from "../shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS } from "../shared/nbaTeams";
-import { NHL_VALID_DB_SLUGS } from "../shared/nhlTeams";
+import { NHL_VALID_DB_SLUGS, NHL_BY_ABBREV, NHL_BY_DB_SLUG } from "../shared/nhlTeams";
+import { NBA_BY_DB_SLUG } from "../shared/nbaTeams";
+import { fetchMetabetConsensusOdds, type MetabetConsensusOdds } from "./metabetScraper";
 import type { InsertGame } from "../drizzle/schema";
 
 const INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
@@ -116,6 +118,175 @@ function dateRange(start: string, end: string): string[] {
     cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return dates;
+}
+
+// ─── MetaBet DraftKings odds helpers ─────────────────────────────────────────
+
+/**
+ * Normalizes a team name to a slug-like key for fuzzy matching.
+ * e.g. "St. John's" → "st_johns", "North Texas" → "north_texas"
+ */
+function normalizeToSlug(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "_");
+}
+
+/**
+ * Applies DraftKings spread odds and O/U odds from MetaBet to existing DB games.
+ * Matches MetaBet games to DB games by team identity, then calls updateBookOdds
+ * to write awaySpreadOdds, homeSpreadOdds, overOdds, underOdds.
+ *
+ * @param sport - "NCAAM" | "NBA" | "NHL"
+ * @param dateStr - YYYY-MM-DD date to update
+ * @param metabetGames - DraftKings odds from MetaBet API
+ */
+async function applyMetabetOdds(
+  sport: "NCAAM" | "NBA" | "NHL",
+  dateStr: string,
+  metabetGames: MetabetConsensusOdds[]
+): Promise<{ updated: number; skipped: number }> {
+  if (metabetGames.length === 0) return { updated: 0, skipped: 0 };
+
+  const existing = await listGamesByDate(dateStr, sport);
+  if (existing.length === 0) return { updated: 0, skipped: 0 };
+
+  let updated = 0;
+  let skipped = 0;
+
+  for (const mb of metabetGames) {
+    let dbGame = null;
+
+    if (sport === "NHL") {
+      // NHL: match by 3-letter abbreviation (e.g. "LAK", "NYI")
+      // MetaBet uses standard NHL abbreviations that match our abbrev field
+      const awayTeam = NHL_BY_ABBREV.get(mb.awayInitials);
+      const homeTeam = NHL_BY_ABBREV.get(mb.homeInitials);
+      if (awayTeam && homeTeam) {
+        dbGame = existing.find(
+          e => e.awayTeam === awayTeam.dbSlug && e.homeTeam === homeTeam.dbSlug
+        );
+      }
+      // Fallback: try non-standard initials (e.g. "NJ" → "new_jersey_devils", "SJ" → "san_jose_sharks", "VGS" → "vegas_golden_knights")
+      if (!dbGame) {
+        const NHL_INITIALS_OVERRIDES: Record<string, string> = {
+          "NJ": "new_jersey_devils",
+          "SJ": "san_jose_sharks",
+          "VGS": "vegas_golden_knights",
+          "TB": "tampa_bay_lightning",
+          "UTA": "utah_mammoth",
+        };
+        const awaySlug = NHL_INITIALS_OVERRIDES[mb.awayInitials] ?? NHL_BY_ABBREV.get(mb.awayInitials)?.dbSlug;
+        const homeSlug = NHL_INITIALS_OVERRIDES[mb.homeInitials] ?? NHL_BY_ABBREV.get(mb.homeInitials)?.dbSlug;
+        if (awaySlug && homeSlug) {
+          dbGame = existing.find(e => e.awayTeam === awaySlug && e.homeTeam === homeSlug);
+        }
+      }
+    } else if (sport === "NBA") {
+      // NBA: match by city+name (e.g. "Memphis Grizzlies" → "memphis_grizzlies")
+      const awayKey = normalizeToSlug(`${mb.awayCity} ${mb.awayName}`);
+      const homeKey = normalizeToSlug(`${mb.homeCity} ${mb.homeName}`);
+      // Try direct DB slug match first
+      dbGame = existing.find(
+        e => normalizeToSlug(e.awayTeam.replace(/_/g, " ")) === awayKey.replace(/_/g, " ") &&
+             normalizeToSlug(e.homeTeam.replace(/_/g, " ")) === homeKey.replace(/_/g, " ")
+      );
+      if (!dbGame) {
+        // Try matching via NBA_BY_DB_SLUG city+name
+        dbGame = existing.find(e => {
+          const awayTeam = NBA_BY_DB_SLUG.get(e.awayTeam);
+          const homeTeam = NBA_BY_DB_SLUG.get(e.homeTeam);
+          if (!awayTeam || !homeTeam) return false;
+          return normalizeToSlug(awayTeam.name) === awayKey &&
+                 normalizeToSlug(homeTeam.name) === homeKey;
+        });
+      }
+    } else {
+      // NCAAM: match by city (school name) + nickname
+      // MetaBet city = school name (e.g. "Tennessee"), name = nickname (e.g. "Volunteers")
+      // DB slug is the vsinSlug with hyphens → underscores
+      // Try: normalize city to slug and look up by vsinSlug
+      const awayVsinSlug = normalizeToSlug(mb.awayCity).replace(/_/g, "-");
+      const homeVsinSlug = normalizeToSlug(mb.homeCity).replace(/_/g, "-");
+      // Look up in NCAAM registry by vsinSlug
+      const { BY_VSIN_SLUG: NCAAM_BY_VSIN } = await import("../shared/ncaamTeams");
+      const awayTeam = NCAAM_BY_VSIN.get(awayVsinSlug);
+      const homeTeam = NCAAM_BY_VSIN.get(homeVsinSlug);
+      if (awayTeam && homeTeam) {
+        dbGame = existing.find(
+          e => e.awayTeam === awayTeam.dbSlug && e.homeTeam === homeTeam.dbSlug
+        );
+      }
+      // Fallback: fuzzy match by normalized city slug against DB slug
+      if (!dbGame) {
+        const awayDbSlug = normalizeToSlug(mb.awayCity);
+        const homeDbSlug = normalizeToSlug(mb.homeCity);
+        dbGame = existing.find(
+          e => e.awayTeam.startsWith(awayDbSlug.split("_")[0]) &&
+               e.homeTeam.startsWith(homeDbSlug.split("_")[0])
+        );
+      }
+    }
+
+    if (!dbGame) {
+      console.log(
+        `[MetaBet][${sport}] NO_MATCH: ${mb.awayCity} ${mb.awayName} (${mb.awayInitials}) @ ` +
+        `${mb.homeCity} ${mb.homeName} (${mb.homeInitials}) on ${dateStr}`
+      );
+      skipped++;
+      continue;
+    }
+
+    await updateBookOdds(dbGame.id, {
+      awayBookSpread: null,   // don't overwrite VSiN spread values
+      homeBookSpread: null,
+      bookTotal: null,
+      awaySpreadOdds: mb.awaySpreadOdds,
+      homeSpreadOdds: mb.homeSpreadOdds,
+      overOdds: mb.overOdds,
+      underOdds: mb.underOdds,
+    });
+    updated++;
+    console.log(
+      `[MetaBet][${sport}] Updated: ${dbGame.awayTeam} @ ${dbGame.homeTeam} (${dateStr}) | ` +
+      `spreadOdds=${mb.awaySpreadOdds}/${mb.homeSpreadOdds} ` +
+      `overOdds=${mb.overOdds} underOdds=${mb.underOdds}`
+    );
+  }
+
+  return { updated, skipped };
+}
+
+/**
+ * Fetches MetaBet DraftKings odds for a sport and applies them to today's games.
+ * Non-fatal — errors are caught and logged.
+ */
+async function runMetabetOddsUpdate(
+  sport: "NCAAM" | "NBA" | "NHL",
+  leagueCode: "BKC" | "BKP" | "HKN",
+  todayStr: string
+): Promise<void> {
+  try {
+    const mbGames = await fetchMetabetConsensusOdds(leagueCode);
+    // Filter to today's games only (MetaBet returns rolling history)
+    const todayStart = new Date(todayStr + "T00:00:00-08:00").getTime(); // PST midnight
+    const tomorrowStart = todayStart + 86400000;
+    const todayGames = mbGames.filter(
+      g => g.gameTimestamp >= todayStart && g.gameTimestamp < tomorrowStart
+    );
+    console.log(
+      `[MetaBet][${sport}] ${todayGames.length} games for today (${todayStr}) ` +
+      `out of ${mbGames.length} total from API`
+    );
+    const result = await applyMetabetOdds(sport, todayStr, todayGames);
+    console.log(
+      `[MetaBet][${sport}] Done: ${result.updated} updated, ${result.skipped} skipped`
+    );
+  } catch (err) {
+    console.error(`[MetaBet][${sport}] Odds update failed (non-fatal):`, err);
+  }
 }
 
 // ─── NCAAM refresh ────────────────────────────────────────────────────────────
@@ -879,8 +1050,8 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     const rangeEnd = datePst(RANGE_DAYS_AHEAD);
     const allDates = dateRange(todayStr, rangeEnd);
 
-    // Run NCAAM and NBA refreshes in sequence (share the same VSiN token)
-     const ncaamResult = await refreshNcaam(todayStr, allDates);
+    // Run NCAAM, NBA, and NHL refreshes in sequence (share the same VSiN token)
+    const ncaamResult = await refreshNcaam(todayStr, allDates);
     const nbaResult = await refreshNba(todayStr, allDates);
     const nhlResult = await refreshNhl(todayStr, allDates);
     console.log(
@@ -888,6 +1059,12 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
       `inserted=${nhlResult.inserted} scheduleInserted=${nhlResult.scheduleInserted} ` +
       `total=${nhlResult.total}`
     );
+
+    // Apply DraftKings spread odds + O/U odds from MetaBet for all three leagues
+    // Runs after VSiN upserts so DB rows exist before we try to update them
+    await runMetabetOddsUpdate("NCAAM", "BKC", todayStr);
+    await runMetabetOddsUpdate("NBA", "BKP", todayStr);
+    await runMetabetOddsUpdate("NHL", "HKN", todayStr);
     const result: RefreshResult = {
       refreshedAt: new Date().toISOString(),
       scoresRefreshedAt: lastScoresRefreshedAt,

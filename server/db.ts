@@ -454,6 +454,11 @@ export async function updateBookOdds(
     mlAwayMoneyPct?: number | null;
     awayML?: string | null;
     homeML?: string | null;
+    // MetaBet consensus odds (spread juice + O/U odds)
+    awaySpreadOdds?: string | null;
+    homeSpreadOdds?: string | null;
+    overOdds?: string | null;
+    underOdds?: string | null;
   }
 ): Promise<void> {
   const db = await getDb();
@@ -475,6 +480,10 @@ export async function updateBookOdds(
   if (data.mlAwayMoneyPct !== undefined) updateData.mlAwayMoneyPct = data.mlAwayMoneyPct;
   if (data.awayML !== undefined) updateData.awayML = data.awayML;
   if (data.homeML !== undefined) updateData.homeML = data.homeML;
+  if (data.awaySpreadOdds !== undefined) updateData.awaySpreadOdds = data.awaySpreadOdds;
+  if (data.homeSpreadOdds !== undefined) updateData.homeSpreadOdds = data.homeSpreadOdds;
+  if (data.overOdds !== undefined) updateData.overOdds = data.overOdds;
+  if (data.underOdds !== undefined) updateData.underOdds = data.underOdds;
   await db.update(games).set(updateData).where(eq(games.id, id));
 }
 

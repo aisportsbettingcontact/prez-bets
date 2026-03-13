@@ -134,6 +134,18 @@ export const games = mysqlTable("games", {
   awayML: varchar("awayML", { length: 16 }),
   /** Home team moneyline odds, e.g. "-142" or "+600" */
   homeML: varchar("homeML", { length: 16 }),
+  /**
+   * Puck line / spread juice for the away team, e.g. "-226" or "+184".
+   * Populated from MetaBet consensus board for NHL games.
+   * For NCAAM/NBA the spread is almost always -110 so this is typically null.
+   */
+  awaySpreadOdds: varchar("awaySpreadOdds", { length: 16 }),
+  /** Puck line / spread juice for the home team, e.g. "+184" or "-226" */
+  homeSpreadOdds: varchar("homeSpreadOdds", { length: 16 }),
+  /** Over odds for the O/U total, e.g. "-107" (null = not available / standard -110) */
+  overOdds: varchar("overOdds", { length: 16 }),
+  /** Under odds for the O/U total, e.g. "-113" (null = not available / standard -110) */
+  underOdds: varchar("underOdds", { length: 16 }),
   /** Model fair value moneyline for the away team, e.g. "+225" or "-670" */
   modelAwayML: varchar("modelAwayML", { length: 16 }),
   /** Model fair value moneyline for the home team, e.g. "-225" or "+670" */

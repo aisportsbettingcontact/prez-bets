@@ -197,6 +197,13 @@
       "when": 1773366520195,
       "tag": "0027_overjoyed_punisher",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1773438371737,
+      "tag": "0028_fancy_blizzard",
+      "breakpoints": true
     }
   ]
 }

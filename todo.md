@@ -1195,3 +1195,24 @@
 - [x] Cron: confirmed all setInterval ticks in vsinAutoRefresh.ts are wrapped in try/catch
 - [x] Frontend: favorites queries use !appAuthLoading guard to prevent race condition on initial load
 - [x] Test suite: 185/186 passing (1 pre-existing KenPom env failure unrelated to hardening)
+
+## NHL Puck Line Odds + O/U Odds (2026-03-13)
+- [x] Add awaySpreadOdds, homeSpreadOdds, overOdds, underOdds columns to games DB schema
+- [x] Run db:push migration
+- [x] Build MetaBet consensus odds scraper for NHL (vsin.com/odds/ with HKN filter)
+- [x] Parse consensus spread odds, O/U odds from MetaBet board HTML
+- [x] Wire MetaBet scrape into NHL refresh pipeline (alongside VSiN splits)
+- [x] Update updateBookOdds DB helper to write spread/O/U odds columns
+- [x] Update GameCard to display puck line odds in parentheses (e.g. +1.5 (-226))
+- [x] Update GameCard to display O/U odds in parentheses (e.g. o5.5 (-107))
+
+## MetaBet Consensus Spread Odds + O/U Odds — All Sports (2026-03-13)
+- [x] Build shared metabetScraper.ts: fetch MetaBet API for BKC (NCAAM), BKP (NBA), HKN (NHL)
+- [x] Parse consensus spread odds (awaySpreadOdds, homeSpreadOdds) and O/U odds (overOdds, underOdds)
+- [x] Extend updateBookOdds DB helper to accept and write awaySpreadOdds, homeSpreadOdds, overOdds, underOdds
+- [x] Wire MetaBet scrape into NCAAM refresh pipeline (alongside VSiN splits)
+- [x] Wire MetaBet scrape into NBA refresh pipeline
+- [x] Wire MetaBet scrape into NHL refresh pipeline
+- [x] Update GameCard BOOK view: show spread odds in parentheses e.g. +4.5 (-105) for all sports
+- [x] Update GameCard BOOK view: show O/U odds in parentheses e.g. o233.5 (-113) for all sports
+- [ ] Write vitest tests for MetaBet scraper decimal-to-American conversion
