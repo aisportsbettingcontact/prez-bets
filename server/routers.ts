@@ -30,11 +30,15 @@ import { syncNbaModelFromSheet, getLastNbaModelSyncResult } from "./nbaModelSync
 import { triggerModelWatcherForDate } from "./ncaamModelWatcher";
 import { VALID_DB_SLUGS } from "@shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS } from "@shared/nbaTeams";
+import { NHL_VALID_DB_SLUGS } from "@shared/nhlTeams";
 
 /** Returns true if both teams are in the appropriate registry for the given sport */
 function isValidGame(awayTeam: string, homeTeam: string, sport?: string | null): boolean {
   if (sport === "NBA") {
     return NBA_VALID_DB_SLUGS.has(awayTeam) && NBA_VALID_DB_SLUGS.has(homeTeam);
+  }
+  if (sport === "NHL") {
+    return NHL_VALID_DB_SLUGS.has(awayTeam) && NHL_VALID_DB_SLUGS.has(homeTeam);
   }
   // Default: NCAAM check
   return VALID_DB_SLUGS.has(awayTeam) && VALID_DB_SLUGS.has(homeTeam);
@@ -324,7 +328,23 @@ export const appRouter = router({
       await refreshAllScoresNow();
       const now = new Date().toISOString();
       const oddsResult = result.status === 'fulfilled' ? result.value : null;
-      return oddsResult ?? { refreshedAt: now, scoresRefreshedAt: now, updated: 0, inserted: 0, ncaaInserted: 0, nbaUpdated: 0, nbaInserted: 0, nbaScheduleInserted: 0, total: 0, nbaTotal: 0, gameDate: "" };
+      return oddsResult ?? {
+        refreshedAt: now,
+        scoresRefreshedAt: now,
+        updated: 0,
+        inserted: 0,
+        ncaaInserted: 0,
+        nbaUpdated: 0,
+        nbaInserted: 0,
+        nbaScheduleInserted: 0,
+        total: 0,
+        nbaTotal: 0,
+        nhlUpdated: 0,
+        nhlInserted: 0,
+        nhlScheduleInserted: 0,
+        nhlTotal: 0,
+        gameDate: "",
+      };
     }),
   }),
 

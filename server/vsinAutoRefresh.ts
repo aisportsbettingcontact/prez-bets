@@ -18,10 +18,13 @@
 import { listGamesByDate, updateBookOdds, insertGames, getGameByNcaaContestId, updateNcaaStartTime } from "./db";
 import { scrapeVsinOdds } from "./vsinScraper";
 import { scrapeNbaVsinOdds } from "./nbaVsinScraper";
+import { scrapeNhlVsinOdds, type NhlScrapedOdds } from "./nhlVsinScraper";
 import { fetchNcaaGames, buildStartTimeMap } from "./ncaaScoreboard";
 import { fetchNbaGamesForDate, buildNbaStartTimeMap, fetchNbaLiveScores } from "./nbaScoreboard";
+import { fetchNhlGamesForRange, buildNhlStartTimeMap, buildNhlGameMap, fetchNhlLiveScores, type NhlScheduleGame } from "./nhlSchedule";
 import { VALID_DB_SLUGS, BY_DB_SLUG } from "../shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS } from "../shared/nbaTeams";
+import { NHL_VALID_DB_SLUGS } from "../shared/nhlTeams";
 import type { InsertGame } from "../drizzle/schema";
 
 const INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
@@ -40,6 +43,10 @@ export interface RefreshResult {
   nbaScheduleInserted: number; // new NBA-only games inserted from schedule
   total: number;             // total NCAAM VSiN games processed
   nbaTotal: number;          // total NBA VSiN games processed
+  nhlUpdated: number;        // NHL games matched + updated (VSiN)
+  nhlInserted: number;       // new NHL games inserted (VSiN stubs)
+  nhlScheduleInserted: number; // new NHL-only games inserted from schedule
+  nhlTotal: number;          // total NHL VSiN games processed
   gameDate: string;          // today YYYY-MM-DD (PST)
 }
 
@@ -652,7 +659,211 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
   return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: relevantGames.length };
 }
 
-// ─── Main refresh orchestrator ────────────────────────────────────────────────
+// ─── NHL Refresh ─────────────────────────────────────────────────────────────
+
+/**
+ * Scrapes VSiN NHL betting splits, fetches NHL.com schedule, and upserts all
+ * NHL games into the DB. Mirrors refreshNba exactly but uses NHL-specific
+ * scrapers, slugs, and sport="NHL".
+ */
+async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
+  updated: number;
+  inserted: number;
+  scheduleInserted: number;
+  total: number;
+}> {
+  // ── Step 1: Scrape all NHL games from VSiN ───────────────────────────────
+  let allScraped: NhlScrapedOdds[] = [];
+  try {
+    allScraped = await scrapeNhlVsinOdds("ALL");
+  } catch (err) {
+    console.error("[VSiNAutoRefresh] NHL VSiN scrape failed (non-fatal):", err);
+    allScraped = [];
+  }
+
+  // Filter to only games with valid DB slugs
+  const relevantGames = allScraped.filter(
+    (g) => NHL_VALID_DB_SLUGS.has(g.awaySlug) && NHL_VALID_DB_SLUGS.has(g.homeSlug)
+  );
+
+  console.log(
+    `[VSiNAutoRefresh] NHL VSiN: ${allScraped.length} total scraped, ` +
+    `${relevantGames.length} with valid DB slugs`
+  );
+
+  // ── Step 2: Fetch NHL schedule for the rolling 7-day window ─────────────
+  const rangeEnd = allDates[allDates.length - 1];
+  let nhlScheduleGames: NhlScheduleGame[] = [];
+  try {
+    nhlScheduleGames = await fetchNhlGamesForRange(todayStr, rangeEnd);
+  } catch (err) {
+    console.warn("[VSiNAutoRefresh] NHL schedule fetch failed (non-fatal):", err);
+    nhlScheduleGames = [];
+  }
+
+  // Build per-date start time maps from the schedule
+  const nhlStartTimeMaps = new Map<string, Map<string, string>>();
+  for (const dateStr of allDates) {
+    const gamesOnDate = nhlScheduleGames.filter((g) => g.gameDateEst === dateStr);
+    nhlStartTimeMaps.set(dateStr, buildNhlStartTimeMap(gamesOnDate));
+  }
+
+  // Build a per-date lookup for NHL schedule games (for schedule-only insertion)
+  const nhlGamesByDate = new Map<string, typeof nhlScheduleGames>();
+  for (const g of nhlScheduleGames) {
+    const list = nhlGamesByDate.get(g.gameDateEst) ?? [];
+    list.push(g);
+    nhlGamesByDate.set(g.gameDateEst, list);
+  }
+
+  // ── Step 3: Upsert VSiN games into DB ────────────────────────────────────
+  let totalUpdated = 0;
+  let totalInserted = 0;
+
+  // Group scraped games by date
+  const vsinDatesSet = new Set<string>();
+  for (const g of relevantGames) vsinDatesSet.add(yyyymmddToIso(String(g.gameDate ?? "")));
+  const vsinDates = Array.from(vsinDatesSet);
+
+  for (const dateStr of vsinDates) {
+    const gamesForDate = relevantGames.filter(
+      (g) => yyyymmddToIso(String(g.gameDate ?? "")) === dateStr
+    );
+    const existing = await listGamesByDate(dateStr, "NHL");
+    const startTimeMap = nhlStartTimeMaps.get(dateStr);
+
+    for (const scraped of gamesForDate) {
+      const awaySlug = scraped.awaySlug;
+      const homeSlug = scraped.homeSlug;
+      const existingGame = existing.find(
+        (e) => e.awayTeam === awaySlug && e.homeTeam === homeSlug
+      );
+      const startTimeKey = `${awaySlug}@${homeSlug}`;
+      const startTimeEst = startTimeMap?.get(startTimeKey);
+
+      if (existingGame) {
+        // Update existing game with fresh VSiN odds + splits
+        await updateBookOdds(existingGame.id, {
+          awayBookSpread: scraped.awaySpread,
+          homeBookSpread: scraped.homeSpread,
+          bookTotal: scraped.total,
+          sortOrder: scraped.vsinRowIndex,
+          ...(startTimeEst ? { startTimeEst } : {}),
+          spreadAwayBetsPct: scraped.spreadAwayBetsPct,
+          spreadAwayMoneyPct: scraped.spreadAwayMoneyPct,
+          totalOverBetsPct: scraped.totalOverBetsPct,
+          totalOverMoneyPct: scraped.totalOverMoneyPct,
+          mlAwayBetsPct: scraped.mlAwayBetsPct,
+          mlAwayMoneyPct: scraped.mlAwayMoneyPct,
+          awayML: scraped.awayML,
+          homeML: scraped.homeML,
+        });
+        totalUpdated++;
+        console.log(
+          `[VSiNAutoRefresh] Updated NHL VSiN: ${scraped.awayTeam} @ ${scraped.homeTeam} ` +
+          `(${dateStr}) spread=${scraped.awaySpread}/${scraped.homeSpread} total=${scraped.total} ` +
+          `awayML=${scraped.awayML ?? "?"} homeML=${scraped.homeML ?? "?"}`
+        );
+      } else {
+        // Insert new game stub from VSiN
+        const row: InsertGame = {
+          fileId: 0,
+          gameDate: dateStr,
+          startTimeEst: startTimeEst ?? "TBD",
+          awayTeam: awaySlug,
+          homeTeam: homeSlug,
+          awayBookSpread: scraped.awaySpread !== null ? String(scraped.awaySpread) : null,
+          homeBookSpread: scraped.homeSpread !== null ? String(scraped.homeSpread) : null,
+          bookTotal: scraped.total !== null ? String(scraped.total) : null,
+          awayModelSpread: null,
+          homeModelSpread: null,
+          modelTotal: null,
+          spreadEdge: null,
+          spreadDiff: null,
+          totalEdge: null,
+          totalDiff: null,
+          sport: "NHL",
+          gameType: "regular_season",
+          conference: null,
+          publishedToFeed: false,
+          rotNums: null,
+          sortOrder: scraped.vsinRowIndex,
+          ncaaContestId: null,
+          spreadAwayBetsPct: scraped.spreadAwayBetsPct,
+          spreadAwayMoneyPct: scraped.spreadAwayMoneyPct,
+          totalOverBetsPct: scraped.totalOverBetsPct,
+          totalOverMoneyPct: scraped.totalOverMoneyPct,
+          mlAwayBetsPct: scraped.mlAwayBetsPct,
+          mlAwayMoneyPct: scraped.mlAwayMoneyPct,
+          awayML: scraped.awayML,
+          homeML: scraped.homeML,
+        };
+        await insertGames([row]);
+        totalInserted++;
+        console.log(
+          `[VSiNAutoRefresh] Inserted NHL VSiN: ${scraped.awayTeam} @ ${scraped.homeTeam} (${dateStr})`
+        );
+      }
+    }
+  }
+
+  // ── Step 4: Insert schedule-only NHL games (no VSiN odds yet) ────────────
+  let scheduleInserted = 0;
+  for (const dateStr of allDates) {
+    if (dateStr < todayStr) continue;
+    const nhlGames = nhlGamesByDate.get(dateStr) ?? [];
+    if (nhlGames.length === 0) continue;
+    const existing = await listGamesByDate(dateStr, "NHL");
+
+    for (const nhlGame of nhlGames) {
+      const { awayDbSlug, homeDbSlug, startTimeEst, gameId } = nhlGame;
+
+      // Skip if already in DB by slug match
+      const bySlug = existing.find(
+        (e) => e.awayTeam === awayDbSlug && e.homeTeam === homeDbSlug
+      );
+      if (bySlug) continue;
+
+      // Skip if already in DB by game ID (stored in ncaaContestId for dedup)
+      const byGameId = await getGameByNcaaContestId(String(gameId));
+      if (byGameId) continue;
+
+      const row: InsertGame = {
+        fileId: 0,
+        gameDate: dateStr,
+        startTimeEst: startTimeEst ?? "TBD",
+        awayTeam: awayDbSlug,
+        homeTeam: homeDbSlug,
+        awayBookSpread: null,
+        homeBookSpread: null,
+        bookTotal: null,
+        awayModelSpread: null,
+        homeModelSpread: null,
+        modelTotal: null,
+        spreadEdge: null,
+        spreadDiff: null,
+        totalEdge: null,
+        totalDiff: null,
+        sport: "NHL",
+        gameType: "regular_season",
+        conference: null,
+        publishedToFeed: false,
+        rotNums: null,
+        sortOrder: 9999,
+        ncaaContestId: String(gameId), // store NHL game ID for dedup
+      };
+      await insertGames([row]);
+      scheduleInserted++;
+      console.log(
+        `[VSiNAutoRefresh] Inserted NHL schedule-only: ${awayDbSlug} @ ${homeDbSlug} (${dateStr})`
+      );
+    }
+  }
+
+  return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: relevantGames.length };
+}
+
+// ─── Main refresh orchestrator ─────────────────────────────────────────────────
 
 /**
  * Core refresh logic — fully idempotent upsert of all VSiN games (NCAAM + NBA),
@@ -669,9 +880,14 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     const allDates = dateRange(todayStr, rangeEnd);
 
     // Run NCAAM and NBA refreshes in sequence (share the same VSiN token)
-    const ncaamResult = await refreshNcaam(todayStr, allDates);
+     const ncaamResult = await refreshNcaam(todayStr, allDates);
     const nbaResult = await refreshNba(todayStr, allDates);
-
+    const nhlResult = await refreshNhl(todayStr, allDates);
+    console.log(
+      `[VSiNAutoRefresh] NHL refresh complete: updated=${nhlResult.updated} ` +
+      `inserted=${nhlResult.inserted} scheduleInserted=${nhlResult.scheduleInserted} ` +
+      `total=${nhlResult.total}`
+    );
     const result: RefreshResult = {
       refreshedAt: new Date().toISOString(),
       scoresRefreshedAt: lastScoresRefreshedAt,
@@ -683,6 +899,10 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
       nbaScheduleInserted: nbaResult.scheduleInserted,
       total: ncaamResult.total,
       nbaTotal: nbaResult.total,
+      nhlUpdated: nhlResult.updated,
+      nhlInserted: nhlResult.inserted,
+      nhlScheduleInserted: nhlResult.scheduleInserted,
+      nhlTotal: nhlResult.total,
       gameDate: todayStr,
     };
 
@@ -811,12 +1031,47 @@ async function refreshNbaScores(): Promise<void> {
   }
 }
 
+async function refreshNhlScores(): Promise<void> {
+  const todayStr = datePst();
+  try {
+    const liveGames = await fetchNhlLiveScores();
+    const existing = await listGamesByDate(todayStr, "NHL");
+    let updated = 0;
+    for (const liveGame of liveGames) {
+      // Match by away+home DB slugs
+      const dbGame = existing.find(
+        (g) => g.awayTeam === liveGame.awayDbSlug && g.homeTeam === liveGame.homeDbSlug
+      );
+      if (!dbGame) continue;
+      // Only update if status or scores have changed
+      const statusChanged = dbGame.gameStatus !== liveGame.gameState;
+      const scoresChanged =
+        dbGame.awayScore !== liveGame.awayScore ||
+        dbGame.homeScore !== liveGame.homeScore ||
+        dbGame.gameClock !== liveGame.gameClock;
+      if (!statusChanged && !scoresChanged) continue;
+      await updateNcaaStartTime(dbGame.id, {
+        startTimeEst: dbGame.startTimeEst,
+        ncaaContestId: dbGame.ncaaContestId ?? "",
+        gameStatus: liveGame.gameState,
+        awayScore: liveGame.awayScore,
+        homeScore: liveGame.homeScore,
+        gameClock: liveGame.gameClock,
+      });
+      updated++;
+    }
+    console.log(`[ScoreRefresh] Updated scores for ${updated} NHL games (${todayStr})`);
+  } catch (err) {
+    console.warn("[ScoreRefresh] NHL score refresh failed (non-fatal):", err);
+  }
+}
+
 /**
- * Runs both NCAAM and NBA score refreshes immediately.
+ * Runs NCAAM, NBA, and NHL score refreshes immediately.
  * Exported so it can be triggered manually from the admin panel.
  */
 export async function refreshAllScoresNow(): Promise<void> {
-  await Promise.allSettled([refreshNcaamScores(), refreshNbaScores()]);
+  await Promise.allSettled([refreshNcaamScores(), refreshNbaScores(), refreshNhlScores()]);
   lastScoresRefreshedAt = new Date().toISOString();
   // Patch scoresRefreshedAt into the last refresh result so the UI can show it
   if (lastRefreshResult) {
@@ -853,6 +1108,7 @@ export function startVsinAutoRefresh() {
     if (isWithinActiveHours()) {
       void refreshNcaamScores();
       void refreshNbaScores();
+      void refreshNhlScores();
     }
   }, SCORE_INTERVAL_MS);
 

@@ -1099,3 +1099,32 @@
 - [x] Extend getTeamColors() to handle sport="NHL"
 - [x] Seed all 32 NHL teams into the database (32/32 inserted, 0 errors)
 - [x] Run validation query confirming 32 rows, no nulls, correct conferences/divisions (13/13 checks passed)
+
+## NHL Data Pipeline (2026-03-12)
+- [x] Audit existing VSIN scraper (vsinScraper.ts) and NBA scraper to understand exact API endpoints
+- [x] Test NHL.com API endpoint (api-web.nhle.com/v1/schedule/today) for today's games
+- [x] Test VSIN NHL API endpoint for betting splits
+- [x] Build nhlVsinScraper.ts: authenticate, fetch NHL splits, parse into ScrapedOdds objects
+- [x] Build nhlSchedule.ts: fetch NHL.com API schedule, extract start times, map to DB slugs via nhl_teams table
+- [x] Add NHL game import to auto-refresh cron (same pattern as NCAAM/NBA)
+- [x] Add NHL tRPC procedures: games.listNhl, games.refreshNhl
+- [x] Write vitest tests for NHL scraper mapping
+
+## NHL Pipeline Full Test (2026-03-13)
+- [x] Audit NCAAM/NBA refresh job and DB helpers to mirror for NHL
+- [x] Finalize nhlVsinScraper.ts with full debug logging
+- [x] Build nhlRefreshJob.ts: VSiN scrape + NHL API schedule + map/match + DB upsert (integrated into vsinAutoRefresh.ts)
+- [x] Add NHL DB helpers: upsertNhlGame, getNhlGames, getNhlGamesByDate
+- [x] Add NHL tRPC procedures: nhl.listGames, nhl.refresh
+- [x] Wire NHL refresh into auto-refresh cron
+- [x] Run end-to-end pipeline test: scrape → map → store → verify DB rows (14/14 games, 14/14 odds, 14/14 splits)
+- [x] Validate mapping accuracy: every VSiN game matched to NHL API game (16/16 VSiN games processed)
+- [x] Write vitest tests for NHL pipeline
+
+## NHL tRPC Integration (2026-03-13)
+- [x] Fix triggerRefresh fallback object to include nhlUpdated/nhlInserted/nhlScheduleInserted/nhlTotal fields
+- [x] Add NHL case to isValidGame() in routers.ts (NHL_VALID_DB_SLUGS)
+- [x] Add NHL sport selector button to Publish Projections page
+- [x] Add NHL Refresh Stats section to Publish Projections stats bar
+- [x] Fix fetchNhlLiveScores() to use DST-aware ET date calculation (was hardcoded -5h, now uses Intl.DateTimeFormat)
+- [x] Live end-to-end validation: 13/13 HTML parse checks passed, 11/11 slug checks passed, 14/14 DB games verified

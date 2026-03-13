@@ -1292,7 +1292,7 @@ export default function PublishProjections() {
   const { appUser, isOwner, loading: authLoading } = useAppAuth();
   const [filter, setFilter] = useState<"all" | "regular_season" | "conference_tournament">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "upcoming" | "live" | "final" | "missing_odds" | "modeled" | "not_modeled">("all");
-  const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA">("NCAAM");
+  const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA" | "NHL">("NCAAM");
   const [gameDate, setGameDate] = useState(() => todayPst());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -1620,6 +1620,24 @@ export default function PublishProjections() {
             />
             NBA
           </button>
+          {/* NHL button */}
+          <button
+            onClick={() => setSelectedSport("NHL")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+            style={selectedSport === "NHL"
+              ? { background: "rgba(0,100,200,0.18)", color: "#0099e6", border: "1px solid rgba(0,100,200,0.5)" }
+              : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+            }
+          >
+            <img
+              src="https://assets.nhle.com/logos/nhl/svg/NHL_dark.svg"
+              alt="NHL"
+              width={16}
+              height={16}
+              style={{ opacity: selectedSport === "NHL" ? 1 : 0.5 }}
+            />
+            NHL
+          </button>
         </div>
 
         {/* Status filter tabs (NCAAM only) — two rows */}
@@ -1834,6 +1852,34 @@ export default function PublishProjections() {
                       )}
                     </div>
                   )}
+                </div>
+              </>
+            )}
+
+            {/* NHL Refresh Stats — only shown when NHL tab is active */}
+            {selectedSport === "NHL" && lastRefresh && (
+              <>
+                <div className="col-span-2" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+                <div className="col-span-2 flex items-center justify-between">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))", fontSize: '14px' }}>
+                      NHL Last Refresh Stats
+                    </span>
+                    <span className="font-mono" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px' }}>
+                      {lastRefresh.nhlTotal ?? 0} VSiN games processed
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+                    <span>
+                      <span className="font-bold" style={{ color: "rgba(57,255,20,0.8)" }}>{lastRefresh.nhlUpdated ?? 0}</span> updated
+                    </span>
+                    <span>
+                      <span className="font-bold" style={{ color: "rgba(57,255,20,0.8)" }}>{lastRefresh.nhlInserted ?? 0}</span> inserted
+                    </span>
+                    <span>
+                      <span className="font-bold" style={{ color: "rgba(100,200,255,0.8)" }}>{lastRefresh.nhlScheduleInserted ?? 0}</span> schedule-only
+                    </span>
+                  </div>
                 </div>
               </>
             )}
