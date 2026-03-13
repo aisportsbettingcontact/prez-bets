@@ -1221,3 +1221,18 @@
 - [x] Update metabetScraper: fetch both DraftKings and consensus providers per game
 - [x] Apply DK first, fall back to consensus per-market (spread, O/U, ML) when DK value is null
 - [x] Verify North Texas @ Tulsa resolves correctly with consensus fallback
+
+## Full Odds/Lines DB Population + Display Audit
+- [ ] Diagnose why awayBookSpread and bookTotal are null in DB after MetaBet refresh
+- [ ] Fix MetaBet refresh pipeline wiring so spread line and total write to DB correctly
+- [ ] Trigger live refresh and re-run DB audit to confirm 100% field completeness
+- [ ] Visual audit: mobile display of spread/ML/O/U odds for NCAAM, NBA, NHL
+- [ ] Visual audit: tablet display of spread/ML/O/U odds for NCAAM, NBA, NHL
+- [ ] Visual audit: desktop display of spread/ML/O/U odds for NCAAM, NBA, NHL
+- [ ] Fix any display gaps or truncation issues found across screen sizes
+
+- [ ] Audit vsin.com/odds/ page structure for NBA and NHL spread/total/ML lines with juice
+- [ ] Build vsin.com/odds/ scraper for NBA and NHL (spread number + juice, total + juice, ML)
+- [ ] Integrate new odds scraper into vsinAutoRefresh.ts (replace/supplement current NBA/NHL odds source)
+- [ ] Publish NBA March 13 games to feed after odds are populated
+- [ ] Verify NBA and NHL game cards display spread, total, and ML with correct odds on mobile and desktop

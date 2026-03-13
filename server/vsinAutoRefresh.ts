@@ -22,7 +22,7 @@ import { scrapeNhlVsinOdds, type NhlScrapedOdds } from "./nhlVsinScraper";
 import { fetchNcaaGames, buildStartTimeMap } from "./ncaaScoreboard";
 import { fetchNbaGamesForDate, buildNbaStartTimeMap, fetchNbaLiveScores } from "./nbaScoreboard";
 import { fetchNhlGamesForRange, buildNhlStartTimeMap, buildNhlGameMap, fetchNhlLiveScores, type NhlScheduleGame } from "./nhlSchedule";
-import { VALID_DB_SLUGS, BY_DB_SLUG } from "../shared/ncaamTeams";
+import { VALID_DB_SLUGS, BY_DB_SLUG, BY_VSIN_SLUG as NCAAM_BY_VSIN } from "../shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS } from "../shared/nbaTeams";
 import { NHL_VALID_DB_SLUGS, NHL_BY_ABBREV, NHL_BY_DB_SLUG } from "../shared/nhlTeams";
 import { NBA_BY_DB_SLUG } from "../shared/nbaTeams";
@@ -129,6 +129,7 @@ function dateRange(start: string, end: string): string[] {
 function normalizeToSlug(s: string): string {
   return s
     .toLowerCase()
+    .replace(/-/g, " ")  // treat hyphens as word separators (e.g. Texas-Arlington → texas_arlington)
     .replace(/[^a-z0-9\s]/g, "")
     .trim()
     .replace(/\s+/g, "_");
@@ -207,11 +208,42 @@ async function applyMetabetOdds(
       // NCAAM: match by city (school name) + nickname
       // MetaBet city = school name (e.g. "Tennessee"), name = nickname (e.g. "Volunteers")
       // DB slug is the vsinSlug with hyphens → underscores
-      // Try: normalize city to slug and look up by vsinSlug
-      const awayVsinSlug = normalizeToSlug(mb.awayCity).replace(/_/g, "-");
-      const homeVsinSlug = normalizeToSlug(mb.homeCity).replace(/_/g, "-");
-      // Look up in NCAAM registry by vsinSlug
-      const { BY_VSIN_SLUG: NCAAM_BY_VSIN } = await import("../shared/ncaamTeams");
+
+      // Explicit overrides for MetaBet city names that don't match our DB slugs or vsinSlugs
+      const NCAAM_CITY_OVERRIDES: Record<string, string> = {
+        "duquesne": "duquesne",
+        "south_carolina_state": "s_carolina_st",
+        "texas_arlington": "texas_arlington",
+        "cal_state_northridge": "csu_northridge",
+        "kent_state": "kent",
+        "cal_state_fullerton": "csu_fullerton",
+        "csu_fullerton": "csu_fullerton",
+        "uc_irvine": "uc_irvine",
+        "utah_valley": "utah_valley",
+        "hawaii": "hawaii",
+        "vcu": "va_commonwealth",
+        "virginia_commonwealth": "va_commonwealth",
+        "florida_am": "florida_a_and_m",
+        "florida_a_m": "florida_a_and_m",
+        "st_johns": "st_johns",
+        "saint_johns": "st_johns",
+        "uc_santa_barbara": "uc_santa_barbara",
+        "long_island": "liu",
+        "liu": "liu",
+        "north_carolina_at": "nc_a_and_t",
+        "nc_at": "nc_a_and_t",
+        "texas_am_corpus_christi": "tx_am_corpus_christi",
+        "texas_am_cc": "tx_am_corpus_christi",
+      };
+
+      const resolveNcaamSlug = (city: string): string => {
+        const normalized = normalizeToSlug(city);
+        return NCAAM_CITY_OVERRIDES[normalized] ?? normalized;
+      };
+
+      const awayVsinSlug = resolveNcaamSlug(mb.awayCity).replace(/_/g, "-");
+      const homeVsinSlug = resolveNcaamSlug(mb.homeCity).replace(/_/g, "-");
+      // Look up in NCAAM registry by vsinSlug (imported at module level for reliability)
       const awayTeam = NCAAM_BY_VSIN.get(awayVsinSlug);
       const homeTeam = NCAAM_BY_VSIN.get(homeVsinSlug);
       if (awayTeam && homeTeam) {
@@ -219,10 +251,18 @@ async function applyMetabetOdds(
           e => e.awayTeam === awayTeam.dbSlug && e.homeTeam === homeTeam.dbSlug
         );
       }
-      // Fallback: fuzzy match by normalized city slug against DB slug
+      // Fallback 1: try direct DB slug match using override-resolved slug
       if (!dbGame) {
-        const awayDbSlug = normalizeToSlug(mb.awayCity);
-        const homeDbSlug = normalizeToSlug(mb.homeCity);
+        const awayDbSlug = resolveNcaamSlug(mb.awayCity);
+        const homeDbSlug = resolveNcaamSlug(mb.homeCity);
+        dbGame = existing.find(
+          e => e.awayTeam === awayDbSlug && e.homeTeam === homeDbSlug
+        );
+      }
+      // Fallback 2: fuzzy prefix match
+      if (!dbGame) {
+        const awayDbSlug = resolveNcaamSlug(mb.awayCity);
+        const homeDbSlug = resolveNcaamSlug(mb.homeCity);
         dbGame = existing.find(
           e => e.awayTeam.startsWith(awayDbSlug.split("_")[0]) &&
                e.homeTeam.startsWith(homeDbSlug.split("_")[0])
@@ -239,10 +279,22 @@ async function applyMetabetOdds(
       continue;
     }
 
+    // Write spread/total numbers from MetaBet when DB fields are null (VSiN scraper missed them)
+    // Always write the odds (juice) fields — these always come from MetaBet DraftKings
     await updateBookOdds(dbGame.id, {
-      awayBookSpread: null,   // don't overwrite VSiN spread values
-      homeBookSpread: null,
-      bookTotal: null,
+      // Only fill spread/total numbers if currently null in DB (don't overwrite VSiN data)
+      ...(dbGame.awayBookSpread == null && mb.awaySpread != null ? {
+        awayBookSpread: mb.awaySpread,
+        homeBookSpread: mb.homeSpread,
+      } : {}),
+      ...(dbGame.bookTotal == null && mb.total != null ? {
+        bookTotal: mb.total,
+      } : {}),
+      // Always update ML from MetaBet if DB is null
+      ...(dbGame.awayML == null && mb.awayML != null ? {
+        awayML: mb.awayML,
+        homeML: mb.homeML,
+      } : {}),
       awaySpreadOdds: mb.awaySpreadOdds,
       homeSpreadOdds: mb.homeSpreadOdds,
       overOdds: mb.overOdds,

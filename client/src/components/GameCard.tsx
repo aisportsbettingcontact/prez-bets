@@ -1126,6 +1126,29 @@ function DesktopMergedPanel({
 }
 
 
+// ── BookOddsCell ─────────────────────────────────────────────────────────────
+// Two-line cell for mobile BOOK column: spread/total on line 1, odds on line 2.
+// When oddsStr is null/empty, renders a single centered line (no second line).
+function BookOddsCell({ spreadStr, oddsStr, style }: {
+  spreadStr: string;
+  oddsStr: string | null | undefined;
+  style: React.CSSProperties;
+}) {
+  if (!oddsStr) {
+    return (
+      <div className="flex items-center justify-center">
+        <span className="tabular-nums" style={style}>{spreadStr}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center justify-center" style={{ gap: 0, lineHeight: 1.2 }}>
+      <span className="tabular-nums" style={{ ...style, fontSize: '10px', fontWeight: style.fontWeight }}>{spreadStr}</span>
+      <span className="tabular-nums" style={{ ...style, fontSize: '8.5px', fontWeight: 400, opacity: 0.85 }}>({oddsStr})</span>
+    </div>
+  );
+}
+
 // ── OddsLinesPanel ───────────────────────────────────────────────────────────
 // IMPORTANT: This MUST be defined at module level (not inside GameCard) to avoid
 // React treating it as a new component type on every render, which causes an
@@ -1138,6 +1161,11 @@ interface OddsLinesPanelProps {
   bookTotal: number;
   awayML: string;
   homeML: string;
+  // Book odds (for parenthetical display, e.g. "+6.5 (-110)")
+  awaySpreadOdds?: string | null;
+  homeSpreadOdds?: string | null;
+  overOdds?: string | null;
+  underOdds?: string | null;
   // Model values
   awayModelSpread: number;
   homeModelSpread: number;
@@ -1167,6 +1195,10 @@ function OddsLinesPanel({
   bookTotal: bkTotal,
   awayML: awayMl,
   homeML: homeMl,
+  awaySpreadOdds,
+  homeSpreadOdds,
+  overOdds,
+  underOdds,
   awayModelSpread: mdlAwaySpread,
   homeModelSpread: mdlHomeSpread,
   modelTotal: mdlTotal,
@@ -1190,11 +1222,20 @@ function OddsLinesPanel({
   const mdlHomeMl = modelHomeML ?? '—';
   const hasModelData = !isNaN(mdlAwaySpread) || !isNaN(mdlTotal) || mdlAwayMl !== '—';
 
-  // Book values
-  const bkAwaySpread  = !isNaN(awaySpread) ? spreadSign(awaySpread) : '—';
-  const bkHomeSpread  = !isNaN(homeSpread) ? spreadSign(homeSpread) : '—';
-  const bkOverTotal   = !isNaN(bkTotal) ? String(bkTotal) : '—';
-  const bkUnderTotal  = !isNaN(bkTotal) ? String(bkTotal) : '—';
+  // Book values — include odds in parentheses when available, e.g. "+6.5 (-110)"
+  const bkTotalStr    = !isNaN(bkTotal) ? String(bkTotal) : '—';
+  const bkAwaySpread  = !isNaN(awaySpread)
+    ? (awaySpreadOdds ? `${spreadSign(awaySpread)} (${awaySpreadOdds})` : spreadSign(awaySpread))
+    : '—';
+  const bkHomeSpread  = !isNaN(homeSpread)
+    ? (homeSpreadOdds ? `${spreadSign(homeSpread)} (${homeSpreadOdds})` : spreadSign(homeSpread))
+    : '—';
+  const bkOverTotal   = !isNaN(bkTotal)
+    ? (overOdds  ? `o${bkTotalStr} (${overOdds})`  : `o${bkTotalStr}`)
+    : 'o—';
+  const bkUnderTotal  = !isNaN(bkTotal)
+    ? (underOdds ? `u${bkTotalStr} (${underOdds})` : `u${bkTotalStr}`)
+    : 'u—';
 
   // Model values
   const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread) ? spreadSign(mdlAwaySpread) : '—';
@@ -1228,12 +1269,13 @@ function OddsLinesPanel({
 
   // Base cell styles — book values are bolder when model is off (primary data), lighter when model is on (secondary)
   // Font sizes scale with viewport: clamp(min, preferred_vw, max)
-  const cellFontSize = 'clamp(11px, 1.2vw, 17px)';
-  const bookCell      = { fontSize: cellFontSize, fontWeight: showModel ? 400 : 600, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
+  // Use smaller font when showing odds in parentheses (longer strings like "+6.5 (-110)")
+  const cellFontSize = 'clamp(9.5px, 1.0vw, 13px)';
+  const bookCell      = { fontSize: cellFontSize, fontWeight: showModel ? 400 : 600, color: '#E8E8E8', letterSpacing: '0.01em', textAlign: 'center' as const, lineHeight: '1.3', whiteSpace: 'nowrap' as const } as React.CSSProperties;
   // Model cells: neon green only when this specific cell is the edge side; otherwise bold white
-  const modelGreen    = { fontSize: cellFontSize, fontWeight: 700, color: '#39FF14', letterSpacing: '0.02em' } as React.CSSProperties;
-  const modelWhite    = { fontSize: cellFontSize, fontWeight: 700, color: '#E8E8E8', letterSpacing: '0.02em' } as React.CSSProperties;
-  const dimCell       = { fontSize: cellFontSize, fontWeight: 700, color: 'rgba(57,255,20,0.28)', letterSpacing: '0.02em' } as React.CSSProperties;
+  const modelGreen    = { fontSize: cellFontSize, fontWeight: 700, color: '#39FF14', letterSpacing: '0.01em', textAlign: 'center' as const } as React.CSSProperties;
+  const modelWhite    = { fontSize: cellFontSize, fontWeight: 700, color: '#E8E8E8', letterSpacing: '0.01em', textAlign: 'center' as const } as React.CSSProperties;
+  const dimCell       = { fontSize: cellFontSize, fontWeight: 700, color: 'rgba(57,255,20,0.28)', letterSpacing: '0.01em', textAlign: 'center' as const } as React.CSSProperties;
 
   // Per-cell model style helpers
   const awaySpreadModelStyle = showModel ? (hasSpreadEdge && spreadEdgeIsAway  ? modelGreen : modelWhite) : dimCell;
@@ -2062,6 +2104,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       bookTotal={bookTotal}
                       awayML={game.awayML ?? '—'}
                       homeML={game.homeML ?? '—'}
+                      awaySpreadOdds={game.awaySpreadOdds ?? null}
+                      homeSpreadOdds={game.homeSpreadOdds ?? null}
+                      overOdds={game.overOdds ?? null}
+                      underOdds={game.underOdds ?? null}
                       awayModelSpread={awayModelSpread}
                       homeModelSpread={homeModelSpread}
                       modelTotal={modelTotal}
@@ -2539,11 +2585,27 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 {/* Away row — height: 44px shared with frozen panel away row */}
                 <div className="grid grid-cols-3" style={{ height: '44px', alignItems: 'center' }}>
                   <div className="grid grid-cols-2">
-                    <span className="text-center tabular-nums" style={bookStyle(awaySpreadIsEdge)}>{bkAwaySpreadStr}</span>
+                    {/* BOOK spread: two lines when odds available */}
+                    {mbAwaySpreadOdds ? (
+                      <div className="flex flex-col items-center justify-center" style={{ lineHeight: 1.2 }}>
+                        <span className="tabular-nums" style={{ ...bookStyle(awaySpreadIsEdge), fontSize: '10px' }}>{!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}</span>
+                        <span className="tabular-nums" style={{ ...bookStyle(awaySpreadIsEdge), fontSize: '8.5px', fontWeight: 400, opacity: 0.85 }}>({mbAwaySpreadOdds})</span>
+                      </div>
+                    ) : (
+                      <span className="text-center tabular-nums" style={bookStyle(awaySpreadIsEdge)}>{bkAwaySpreadStr}</span>
+                    )}
                     <span className="text-center tabular-nums" style={modelStyle(awaySpreadIsEdge)}>{mdlAwaySpreadStr}</span>
                   </div>
                   <div className="grid grid-cols-2">
-                    <span className="text-center tabular-nums" style={bookStyle(overTotalIsEdge)}>{bkOverStr}</span>
+                    {/* BOOK total: two lines when odds available */}
+                    {mbOverOdds ? (
+                      <div className="flex flex-col items-center justify-center" style={{ lineHeight: 1.2 }}>
+                        <span className="tabular-nums" style={{ ...bookStyle(overTotalIsEdge), fontSize: '10px' }}>{!isNaN(bookTotal) ? `o${bkTotalStr}` : 'o—'}</span>
+                        <span className="tabular-nums" style={{ ...bookStyle(overTotalIsEdge), fontSize: '8.5px', fontWeight: 400, opacity: 0.85 }}>({mbOverOdds})</span>
+                      </div>
+                    ) : (
+                      <span className="text-center tabular-nums" style={bookStyle(overTotalIsEdge)}>{bkOverStr}</span>
+                    )}
                     <span className="text-center tabular-nums" style={modelStyle(overTotalIsEdge)}>o{mdlTotalStr}</span>
                   </div>
                   <div className="grid grid-cols-2">
@@ -2556,11 +2618,27 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 {/* Home row — height: 44px shared with frozen panel home row */}
                 <div className="grid grid-cols-3" style={{ height: '44px', alignItems: 'center' }}>
                   <div className="grid grid-cols-2">
-                    <span className="text-center tabular-nums" style={bookStyle(homeSpreadIsEdge)}>{bkHomeSpreadStr}</span>
+                    {/* BOOK spread: two lines when odds available */}
+                    {mbHomeSpreadOdds ? (
+                      <div className="flex flex-col items-center justify-center" style={{ lineHeight: 1.2 }}>
+                        <span className="tabular-nums" style={{ ...bookStyle(homeSpreadIsEdge), fontSize: '10px' }}>{!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—'}</span>
+                        <span className="tabular-nums" style={{ ...bookStyle(homeSpreadIsEdge), fontSize: '8.5px', fontWeight: 400, opacity: 0.85 }}>({mbHomeSpreadOdds})</span>
+                      </div>
+                    ) : (
+                      <span className="text-center tabular-nums" style={bookStyle(homeSpreadIsEdge)}>{bkHomeSpreadStr}</span>
+                    )}
                     <span className="text-center tabular-nums" style={modelStyle(homeSpreadIsEdge)}>{mdlHomeSpreadStr}</span>
                   </div>
                   <div className="grid grid-cols-2">
-                    <span className="text-center tabular-nums" style={bookStyle(underTotalIsEdge)}>{bkUnderStr}</span>
+                    {/* BOOK total: two lines when odds available */}
+                    {mbUnderOdds ? (
+                      <div className="flex flex-col items-center justify-center" style={{ lineHeight: 1.2 }}>
+                        <span className="tabular-nums" style={{ ...bookStyle(underTotalIsEdge), fontSize: '10px' }}>{!isNaN(bookTotal) ? `u${bkTotalStr}` : 'u—'}</span>
+                        <span className="tabular-nums" style={{ ...bookStyle(underTotalIsEdge), fontSize: '8.5px', fontWeight: 400, opacity: 0.85 }}>({mbUnderOdds})</span>
+                      </div>
+                    ) : (
+                      <span className="text-center tabular-nums" style={bookStyle(underTotalIsEdge)}>{bkUnderStr}</span>
+                    )}
                     <span className="text-center tabular-nums" style={modelStyle(underTotalIsEdge)}>u{mdlTotalStr}</span>
                   </div>
                   <div className="grid grid-cols-2">

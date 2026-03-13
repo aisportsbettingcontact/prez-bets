@@ -440,9 +440,9 @@ export async function updateGameProjections(
 export async function updateBookOdds(
   id: number,
   data: {
-    awayBookSpread: number | null;
-    homeBookSpread: number | null;
-    bookTotal: number | null;
+    awayBookSpread?: number | null;
+    homeBookSpread?: number | null;
+    bookTotal?: number | null;
     sortOrder?: number;
     startTimeEst?: string;
     // Betting splits (NCAAM: 4 fields; NBA: 6 fields + ML odds)
@@ -464,11 +464,10 @@ export async function updateBookOdds(
   const db = await getDb();
   if (!db) return;
   const { eq } = await import("drizzle-orm");
-  const updateData: Record<string, unknown> = {
-    awayBookSpread: data.awayBookSpread !== null ? String(data.awayBookSpread) : null,
-    homeBookSpread: data.homeBookSpread !== null ? String(data.homeBookSpread) : null,
-    bookTotal: data.bookTotal !== null ? String(data.bookTotal) : null,
-  };
+  const updateData: Record<string, unknown> = {};
+  if (data.awayBookSpread !== undefined) updateData.awayBookSpread = data.awayBookSpread !== null ? String(data.awayBookSpread) : null;
+  if (data.homeBookSpread !== undefined) updateData.homeBookSpread = data.homeBookSpread !== null ? String(data.homeBookSpread) : null;
+  if (data.bookTotal !== undefined) updateData.bookTotal = data.bookTotal !== null ? String(data.bookTotal) : null;
   if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
   if (data.startTimeEst !== undefined) updateData.startTimeEst = data.startTimeEst;
   // Splits — only write non-undefined values (null = explicitly clear, undefined = skip)
