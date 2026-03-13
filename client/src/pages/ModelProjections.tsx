@@ -418,18 +418,22 @@ export default function ModelProjections() {
   const { data: lastRefresh } = trpc.games.lastRefresh.useQuery(undefined, { refetchInterval: 60_000 });
 
     // ── Favorites ──────────────────────────────────────────────────────────────
-  // NOTE: enabled must use Boolean(appUser) — NOT isAuthenticated (Manus OAuth).
+  // NOTE: enabled must use Boolean(appUser) AND !appAuthLoading — NOT isAuthenticated (Manus OAuth).
+  // Wait for appUsers.me to resolve before firing favorites queries to avoid race condition
+  // where the initial batch fires before the app_session cookie state is known.
   // Custom-auth users always have isAuthenticated=false, so the query would never fire.
-  const isAppAuthedForFav = Boolean(appUser);
+  const isAppAuthedForFav = !appAuthLoading && Boolean(appUser);
   const { data: favData } = trpc.favorites.getMyFavorites.useQuery(undefined, {
     enabled: isAppAuthedForFav,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   // Favorites with game dates — for the Favorites tab and 11:00 UTC expiry
   const { data: favWithDatesData } = trpc.favorites.getMyFavoritesWithDates.useQuery(undefined, {
     enabled: isAppAuthedForFav,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const [optimisticFavIds, setOptimisticFavIds] = useState<Set<number>>(new Set());

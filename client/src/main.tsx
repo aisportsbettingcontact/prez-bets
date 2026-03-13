@@ -25,10 +25,30 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   window.location.href = getLoginUrl();
 };
 
+// Procedure paths that are optional / auth-gated client-side — suppress UNAUTHORIZED noise for these.
+// They use enabled:false guards but may fire once on initial render before auth state resolves.
+// tRPC query keys are arrays like ["trpc", ["favorites", "getMyFavorites"], {...}]
+const OPTIONAL_AUTH_PATHS = new Set([
+  "favorites,getMyFavorites",
+  "favorites,getMyFavoritesWithDates",
+]);
+
+function isOptionalAuthQuery(queryKey: readonly unknown[]): boolean {
+  // tRPC v11 key shape: ["trpc", ["procedure", "name"], inputHash]
+  const pathPart = queryKey[1];
+  if (Array.isArray(pathPart)) return OPTIONAL_AUTH_PATHS.has(pathPart.join(","));
+  return false;
+}
+
 queryClient.getQueryCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.query.state.error;
     redirectToLoginIfUnauthorized(error);
+    // Suppress UNAUTHORIZED console errors for optional auth-gated queries to reduce noise.
+    // These queries are already guarded with enabled:!loading && Boolean(appUser) and will
+    // silently not fire once auth state resolves.
+    const isUnauthorized = error instanceof TRPCClientError && error.message === UNAUTHED_ERR_MSG;
+    if (isOptionalAuthQuery(event.query.queryKey) && isUnauthorized) return; // suppress
     console.error("[API Query Error]", error);
   }
 });

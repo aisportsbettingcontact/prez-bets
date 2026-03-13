@@ -1148,3 +1148,10 @@
 - [x] Advanced debug audit: 14/14 games with spread, total, ML, published — 0 missing fields
 - [x] Mobile tab filter: removed NHL gate so mobile tab bar shows for NHL too
 - [x] TypeScript: 0 errors; 185/186 tests passing (1 pre-existing KenPom env failure)
+
+## Auth Error Fix (2026-03-13)
+- [x] Diagnose "Not authenticated" TRPCClientError: race condition in initial tRPC batch — favorites.getMyFavorites fires before appUsers.me resolves, no app_session cookie yet
+- [x] Fix ModelProjections.tsx: change isAppAuthedForFav to !appAuthLoading && Boolean(appUser) so favorites queries wait for auth state to resolve
+- [x] Fix ModelProjections.tsx: add retry:false to favorites queries to prevent retry loops
+- [x] Fix main.tsx: suppress UNAUTHORIZED console errors for optional auth-gated queries (favorites) to eliminate noise
+- [x] TypeScript: 0 errors; 185/186 tests passing (1 pre-existing KenPom env failure)
