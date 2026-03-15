@@ -940,120 +940,57 @@ function DesktopMergedPanel({
           SPREAD/ML: logo immediately left of value in BOTH BOOK and MODEL cells.
           TOTAL:     "OVER"/"UNDER" text only — no o{}/u{} prefix, no logos.
         */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 6px', marginBottom: 8, alignItems: 'center' }}>
+        {/*
+          OddsCell pill grid — 2 columns (BOOK | MODEL), 2 rows (away/over | home/under).
+          BOOK pills: rounded border, bold main value, smaller juice below, optional open line above.
+          MODEL pills: transparent bg, neon green when edge, white otherwise.
+          isEdge is detected by comparing awayModelStyle / homeModelStyle to the modelGreen object.
+          LOG: [OddsCell] logs are emitted in dev whenever isBest or isEdge is true.
+        */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 8px', marginBottom: 8, alignItems: 'start' }}>
           {/* Header row */}
           <span className="text-center" style={colHdrStyle('#FFFFFF')}>BOOK</span>
           <span className="text-center" style={colHdrStyle('#39FF14')}>MODEL</span>
 
-          {/* Away / OVER — BOOK cell */}
-          {totalLine ? (
-            /* TOTAL: "OVER" label + book over total value, with optional OPEN sub-row */
-            <div className="flex flex-col items-center justify-center" style={{ gap: 1 }}>
-              {openAwayBook && (
-                <span className="flex items-center justify-center gap-1" style={{ fontSize: 'clamp(8px,0.65vw,10px)', fontWeight: 500, color: 'rgba(255,255,255,0.38)', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-                  <span style={{ fontSize: 'clamp(7px,0.58vw,9px)', fontWeight: 600, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>OPEN</span>
-                  <span className="tabular-nums">{openAwayBook}</span>
-                </span>
-              )}
-              <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
-                <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0 }}>OVER</span>
-                <span className="tabular-nums">{awayBook}</span>
-              </span>
-            </div>
-          ) : (
-            /* SPREAD/ML: logo + abbreviation immediately left of book value, with optional OPEN sub-row */
-            <div className="flex flex-col items-center justify-center" style={{ gap: 1 }}>
-              {openAwayBook && (
-                <span className="flex items-center justify-center gap-1" style={{ fontSize: 'clamp(8px,0.65vw,10px)', fontWeight: 500, color: 'rgba(255,255,255,0.38)', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-                  <span style={{ fontSize: 'clamp(7px,0.58vw,9px)', fontWeight: 600, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>OPEN</span>
-                  <span className="tabular-nums">{openAwayBook}</span>
-                </span>
-              )}
-              <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
-                {sectionAwayLogoUrl && (
-                  <img src={sectionAwayLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
-                )}
-                {sectionAwayAbbr && (
-                  <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionAwayAbbr}</span>
-                )}
-                <span className="tabular-nums">{awayBook}</span>
-              </span>
-            </div>
-          )}
-          {/* Away — MODEL cell */}
-          {totalLine ? (
-            /* TOTAL: "OVER" label + model over total value */
-            <span className="flex items-center justify-center gap-1" style={{ ...awayModelStyle, fontSize: valFontSize }}>
-              <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0 }}>OVER</span>
-              <span className="tabular-nums">{awayModel}</span>
-            </span>
-          ) : (
-            /* SPREAD/ML: logo + abbreviation immediately left of model value */
-            <span className="flex items-center justify-center gap-1" style={{ ...awayModelStyle, fontSize: valFontSize }}>
-              {sectionAwayLogoUrl && (
-                <img src={sectionAwayLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
-              )}
-              {sectionAwayAbbr && (
-                <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionAwayAbbr}</span>
-              )}
-              <span className="tabular-nums">{awayModel}</span>
-            </span>
-          )}
+          {/* Away / OVER — BOOK pill */}
+          <OddsCell
+            mainValue={totalLine ? `o${awayBook}` : awayBook}
+            juiceStr={null}
+            isBook={true}
+            openLine={openAwayBook}
+            size="md"
+            wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+          />
 
-          {/* Home / UNDER — BOOK cell */}
-          {totalLine ? (
-            /* TOTAL: "UNDER" label + book under total value, with optional OPEN sub-row */
-            <div className="flex flex-col items-center justify-center" style={{ gap: 1 }}>
-              {openHomeBook && (
-                <span className="flex items-center justify-center gap-1" style={{ fontSize: 'clamp(8px,0.65vw,10px)', fontWeight: 500, color: 'rgba(255,255,255,0.38)', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-                  <span style={{ fontSize: 'clamp(7px,0.58vw,9px)', fontWeight: 600, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>OPEN</span>
-                  <span className="tabular-nums">{openHomeBook}</span>
-                </span>
-              )}
-              <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
-                <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0 }}>UNDER</span>
-                <span className="tabular-nums">{homeBook}</span>
-              </span>
-            </div>
-          ) : (
-            /* SPREAD/ML: logo + abbreviation immediately left of book value, with optional OPEN sub-row */
-            <div className="flex flex-col items-center justify-center" style={{ gap: 1 }}>
-              {openHomeBook && (
-                <span className="flex items-center justify-center gap-1" style={{ fontSize: 'clamp(8px,0.65vw,10px)', fontWeight: 500, color: 'rgba(255,255,255,0.38)', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-                  <span style={{ fontSize: 'clamp(7px,0.58vw,9px)', fontWeight: 600, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>OPEN</span>
-                  <span className="tabular-nums">{openHomeBook}</span>
-                </span>
-              )}
-              <span className="flex items-center justify-center gap-1" style={{ ...bookCell, fontSize: valFontSize }}>
-                {sectionHomeLogoUrl && (
-                  <img src={sectionHomeLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
-                )}
-                {sectionHomeAbbr && (
-                  <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionHomeAbbr}</span>
-                )}
-                <span className="tabular-nums">{homeBook}</span>
-              </span>
-            </div>
-          )}
-          {/* Home — MODEL cell */}
-          {totalLine ? (
-            /* TOTAL: "UNDER" label + model under total value */
-            <span className="flex items-center justify-center gap-1" style={{ ...homeModelStyle, fontSize: valFontSize }}>
-              <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0 }}>UNDER</span>
-              <span className="tabular-nums">{homeModel}</span>
-            </span>
-          ) : (
-            /* SPREAD/ML: logo + abbreviation immediately left of model value */
-            <span className="flex items-center justify-center gap-1" style={{ ...homeModelStyle, fontSize: valFontSize }}>
-              {sectionHomeLogoUrl && (
-                <img src={sectionHomeLogoUrl} alt="" style={{ width: 'clamp(13px,1.1vw,18px)', height: 'clamp(13px,1.1vw,18px)', objectFit: 'contain', flexShrink: 0, mixBlendMode: 'screen' }} />
-              )}
-              {sectionHomeAbbr && (
-                <span style={{ fontSize: ABBR_FS, fontWeight: 600, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.06em', flexShrink: 0, textTransform: 'uppercase' }}>{sectionHomeAbbr}</span>
-              )}
-              <span className="tabular-nums">{homeModel}</span>
-            </span>
-          )}
+          {/* Away / OVER — MODEL pill */}
+          <OddsCell
+            mainValue={totalLine ? `o${awayModel}` : awayModel}
+            juiceStr={null}
+            isBook={false}
+            isEdge={awayModelStyle === modelGreen}
+            size="md"
+            wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+          />
+
+          {/* Home / UNDER — BOOK pill */}
+          <OddsCell
+            mainValue={totalLine ? `u${homeBook}` : homeBook}
+            juiceStr={null}
+            isBook={true}
+            openLine={openHomeBook}
+            size="md"
+            wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+          />
+
+          {/* Home / UNDER — MODEL pill */}
+          <OddsCell
+            mainValue={totalLine ? `u${homeModel}` : homeModel}
+            juiceStr={null}
+            isBook={false}
+            isEdge={homeModelStyle === modelGreen}
+            size="md"
+            wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+          />
         </div>
 
         {/* ── Thin separator ── */}
@@ -1205,7 +1142,213 @@ function DesktopMergedPanel({
 }
 
 
-// ── BookOddsCell ─────────────────────────────────────────────────────────────
+// ── OddsCell ─────────────────────────────────────────────────────────────────
+//
+// Pill-style odds cell inspired by Action Network's book-cell design.
+//
+// Visual spec:
+//   ┌─────────────────────────────────────────────────────────────────┐
+//   │  [🔖 orange bookmark badge — top-left corner, only when best]  │
+//   │                                                                 │
+//   │              +5.5          ← mainValue (bold, large)           │
+//   │              -115          ← juiceStr  (muted, smaller)        │
+//   │                                                                 │
+//   └─────────────────────────────────────────────────────────────────┘
+//
+// Props:
+//   mainValue  — the primary line value, e.g. "+5.5", "o139.5", "-148"
+//   juiceStr   — the odds/juice, e.g. "-115", "-110" (null = omit second line)
+//   isBest     — when true, renders the orange bookmark badge (top-left)
+//   isEdge     — when true, applies neon green highlight to the pill
+//   isBook     — when true, renders book styling (light bg pill); else model styling (transparent)
+//   openLine   — optional open line string shown above pill in muted text
+//   size       — 'sm' (mobile) | 'md' (tablet/desktop)
+//
+// Sizing strategy:
+//   All font sizes use CSS clamp() so the pill scales fluidly from 320px to 1920px viewport.
+//   The pill container uses percentage-based padding so it never overflows its grid cell.
+//
+// Debug logging:
+//   In development, logs [OddsCell] mainValue + juiceStr + isBest + isEdge to console
+//   whenever isBest or isEdge is true (to avoid noise for normal cells).
+
+interface OddsCellProps {
+  mainValue: string;
+  juiceStr?: string | null;
+  isBest?: boolean;
+  isEdge?: boolean;
+  isBook?: boolean;
+  openLine?: string | null;
+  size?: 'sm' | 'md';
+  /** Optional additional style overrides for the outer wrapper */
+  wrapperStyle?: React.CSSProperties;
+}
+
+function OddsCell({
+  mainValue,
+  juiceStr,
+  isBest = false,
+  isEdge = false,
+  isBook = true,
+  openLine,
+  size = 'md',
+  wrapperStyle,
+}: OddsCellProps) {
+  // ── Debug logging ──────────────────────────────────────────────────────────
+  if (process.env.NODE_ENV === 'development' && (isBest || isEdge)) {
+    console.log(
+      `%c[OddsCell] ${mainValue} ${juiceStr ?? ''} | isBest=${isBest} isEdge=${isEdge} isBook=${isBook} size=${size}`,
+      `color:${isEdge ? '#39FF14' : '#F5A623'};font-size:9px`
+    );
+  }
+
+  // ── Sizing ─────────────────────────────────────────────────────────────────
+  // sm (mobile): mainValue 11-13px, juice 9-10px, pill padding 3px 6px
+  // md (desktop): mainValue 13-17px, juice 10-12px, pill padding 4px 8px
+  const mainFs = size === 'sm'
+    ? 'clamp(11px, 2.8vw, 13px)'
+    : 'clamp(13px, 1.1vw, 17px)';
+  const juiceFs = size === 'sm'
+    ? 'clamp(9px, 2.2vw, 10.5px)'
+    : 'clamp(10px, 0.85vw, 12px)';
+  const openFs = size === 'sm'
+    ? 'clamp(7.5px, 1.8vw, 9px)'
+    : 'clamp(8px, 0.65vw, 10px)';
+  const pillPadding = size === 'sm' ? '3px 6px' : '4px 8px';
+  const borderRadius = size === 'sm' ? '8px' : '10px';
+
+  // ── Colors ─────────────────────────────────────────────────────────────────
+  // Book pill: light semi-transparent background, dark text on light → use white text on dark bg
+  // Model pill: transparent bg, colored text
+  // Edge: neon green border + text
+  const pillBg = isBook
+    ? (isEdge
+        ? 'rgba(57,255,20,0.10)'
+        : 'rgba(255,255,255,0.07)')
+    : 'transparent';
+  const pillBorder = isBook
+    ? (isEdge
+        ? '1px solid rgba(57,255,20,0.45)'
+        : '1px solid rgba(255,255,255,0.13)')
+    : (isEdge
+        ? '1px solid rgba(57,255,20,0.30)'
+        : '1px solid transparent');
+  const mainColor = isEdge ? '#39FF14' : (isBook ? '#FFFFFF' : '#FFFFFF');
+  const mainWeight = isEdge ? 800 : (isBook ? 700 : 700);
+  const juiceColor = isEdge ? 'rgba(57,255,20,0.70)' : 'rgba(200,200,200,0.60)';
+
+  return (
+    <div
+      className="flex flex-col items-center justify-center"
+      style={{ gap: 1, ...wrapperStyle }}
+    >
+      {/* Open line — shown above the pill in muted text */}
+      {openLine && (
+        <span
+          className="tabular-nums"
+          style={{
+            fontSize: openFs,
+            fontWeight: 500,
+            color: 'rgba(255,255,255,0.30)',
+            letterSpacing: '0.03em',
+            whiteSpace: 'nowrap',
+            lineHeight: 1,
+            marginBottom: 1,
+          }}
+        >
+          o:{openLine}
+        </span>
+      )}
+
+      {/* Pill container */}
+      <div
+        style={{
+          position: 'relative',
+          display: 'inline-flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: pillPadding,
+          borderRadius,
+          background: pillBg,
+          border: pillBorder,
+          minWidth: size === 'sm' ? 38 : 48,
+          gap: 1,
+          transition: 'background 200ms, border 200ms',
+        }}
+      >
+        {/* Orange bookmark badge — top-left corner */}
+        {isBest && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: size === 'sm' ? 12 : 15,
+              height: size === 'sm' ? 16 : 20,
+              overflow: 'hidden',
+              borderTopLeftRadius: borderRadius,
+            }}
+            title="Best available odds"
+          >
+            {/* Bookmark ribbon SVG — orange fill, star icon */}
+            <svg
+              viewBox="0 0 15 20"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              style={{ width: '100%', height: '100%' }}
+            >
+              <path d="M0 0 H15 V20 L7.5 14 L0 20 Z" fill="#F5A623" />
+              <text
+                x="7.5"
+                y="10"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize="7"
+                fill="white"
+                fontWeight="bold"
+              >★</text>
+            </svg>
+          </div>
+        )}
+
+        {/* Main value — bold, large */}
+        <span
+          className="tabular-nums"
+          style={{
+            fontSize: mainFs,
+            fontWeight: mainWeight,
+            color: mainColor,
+            letterSpacing: '0.01em',
+            lineHeight: 1.1,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {mainValue}
+        </span>
+
+        {/* Juice/odds — smaller, muted */}
+        {juiceStr && (
+          <span
+            className="tabular-nums"
+            style={{
+              fontSize: juiceFs,
+              fontWeight: 500,
+              color: juiceColor,
+              letterSpacing: '0.01em',
+              lineHeight: 1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {juiceStr}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── BookOddsCell (legacy shim — kept for backward compat with OddsLinesPanel) ─
 // Two-line cell for mobile BOOK column: spread/total on line 1, odds on line 2.
 // When oddsStr is null/empty, renders a single centered line (no second line).
 function BookOddsCell({ spreadStr, oddsStr, style }: {
@@ -1446,51 +1589,117 @@ function OddsLinesPanel({
         }
       </div>
 
-      {/* Away row */}
+      {/* Away row — OddsCell pills for BOOK, plain spans for MODEL */}
       <div className={`grid ${GRID} py-2`} style={{ transition: 'grid-template-columns 200ms ease' }}>
-        {/* Away Spread BOOK cell: OPEN sub-row + DK line */}
-        <div className="flex flex-col items-center justify-center" style={{ gap: 0 }}>
-          {openAwaySpreadStr && <span className="tabular-nums" style={{ fontSize: '8px', fontWeight: 500, color: 'rgba(255,255,255,0.32)', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>o:{openAwaySpreadStr}</span>}
-          <span className="tabular-nums" style={bookCell}>{bkAwaySpread}</span>
-        </div>
-        {showModel && <Cell val={mdlAwaySpreadStr} style={awaySpreadModelStyle} />}
-        {/* Away Total BOOK cell: OPEN sub-row + DK line */}
-        <div className="flex flex-col items-center justify-center" style={{ gap: 0 }}>
-          {openOverStr && <span className="tabular-nums" style={{ fontSize: '8px', fontWeight: 500, color: 'rgba(255,255,255,0.32)', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>o:{openOverStr}</span>}
-          <span className="tabular-nums" style={bookCell}>{bkOverTotal}</span>
-        </div>
-        {showModel && <Cell val={mdlOverTotal} style={overTotalModelStyle} />}
-        {/* Away ML BOOK cell: OPEN sub-row + DK line */}
-        <div className="flex flex-col items-center justify-center" style={{ gap: 0 }}>
-          {openAwayMlStr && <span className="tabular-nums" style={{ fontSize: '8px', fontWeight: 500, color: 'rgba(255,255,255,0.32)', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>o:{openAwayMlStr}</span>}
-          <span className="tabular-nums" style={bookCell}>{awayMlDisplay || '—'}</span>
-        </div>
-        {showModel && <Cell val={mdlAwayMlStr} style={awayMlModelStyle} />}
+        {/* Away Spread BOOK pill */}
+        <OddsCell
+          mainValue={bkAwaySpread}
+          juiceStr={null}
+          isBook={true}
+          openLine={openAwaySpreadStr}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />
+        {showModel && <OddsCell
+          mainValue={mdlAwaySpreadStr}
+          juiceStr={null}
+          isBook={false}
+          isEdge={awaySpreadModelStyle === modelGreen}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />}
+        {/* Away Total BOOK pill */}
+        <OddsCell
+          mainValue={bkOverTotal}
+          juiceStr={null}
+          isBook={true}
+          openLine={openOverStr}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />
+        {showModel && <OddsCell
+          mainValue={`o${mdlOverTotal}`}
+          juiceStr={null}
+          isBook={false}
+          isEdge={overTotalModelStyle === modelGreen}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />}
+        {/* Away ML BOOK pill */}
+        <OddsCell
+          mainValue={awayMlDisplay || '—'}
+          juiceStr={null}
+          isBook={true}
+          openLine={openAwayMlStr}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />
+        {showModel && <OddsCell
+          mainValue={mdlAwayMlStr}
+          juiceStr={null}
+          isBook={false}
+          isEdge={awayMlModelStyle === modelGreen}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />}
       </div>
 
       {/* Divider */}
       <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
 
-      {/* Home row */}
+      {/* Home row — OddsCell pills for BOOK, plain spans for MODEL */}
       <div className={`grid ${GRID} py-2`} style={{ transition: 'grid-template-columns 200ms ease' }}>
-        {/* Home Spread BOOK cell: OPEN sub-row + DK line */}
-        <div className="flex flex-col items-center justify-center" style={{ gap: 0 }}>
-          {openHomeSpreadStr && <span className="tabular-nums" style={{ fontSize: '8px', fontWeight: 500, color: 'rgba(255,255,255,0.32)', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>o:{openHomeSpreadStr}</span>}
-          <span className="tabular-nums" style={bookCell}>{bkHomeSpread}</span>
-        </div>
-        {showModel && <Cell val={mdlHomeSpreadStr} style={homeSpreadModelStyle} />}
-        {/* Home Total BOOK cell: OPEN sub-row + DK line */}
-        <div className="flex flex-col items-center justify-center" style={{ gap: 0 }}>
-          {openUnderStr && <span className="tabular-nums" style={{ fontSize: '8px', fontWeight: 500, color: 'rgba(255,255,255,0.32)', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>o:{openUnderStr}</span>}
-          <span className="tabular-nums" style={bookCell}>{bkUnderTotal}</span>
-        </div>
-        {showModel && <Cell val={mdlUnderTotal} style={underTotalModelStyle} />}
-        {/* Home ML BOOK cell: OPEN sub-row + DK line */}
-        <div className="flex flex-col items-center justify-center" style={{ gap: 0 }}>
-          {openHomeMlStr && <span className="tabular-nums" style={{ fontSize: '8px', fontWeight: 500, color: 'rgba(255,255,255,0.32)', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>o:{openHomeMlStr}</span>}
-          <span className="tabular-nums" style={bookCell}>{homeMlDisplay || '—'}</span>
-        </div>
-        {showModel && <Cell val={mdlHomeMlStr} style={homeMlModelStyle} />}
+        {/* Home Spread BOOK pill */}
+        <OddsCell
+          mainValue={bkHomeSpread}
+          juiceStr={null}
+          isBook={true}
+          openLine={openHomeSpreadStr}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />
+        {showModel && <OddsCell
+          mainValue={mdlHomeSpreadStr}
+          juiceStr={null}
+          isBook={false}
+          isEdge={homeSpreadModelStyle === modelGreen}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />}
+        {/* Home Total BOOK pill */}
+        <OddsCell
+          mainValue={bkUnderTotal}
+          juiceStr={null}
+          isBook={true}
+          openLine={openUnderStr}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />
+        {showModel && <OddsCell
+          mainValue={`u${mdlUnderTotal}`}
+          juiceStr={null}
+          isBook={false}
+          isEdge={underTotalModelStyle === modelGreen}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />}
+        {/* Home ML BOOK pill */}
+        <OddsCell
+          mainValue={homeMlDisplay || '—'}
+          juiceStr={null}
+          isBook={true}
+          openLine={openHomeMlStr}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />
+        {showModel && <OddsCell
+          mainValue={mdlHomeMlStr}
+          juiceStr={null}
+          isBook={false}
+          isEdge={homeMlModelStyle === modelGreen}
+          size="md"
+          wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+        />}
       </div>
 
     </div>
@@ -2789,68 +2998,126 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   ))}
                 </div>
                 </div>{/* end 30px header block */}
-                {/* Away row — height: 44px shared with frozen panel away row */}
+                {/* Away row — OddsCell pills, height: 44px */}
                 <div className="grid grid-cols-3" style={{ height: '44px', alignItems: 'center' }}>
-                  <div className="grid grid-cols-2">
-                    {/* BOOK spread: two lines when odds available */}
-                    {mbAwaySpreadOdds ? (
-                      <div className="flex flex-col items-center justify-center" style={{ lineHeight: 1.2 }}>
-                        <span className="tabular-nums" style={{ ...bookStyle(awaySpreadIsEdge), fontSize: '10px' }}>{!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}</span>
-                        <span className="tabular-nums" style={{ ...bookStyle(awaySpreadIsEdge), fontSize: '8.5px', fontWeight: 400, opacity: 0.85 }}>({mbAwaySpreadOdds})</span>
-                      </div>
-                    ) : (
-                      <span className="text-center tabular-nums" style={bookStyle(awaySpreadIsEdge)}>{bkAwaySpreadStr}</span>
-                    )}
-                    <span className="text-center tabular-nums" style={modelStyle(awaySpreadIsEdge)}>{mdlAwaySpreadStr}</span>
+                  {/* SPREAD */}
+                  <div className="grid grid-cols-2 items-center">
+                    <OddsCell
+                      mainValue={!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}
+                      juiceStr={mbAwaySpreadOdds ?? null}
+                      isBook={true}
+                      isEdge={awaySpreadIsEdge}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
+                    <OddsCell
+                      mainValue={mdlAwaySpreadStr}
+                      juiceStr={null}
+                      isBook={false}
+                      isEdge={awaySpreadIsEdge && isModelTab}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
                   </div>
-                  <div className="grid grid-cols-2">
-                    {/* BOOK total: two lines when odds available */}
-                    {mbOverOdds ? (
-                      <div className="flex flex-col items-center justify-center" style={{ lineHeight: 1.2 }}>
-                        <span className="tabular-nums" style={{ ...bookStyle(overTotalIsEdge), fontSize: '10px' }}>{!isNaN(bookTotal) ? `o${bkTotalStr}` : 'o—'}</span>
-                        <span className="tabular-nums" style={{ ...bookStyle(overTotalIsEdge), fontSize: '8.5px', fontWeight: 400, opacity: 0.85 }}>({mbOverOdds})</span>
-                      </div>
-                    ) : (
-                      <span className="text-center tabular-nums" style={bookStyle(overTotalIsEdge)}>{bkOverStr}</span>
-                    )}
-                    <span className="text-center tabular-nums" style={modelStyle(overTotalIsEdge)}>o{mdlTotalStr}</span>
+                  {/* TOTAL */}
+                  <div className="grid grid-cols-2 items-center">
+                    <OddsCell
+                      mainValue={!isNaN(bookTotal) ? `o${bkTotalStr}` : 'o—'}
+                      juiceStr={mbOverOdds ?? null}
+                      isBook={true}
+                      isEdge={overTotalIsEdge}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
+                    <OddsCell
+                      mainValue={`o${mdlTotalStr}`}
+                      juiceStr={null}
+                      isBook={false}
+                      isEdge={overTotalIsEdge && isModelTab}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
                   </div>
-                  <div className="grid grid-cols-2">
-                    <span className="text-center tabular-nums" style={bookStyle(awayMlIsEdge)}>{bkAwayMl}</span>
-                    <span className="text-center tabular-nums" style={modelStyle(awayMlIsEdge)}>{mdlAwayMl}</span>
+                  {/* MONEYLINE */}
+                  <div className="grid grid-cols-2 items-center">
+                    <OddsCell
+                      mainValue={bkAwayMl}
+                      juiceStr={null}
+                      isBook={true}
+                      isEdge={awayMlIsEdge}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
+                    <OddsCell
+                      mainValue={mdlAwayMl}
+                      juiceStr={null}
+                      isBook={false}
+                      isEdge={awayMlIsEdge && isModelTab}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
                   </div>
                 </div>
                 {/* Divider */}
                 <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
-                {/* Home row — height: 44px shared with frozen panel home row */}
+                {/* Home row — OddsCell pills, height: 44px */}
                 <div className="grid grid-cols-3" style={{ height: '44px', alignItems: 'center' }}>
-                  <div className="grid grid-cols-2">
-                    {/* BOOK spread: two lines when odds available */}
-                    {mbHomeSpreadOdds ? (
-                      <div className="flex flex-col items-center justify-center" style={{ lineHeight: 1.2 }}>
-                        <span className="tabular-nums" style={{ ...bookStyle(homeSpreadIsEdge), fontSize: '10px' }}>{!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—'}</span>
-                        <span className="tabular-nums" style={{ ...bookStyle(homeSpreadIsEdge), fontSize: '8.5px', fontWeight: 400, opacity: 0.85 }}>({mbHomeSpreadOdds})</span>
-                      </div>
-                    ) : (
-                      <span className="text-center tabular-nums" style={bookStyle(homeSpreadIsEdge)}>{bkHomeSpreadStr}</span>
-                    )}
-                    <span className="text-center tabular-nums" style={modelStyle(homeSpreadIsEdge)}>{mdlHomeSpreadStr}</span>
+                  {/* SPREAD */}
+                  <div className="grid grid-cols-2 items-center">
+                    <OddsCell
+                      mainValue={!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—'}
+                      juiceStr={mbHomeSpreadOdds ?? null}
+                      isBook={true}
+                      isEdge={homeSpreadIsEdge}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
+                    <OddsCell
+                      mainValue={mdlHomeSpreadStr}
+                      juiceStr={null}
+                      isBook={false}
+                      isEdge={homeSpreadIsEdge && isModelTab}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
                   </div>
-                  <div className="grid grid-cols-2">
-                    {/* BOOK total: two lines when odds available */}
-                    {mbUnderOdds ? (
-                      <div className="flex flex-col items-center justify-center" style={{ lineHeight: 1.2 }}>
-                        <span className="tabular-nums" style={{ ...bookStyle(underTotalIsEdge), fontSize: '10px' }}>{!isNaN(bookTotal) ? `u${bkTotalStr}` : 'u—'}</span>
-                        <span className="tabular-nums" style={{ ...bookStyle(underTotalIsEdge), fontSize: '8.5px', fontWeight: 400, opacity: 0.85 }}>({mbUnderOdds})</span>
-                      </div>
-                    ) : (
-                      <span className="text-center tabular-nums" style={bookStyle(underTotalIsEdge)}>{bkUnderStr}</span>
-                    )}
-                    <span className="text-center tabular-nums" style={modelStyle(underTotalIsEdge)}>u{mdlTotalStr}</span>
+                  {/* TOTAL */}
+                  <div className="grid grid-cols-2 items-center">
+                    <OddsCell
+                      mainValue={!isNaN(bookTotal) ? `u${bkTotalStr}` : 'u—'}
+                      juiceStr={mbUnderOdds ?? null}
+                      isBook={true}
+                      isEdge={underTotalIsEdge}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
+                    <OddsCell
+                      mainValue={`u${mdlTotalStr}`}
+                      juiceStr={null}
+                      isBook={false}
+                      isEdge={underTotalIsEdge && isModelTab}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
                   </div>
-                  <div className="grid grid-cols-2">
-                    <span className="text-center tabular-nums" style={bookStyle(homeMlIsEdge)}>{bkHomeMl}</span>
-                    <span className="text-center tabular-nums" style={modelStyle(homeMlIsEdge)}>{mdlHomeMl}</span>
+                  {/* MONEYLINE */}
+                  <div className="grid grid-cols-2 items-center">
+                    <OddsCell
+                      mainValue={bkHomeMl}
+                      juiceStr={null}
+                      isBook={true}
+                      isEdge={homeMlIsEdge}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
+                    <OddsCell
+                      mainValue={mdlHomeMl}
+                      juiceStr={null}
+                      isBook={false}
+                      isEdge={homeMlIsEdge && isModelTab}
+                      size="sm"
+                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
+                    />
                   </div>
                 </div>
               </div>

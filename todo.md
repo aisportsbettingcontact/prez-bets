@@ -1354,3 +1354,9 @@
 - [x] Update refreshAnApiOdds() to use alias-aware getNcaamTeamByAnSlug() for NCAAM slug resolution
 - [x] Update refreshAnApiOdds() to pass Open line data (spread, total, ML) through to updateAnOdds()
 - [x] FINAL DIAGNOSTIC: 18/18 March 15 games — ALL slugs resolved, ALL DB matched, ALL DK populated, ALL Open populated
+- [x] Build OddsCell pill component: rounded rectangle, bold main value + smaller juice below, orange bookmark badge for best-value cell
+- [x] Integrate OddsCell into desktop SectionCol BOOK cells (DesktopMergedPanel)
+- [x] Integrate OddsCell into desktop OddsLinesPanel BOOK cells
+- [x] Integrate OddsCell into mobile OddsTable BOOK cells (full mode)
+- [x] Integrate OddsCell MODEL cells with pill style (neon green edge / white non-edge)
+- [x] Ensure OddsCell scales seamlessly across all breakpoints (clamp-based sizing)
