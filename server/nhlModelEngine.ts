@@ -40,10 +40,20 @@ export interface NhlModelEngineInput {
   mkt_under_odds:    number | null;
   mkt_away_ml:       number | null;
   mkt_home_ml:       number | null;
+  away_goalie_shots_faced?: number;   // shots faced this season (for goalie_effect)
+  home_goalie_shots_faced?: number;
+  away_rest_days?:  number;           // days since last game (fatigue)
+  home_rest_days?:  number;
   team_stats:        Record<string, {
+    // Percentage-based
     xGF_pct: number; xGA_pct: number;
     CF_pct: number; SCF_pct: number; HDCF_pct: number;
     SH_pct: number; SV_pct: number; GF: number; GA: number;
+    // Per-60 rate stats (Sharp Line Engine)
+    xGF_60?: number | null; xGA_60?: number | null;
+    HDCF_60?: number | null; HDCA_60?: number | null;
+    Rush_60?: number | null; RushA_60?: number | null;
+    Reb_60?: number | null; SA_60?: number | null; SlotShots?: number | null;
   }>;
 }
 
@@ -258,7 +268,7 @@ export function formatNhlML(ml: number): string {
   return ml > 0 ? `+${ml}` : String(ml);
 }
 
-/** Build team_stats dict for Python engine from NhlTeamStats map */
+/** Build team_stats dict for Python engine from NhlTeamStats map (full per-60 + percentage fields) */
 export function buildTeamStatsDict(
   awayAbbrev: string,
   homeAbbrev: string,
@@ -267,26 +277,45 @@ export function buildTeamStatsDict(
   xGF_pct: number; xGA_pct: number;
   CF_pct: number; SCF_pct: number; HDCF_pct: number;
   SH_pct: number; SV_pct: number; GF: number; GA: number;
+  xGF_60?: number | null; xGA_60?: number | null;
+  HDCF_60?: number | null; HDCA_60?: number | null;
+  Rush_60?: number | null; RushA_60?: number | null;
+  Reb_60?: number | null; SA_60?: number | null; SlotShots?: number | null;
 }> {
   const result: Record<string, {
     xGF_pct: number; xGA_pct: number;
     CF_pct: number; SCF_pct: number; HDCF_pct: number;
     SH_pct: number; SV_pct: number; GF: number; GA: number;
+    xGF_60?: number | null; xGA_60?: number | null;
+    HDCF_60?: number | null; HDCA_60?: number | null;
+    Rush_60?: number | null; RushA_60?: number | null;
+    Reb_60?: number | null; SA_60?: number | null; SlotShots?: number | null;
   }> = {};
 
   for (const abbrev of [awayAbbrev, homeAbbrev]) {
     const stats = teamStatsMap.get(abbrev);
     if (stats) {
       result[abbrev] = {
-        xGF_pct: stats.xGF_pct,
-        xGA_pct: stats.xGA_pct,
-        CF_pct:  stats.CF_pct,
-        SCF_pct: stats.SCF_pct,
+        // Percentage-based
+        xGF_pct:  stats.xGF_pct,
+        xGA_pct:  stats.xGA_pct,
+        CF_pct:   stats.CF_pct,
+        SCF_pct:  stats.SCF_pct,
         HDCF_pct: stats.HDCF_pct,
-        SH_pct:  stats.SH_pct,
-        SV_pct:  stats.SV_pct,
-        GF:      stats.GF,
-        GA:      stats.GA,
+        SH_pct:   stats.SH_pct,
+        SV_pct:   stats.SV_pct,
+        GF:       stats.GF,
+        GA:       stats.GA,
+        // Per-60 rate stats (Sharp Line Engine)
+        xGF_60:    stats.xGF_60,
+        xGA_60:    stats.xGA_60,
+        HDCF_60:   stats.HDCF_60,
+        HDCA_60:   stats.HDCA_60,
+        Rush_60:   stats.Rush_60,
+        RushA_60:  stats.RushA_60,
+        Reb_60:    stats.Reb_60,
+        SA_60:     stats.SA_60,
+        SlotShots: stats.SlotShots,
       };
     }
   }

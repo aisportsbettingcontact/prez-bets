@@ -1420,3 +1420,18 @@
 - [x] Update Publish Projections: show PL Odds column header instead of Book ML for NHL
 - [x] Ensure Refresh Now and Publish All on NHL tab only operate on NHL data
 - [x] Write 24 vitest tests for NHL model pipeline (puck line odds, goalie adj, cover pct, sport-scoping, freeze detection)
+
+## NHL Sharp Line Origination Engine Rewrite (Mar 15, 2026)
+- [ ] Rewrite nhl_model_engine.py: correlated NB distributions (k=7-10, rho=0.12-0.18), 200k sims
+- [ ] Implement OFF_rating (xGF60 0.40, HDCF60 0.20, Rush60 0.15, Rebounds60 0.10, ShotAttempts60 0.15)
+- [ ] Implement DEF_rating (xGA60 0.40, HDCA60 0.25, RushAllowed 0.20, SlotShots 0.15)
+- [ ] Implement goalie_multiplier = 1 - (GSAX / shots_faced), typical range 0.92-1.08
+- [ ] Implement fatigue factors (normal=1.00, 1-day=0.97, B2B=0.94)
+- [ ] Implement home_ice = 1.04
+- [ ] Implement pace_factor from combined shot rate
+- [ ] Ensure ML/PL/total all derive from same joint distribution (no independent estimation)
+- [ ] Update nhlNaturalStatScraper.ts to supply Rush60, Rebounds60, SlotShots, HD Save%, workload
+- [ ] Update nhlModelEngine.ts to pass new input fields
+- [ ] Update nhlModelSync.ts to pass new scraped fields to model
+- [ ] Verify model output consistency constraints (Section 11)
+- [ ] Run tests, verify engine produces correct output, save checkpoint

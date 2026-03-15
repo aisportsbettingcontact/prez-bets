@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
 """
-nhl_model_engine.py — NHL Monte Carlo Origination Engine v1.0
-==============================================================
-Backend integration entry point.
+nhl_model_engine.py — NHL Sharp Line Origination Engine v2.0
+=============================================================
+Implements the Sharp Line Origination Engine specification:
+  • Correlated Negative Binomial goal distributions (overdispersion k≈7-10, rho≈0.12-0.18)
+  • 200,000 Monte Carlo simulations
+  • OFF_rating / DEF_rating from weighted NaturalStatTrick metrics
+  • Goalie multiplier: goalie_effect = GSAX/shots_faced → goalie_multiplier = 1 − goalie_effect
+  • Fatigue factors (normal=1.00, 1-day=0.97, B2B=0.94)
+  • Home ice = 1.04
+  • Pace factor from combined shot rate
+  • ALL markets (ML, puck line, total) originate from the SAME joint scoring distribution
+  • No market is independently estimated — fully internally consistent
 
 Protocol:
   STDIN  → single JSON object (NhlModelInput)
@@ -10,57 +19,69 @@ Protocol:
 
 Input schema:
   {
-    "away_team":       "Boston Bruins",    # Full team name matching NaturalStatTrick
-    "home_team":       "Toronto Maple Leafs",
-    "away_abbrev":     "BOS",              # NHL abbreviation
-    "home_abbrev":     "TOR",
-    "away_goalie":     "Jeremy Swayman",   # Starting goalie name (or null)
-    "home_goalie":     "Anthony Stolarz",
-    "away_goalie_gp":  38,                 # Goalie GP (for GSAx normalization)
-    "home_goalie_gp":  32,
-    "away_goalie_gsax": 6.4,              # Goals Saved Above Expected
-    "home_goalie_gsax": 2.1,
-    "mkt_puck_line":   -1.5,              # Market puck line (always ±1.5)
-    "mkt_away_pl_odds": -132,             # Market away puck line odds
-    "mkt_home_pl_odds": 112,              # Market home puck line odds
-    "mkt_total":       6.0,               # Market total (over/under line)
-    "mkt_over_odds":   -101,              # Market over odds
-    "mkt_under_odds":  101,               # Market under odds
-    "mkt_away_ml":     135,               # Market away moneyline
-    "mkt_home_ml":     -155,              # Market home moneyline
-    "team_stats": {                        # NaturalStatTrick team stats (keyed by abbrev)
+    "away_team":          "Boston Bruins",
+    "home_team":          "Tampa Bay Lightning",
+    "away_abbrev":        "BOS",
+    "home_abbrev":        "TBL",
+    "away_goalie":        "Jeremy Swayman",
+    "home_goalie":        "Andrei Vasilevskiy",
+    "away_goalie_gsax":   6.4,       # Goals Saved Above Expected (season total)
+    "home_goalie_gsax":   2.1,
+    "away_goalie_gp":     38,        # Games played (for per-game normalization)
+    "home_goalie_gp":     32,
+    "away_goalie_shots_faced": 1050, # Season shots faced (for goalie_effect = GSAX/shots_faced)
+    "home_goalie_shots_faced": 920,
+    "away_rest_days":     2,         # Days since last game (2+ = normal rest)
+    "home_rest_days":     1,         # 1 = 1-day rest, 0 = back-to-back
+    "mkt_puck_line":      -1.5,
+    "mkt_away_pl_odds":   -132,
+    "mkt_home_pl_odds":   112,
+    "mkt_total":          6.0,
+    "mkt_over_odds":      -101,
+    "mkt_under_odds":     101,
+    "mkt_away_ml":        135,
+    "mkt_home_ml":        -155,
+    "team_stats": {
       "BOS": {
-        "xGF_pct": 52.3, "xGA_pct": 47.7,
-        "CF_pct": 53.1, "SCF_pct": 51.8, "HDCF_pct": 54.2,
-        "SH_pct": 10.2, "SV_pct": 91.8, "GF": 180, "GA": 155
+        "xGF_60":    2.85,   "xGA_60":    2.41,
+        "HDCF_60":   1.12,   "HDCA_60":   0.91,
+        "Rush_60":   0.48,   "RushA_60":  0.39,
+        "Reb_60":    0.31,   "SlotShots": 18.2,
+        "SA_60":     32.1,   "NZEntry_60": 14.5,
+        "PP_xGF":    0.82,   "PK_xGA":    0.61,
+        "SH_pct":    10.2,   "SV_pct":    91.8,
+        "CF_pct":    53.1,   "SCF_pct":   51.8,
+        "HDCF_pct":  54.2,   "xGF_pct":   52.3,
+        "xGA_pct":   47.7,   "GF":        180,
+        "GA":        155
       },
-      "TOR": { ... }
+      "TBL": { ... }
     }
   }
 
 Output schema (last line of stdout):
   {
     "ok": true,
-    "game": "Boston Bruins @ Toronto Maple Leafs",
+    "game": "Boston Bruins @ Tampa Bay Lightning",
     "away_name": "Boston Bruins",
-    "home_name": "Toronto Maple Leafs",
+    "home_name": "Tampa Bay Lightning",
     "proj_away_goals": 2.73,
     "proj_home_goals": 3.18,
     "away_puck_line": "+1.5",
-    "away_puck_line_odds": -132,
+    "away_puck_line_odds": -218,
     "home_puck_line": "-1.5",
-    "home_puck_line_odds": 112,
+    "home_puck_line_odds": 218,
     "away_ml": 135,
-    "home_ml": -155,
+    "home_ml": -135,
     "total_line": 6.0,
     "over_odds": -101,
     "under_odds": 101,
     "away_win_pct": 42.3,
     "home_win_pct": 57.7,
+    "away_pl_cover_pct": 68.6,
+    "home_pl_cover_pct": 31.4,
     "over_pct": 48.2,
     "under_pct": 51.8,
-    "away_cover_pct": 38.4,
-    "home_cover_pct": 61.6,
     "edges": [...],
     "error": null
   }
@@ -72,260 +93,441 @@ import numpy as np
 import time
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CONSTANTS
+# CONSTANTS  (Section 4 & 6 of Sharp Line Origination Engine spec)
 # ─────────────────────────────────────────────────────────────────────────────
 
-SIMULATIONS     = 50_000
-LEAGUE_AVG_GOALS = 3.05   # NHL 5v5 goals per team per game (2025-26 season avg)
-LEAGUE_SH_PCT   = 9.5     # League average shooting percentage
+SIMULATIONS         = 200_000   # Section 6: N = 200,000 games
+LEAGUE_GOAL_RATE    = 3.05      # Section 4: league_goal_rate ≈ 3.05
+HOME_ICE            = 1.04      # Section 4: home_ice = 1.04
 
-# Goalie quality tiers (GSAx/game thresholds)
-ELITE_GOALIE_THRESHOLD  =  0.10   # GSAx/game ≥ 0.10 → elite (-0.35 goal adj)
-WEAK_GOALIE_THRESHOLD   = -0.10   # GSAx/game ≤ -0.10 → weak (+0.40 goal adj)
-ELITE_GOALIE_ADJ        = -0.35
-AVERAGE_GOALIE_ADJ      =  0.00
-WEAK_GOALIE_ADJ         = +0.40
+# Negative Binomial dispersion (Section 5: k ≈ 7–10)
+NB_K                = 8.0       # Dispersion parameter k; Var(G) = mu + mu²/k
 
-# Market weighting (blend model output toward market to reduce clamping)
-MARKET_WEIGHT = 0.30   # 30% market blend for goals projection
-MODEL_WEIGHT  = 0.70   # 70% pure model
+# Goal correlation between teams (Section 5: rho ≈ 0.12–0.18)
+# Implemented via shared pace component
+GOAL_CORRELATION    = 0.15      # Shared game-pace factor weight
 
-# Home ice advantage (goals)
-HOME_ICE_ADJ = 0.035   # ~3.5% boost to home team goals
+# Fatigue factors (Section 4)
+FATIGUE_NORMAL      = 1.00      # 2+ days rest
+FATIGUE_ONE_DAY     = 0.97      # 1 day rest
+FATIGUE_B2B         = 0.94      # Back-to-back (0 days rest)
+
+# League averages for normalization (NaturalStatTrick 2025-26 season)
+LEAGUE_XGF_60       = 2.65
+LEAGUE_HDCF_60      = 1.05
+LEAGUE_RUSH_60      = 0.45
+LEAGUE_REB_60       = 0.28
+LEAGUE_SA_60        = 30.5
+LEAGUE_XGA_60       = 2.65
+LEAGUE_HDCA_60      = 1.05
+LEAGUE_RUSH_A_60    = 0.45
+LEAGUE_SLOT_SHOTS   = 17.0
 
 # Edge detection thresholds
-PUCK_LINE_EDGE_THRESHOLD = 0.05   # 5% probability edge over break-even
-ML_EDGE_THRESHOLD        = 0.04   # 4% probability edge over break-even
-TOTAL_EDGE_THRESHOLD     = 0.05   # 5% probability edge over break-even
+PUCK_LINE_EDGE_THRESHOLD = 0.05   # 5% probability edge
+ML_EDGE_THRESHOLD        = 0.04   # 4% probability edge
+TOTAL_EDGE_THRESHOLD     = 0.05   # 5% probability edge
+
+# Market blend (anchor model to market to reduce clamping)
+MARKET_WEIGHT       = 0.30
+MODEL_WEIGHT        = 0.70
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ATTACK / DEFENSE INDICES
+# SECTION 2 — TEAM STRENGTH ESTIMATION
+# OFF_rating and DEF_rating per the Sharp Line Origination Engine spec
 # ─────────────────────────────────────────────────────────────────────────────
 
-def compute_attack_index(stats: dict) -> float:
+def compute_off_rating(stats: dict) -> float:
     """
-    Weighted composite of offensive possession metrics.
-    All stats are percentages (e.g. xGF_pct=52.3 means 52.3%).
-    Normalized to 1.0 = league average (50%).
+    Section 2 — OFFENSE MODEL:
+      OFF_rating =
+          0.40 * (xGF60 / league_xGF60)
+        + 0.20 * (HDCF60 / league_HDCF60)
+        + 0.15 * (Rush60 / league_Rush60)
+        + 0.10 * (Rebounds60 / league_Rebounds60)
+        + 0.15 * (ShotAttempts60 / league_ShotAttempts60)
+
+    Values > 1 = stronger offense, < 1 = weaker offense.
+    Falls back to xGF_pct-based estimate if per-60 stats are unavailable.
     """
-    raw = (
-        0.40 * stats["xGF_pct"] +
-        0.25 * stats["SCF_pct"] +
-        0.20 * stats["HDCF_pct"] +
-        0.15 * stats["CF_pct"]
-    )
-    return raw / 50.0
+    xgf_60   = stats.get("xGF_60")
+    hdcf_60  = stats.get("HDCF_60")
+    rush_60  = stats.get("Rush_60")
+    reb_60   = stats.get("Reb_60")
+    sa_60    = stats.get("SA_60")
 
-
-def compute_defense_index(stats: dict) -> float:
-    """
-    Weighted composite of defensive suppression metrics.
-    xGA_pct = 100 - xGF_pct for opponent, but we use the team's own xGA% directly.
-    Lower xGA% = better defense → lower defense_index → fewer goals allowed.
-    """
-    # SCA% = 100 - SCF% (opponent scoring chances allowed %)
-    sca_pct = 100.0 - stats["SCF_pct"]
-    # HDCA% = 100 - HDCF% (opponent high-danger chances allowed %)
-    hdca_pct = 100.0 - stats["HDCF_pct"]
-    # CA% = 100 - CF% (opponent corsi allowed %)
-    ca_pct = 100.0 - stats["CF_pct"]
-
-    raw = (
-        0.45 * stats["xGA_pct"] +
-        0.25 * sca_pct +
-        0.20 * hdca_pct +
-        0.10 * ca_pct
-    )
-    return raw / 50.0
-
-
-def finishing_factor(stats: dict) -> float:
-    """Ratio of team SH% to league average SH%."""
-    return stats["SH_pct"] / LEAGUE_SH_PCT
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# GOALIE FACTOR
-# ─────────────────────────────────────────────────────────────────────────────
-
-def goalie_factor(gsax: float, gp: int) -> float:
-    """
-    Convert GSAx (Goals Saved Above Expected) to a multiplicative factor on
-    goals allowed. Higher GSAx = better goalie = fewer goals allowed.
-
-    Formula: factor = 1 - (gsax_per_game / 3.0)
-    Clamp to [0.75, 1.25] to prevent extreme outliers.
-    """
-    if gp <= 0:
-        return 1.0
-    gsax_per_game = gsax / gp
-    factor = 1.0 - (gsax_per_game / 3.0)
-    return max(0.75, min(1.25, factor))
-
-
-def goalie_tier_adjustment(gsax: float, gp: int) -> float:
-    """
-    Additional goal adjustment based on goalie quality tier.
-    Elite goalies suppress scoring; weak goalies inflate it.
-    """
-    if gp <= 0:
-        return AVERAGE_GOALIE_ADJ
-    gsax_per_game = gsax / gp
-    if gsax_per_game >= ELITE_GOALIE_THRESHOLD:
-        return ELITE_GOALIE_ADJ
-    elif gsax_per_game <= WEAK_GOALIE_THRESHOLD:
-        return WEAK_GOALIE_ADJ
+    if all(v is not None for v in [xgf_60, hdcf_60, rush_60, reb_60, sa_60]):
+        # Full spec formula
+        rating = (
+            0.40 * (xgf_60  / LEAGUE_XGF_60)  +
+            0.20 * (hdcf_60 / LEAGUE_HDCF_60) +
+            0.15 * (rush_60 / LEAGUE_RUSH_60)  +
+            0.10 * (reb_60  / LEAGUE_REB_60)   +
+            0.15 * (sa_60   / LEAGUE_SA_60)
+        )
     else:
-        return AVERAGE_GOALIE_ADJ
+        # Fallback: use percentage-based stats (xGF_pct, HDCF_pct, CF_pct, SCF_pct)
+        xgf_pct  = float(stats.get("xGF_pct",  50.0))
+        hdcf_pct = float(stats.get("HDCF_pct", 50.0))
+        scf_pct  = float(stats.get("SCF_pct",  50.0))
+        cf_pct   = float(stats.get("CF_pct",   50.0))
+        raw = (
+            0.40 * xgf_pct  +
+            0.25 * scf_pct  +
+            0.20 * hdcf_pct +
+            0.15 * cf_pct
+        )
+        rating = raw / 50.0
+
+    return max(0.50, min(2.00, rating))
+
+
+def compute_def_rating(stats: dict) -> float:
+    """
+    Section 2 — DEFENSE MODEL:
+      DEF_rating =
+          0.40 * (league_xGA60 / xGA60)
+        + 0.25 * (league_HDCA60 / HDCA60)
+        + 0.20 * (league_RushAllowed / RushAllowed)
+        + 0.15 * (league_SlotShots / SlotShotsAllowed)
+
+    Values > 1 = stronger defense (suppresses more), < 1 = weaker defense.
+    Falls back to xGA_pct-based estimate if per-60 stats are unavailable.
+    """
+    xga_60     = stats.get("xGA_60")
+    hdca_60    = stats.get("HDCA_60")
+    rush_a_60  = stats.get("RushA_60")
+    slot_shots = stats.get("SlotShots")
+
+    if all(v is not None and v > 0 for v in [xga_60, hdca_60, rush_a_60, slot_shots]):
+        # Full spec formula
+        rating = (
+            0.40 * (LEAGUE_XGA_60     / xga_60)     +
+            0.25 * (LEAGUE_HDCA_60    / hdca_60)    +
+            0.20 * (LEAGUE_RUSH_A_60  / rush_a_60)  +
+            0.15 * (LEAGUE_SLOT_SHOTS / slot_shots)
+        )
+    else:
+        # Fallback: use percentage-based stats
+        xga_pct  = float(stats.get("xGA_pct",  50.0))
+        sca_pct  = 100.0 - float(stats.get("SCF_pct",  50.0))
+        hdca_pct = 100.0 - float(stats.get("HDCF_pct", 50.0))
+        ca_pct   = 100.0 - float(stats.get("CF_pct",   50.0))
+        raw = (
+            0.45 * xga_pct  +
+            0.25 * sca_pct  +
+            0.20 * hdca_pct +
+            0.10 * ca_pct
+        )
+        rating = 50.0 / (raw / 1.0)   # invert: lower xGA% = better defense
+
+    return max(0.50, min(2.00, rating))
+
+
+def compute_pace_factor(away_stats: dict, home_stats: dict) -> float:
+    """
+    Section 4: Pace adjustment derived from combined shot rate.
+    pace_factor = combined_SA60 / (2 * league_SA60)
+    Clamped to [0.85, 1.15] to prevent extreme outliers.
+    """
+    away_sa = away_stats.get("SA_60", LEAGUE_SA_60)
+    home_sa = home_stats.get("SA_60", LEAGUE_SA_60)
+    combined = (away_sa + home_sa) / 2.0
+    factor = combined / LEAGUE_SA_60
+    return max(0.85, min(1.15, factor))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# GOAL PROJECTION
+# SECTION 3 — GOALIE MODEL
+# goalie_effect = GSAX / shots_faced
+# goalie_multiplier = 1 − goalie_effect
+# Typical values: elite=0.92, average=1.00, weak=1.08
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_goalie_multiplier(gsax: float, shots_faced: int, gp: int) -> float:
+    """
+    Section 3 — GOALIE MODEL:
+      goalie_effect    = GSAX / shots_faced
+      goalie_multiplier = 1 − goalie_effect
+
+    Typical values:
+      Elite goalie  → multiplier ≈ 0.92  (saves ~8% more than expected)
+      Average goalie → multiplier ≈ 1.00
+      Weak goalie   → multiplier ≈ 1.08
+
+    Clamped to [0.80, 1.20] to prevent extreme outliers.
+    """
+    if shots_faced is None or shots_faced <= 0:
+        # Fall back to per-game normalization if shots_faced not available
+        if gp is None or gp <= 0:
+            return 1.0
+        # Estimate shots_faced from GP (NHL avg ~28 shots/game)
+        shots_faced = gp * 28
+
+    gsax = float(gsax or 0.0)
+    shots_faced = float(shots_faced)
+
+    goalie_effect = gsax / shots_faced
+    multiplier = 1.0 - goalie_effect
+
+    # Clamp to realistic range
+    return max(0.80, min(1.20, multiplier))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 4 — FATIGUE FACTOR
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_fatigue_factor(rest_days: int | None) -> float:
+    """
+    Section 4 — Fatigue adjustments:
+      Normal rest (2+ days) → 1.00
+      1 day rest            → 0.97
+      Back-to-back (0 days) → 0.94
+    """
+    if rest_days is None:
+        return FATIGUE_NORMAL
+    if rest_days == 0:
+        return FATIGUE_B2B
+    if rest_days == 1:
+        return FATIGUE_ONE_DAY
+    return FATIGUE_NORMAL
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 4 — EXPECTED GOALS MODEL
+# mu_home = league_goal_rate * OFF_home * DEF_away * goalie_multiplier_away * home_ice * fatigue * pace
+# mu_away = league_goal_rate * OFF_away * DEF_home * goalie_multiplier_home * fatigue * pace
 # ─────────────────────────────────────────────────────────────────────────────
 
 def project_goals(
     away_stats: dict,
     home_stats: dict,
     away_goalie_gsax: float,
+    away_goalie_shots_faced: int,
     away_goalie_gp: int,
     home_goalie_gsax: float,
+    home_goalie_shots_faced: int,
     home_goalie_gp: int,
+    away_rest_days: int | None,
+    home_rest_days: int | None,
     mkt_away_ml: int | None = None,
     mkt_home_ml: int | None = None,
     mkt_total: float | None = None,
 ) -> tuple[float, float]:
     """
-    Project expected goals for away and home teams.
+    Section 4 — Expected Goals Model.
 
-    Model formula (per team):
-      goals = LEAGUE_AVG * attack_index * defense_index_opponent * finishing_factor * goalie_factor_opponent
+    mu_home = league_goal_rate * OFF_home * DEF_away * goalie_multiplier_away_goalie * home_ice * fatigue_home * pace
+    mu_away = league_goal_rate * OFF_away * DEF_home * goalie_multiplier_home_goalie * fatigue_away * pace
 
-    Then blend with market-implied goals (if available) to anchor to market.
+    Note: goalie_multiplier for the HOME team's expected goals is the AWAY goalie's multiplier
+    (the away goalie is defending against home team shots), and vice versa.
     """
-    attack_away  = compute_attack_index(away_stats)
-    defense_away = compute_defense_index(away_stats)
-    finish_away  = finishing_factor(away_stats)
+    off_away = compute_off_rating(away_stats)
+    def_away = compute_def_rating(away_stats)
+    off_home = compute_off_rating(home_stats)
+    def_home = compute_def_rating(home_stats)
 
-    attack_home  = compute_attack_index(home_stats)
-    defense_home = compute_defense_index(home_stats)
-    finish_home  = finishing_factor(home_stats)
+    # Goalie multipliers: away goalie defends home team shots, home goalie defends away team shots
+    gm_away_goalie = compute_goalie_multiplier(away_goalie_gsax, away_goalie_shots_faced, away_goalie_gp)
+    gm_home_goalie = compute_goalie_multiplier(home_goalie_gsax, home_goalie_shots_faced, home_goalie_gp)
 
-    gf_away_opp = goalie_factor(home_goalie_gsax, home_goalie_gp)
-    gf_home_opp = goalie_factor(away_goalie_gsax, away_goalie_gp)
+    fatigue_away = compute_fatigue_factor(away_rest_days)
+    fatigue_home = compute_fatigue_factor(home_rest_days)
 
-    # Raw model goals
-    raw_away = (
-        LEAGUE_AVG_GOALS
-        * attack_away
-        * defense_home
-        * finish_away
-        * gf_away_opp
+    pace = compute_pace_factor(away_stats, home_stats)
+
+    # Section 4 formulas:
+    # mu_home = league_goal_rate * OFF_home * DEF_away * goalie_multiplier_away * home_ice * fatigue_home * pace
+    # mu_away = league_goal_rate * OFF_away * DEF_home * goalie_multiplier_home * fatigue_away * pace
+    mu_home = (
+        LEAGUE_GOAL_RATE
+        * off_home
+        * def_away
+        * gm_away_goalie   # away goalie faces home team shots
+        * HOME_ICE
+        * fatigue_home
+        * pace
     )
-    raw_home = (
-        LEAGUE_AVG_GOALS
-        * attack_home
-        * defense_away
-        * finish_home
-        * gf_home_opp
-        * (1.0 + HOME_ICE_ADJ)
+    mu_away = (
+        LEAGUE_GOAL_RATE
+        * off_away
+        * def_home
+        * gm_home_goalie   # home goalie faces away team shots
+        * fatigue_away
+        * pace
     )
 
-    # Apply goalie tier adjustments (additive)
-    away_tier_adj = goalie_tier_adjustment(home_goalie_gsax, home_goalie_gp)
-    home_tier_adj = goalie_tier_adjustment(away_goalie_gsax, away_goalie_gp)
-    raw_away += away_tier_adj
-    raw_home += home_tier_adj
+    # Ensure non-negative minimums
+    mu_away = max(0.50, mu_away)
+    mu_home = max(0.50, mu_home)
 
-    # Ensure non-negative
-    raw_away = max(0.5, raw_away)
-    raw_home = max(0.5, raw_home)
-
-    # Market-implied goals blend
+    # Market blend: anchor model to market to reduce clamping
     if mkt_away_ml is not None and mkt_home_ml is not None and mkt_total is not None:
-        # Convert ML to win probability
         away_win_prob = ml_to_prob(mkt_away_ml)
         home_win_prob = 1.0 - away_win_prob
-        # Market-implied goals: distribute total by win probability ratio
-        # Slight adjustment: favorite gets slightly more goals
-        ratio = home_win_prob / away_win_prob if away_win_prob > 0 else 1.0
+        ratio = home_win_prob / max(away_win_prob, 0.001)
         mkt_home_goals = mkt_total * ratio / (1.0 + ratio)
         mkt_away_goals = mkt_total - mkt_home_goals
-        # Blend
-        blended_away = MODEL_WEIGHT * raw_away + MARKET_WEIGHT * mkt_away_goals
-        blended_home = MODEL_WEIGHT * raw_home + MARKET_WEIGHT * mkt_home_goals
-    else:
-        blended_away = raw_away
-        blended_home = raw_home
+        mu_away = MODEL_WEIGHT * mu_away + MARKET_WEIGHT * mkt_away_goals
+        mu_home = MODEL_WEIGHT * mu_home + MARKET_WEIGHT * mkt_home_goals
 
-    return round(blended_away, 4), round(blended_home, 4)
+    return round(mu_away, 4), round(mu_home, 4)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MONTE CARLO SIMULATION
+# SECTION 5 — SCORING DISTRIBUTION MODEL
+# Correlated Negative Binomial: G ~ NB(mu, k), with goal correlation rho≈0.15
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_simulation(lambda_away: float, lambda_home: float) -> tuple[np.ndarray, np.ndarray]:
-    """Run 50k Poisson simulations for both teams."""
-    away_scores = np.random.poisson(lambda_away, SIMULATIONS)
-    home_scores = np.random.poisson(lambda_home, SIMULATIONS)
-    return away_scores, home_scores
+def sample_correlated_nb(mu_away: float, mu_home: float, n: int) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Section 5 — Correlated Negative Binomial goal distributions.
+
+    G_home ~ NB(mu_home, k_home)
+    G_away ~ NB(mu_away, k_away)
+
+    Variance: Var(G) = mu + mu²/k   (overdispersed vs Poisson)
+    Goal correlation rho ≈ 0.12–0.18 via shared game-pace component.
+
+    Implementation:
+      1. Sample a shared pace multiplier from Gamma(shape=1/rho, scale=rho) ≈ 1.0
+         This introduces the inter-team correlation without changing marginal means.
+      2. For each team, sample from NB(mu * pace_mult, k) using Gamma-Poisson mixture:
+         - lambda_i ~ Gamma(k, mu_i/k)   [Gamma scale parameterization]
+         - goals_i  ~ Poisson(lambda_i * pace_mult)
+    """
+    k = NB_K
+    rho = GOAL_CORRELATION
+
+    # Shared pace multiplier (introduces correlation between teams)
+    # Gamma(shape=1/rho, scale=rho) has mean=1, variance=rho
+    pace_shape = 1.0 / rho
+    pace_mult = np.random.gamma(pace_shape, rho, size=n)  # mean=1, var=rho
+
+    # NB via Gamma-Poisson mixture for away team
+    # lambda_away ~ Gamma(k, mu_away/k)  →  mean=mu_away, var=mu_away²/k
+    lambda_away = np.random.gamma(k, mu_away / k, size=n) * pace_mult
+    goals_away  = np.random.poisson(lambda_away)
+
+    # NB via Gamma-Poisson mixture for home team
+    lambda_home = np.random.gamma(k, mu_home / k, size=n) * pace_mult
+    goals_home  = np.random.poisson(lambda_home)
+
+    return goals_away, goals_home
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PROBABILITY CALCULATIONS
+# SECTION 6 — MONTE CARLO SIMULATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def run_simulation(mu_away: float, mu_home: float) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Section 6: Run N=200,000 correlated NB simulations.
+    Returns (away_scores, home_scores) arrays of length SIMULATIONS.
+    """
+    return sample_correlated_nb(mu_away, mu_home, SIMULATIONS)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTIONS 7–10 — PROBABILITY OUTPUTS & MARKET ORIGINATION
+# All markets derived from the SAME joint distribution (Section 11 consistency)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def calculate_probs(away_scores: np.ndarray, home_scores: np.ndarray) -> dict:
     """
-    Calculate all probabilities from simulation results.
-    Puck line is always ±1.5 in NHL.
+    Sections 7–10: Calculate all probabilities from the joint simulation.
+
+    Section 7 — Probability Outputs:
+      home_win_prob = home_wins / N
+      away_win_prob = 1 − home_win_prob
+
+    Section 9 — Puck Line:
+      P(home −1.5) = P(margin ≥ 2)
+      P(away +1.5) = 1 − P(home −1.5)
+
+    Section 10 — Total:
+      E_total = mean(total_goals), rounded to nearest 0.5
+      P(total > line), P(total < line)
+
+    All three markets derive from the same (away_scores, home_scores) arrays.
     """
+    n = len(away_scores)
     totals = away_scores + home_scores
-    margin = home_scores - away_scores  # positive = home winning
+    margin = home_scores.astype(int) - away_scores.astype(int)   # positive = home winning
 
-    away_wins  = float(np.mean(away_scores > home_scores))
-    home_wins  = float(np.mean(home_scores > away_scores))
+    # Section 7: Moneyline probabilities
+    home_wins  = float(np.sum(home_scores > away_scores)) / n
+    away_wins  = float(np.sum(away_scores > home_scores)) / n
+    # Ties (OT games) are split evenly between ML outcomes
+    ties       = float(np.sum(home_scores == away_scores)) / n
+    home_win_prob = home_wins + 0.5 * ties
+    away_win_prob = away_wins + 0.5 * ties
 
-    # Puck line: away +1.5 covers if away loses by exactly 1 or wins outright
-    away_pl_cover = float(np.mean(margin <= 1))   # away +1.5 covers
-    home_pl_cover = float(np.mean(margin >= 2))   # home -1.5 covers
+    # Normalize to sum to 1.0 (handles floating point)
+    total_prob = home_win_prob + away_win_prob
+    if total_prob > 0:
+        home_win_prob /= total_prob
+        away_win_prob /= total_prob
 
-    # Find the best total line from candidates
-    candidates = [5.0, 5.5, 6.0, 6.5, 7.0, 7.5]
-    best_line = 6.0
-    best_diff = 1.0
-    best_over_prob = 0.5
-    for line in candidates:
-        prob = float(np.mean(totals > line))
-        diff = abs(prob - 0.5)
-        if diff < best_diff:
-            best_diff = diff
-            best_line = line
-            best_over_prob = prob
+    # Section 9: Puck line
+    # P(home −1.5) = P(margin ≥ 2)
+    home_pl_cover = float(np.sum(margin >= 2)) / n
+    away_pl_cover = 1.0 - home_pl_cover
+
+    # Section 10: Total — find the best line (nearest 0.5)
+    e_total = float(np.mean(totals))
+    # Round E_total to nearest 0.5
+    best_line = round(e_total * 2) / 2.0
+    # Ensure line is in realistic NHL range [4.5, 8.5]
+    best_line = max(4.5, min(8.5, best_line))
+
+    # P(total > line) and P(total < line)
+    over_prob  = float(np.sum(totals > best_line)) / n
+    under_prob = float(np.sum(totals < best_line)) / n
+    push_prob  = 1.0 - over_prob - under_prob
+
+    # Redistribute push probability evenly
+    over_prob  += push_prob * 0.5
+    under_prob += push_prob * 0.5
+
+    # Section 11 consistency check:
+    # P(home_win) + P(away_win) = 1 ✓ (enforced above)
+    # E_total = mu_home + mu_away ✓ (by construction)
+    # P(home −1.5) ≤ P(home_win) ✓ (winning by 2+ ≤ winning at all)
 
     return {
-        "away_win":      away_wins,
-        "home_win":      home_wins,
-        "away_pl_cover": away_pl_cover,
-        "home_pl_cover": home_pl_cover,
+        "away_win":        away_win_prob,
+        "home_win":        home_win_prob,
+        "away_pl_cover":   away_pl_cover,
+        "home_pl_cover":   home_pl_cover,
         "best_total_line": best_line,
-        "best_over_prob":  best_over_prob,
-        "totals":          totals,
+        "over_prob":       over_prob,
+        "under_prob":      under_prob,
+        "e_total":         e_total,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PROBABILITY ↔ MONEYLINE CONVERSION
+# PROBABILITY ↔ AMERICAN MONEYLINE CONVERSION
+# Sections 8, 9, 10: Convert probabilities to American odds
 # ─────────────────────────────────────────────────────────────────────────────
 
 def prob_to_ml(p: float) -> int:
-    """Convert win probability to American moneyline odds (no vig)."""
+    """
+    Section 8: Convert win probability to American moneyline (no vig, fair value).
+
+    If p > 0.5:  favorite_odds = −100 × (p / (1 − p))
+    If p < 0.5:  underdog_odds = +100 × ((1 − p) / p)
+    If p = 0.5:  ±100
+    """
     p = max(0.001, min(0.999, p))
     if p >= 0.5:
-        return -round((p / (1.0 - p)) * 100)
+        return -int(round((p / (1.0 - p)) * 100))
     else:
-        return round(((1.0 - p) / p) * 100)
+        return int(round(((1.0 - p) / p) * 100))
 
 
 def ml_to_prob(ml: int) -> float:
@@ -368,12 +570,12 @@ def detect_edges(
         edge_vs_be = model_away_pl_prob - mkt_away_pl_prob
         if edge_vs_be >= PUCK_LINE_EDGE_THRESHOLD:
             edges.append({
-                "type": "PUCK_LINE",
-                "side": "AWAY +1.5",
+                "type":       "PUCK_LINE",
+                "side":       "AWAY +1.5",
                 "model_prob": round(model_away_pl_prob * 100, 2),
                 "mkt_prob":   round(mkt_away_pl_prob * 100, 2),
                 "edge_vs_be": round(edge_vs_be * 100, 2),
-                "conf": "HIGH" if edge_vs_be >= 0.10 else ("MOD" if edge_vs_be >= 0.07 else "LOW"),
+                "conf":       "HIGH" if edge_vs_be >= 0.10 else ("MOD" if edge_vs_be >= 0.07 else "LOW"),
             })
 
     if mkt_home_pl_odds is not None:
@@ -382,41 +584,41 @@ def detect_edges(
         edge_vs_be = model_home_pl_prob - mkt_home_pl_prob
         if edge_vs_be >= PUCK_LINE_EDGE_THRESHOLD:
             edges.append({
-                "type": "PUCK_LINE",
-                "side": "HOME -1.5",
+                "type":       "PUCK_LINE",
+                "side":       "HOME -1.5",
                 "model_prob": round(model_home_pl_prob * 100, 2),
                 "mkt_prob":   round(mkt_home_pl_prob * 100, 2),
                 "edge_vs_be": round(edge_vs_be * 100, 2),
-                "conf": "HIGH" if edge_vs_be >= 0.10 else ("MOD" if edge_vs_be >= 0.07 else "LOW"),
+                "conf":       "HIGH" if edge_vs_be >= 0.10 else ("MOD" if edge_vs_be >= 0.07 else "LOW"),
             })
 
     # ── Total Edges ──────────────────────────────────────────────────────────
     if mkt_over_odds is not None:
         mkt_over_prob = ml_to_prob(mkt_over_odds)
-        model_over_prob = probs["best_over_prob"]
+        model_over_prob = probs["over_prob"]
         edge_vs_be = model_over_prob - mkt_over_prob
         if edge_vs_be >= TOTAL_EDGE_THRESHOLD:
             edges.append({
-                "type": "TOTAL",
-                "side": f"OVER {probs['best_total_line']}",
+                "type":       "TOTAL",
+                "side":       f"OVER {probs['best_total_line']}",
                 "model_prob": round(model_over_prob * 100, 2),
                 "mkt_prob":   round(mkt_over_prob * 100, 2),
                 "edge_vs_be": round(edge_vs_be * 100, 2),
-                "conf": "HIGH" if edge_vs_be >= 0.10 else ("MOD" if edge_vs_be >= 0.07 else "LOW"),
+                "conf":       "HIGH" if edge_vs_be >= 0.10 else ("MOD" if edge_vs_be >= 0.07 else "LOW"),
             })
 
     if mkt_under_odds is not None:
         mkt_under_prob = ml_to_prob(mkt_under_odds)
-        model_under_prob = 1.0 - probs["best_over_prob"]
+        model_under_prob = probs["under_prob"]
         edge_vs_be = model_under_prob - mkt_under_prob
         if edge_vs_be >= TOTAL_EDGE_THRESHOLD:
             edges.append({
-                "type": "TOTAL",
-                "side": f"UNDER {probs['best_total_line']}",
+                "type":       "TOTAL",
+                "side":       f"UNDER {probs['best_total_line']}",
                 "model_prob": round(model_under_prob * 100, 2),
                 "mkt_prob":   round(mkt_under_prob * 100, 2),
                 "edge_vs_be": round(edge_vs_be * 100, 2),
-                "conf": "HIGH" if edge_vs_be >= 0.10 else ("MOD" if edge_vs_be >= 0.07 else "LOW"),
+                "conf":       "HIGH" if edge_vs_be >= 0.10 else ("MOD" if edge_vs_be >= 0.07 else "LOW"),
             })
 
     # ── Moneyline Edges ──────────────────────────────────────────────────────
@@ -426,12 +628,12 @@ def detect_edges(
         edge_vs_be = model_away_prob - mkt_away_prob
         if edge_vs_be >= ML_EDGE_THRESHOLD:
             edges.append({
-                "type": "ML",
-                "side": "AWAY ML",
+                "type":       "ML",
+                "side":       "AWAY ML",
                 "model_prob": round(model_away_prob * 100, 2),
                 "mkt_prob":   round(mkt_away_prob * 100, 2),
                 "edge_vs_be": round(edge_vs_be * 100, 2),
-                "conf": "HIGH" if edge_vs_be >= 0.08 else ("MOD" if edge_vs_be >= 0.06 else "LOW"),
+                "conf":       "HIGH" if edge_vs_be >= 0.08 else ("MOD" if edge_vs_be >= 0.06 else "LOW"),
             })
 
     if mkt_home_ml is not None:
@@ -440,31 +642,70 @@ def detect_edges(
         edge_vs_be = model_home_prob - mkt_home_prob
         if edge_vs_be >= ML_EDGE_THRESHOLD:
             edges.append({
-                "type": "ML",
-                "side": "HOME ML",
+                "type":       "ML",
+                "side":       "HOME ML",
                 "model_prob": round(model_home_prob * 100, 2),
                 "mkt_prob":   round(mkt_home_prob * 100, 2),
                 "edge_vs_be": round(edge_vs_be * 100, 2),
-                "conf": "HIGH" if edge_vs_be >= 0.08 else ("MOD" if edge_vs_be >= 0.06 else "LOW"),
+                "conf":       "HIGH" if edge_vs_be >= 0.08 else ("MOD" if edge_vs_be >= 0.06 else "LOW"),
             })
 
     return edges
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MAIN MODEL ENTRY POINT
+# SECTION 11 — CONSISTENCY VALIDATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def validate_consistency(probs: dict, mu_away: float, mu_home: float) -> list[str]:
+    """
+    Section 11 — Consistency Constraints:
+    1. P(home_win) + P(away_win) = 1
+    2. E_total = mu_home + mu_away
+    3. P(home −1.5) ≤ P(home_win)
+    4. All markets from same distribution ✓ (by construction)
+
+    Returns list of violation messages (empty = all constraints satisfied).
+    """
+    violations = []
+
+    # Constraint 1: probabilities sum to 1
+    prob_sum = probs["home_win"] + probs["away_win"]
+    if abs(prob_sum - 1.0) > 0.001:
+        violations.append(f"C1 VIOLATION: P(home)+P(away)={prob_sum:.4f} ≠ 1.0")
+
+    # Constraint 2: E_total ≈ mu_home + mu_away
+    expected_total = mu_away + mu_home
+    sim_total = probs["e_total"]
+    if abs(sim_total - expected_total) > 0.30:
+        violations.append(f"C2 WARNING: E_total_sim={sim_total:.3f} vs mu_sum={expected_total:.3f}")
+
+    # Constraint 3: P(home −1.5) ≤ P(home_win)
+    if probs["home_pl_cover"] > probs["home_win"] + 0.001:
+        violations.append(
+            f"C3 VIOLATION: P(home-1.5)={probs['home_pl_cover']:.4f} > P(home_win)={probs['home_win']:.4f}"
+        )
+
+    return violations
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 12 — FINAL MARKET OUTPUT
 # ─────────────────────────────────────────────────────────────────────────────
 
 def originate_game(inp: dict) -> dict:
     """
-    Full NHL game origination pipeline:
+    Full Sharp Line Origination Engine pipeline:
     1. Load team stats from input
-    2. Project goals (model + market blend)
-    3. Run 50k Monte Carlo simulation
-    4. Calculate probabilities
-    5. Originate puck line odds, ML, and total
-    6. Detect edges
-    7. Return structured result
+    2. Compute OFF_rating and DEF_rating (Section 2)
+    3. Compute goalie multipliers (Section 3)
+    4. Project mu_away and mu_home (Section 4)
+    5. Run 200k correlated NB simulation (Sections 5–6)
+    6. Calculate all probabilities from joint distribution (Section 7)
+    7. Originate ML, puck line, total from SAME distribution (Sections 8–10)
+    8. Validate consistency constraints (Section 11)
+    9. Detect edges
+    10. Return Section 12 market output
     """
     away_name   = inp["away_team"]
     home_name   = inp["home_team"]
@@ -477,57 +718,103 @@ def originate_game(inp: dict) -> dict:
 
     if not away_stats or not home_stats:
         return {
-            "ok": False,
-            "error": f"Missing team stats for {away_abbrev} or {home_abbrev}",
+            "ok":    False,
+            "error": f"Missing team stats for {away_abbrev} or {home_abbrev}. Available: {list(team_stats.keys())}",
         }
 
-    away_goalie_gsax = float(inp.get("away_goalie_gsax") or 0.0)
-    away_goalie_gp   = int(inp.get("away_goalie_gp") or 1)
-    home_goalie_gsax = float(inp.get("home_goalie_gsax") or 0.0)
-    home_goalie_gp   = int(inp.get("home_goalie_gp") or 1)
+    # Goalie inputs
+    away_goalie_gsax         = float(inp.get("away_goalie_gsax") or 0.0)
+    away_goalie_shots_faced  = int(inp.get("away_goalie_shots_faced") or 0)
+    away_goalie_gp           = int(inp.get("away_goalie_gp") or 1)
+    home_goalie_gsax         = float(inp.get("home_goalie_gsax") or 0.0)
+    home_goalie_shots_faced  = int(inp.get("home_goalie_shots_faced") or 0)
+    home_goalie_gp           = int(inp.get("home_goalie_gp") or 1)
 
-    mkt_away_ml    = inp.get("mkt_away_ml")
-    mkt_home_ml    = inp.get("mkt_home_ml")
-    mkt_total      = inp.get("mkt_total")
+    # Schedule inputs
+    away_rest_days = inp.get("away_rest_days")
+    home_rest_days = inp.get("home_rest_days")
+
+    # Market inputs
+    mkt_away_ml      = inp.get("mkt_away_ml")
+    mkt_home_ml      = inp.get("mkt_home_ml")
+    mkt_total        = inp.get("mkt_total")
     mkt_away_pl_odds = inp.get("mkt_away_pl_odds")
     mkt_home_pl_odds = inp.get("mkt_home_pl_odds")
-    mkt_over_odds  = inp.get("mkt_over_odds")
-    mkt_under_odds = inp.get("mkt_under_odds")
+    mkt_over_odds    = inp.get("mkt_over_odds")
+    mkt_under_odds   = inp.get("mkt_under_odds")
 
-    print(f"[NHLModel] ► Originating: {away_name} @ {home_name}", file=sys.stderr)
-    print(f"[NHLModel]   Away goalie: {inp.get('away_goalie','?')} GSAx={away_goalie_gsax:.2f} GP={away_goalie_gp}", file=sys.stderr)
-    print(f"[NHLModel]   Home goalie: {inp.get('home_goalie','?')} GSAx={home_goalie_gsax:.2f} GP={home_goalie_gp}", file=sys.stderr)
-    print(f"[NHLModel]   Market: PL_odds={mkt_away_pl_odds}/{mkt_home_pl_odds} Total={mkt_total} ML={mkt_away_ml}/{mkt_home_ml}", file=sys.stderr)
+    # ── Logging ──────────────────────────────────────────────────────────────
+    print(f"\n[NHLModel] ════════════════════════════════════════════════════", file=sys.stderr)
+    print(f"[NHLModel] ► ORIGINATING: {away_name} @ {home_name}", file=sys.stderr)
+    print(f"[NHLModel]   Away goalie: {inp.get('away_goalie','?')} | GSAx={away_goalie_gsax:.2f} | GP={away_goalie_gp} | SF={away_goalie_shots_faced}", file=sys.stderr)
+    print(f"[NHLModel]   Home goalie: {inp.get('home_goalie','?')} | GSAx={home_goalie_gsax:.2f} | GP={home_goalie_gp} | SF={home_goalie_shots_faced}", file=sys.stderr)
+    print(f"[NHLModel]   Rest: away={away_rest_days}d home={home_rest_days}d", file=sys.stderr)
+    print(f"[NHLModel]   Market: PL={mkt_away_pl_odds}/{mkt_home_pl_odds} | Total={mkt_total} ({mkt_over_odds}/{mkt_under_odds}) | ML={mkt_away_ml}/{mkt_home_ml}", file=sys.stderr)
 
     t0 = time.time()
 
-    # 1. Project goals
-    lambda_away, lambda_home = project_goals(
+    # ── Step 2: Team strength ratings ────────────────────────────────────────
+    off_away = compute_off_rating(away_stats)
+    def_away = compute_def_rating(away_stats)
+    off_home = compute_off_rating(home_stats)
+    def_home = compute_def_rating(home_stats)
+    print(f"[NHLModel]   OFF: {away_abbrev}={off_away:.4f} {home_abbrev}={off_home:.4f}", file=sys.stderr)
+    print(f"[NHLModel]   DEF: {away_abbrev}={def_away:.4f} {home_abbrev}={def_home:.4f}", file=sys.stderr)
+
+    # ── Step 3: Goalie multipliers ────────────────────────────────────────────
+    gm_away = compute_goalie_multiplier(away_goalie_gsax, away_goalie_shots_faced, away_goalie_gp)
+    gm_home = compute_goalie_multiplier(home_goalie_gsax, home_goalie_shots_faced, home_goalie_gp)
+    print(f"[NHLModel]   Goalie multipliers: {away_abbrev}={gm_away:.4f} {home_abbrev}={gm_home:.4f}", file=sys.stderr)
+
+    # ── Step 4: Expected goals ────────────────────────────────────────────────
+    mu_away, mu_home = project_goals(
         away_stats, home_stats,
-        away_goalie_gsax, away_goalie_gp,
-        home_goalie_gsax, home_goalie_gp,
+        away_goalie_gsax, away_goalie_shots_faced, away_goalie_gp,
+        home_goalie_gsax, home_goalie_shots_faced, home_goalie_gp,
+        away_rest_days, home_rest_days,
         mkt_away_ml, mkt_home_ml, mkt_total,
     )
-    print(f"[NHLModel]   Projected goals: {away_name}={lambda_away:.4f} {home_name}={lambda_home:.4f}", file=sys.stderr)
+    print(f"[NHLModel]   μ_away={mu_away:.4f}  μ_home={mu_home:.4f}  E_total={mu_away+mu_home:.4f}", file=sys.stderr)
+    print(f"[NHLModel]   Fatigue: away={compute_fatigue_factor(away_rest_days):.2f} home={compute_fatigue_factor(home_rest_days):.2f}", file=sys.stderr)
+    print(f"[NHLModel]   Pace factor: {compute_pace_factor(away_stats, home_stats):.4f}", file=sys.stderr)
 
-    # 2. Monte Carlo
-    away_scores, home_scores = run_simulation(lambda_away, lambda_home)
+    # ── Steps 5–6: Monte Carlo simulation ────────────────────────────────────
+    print(f"[NHLModel]   Running {SIMULATIONS:,} correlated NB simulations (k={NB_K}, rho={GOAL_CORRELATION})...", file=sys.stderr)
+    away_scores, home_scores = run_simulation(mu_away, mu_home)
 
-    # 3. Probabilities
+    # ── Step 7: Probabilities ─────────────────────────────────────────────────
     probs = calculate_probs(away_scores, home_scores)
+    print(f"[NHLModel]   Win%: {away_abbrev}={probs['away_win']*100:.2f}% {home_abbrev}={probs['home_win']*100:.2f}%", file=sys.stderr)
+    print(f"[NHLModel]   PL%:  {away_abbrev}+1.5={probs['away_pl_cover']*100:.2f}% {home_abbrev}-1.5={probs['home_pl_cover']*100:.2f}%", file=sys.stderr)
+    print(f"[NHLModel]   Total: line={probs['best_total_line']} over={probs['over_prob']*100:.2f}% under={probs['under_prob']*100:.2f}%", file=sys.stderr)
 
-    # 4. Originate lines
-    model_away_ml_int = prob_to_ml(probs["away_win"])
-    model_home_ml_int = -model_away_ml_int
+    # ── Steps 8–10: Market origination ───────────────────────────────────────
+    # Section 8: Moneyline
+    model_away_ml = prob_to_ml(probs["away_win"])
+    model_home_ml = prob_to_ml(probs["home_win"])
 
-    model_away_pl_odds_int = prob_to_ml(probs["away_pl_cover"])
-    model_home_pl_odds_int = -model_away_pl_odds_int
+    # Section 9: Puck line
+    model_away_pl_odds = prob_to_ml(probs["away_pl_cover"])
+    model_home_pl_odds = prob_to_ml(probs["home_pl_cover"])
 
-    model_total_line = probs["best_total_line"]
-    model_over_odds_int  = prob_to_ml(probs["best_over_prob"])
-    model_under_odds_int = -model_over_odds_int
+    # Section 10: Total
+    model_total_line  = probs["best_total_line"]
+    model_over_odds   = prob_to_ml(probs["over_prob"])
+    model_under_odds  = prob_to_ml(probs["under_prob"])
 
-    # 5. Detect edges
+    print(f"[NHLModel]   ML:    {format_ml(model_away_ml)} / {format_ml(model_home_ml)}", file=sys.stderr)
+    print(f"[NHLModel]   PL:    {format_ml(model_away_pl_odds)} / {format_ml(model_home_pl_odds)}", file=sys.stderr)
+    print(f"[NHLModel]   Total: {model_total_line} ({format_ml(model_over_odds)} / {format_ml(model_under_odds)})", file=sys.stderr)
+
+    # ── Step 8: Consistency validation ───────────────────────────────────────
+    violations = validate_consistency(probs, mu_away, mu_home)
+    if violations:
+        for v in violations:
+            print(f"[NHLModel]   ⚠ {v}", file=sys.stderr)
+    else:
+        print(f"[NHLModel]   ✓ All Section 11 consistency constraints satisfied", file=sys.stderr)
+
+    # ── Step 9: Edge detection ────────────────────────────────────────────────
     edges = detect_edges(
         probs,
         mkt_away_pl_odds, mkt_home_pl_odds,
@@ -536,43 +823,46 @@ def originate_game(inp: dict) -> dict:
     )
 
     elapsed = time.time() - t0
-    print(f"[NHLModel]   ✓ Done in {elapsed:.2f}s | Edges: {len(edges)}", file=sys.stderr)
-    print(f"[NHLModel]   ML: {format_ml(model_away_ml_int)}/{format_ml(model_home_ml_int)} | PL: {format_ml(model_away_pl_odds_int)}/{format_ml(model_home_pl_odds_int)} | Total: {model_total_line} ({format_ml(model_over_odds_int)}/{format_ml(model_under_odds_int)})", file=sys.stderr)
+    print(f"[NHLModel]   ✓ Done in {elapsed:.3f}s | Edges detected: {len(edges)}", file=sys.stderr)
+    print(f"[NHLModel] ════════════════════════════════════════════════════\n", file=sys.stderr)
 
+    # ── Section 12: Final market output ──────────────────────────────────────
     return {
-        "ok":                True,
-        "game":              f"{away_name} @ {home_name}",
-        "away_name":         away_name,
-        "home_name":         home_name,
-        "away_abbrev":       away_abbrev,
-        "home_abbrev":       home_abbrev,
-        "away_goalie":       inp.get("away_goalie"),
-        "home_goalie":       inp.get("home_goalie"),
-        # Projected goals
-        "proj_away_goals":   round(lambda_away, 2),
-        "proj_home_goals":   round(lambda_home, 2),
-        # Puck line (always ±1.5)
-        "away_puck_line":    "+1.5",
-        "away_puck_line_odds": model_away_pl_odds_int,
-        "home_puck_line":    "-1.5",
-        "home_puck_line_odds": model_home_pl_odds_int,
-        # Moneylines
-        "away_ml":           model_away_ml_int,
-        "home_ml":           model_home_ml_int,
-        # Total
-        "total_line":        model_total_line,
-        "over_odds":         model_over_odds_int,
-        "under_odds":        model_under_odds_int,
-        # Probabilities
-        "away_win_pct":      round(probs["away_win"] * 100, 2),
-        "home_win_pct":      round(probs["home_win"] * 100, 2),
-        "away_pl_cover_pct": round(probs["away_pl_cover"] * 100, 2),
-        "home_pl_cover_pct": round(probs["home_pl_cover"] * 100, 2),
-        "over_pct":          round(probs["best_over_prob"] * 100, 2),
-        "under_pct":         round((1.0 - probs["best_over_prob"]) * 100, 2),
+        "ok":                   True,
+        "game":                 f"{away_name} @ {home_name}",
+        "away_name":            away_name,
+        "home_name":            home_name,
+        "away_abbrev":          away_abbrev,
+        "home_abbrev":          home_abbrev,
+        "away_goalie":          inp.get("away_goalie"),
+        "home_goalie":          inp.get("home_goalie"),
+        # Projected goals (Section 4)
+        "proj_away_goals":      round(mu_away, 2),
+        "proj_home_goals":      round(mu_home, 2),
+        # Puck line (Section 9) — always ±1.5 in NHL
+        "away_puck_line":       "+1.5",
+        "away_puck_line_odds":  model_away_pl_odds,
+        "home_puck_line":       "-1.5",
+        "home_puck_line_odds":  model_home_pl_odds,
+        # Moneylines (Section 8)
+        "away_ml":              model_away_ml,
+        "home_ml":              model_home_ml,
+        # Total (Section 10)
+        "total_line":           model_total_line,
+        "over_odds":            model_over_odds,
+        "under_odds":           model_under_odds,
+        # Probabilities (Section 7)
+        "away_win_pct":         round(probs["away_win"] * 100, 2),
+        "home_win_pct":         round(probs["home_win"] * 100, 2),
+        "away_pl_cover_pct":    round(probs["away_pl_cover"] * 100, 2),
+        "home_pl_cover_pct":    round(probs["home_pl_cover"] * 100, 2),
+        "over_pct":             round(probs["over_prob"] * 100, 2),
+        "under_pct":            round(probs["under_prob"] * 100, 2),
         # Edges
-        "edges":             edges,
-        "error":             None,
+        "edges":                edges,
+        # Diagnostics
+        "consistency_violations": violations,
+        "error":                None,
     }
 
 
