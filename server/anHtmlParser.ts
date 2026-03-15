@@ -87,10 +87,38 @@ type CheerioAPI = ReturnType<typeof cheerio.load>;
 type El = any;
 
 /**
- * Scan all rows to find which column index most frequently contains a DK logo.
- * Returns the column index with the highest DK logo count.
+ * Find the DK NJ column index by scanning the header row (<th> elements).
+ * The header row contains book logo images with alt text like "DK NJ logo".
+ * Falls back to scanning data rows if no header is found.
+ * Returns the column index of the DK NJ book column.
  */
 function findDkColumnIndex(api: CheerioAPI, rows: El[]): number {
+  // Strategy 1: Look for a header row with <th> elements containing book logos
+  const headerRow = rows.find((r: El) => api(r).find("th").length > 0);
+  if (headerRow) {
+    const headers = api(headerRow).find("th").toArray();
+    for (let i = 0; i < headers.length; i++) {
+      const altText = api(headers[i]).find("img").attr("alt") || "";
+      if (/DK NJ/i.test(altText) || /DraftKings/i.test(altText)) {
+        return i;
+      }
+    }
+  }
+
+  // Strategy 2: Look for a row with <td> header-like cells (some AN pages use <td> for headers)
+  for (const row of rows) {
+    const cells = api(row).find("> td").toArray();
+    for (let i = 0; i < cells.length; i++) {
+      const altText = api(cells[i]).find("img").attr("alt") || "";
+      if (/DK NJ/i.test(altText) || /DraftKings/i.test(altText)) {
+        return i;
+      }
+    }
+  }
+
+  // Strategy 3: Fallback — scan data rows for DK logo in book cells (old behavior)
+  // The DK logo appears in data cells only when DK has the best odds for that side.
+  // Count occurrences per column — the true DK column will have the most.
   const counts: Record<number, number> = {};
   for (const row of rows) {
     const cells = api(row).find("> td").toArray();
@@ -100,7 +128,13 @@ function findDkColumnIndex(api: CheerioAPI, rows: El[]): number {
     });
   }
   const entries = Object.entries(counts).sort((a, b) => Number(b[1]) - Number(a[1]));
-  return entries.length ? Number(entries[0][0]) : 9; // fallback to 9 (known default)
+  if (entries.length) {
+    console.warn(`[AnHtmlParser] No header row found — using data-row DK logo scan, best column: ${entries[0][0]}`);
+    return Number(entries[0][0]);
+  }
+
+  console.warn("[AnHtmlParser] Could not find DK NJ column — using fallback index 8");
+  return 8; // updated fallback based on known NCAAB structure
 }
 
 type RowType = "SPREAD" | "TOTAL" | "ML" | "SEPARATOR";
