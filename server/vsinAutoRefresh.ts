@@ -294,16 +294,33 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
     if (ncaaGames.length === 0) continue;
 
     const existingForDate = await listGamesByDate(dateStr, "NCAAM");
+    // Cache for PST-date lookups (for late-night games that belong to a prior date)
+    const existingByPstDate = new Map<string, Awaited<ReturnType<typeof listGamesByDate>>>();
     const startTimeMap = startTimeMaps.get(dateStr);
 
     for (const ncaaGame of ncaaGames) {
-      const { contestId, awaySeoname, homeSeoname, startTimeEst, gameStatus } = ncaaGame;
+      const { contestId, awaySeoname, homeSeoname, startTimeEst, gameStatus, gameDatePst } = ncaaGame;
 
       if (!VALID_DB_SLUGS.has(awaySeoname) || !VALID_DB_SLUGS.has(homeSeoname)) {
         if (awaySeoname !== "tba" && homeSeoname !== "tba") {
           console.log(`[VSiNAutoRefresh] Skipping non-D1 NCAA game: ${awaySeoname} @ ${homeSeoname}`);
         }
         continue;
+      }
+
+      // Use the PST calendar date as the authoritative gameDate.
+      // For late-night games (e.g. 9 PM PST on March 13 returned by March 14 query),
+      // gameDatePst will differ from dateStr. We must use gameDatePst for DB lookups
+      // and insertions to avoid storing the game under the wrong date.
+      const effectiveDate = gameDatePst ?? dateStr;
+
+      // Get the existing games for the effective PST date
+      let existingForEffectiveDate = existingForDate;
+      if (effectiveDate !== dateStr) {
+        if (!existingByPstDate.has(effectiveDate)) {
+          existingByPstDate.set(effectiveDate, await listGamesByDate(effectiveDate, "NCAAM"));
+        }
+        existingForEffectiveDate = existingByPstDate.get(effectiveDate)!;
       }
 
       const byContestId = await getGameByNcaaContestId(contestId);
@@ -320,10 +337,10 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
         continue;
       }
 
-      const bySlugCanonical = existingForDate.find(
+      const bySlugCanonical = existingForEffectiveDate.find(
         e => slugsMatch(e.awayTeam, awaySeoname) && slugsMatch(e.homeTeam, homeSeoname)
       );
-      const bySlugReversed = !bySlugCanonical ? existingForDate.find(
+      const bySlugReversed = !bySlugCanonical ? existingForEffectiveDate.find(
         e => slugsMatch(e.awayTeam, homeSeoname) && slugsMatch(e.homeTeam, awaySeoname)
       ) : undefined;
       const bySlug = bySlugCanonical ?? bySlugReversed;
@@ -344,7 +361,7 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
       const resolvedStartTime = startTimeMap?.get(`${awaySeoname}@${homeSeoname}`) ?? startTimeEst ?? "TBD";
       const row: InsertGame = {
         fileId: 0,
-        gameDate: dateStr,
+        gameDate: effectiveDate, // Use PST calendar date (not query date)
         startTimeEst: resolvedStartTime,
         awayTeam: awaySeoname,
         homeTeam: homeSeoname,
@@ -737,14 +754,19 @@ async function refreshNcaamScores(): Promise<void> {
     const yyyymmdd = todayStr.replace(/-/g, "");
     const ncaaGames = await fetchNcaaGames(yyyymmdd);
 
-    // Also fetch next-day midnight games (stored under today's date in DB)
+    // Also fetch the next UTC day's games from the NCAA API.
+    // The NCAA API uses UTC midnight as the day boundary, so a game at 9 PM PST
+    // on March 13 (= 4 AM UTC on March 14) is returned by the March 14 query.
+    // We use gameDatePst to identify games that actually belong to today (PST).
     const nextDay = new Date(todayStr + "T00:00:00Z");
     nextDay.setUTCDate(nextDay.getUTCDate() + 1);
     const nextDayYyyymmdd = nextDay.toISOString().slice(0, 10).replace(/-/g, "");
     try {
       const nextDayGames = await fetchNcaaGames(nextDayYyyymmdd);
-      const midnightGames = nextDayGames.filter(g => g.startTimeEst === "00:00");
-      ncaaGames.push(...midnightGames);
+      // Include games whose PST calendar date is today (they belong to today's slate
+      // even though the NCAA API returns them under the next UTC day)
+      const todayPstGames = nextDayGames.filter(g => g.gameDatePst === todayStr);
+      ncaaGames.push(...todayPstGames);
     } catch {
       // Non-fatal
     }

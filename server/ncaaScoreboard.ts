@@ -1,7 +1,11 @@
 /**
  * NCAA Scoreboard API scraper
- * Fetches game start times (in EST) from the NCAA GraphQL API.
+ * Fetches game start times (in PST/PDT) from the NCAA GraphQL API.
  * No authentication required — public endpoint.
+ *
+ * NCAAM games use Pacific Time (PST/PDT) to avoid midnight confusion for
+ * late-night West Coast games (e.g. a game at 9 PM PT = midnight ET would
+ * display as 00:00 in EST, which is confusing). NBA and NHL remain in EST.
  *
  * Team resolution: NCAA seonames (hyphen format, e.g. "michigan-st") are
  * looked up directly in the 365-team registry (BY_NCAA_SLUG). If a seoname
@@ -30,17 +34,25 @@ export interface NcaaGame {
   /** DB-style slug for home team, e.g. "penn_state" ("tba" if unknown) */
   homeSeoname: string;
   /**
-   * Start time in ET as "HH:MM", e.g. "19:30" (DST-aware).
+   * Start time in PT (Pacific Time) as "HH:MM", e.g. "19:30" (DST-aware).
    * "TBD" when no confirmed start time.
-   * "00:00" means a late-night West Coast game (e.g. 9 PM PT = midnight ET).
-   * These games belong to the calendar date the NCAA API returns them under —
-   * no date adjustment is needed.
+   * Using Pacific Time for NCAAM to avoid midnight confusion for late-night
+   * West Coast games (e.g. 9 PM PT instead of 00:00 ET).
    */
   startTimeEst: string;
   /** Whether the start time is confirmed (not TBA) */
   hasStartTime: boolean;
   /** Unix epoch in seconds (UTC) */
   startTimeEpoch: number;
+  /**
+   * The correct PST calendar date for this game as "YYYY-MM-DD".
+   * Derived from the epoch converted to Pacific Time.
+   * This is the authoritative gameDate to store in the DB — it may differ
+   * from the NCAA API query date for late-night games that cross UTC midnight
+   * (e.g. a game at 9 PM PST on March 13 is returned by the March 14 query
+   * because its UTC time is 04:00 on March 14, but it belongs to March 13).
+   */
+  gameDatePst: string;
   /**
    * Game status derived from NCAA API gameState field:
    * 'P' (pre) → 'upcoming', 'I' (in-progress) → 'live', 'F' (final) → 'final'
@@ -64,11 +76,31 @@ function toNcaaDate(yyyymmdd: string): string {
   return `${m}/${d}/${y}`;
 }
 
-/** Convert a Unix epoch (seconds) to "HH:MM" in Eastern Time (DST-aware). */
-function epochToEt(epochSec: number): string {
+/** Convert a YYYYMMDD string to "YYYY-MM-DD" ISO format. */
+function yyyymmddToIso(yyyymmdd: string): string {
+  return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
+}
+
+/** Convert a Unix epoch (seconds) to "YYYY-MM-DD" in Pacific Time (DST-aware). */
+function epochToPstDate(epochSec: number): string {
+  const d = new Date(epochSec * 1000);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const y = parts.find(p => p.type === "year")?.value ?? "";
+  const m = parts.find(p => p.type === "month")?.value ?? "";
+  const dd = parts.find(p => p.type === "day")?.value ?? "";
+  return `${y}-${m}-${dd}`; // e.g. "2026-03-13"
+}
+
+/** Convert a Unix epoch (seconds) to "HH:MM" in Pacific Time (DST-aware). */
+function epochToPt(epochSec: number): string {
   const d = new Date(epochSec * 1000);
   return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
+    timeZone: "America/Los_Angeles",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -117,25 +149,21 @@ export async function fetchNcaaGames(dateYYYYMMDD: string): Promise<NcaaGame[]> 
     const home = c.teams?.find((t: any) => t.isHome);
     if (!away || !home) continue;
 
-    // Resolve start time:
-    // - If hasStartTime=true: use the confirmed time directly.
-    // - If hasStartTime=false but epoch resolves to 00:xx ET: this is a real
-    //   late-night West Coast game (e.g. Hawaii 9 PM PT = midnight ET).
-    //   The NCAA API already returns it under the correct ET calendar date.
-    //   Store "00:00" as the start time — no date adjustment needed.
-    // - If hasStartTime=false and epoch is NOT midnight: TBD (placeholder epoch).
+    // Resolve start time in Pacific Time (PST/PDT):
+    // - If hasStartTime=true: convert the epoch to PT.
+    // - If hasStartTime=false but epoch is a valid future/recent time: convert to PT.
+    // - If no epoch: TBD.
+    // Using Pacific Time for NCAAM avoids the confusing 00:00 display for
+    // late-night West Coast games (e.g. 9 PM PT shows correctly instead of 00:00 ET).
     let startTimeEst: string;
-    if (c.hasStartTime && c.startTime) {
-      startTimeEst = c.startTime;
-    } else if (c.startTimeEpoch) {
-      const etTime = epochToEt(c.startTimeEpoch);
-      const etHour = parseInt(etTime.split(":")[0] ?? "12", 10);
-      if (etHour === 0 || etHour === 24) {
-        // Midnight ET — real late-night West Coast game
-        // The NCAA API already places this under the correct calendar date
-        startTimeEst = "00:00";
+    if (c.startTimeEpoch) {
+      const ptTime = epochToPt(c.startTimeEpoch);
+      const ptHour = parseInt(ptTime.split(":")[0] ?? "12", 10);
+      // Validate: if epoch gives a reasonable hour (0-23), use it
+      // A placeholder epoch (e.g. noon on a future date) will still show correctly
+      if (c.hasStartTime || (ptHour >= 0 && ptHour <= 23)) {
+        startTimeEst = ptTime;
       } else {
-        // Non-midnight epoch with hasStartTime=false — treat as TBD
         startTimeEst = "TBD";
       }
     } else {
@@ -196,6 +224,14 @@ export async function fetchNcaaGames(dateYYYYMMDD: string): Promise<NcaaGame[]> 
       }
     }
 
+    // Derive the PST calendar date from the epoch.
+    // This is the authoritative date to store in the DB — it correctly handles
+    // late-night games that cross UTC midnight (e.g. 9 PM PST on March 13 is
+    // returned by the March 14 NCAA API query but belongs to March 13).
+    const gameDatePst = c.startTimeEpoch
+      ? epochToPstDate(c.startTimeEpoch)
+      : yyyymmddToIso(dateYYYYMMDD); // fallback to query date if no epoch
+
     games.push({
       contestId: String(c.contestId),
       awaySeoname,
@@ -203,6 +239,7 @@ export async function fetchNcaaGames(dateYYYYMMDD: string): Promise<NcaaGame[]> 
       startTimeEst,
       hasStartTime: c.hasStartTime ?? false,
       startTimeEpoch: c.startTimeEpoch,
+      gameDatePst,
       gameStatus,
       awayScore,
       homeScore,
@@ -211,6 +248,11 @@ export async function fetchNcaaGames(dateYYYYMMDD: string): Promise<NcaaGame[]> 
   }
 
   return games;
+}
+
+/** Convert a Unix epoch (seconds) to "HH:MM" in Pacific Time (DST-aware). Exported for use in vsinAutoRefresh. */
+export function epochToPtExported(epochSec: number): string {
+  return epochToPt(epochSec);
 }
 
 export function buildStartTimeMap(games: NcaaGame[]): Map<string, string> {

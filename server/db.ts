@@ -154,7 +154,9 @@ export async function deleteModelFile(id: number) {
 // ─── Games ───────────────────────────────────────────────────────────────────
 
 /**
- * Sort game rows by start time, treating '00:00' as midnight (sort last).
+ * Sort game rows by start time. NCAAM uses PST, NBA/NHL use EST.
+ * '21:00' PST (New Mexico @ San Diego St) sorts correctly after '19:00' PST (Hawaii).
+ * The old '00:00' special case is no longer needed since NCAAM switched to PST.
  * This replaces the CASE WHEN ORDER BY SQL expression which is not supported
  * by the TiDB driver. DB-level sort by sortOrder is done first, then this
  * stable sort applies start-time ordering on top.
@@ -164,9 +166,9 @@ function sortGamesByStartTime<T extends { gameDate: string; startTimeEst: string
     // Primary: gameDate ascending
     if (a.gameDate < b.gameDate) return -1;
     if (a.gameDate > b.gameDate) return 1;
-    // Secondary: start time ascending, '00:00' sorts last (midnight)
-    const timeA = (!a.startTimeEst || a.startTimeEst === '00:00') ? '24:00' : a.startTimeEst;
-    const timeB = (!b.startTimeEst || b.startTimeEst === '00:00') ? '24:00' : b.startTimeEst;
+    // Secondary: start time ascending (TBD/null sorts last)
+    const timeA = (!a.startTimeEst || a.startTimeEst === 'TBD') ? '99:00' : a.startTimeEst;
+    const timeB = (!b.startTimeEst || b.startTimeEst === 'TBD') ? '99:00' : b.startTimeEst;
     if (timeA < timeB) return -1;
     if (timeA > timeB) return 1;
     // Tertiary: sortOrder ascending (VSiN page order)

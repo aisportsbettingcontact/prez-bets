@@ -13,7 +13,8 @@ import { NHL_BY_DB_SLUG } from "@shared/nhlTeams";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatMilitaryTime(time: string | null | undefined): string {
+// NCAAM uses PST (Pacific Standard Time) for start times; NBA and NHL use EST.
+function formatMilitaryTime(time: string | null | undefined, sport?: string): string {
   if (!time) return "TBD";
   const upper = time.trim().toUpperCase();
   if (upper === "TBD" || upper === "TBA" || upper === "") return "TBD";
@@ -23,7 +24,8 @@ function formatMilitaryTime(time: string | null | undefined): string {
   if (isNaN(h) || isNaN(m)) return "TBD";
   const suffix = h >= 12 ? "PM" : "AM";
   const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}:${String(m).padStart(2, "0")} ${suffix} ET`;
+  const tz = sport === "NCAAM" ? "PST" : "EST";
+  return `${hour12}:${String(m).padStart(2, "0")} ${suffix} ${tz}`;
 }
 
 function timeToMinutes(time: string | null | undefined): number {
@@ -73,7 +75,7 @@ function TeamBadge({ slug, size = 22 }: { slug: string; size?: number }) {
 }
 
 // ─── Search Result Row ────────────────────────────────────────────────────────
-type GameRow = { id: number; awayTeam: string; homeTeam: string; gameDate: string; startTimeEst: string | null; awayBookSpread?: string | null };
+type GameRow = { id: number; awayTeam: string; homeTeam: string; gameDate: string; startTimeEst: string | null; awayBookSpread?: string | null; sport?: string | null };
 
 function SearchResultRow({ game, onClick }: { game: GameRow; onClick: () => void }) {
   const awayNcaa = getTeamByDbSlug(game.awayTeam);
@@ -87,7 +89,9 @@ function SearchResultRow({ game, onClick }: { game: GameRow; onClick: () => void
   const awayNick = awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? awayNhl?.nickname ?? "";
   const homeSchool = homeNcaa?.ncaaName ?? homeNba?.city ?? homeNhl?.city ?? game.homeTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   const homeNick = homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? homeNhl?.nickname ?? "";
-  const time = formatMilitaryTime(game.startTimeEst);
+  // Determine sport from team lookup if not directly available
+  const sport = game.sport ?? (awayNcaa ? "NCAAM" : awayNba ? "NBA" : "NHL");
+  const time = formatMilitaryTime(game.startTimeEst, sport);
   const dateShort = formatDateShort(game.gameDate);
 
   return (

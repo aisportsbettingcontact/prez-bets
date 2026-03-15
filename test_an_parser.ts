@@ -1,27 +1,34 @@
 import { parseAnAllMarketsHtml } from "./server/anHtmlParser.ts";
 import { readFileSync } from "fs";
 
-const html = readFileSync("/home/ubuntu/upload/pasted_content_26.txt", "utf8");
-const result = parseAnAllMarketsHtml(html);
+// Test NCAAB
+const ncaabHtml = readFileSync('/home/ubuntu/Downloads/ncaab_all_markets.html', 'utf-8');
+const ncaabResult = parseAnAllMarketsHtml(ncaabHtml, 'ncaab');
+console.log(`\n=== NCAAB ===`);
+console.log(`Games parsed: ${ncaabResult.games.length}`);
+console.log(`DK column: ${ncaabResult.dkColumnIndex}`);
+console.log(`Warnings: ${ncaabResult.warnings.length}`);
+if (ncaabResult.warnings.length) console.log('Warnings:', ncaabResult.warnings.slice(0, 5));
+ncaabResult.games.forEach((g, i) => {
+  console.log(`  ${i+1}. [${g.anGameId}] ${g.awayName} @ ${g.homeName} | Open: ${g.openAwaySpread?.line}/${g.openHomeSpread?.line} | DK: ${g.dkAwaySpread?.line}/${g.dkHomeSpread?.line}`);
+});
 
-console.log("Games:", result.games.length);
-console.log("DK col:", result.dkColumnIndex);
-console.log("Warnings:", result.warnings);
+// Test NBA
+const nbaHtml = readFileSync('/home/ubuntu/Downloads/nba_all_markets.html', 'utf-8');
+const nbaResult = parseAnAllMarketsHtml(nbaHtml, 'nba');
+console.log(`\n=== NBA ===`);
+console.log(`Games parsed: ${nbaResult.games.length}`);
+console.log(`DK column: ${nbaResult.dkColumnIndex}`);
+nbaResult.games.forEach((g, i) => {
+  console.log(`  ${i+1}. [${g.anGameId}] ${g.awayName} @ ${g.homeName} | Open: ${g.openAwaySpread?.line}/${g.openHomeSpread?.line} | DK: ${g.dkAwaySpread?.line}/${g.dkHomeSpread?.line}`);
+});
 
-result.games.forEach((g, i) => {
-  console.log(`\nGame ${i + 1}: ${g.awayName} @ ${g.homeName} [AN:${g.anGameId}]`);
-  console.log(
-    `  SPREAD open: ${g.openAwaySpread?.line}(${g.openAwaySpread?.juice}) / ${g.openHomeSpread?.line}(${g.openHomeSpread?.juice})`
-  );
-  console.log(
-    `  SPREAD DK:   ${g.dkAwaySpread?.line}(${g.dkAwaySpread?.juice}) / ${g.dkHomeSpread?.line}(${g.dkHomeSpread?.juice})`
-  );
-  console.log(
-    `  TOTAL  open: ${g.openOver?.line}(${g.openOver?.juice}) / ${g.openUnder?.line}(${g.openUnder?.juice})`
-  );
-  console.log(
-    `  TOTAL  DK:   ${g.dkOver?.line}(${g.dkOver?.juice}) / ${g.dkUnder?.line}(${g.dkUnder?.juice})`
-  );
-  console.log(`  ML     open: ${g.openAwayML?.line} / ${g.openHomeML?.line}`);
-  console.log(`  ML     DK:   ${g.dkAwayML?.line} / ${g.dkHomeML?.line}`);
+// Test NHL
+const nhlHtml = readFileSync('/home/ubuntu/Downloads/nhl_all_markets.html', 'utf-8');
+const nhlResult = parseAnAllMarketsHtml(nhlHtml, 'nhl');
+console.log(`\n=== NHL ===`);
+console.log(`Games parsed: ${nhlResult.games.length}`);
+console.log(`DK column: ${nhlResult.dkColumnIndex}`);
+nhlResult.games.forEach((g, i) => {
+  console.log(`  ${i+1}. [${g.anGameId}] ${g.awayName} @ ${g.homeName} | Open ML: ${g.openAwayML?.line}/${g.openHomeML?.line} | DK ML: ${g.dkAwayML?.line}/${g.dkHomeML?.line}`);
 });

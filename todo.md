@@ -1317,3 +1317,18 @@
 - [x] Fix updateAnOdds to parse spread/total strings to numbers for decimal columns
 - [x] 195/196 vitest tests passing (1 pre-existing KenPom env var failure)
 - [x] Checkpoint
+- [ ] Change NCAAM start times from EST to PST to avoid midnight confusion
+- [ ] Keep NBA and NHL start times in EST
+- [ ] Update existing DB games with corrected PST start times for NCAAM
+
+- [x] Change NCAAM start times from EST to PST (NCAA scraper uses epochToPt, vsinAutoRefresh uses gameDatePst)
+- [x] Keep NBA and NHL start times in EST
+- [x] Fix all 21 NCAAM games for March 14 to use correct PST start times from NCAA API epochs
+- [x] Move Cal Baptist @ Utah Valley from March 15 to March 14 (correct PST date = March 14 at 8:59 PM PST)
+- [x] Remove UNM vs SDSU from March 14 (moved to March 13 per PST calendar date)
+- [x] Apply AN odds to all 42 games (21 NCAAM + 7 NBA + 14 NHL) - 42/42 with DK + Open odds
+- [x] Apply VSiN splits to all 42 games - 41/42 with splits (Kings @ Clippers late game, splits not yet posted)
+- [x] Add gameDatePst field to NcaaGame interface for correct PST calendar date assignment
+- [x] Update vsinAutoRefresh to use gameDatePst when inserting NCAAM games
+- [x] Update sortGamesByStartTime to remove 00:00 special case (no longer needed with PST)
+- [x] Update GameCard.tsx formatMilitaryTime to show PST for NCAAM, EST for NBA/NHL

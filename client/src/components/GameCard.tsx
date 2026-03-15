@@ -37,7 +37,9 @@ type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
 
 // ── Time formatting ───────────────────────────────────────────────────────────
-function formatMilitaryTime(time: string): string {
+// NCAAM uses PST (Pacific Standard Time) to avoid midnight confusion for
+// late-night West Coast games. NBA and NHL use EST.
+function formatMilitaryTime(time: string, sport?: string): string {
   const upper = time?.toUpperCase() ?? "";
   if (!time || upper === "TBD" || upper === "TBA" || !time.includes(":")) return "TBD";
   const parts = time.split(":");
@@ -46,7 +48,9 @@ function formatMilitaryTime(time: string): string {
   if (isNaN(hours)) return "TBD";
   const ampm = hours >= 12 ? "PM" : "AM";
   hours = hours % 12 || 12;
-  return `${hours}:${minutes} ${ampm} EST`;
+  // NCAAM uses PST; NBA and NHL use EST
+  const tz = sport === "NCAAM" ? "PST" : "EST";
+  return `${hours}:${minutes} ${ampm} ${tz}`;
 }
 
 // ── Date formatting ───────────────────────────────────────────────────────────
@@ -1610,15 +1614,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const awayLogoUrl = awayNcaa?.logoUrl ?? awayNba?.logoUrl ?? awayNhl?.logoUrl;
   const homeLogoUrl = homeNcaa?.logoUrl ?? homeNba?.logoUrl ?? homeNhl?.logoUrl;
 
-  const time = formatMilitaryTime(game.startTimeEst);
-  const displayDate = (() => {
-    if (game.startTimeEst === "00:00") {
-      const d = new Date(game.gameDate + "T00:00:00");
-      d.setDate(d.getDate() + 1);
-      return d.toISOString().slice(0, 10);
-    }
-    return game.gameDate;
-  })();
+  const time = formatMilitaryTime(game.startTimeEst, game.sport);
+  // NCAAM uses PST — no midnight date-shift needed (00:00 is no longer used for NCAAM).
+  // NBA/NHL use EST — no date-shift needed either (games end before midnight EST).
+  const displayDate = game.gameDate;
   const dateLabel = formatDate(displayDate);
 
   // Score state
