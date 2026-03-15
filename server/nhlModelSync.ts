@@ -99,7 +99,11 @@ function fmtML(ml: number): string {
  * Run the NHL model for all unmodeled games today.
  * Called by the scheduler and by the manual triggerRefresh tRPC procedure.
  */
-export async function syncNhlModelForToday(source: "auto" | "manual" = "auto", forceRerun = false): Promise<NhlModelSyncResult> {
+export async function syncNhlModelForToday(
+  source: "auto" | "manual" = "auto",
+  forceRerun = false,
+  runAllStatuses = false
+): Promise<NhlModelSyncResult> {
   const gameDate = getTodayDate();
   const tag = source === "manual" ? "[MANUAL]" : "[AUTO]";
 
@@ -116,32 +120,27 @@ export async function syncNhlModelForToday(source: "auto" | "manual" = "auto", f
 
   const db = await getDb();
 
-  // If forceRerun, clear modelRunAt for all today's upcoming NHL games first
-  if (forceRerun) {
-    console.log(`[NhlModelSync]${tag}   forceRerun=true — clearing modelRunAt for all upcoming NHL games today`);
-    await db
-      .update(games)
-      .set({ modelRunAt: null })
-      .where(
-        and(
-          eq(games.gameDate, gameDate),
-          eq(games.sport, "NHL"),
-          eq(games.gameStatus, "upcoming")
-        )
-      );
+  // If forceRerun, clear modelRunAt for today's NHL games
+  // runAllStatuses=true clears ALL statuses (upcoming + live + final)
+  // forceRerun=true (without runAllStatuses) only clears upcoming
+  if (forceRerun || runAllStatuses) {
+    const statusMsg = runAllStatuses ? "ALL statuses (upcoming + live + final)" : "upcoming only";
+    console.log(`[NhlModelSync]${tag}   forceRerun=true — clearing modelRunAt for NHL games today (${statusMsg})`);
+    const clearWhere = runAllStatuses
+      ? and(eq(games.gameDate, gameDate), eq(games.sport, "NHL"))
+      : and(eq(games.gameDate, gameDate), eq(games.sport, "NHL"), eq(games.gameStatus, "upcoming"));
+    await db.update(games).set({ modelRunAt: null }).where(clearWhere);
   }
+
+  // Query games to model — runAllStatuses=true includes live/final games
+  const statusFilter = runAllStatuses
+    ? and(eq(games.gameDate, gameDate), eq(games.sport, "NHL"), or(isNull(games.modelRunAt), isNull(games.modelAwayScore)))
+    : and(eq(games.gameDate, gameDate), eq(games.sport, "NHL"), eq(games.gameStatus, "upcoming"), or(isNull(games.modelRunAt), isNull(games.modelAwayScore)));
 
   const unmodeled = await db
     .select()
     .from(games)
-    .where(
-      and(
-        eq(games.gameDate, gameDate),
-        eq(games.sport, "NHL"),
-        eq(games.gameStatus, "upcoming"),
-        or(isNull(games.modelRunAt), isNull(games.modelAwayScore))
-      )
-    );
+    .where(statusFilter);
 
   console.log(`[NhlModelSync]${tag}   Found ${unmodeled.length} unmodeled NHL game(s) for ${gameDate}`);
 

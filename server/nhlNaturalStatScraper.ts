@@ -124,6 +124,10 @@ const NST_ABBREV_OVERRIDES: Record<string, string> = {
   "T.B": "TBL",
   // NST uses "L.A" for Los Angeles Kings
   "L.A": "LAK",
+  // NST uses "ST LOUIS BLUES" (no period) for St. Louis Blues
+  "ST LOUIS BLUES": "STL",
+  // NST uses "UTAH HOCKEY CLUB" for Utah Mammoth (formerly Utah HC)
+  "UTAH HOCKEY CLUB": "UTA",
 };
 
 /**

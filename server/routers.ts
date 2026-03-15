@@ -731,6 +731,16 @@ export const appRouter = router({
         const result = await syncNhlModelForToday("manual", true);
         return result;
       }),
+    /**
+     * Force re-run the NHL model for ALL today's games regardless of status.
+     * Owner-only — runs model for upcoming + live + final games.
+     * Use this to backfill correct model values after engine fixes.
+     */
+    forceRerunAll: ownerProcedure
+      .mutation(async () => {
+        const result = await syncNhlModelForToday("manual", true, true);
+        return result;
+      }),
   }),
   // ─── Odds History ────────────────────────────────────────────────────────────────────────────
   oddsHistory: router({

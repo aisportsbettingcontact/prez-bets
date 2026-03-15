@@ -1817,14 +1817,22 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   }, [isAppAuthed, onToggleFavorite, game.id, toggleFavMutation, isFavorited, onFavoriteNotify]);
   const awayBookSpread = toNum(game.awayBookSpread);
   const homeBookSpread = toNum(game.homeBookSpread);
-  const awayModelSpread = toNum(game.awayModelSpread);
-  const homeModelSpread = toNum(game.homeModelSpread);
+  const isNhlGame = game.sport === 'NHL';
+  // For NHL: use modelAwayPuckLine/modelHomePuckLine (simulation-derived, e.g. "+1.5"/"-1.5")
+  // instead of awayModelSpread/homeModelSpread (which may contain stale goal-differential values).
+  // For NCAAM/NBA: use awayModelSpread/homeModelSpread as before.
+  const awayModelSpread = isNhlGame
+    ? toNum(game.modelAwayPuckLine ?? game.awayModelSpread)
+    : toNum(game.awayModelSpread);
+  const homeModelSpread = isNhlGame
+    ? toNum(game.modelHomePuckLine ?? game.homeModelSpread)
+    : toNum(game.homeModelSpread);
   const bookTotal = toNum(game.bookTotal);
+  // For NHL: modelTotal from DB may be stale (8.5 from old goal-sum formula).
+  // The correct simulation-derived total is stored in modelTotal after re-run.
+  // Use it directly — it will be correct after the next model run.
   const modelTotal = toNum(game.modelTotal);
 
-  const isNhlGame = game.sport === 'NHL';
-  // For NHL: awayModelSpread is always ±1.5 or ±2.5 (puck line from simulation).
-  // Arithmetic comparison of line values is meaningless — both model and book are ±1.5.
   // Use game.spreadDiff (probability edge in pp, set by Python engine) for NHL.
   // For NCAAM/NBA: compute diff from line values as before.
   const spreadDiff = isNhlGame
