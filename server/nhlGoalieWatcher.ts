@@ -25,6 +25,7 @@ import type { Game } from "../drizzle/schema.js";
 import { scrapeNhlStartingGoalies } from "./nhlRotoWireScraper.js";
 import type { NhlLineupGame } from "./nhlRotoWireScraper.js";
 import { syncNhlModelForToday } from "./nhlModelSync.js";
+import { NHL_BY_DB_SLUG } from "../shared/nhlTeams.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -102,23 +103,27 @@ function isSameGoalie(a: string | null | undefined, b: string | null | undefined
 
 /**
  * Match a scraped RotoWire game to a DB game by team abbreviations.
+ * RotoWire returns 3-letter abbrevs (e.g. "BOS"), DB stores dbSlugs (e.g. "boston_bruins").
+ * Uses NHL_BY_DB_SLUG to convert dbSlug → abbrev for comparison.
  */
 function matchGameToDb(rotoGame: NhlLineupGame, dbGames: Game[]): Game | null {
-  // Exact match
-  const exact = dbGames.find(
-    g => g.awayTeam === rotoGame.awayTeam && g.homeTeam === rotoGame.homeTeam
-  );
-  if (exact) return exact;
+  const rotoAway = rotoGame.awayTeam.toUpperCase();
+  const rotoHome = rotoGame.homeTeam.toUpperCase();
 
-  // Fuzzy match (first 3 chars)
-  const fuzzy = dbGames.find(g => {
-    const dbAway  = (g.awayTeam ?? "").toUpperCase().slice(0, 3);
-    const dbHome  = (g.homeTeam ?? "").toUpperCase().slice(0, 3);
-    const rotoAway = rotoGame.awayTeam.toUpperCase().slice(0, 3);
-    const rotoHome = rotoGame.homeTeam.toUpperCase().slice(0, 3);
-    return dbAway === rotoAway && dbHome === rotoHome;
+  // Primary match: convert dbSlug → abbrev via NHL_BY_DB_SLUG
+  const abbrevMatch = dbGames.find(g => {
+    const dbAwayAbbrev = NHL_BY_DB_SLUG.get(g.awayTeam ?? "")?.abbrev?.toUpperCase() ?? "";
+    const dbHomeAbbrev = NHL_BY_DB_SLUG.get(g.homeTeam ?? "")?.abbrev?.toUpperCase() ?? "";
+    return dbAwayAbbrev === rotoAway && dbHomeAbbrev === rotoHome;
   });
-  return fuzzy ?? null;
+  if (abbrevMatch) return abbrevMatch;
+
+  // Fallback: direct string match (in case DB stores abbrevs directly)
+  const directMatch = dbGames.find(
+    g => (g.awayTeam ?? "").toUpperCase() === rotoAway &&
+         (g.homeTeam ?? "").toUpperCase() === rotoHome
+  );
+  return directMatch ?? null;
 }
 
 // ─── Core Watch Function ──────────────────────────────────────────────────────

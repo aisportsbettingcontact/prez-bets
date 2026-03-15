@@ -23,7 +23,7 @@ import { fetchNbaGamesForDate, buildNbaStartTimeMap, fetchNbaLiveScores } from "
 import { fetchNhlGamesForRange, buildNhlStartTimeMap, buildNhlGameMap, fetchNhlLiveScores, type NhlScheduleGame } from "./nhlSchedule";
 import { VALID_DB_SLUGS, BY_DB_SLUG, BY_VSIN_SLUG, BY_AN_SLUG as NCAAM_BY_AN, getTeamByAnSlug as getNcaamTeamByAnSlug } from "../shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS, NBA_BY_VSIN_SLUG, NBA_BY_AN_SLUG, getNbaTeamByVsinSlug } from "../shared/nbaTeams";
-import { NHL_VALID_DB_SLUGS, NHL_BY_ABBREV, NHL_BY_DB_SLUG, NHL_BY_VSIN_SLUG, NHL_BY_AN_SLUG } from "../shared/nhlTeams";
+import { NHL_VALID_DB_SLUGS, NHL_BY_ABBREV, NHL_BY_DB_SLUG, NHL_BY_VSIN_SLUG, NHL_BY_AN_SLUG, getNhlTeamByAnSlug } from "../shared/nhlTeams";
 import { NBA_BY_DB_SLUG } from "../shared/nbaTeams";
 import type { InsertGame } from "../drizzle/schema";
 
@@ -742,8 +742,8 @@ async function refreshAnApiOdds(
           awayDbSlug = NBA_BY_AN_SLUG.get(anGame.awayUrlSlug)?.dbSlug;
           homeDbSlug = NBA_BY_AN_SLUG.get(anGame.homeUrlSlug)?.dbSlug;
         } else if (sport === "nhl") {
-          awayDbSlug = NHL_BY_AN_SLUG.get(anGame.awayUrlSlug)?.dbSlug;
-          homeDbSlug = NHL_BY_AN_SLUG.get(anGame.homeUrlSlug)?.dbSlug;
+          awayDbSlug = getNhlTeamByAnSlug(anGame.awayUrlSlug)?.dbSlug;
+          homeDbSlug = getNhlTeamByAnSlug(anGame.homeUrlSlug)?.dbSlug;
         } else {
           // NCAAM — use alias-aware helper so v2 slugs (e.g. "wichita-state-shockers",
           // "south-florida-bulls", "pennsylvania-quakers") resolve correctly

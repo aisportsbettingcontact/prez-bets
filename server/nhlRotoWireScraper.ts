@@ -1,10 +1,26 @@
 /**
  * nhlRotoWireScraper.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Scrapes starting goalies and forward lines from RotoWire NHL Lineups page.
+ * Scrapes starting goalies from RotoWire NHL Lineups page.
  *
  * Data source:
  *   https://www.rotowire.com/hockey/nhl-lineups.php
+ *
+ * Page structure (verified Mar 2026):
+ *   .lineup__box                   — one per game
+ *     .lineup__top
+ *       .lineup__teams
+ *         a.lineup__team.is-visit  — away team link
+ *           .lineup__abbr          — 3-letter abbrev (e.g. "STL")
+ *         a.lineup__team.is-home   — home team link
+ *           .lineup__abbr          — 3-letter abbrev (e.g. "WPG")
+ *     .lineup__main
+ *       ul.lineup__list.is-visit   — away team lineup
+ *         li.lineup__player-highlight  — starting goalie (first item)
+ *           .lineup__player-highlight-name > a  — goalie name
+ *           .is-confirmed / .is-expected        — status
+ *       ul.lineup__list.is-home    — home team lineup
+ *         li.lineup__player-highlight  — starting goalie (first item)
  *
  * Outputs:
  *   NhlLineupGame — per-game lineup with starting goalies confirmed/projected
@@ -16,8 +32,8 @@ import * as cheerio from "cheerio";
 
 export interface NhlStartingGoalie {
   name: string;
-  confirmed: boolean;   // true = confirmed starter, false = projected
-  team: string;         // NHL abbreviation
+  confirmed: boolean;   // true = confirmed starter, false = projected/expected
+  team: string;         // NHL abbreviation (e.g. "BOS")
 }
 
 export interface NhlLineupGame {
@@ -39,49 +55,6 @@ const FETCH_HEADERS = {
   "Referer": "https://www.rotowire.com/",
 };
 
-// ─── Team Abbreviation Normalization ─────────────────────────────────────────
-// RotoWire uses full team names or different abbreviations
-const ROTOWIRE_TEAM_MAP: Record<string, string> = {
-  "Anaheim Ducks":          "ANA",
-  "Arizona Coyotes":        "ARI",
-  "Utah Hockey Club":       "UTA",
-  "Boston Bruins":          "BOS",
-  "Buffalo Sabres":         "BUF",
-  "Calgary Flames":         "CGY",
-  "Carolina Hurricanes":    "CAR",
-  "Chicago Blackhawks":     "CHI",
-  "Colorado Avalanche":     "COL",
-  "Columbus Blue Jackets":  "CBJ",
-  "Dallas Stars":           "DAL",
-  "Detroit Red Wings":      "DET",
-  "Edmonton Oilers":        "EDM",
-  "Florida Panthers":       "FLA",
-  "Los Angeles Kings":      "LAK",
-  "Minnesota Wild":         "MIN",
-  "Montreal Canadiens":     "MTL",
-  "Nashville Predators":    "NSH",
-  "New Jersey Devils":      "NJD",
-  "New York Islanders":     "NYI",
-  "New York Rangers":       "NYR",
-  "Ottawa Senators":        "OTT",
-  "Philadelphia Flyers":    "PHI",
-  "Pittsburgh Penguins":    "PIT",
-  "San Jose Sharks":        "SJS",
-  "Seattle Kraken":         "SEA",
-  "St. Louis Blues":        "STL",
-  "Tampa Bay Lightning":    "TBL",
-  "Toronto Maple Leafs":    "TOR",
-  "Vancouver Canucks":      "VAN",
-  "Vegas Golden Knights":   "VGK",
-  "Washington Capitals":    "WSH",
-  "Winnipeg Jets":          "WPG",
-};
-
-function normalizeTeam(raw: string): string {
-  const trimmed = raw.trim();
-  return ROTOWIRE_TEAM_MAP[trimmed] ?? trimmed.toUpperCase().slice(0, 3);
-}
-
 // ─── Scraper ─────────────────────────────────────────────────────────────────
 
 /**
@@ -99,115 +72,101 @@ export async function scrapeNhlStartingGoalies(): Promise<NhlLineupGame[]> {
   const html = await resp.text();
   console.log(`[RotoWireScraper]   Received ${html.length} bytes`);
 
+  return parseRotoWireLineups(html);
+}
+
+/**
+ * Parse RotoWire lineups HTML.
+ * Exported for testing.
+ */
+export function parseRotoWireLineups(html: string): NhlLineupGame[] {
   const $ = cheerio.load(html);
   const games: NhlLineupGame[] = [];
 
-  // RotoWire lineup page structure: each game is in a .lineup__box or .lineup-card container
-  const gameContainers = $(".lineup__box, .lineup-card, [class*='lineup__box']");
-  console.log(`[RotoWireScraper]   Found ${gameContainers.length} game containers`);
+  const gameBoxes = $(".lineup__box").toArray();
+  console.log(`[RotoWireScraper]   Found ${gameBoxes.length} game boxes`);
 
-  if (gameContainers.length === 0) {
-    // Try alternative structure
-    return parseAlternativeStructure($, html);
-  }
+  for (const box of gameBoxes) {
+    const $box = $(box);
 
-  gameContainers.each((idx, container) => {
-    const $container = $(container);
+    // ── Team abbreviations ────────────────────────────────────────────────
+    const awayAbbr = $box.find(".lineup__team.is-visit .lineup__abbr").first().text().trim();
+    const homeAbbr = $box.find(".lineup__team.is-home .lineup__abbr").first().text().trim();
 
-    // Extract team names
-    const teamNames = $container.find(".lineup__team-name, .team-name, [class*='team-name']");
-    const awayTeamRaw = $(teamNames[0]).text().trim();
-    const homeTeamRaw = $(teamNames[1]).text().trim();
+    if (!awayAbbr || !homeAbbr) {
+      console.warn("[RotoWireScraper]   Skipping box — could not find team abbrevs");
+      continue;
+    }
 
-    if (!awayTeamRaw || !homeTeamRaw) return;
+    // ── Game time ─────────────────────────────────────────────────────────
+    const gameTime = $box.find(".lineup__time").first().text().trim();
 
-    const awayTeam = normalizeTeam(awayTeamRaw);
-    const homeTeam = normalizeTeam(homeTeamRaw);
-
-    // Extract game time
-    const gameTime = $container.find(".lineup__time, .game-time, [class*='game-time']").first().text().trim();
-
-    // Extract starting goalies
-    // RotoWire shows goalies in .lineup__goalie or similar
-    const goalieEls = $container.find(".lineup__goalie, .goalie, [class*='goalie']");
-    let awayGoalie: NhlStartingGoalie | null = null;
-    let homeGoalie: NhlStartingGoalie | null = null;
-
-    goalieEls.each((gIdx, goalieEl) => {
-      const $goalie = $(goalieEl);
-      const name = $goalie.find("a, .player-name, [class*='player']").first().text().trim()
-        || $goalie.text().trim();
-      const confirmed = !$goalie.hasClass("is-projected") && !$goalie.hasClass("projected");
-
-      if (!name) return;
-
-      if (gIdx === 0) {
-        awayGoalie = { name, confirmed, team: awayTeam } as NhlStartingGoalie;
-      } else if (gIdx === 1) {
-        homeGoalie = { name, confirmed, team: homeTeam } as NhlStartingGoalie;
-      }
-    });
+    // ── Goalies from lineup__player-highlight ─────────────────────────────
+    const awayGoalie = extractGoalie($, $box, "is-visit", awayAbbr);
+    const homeGoalie = extractGoalie($, $box, "is-home", homeAbbr);
 
     const game: NhlLineupGame = {
-      awayTeam, homeTeam,
-      awayGoalie, homeGoalie,
+      awayTeam: awayAbbr,
+      homeTeam: homeAbbr,
+      awayGoalie,
+      homeGoalie,
       gameTime,
     };
     games.push(game);
 
-    const awayG = awayGoalie as NhlStartingGoalie | null;
-    const homeG = homeGoalie as NhlStartingGoalie | null;
     console.log(
-      `[RotoWireScraper]   Game ${idx}: ${awayTeam} @ ${homeTeam} | ` +
-      `Away G: ${awayG?.name ?? "TBD"} (${awayG?.confirmed ? "CONFIRMED" : "PROJECTED"}) | ` +
-      `Home G: ${homeG?.name ?? "TBD"} (${homeG?.confirmed ? "CONFIRMED" : "PROJECTED"})`
+      `[RotoWireScraper]   ${awayAbbr} @ ${homeAbbr} | ` +
+      `Away G: ${awayGoalie?.name ?? "TBD"} (${awayGoalie?.confirmed ? "CONFIRMED" : "EXPECTED"}) | ` +
+      `Home G: ${homeGoalie?.name ?? "TBD"} (${homeGoalie?.confirmed ? "CONFIRMED" : "EXPECTED"})`
     );
-  });
+  }
 
   console.log(`[RotoWireScraper] ✅ Scraped ${games.length} games with goalie data`);
   return games;
 }
 
 /**
- * Alternative parser for when the primary selector doesn't match.
- * Tries to find goalie data from a different page structure.
+ * Extract the starting goalie from a lineup list (is-visit or is-home).
+ *
+ * Structure:
+ *   ul.lineup__list.{side}
+ *     li.lineup__player-highlight   ← goalie (first item)
+ *       .lineup__player-highlight-name > a  ← name
+ *       .is-confirmed / .is-expected        ← status
  */
-function parseAlternativeStructure($: cheerio.CheerioAPI, html: string): NhlLineupGame[] {
-  console.log("[RotoWireScraper] ⚠ Trying alternative page structure...");
-  const games: NhlLineupGame[] = [];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractGoalie(
+  $: cheerio.CheerioAPI,
+  $box: cheerio.Cheerio<any>,
+  side: "is-visit" | "is-home",
+  teamAbbr: string
+): NhlStartingGoalie | null {
+  const $list = $box.find(`ul.lineup__list.${side}`).first();
+  if (!$list.length) return null;
 
-  // Look for any table or list with goalie names
-  // Try to find game blocks by looking for team abbreviations
-  const gameBlocks = $("[class*='game'], [class*='matchup'], [data-game-id]");
-  console.log(`[RotoWireScraper]   Alternative: found ${gameBlocks.length} game blocks`);
+  const $highlight = $list.find("li.lineup__player-highlight").first();
+  if (!$highlight.length) return null;
 
-  gameBlocks.each((idx, block) => {
-    const $block = $(block);
-    const text = $block.text();
+  // Goalie name
+  const nameEl = $highlight.find(".lineup__player-highlight-name a").first();
+  const name = nameEl.text().trim();
+  if (!name) return null;
 
-    // Extract team abbreviations from data attributes or text
-    const awayTeam = $block.attr("data-away-team") || $block.find("[class*='away'] [class*='abbrev']").text().trim();
-    const homeTeam = $block.attr("data-home-team") || $block.find("[class*='home'] [class*='abbrev']").text().trim();
+  // Status: look for .is-confirmed or .is-expected class
+  const hasConfirmed = $highlight.find(".is-confirmed").length > 0;
+  const hasExpected  = $highlight.find(".is-expected").length > 0;
 
-    if (!awayTeam || !homeTeam) return;
+  // Also check text content for "Confirmed" / "Expected" / "Projected"
+  const statusText = $highlight.text().toLowerCase();
+  const textConfirmed = statusText.includes("confirmed");
+  const textExpected  = statusText.includes("expected") || statusText.includes("projected");
 
-    games.push({
-      awayTeam: awayTeam.toUpperCase(),
-      homeTeam: homeTeam.toUpperCase(),
-      awayGoalie: null,
-      homeGoalie: null,
-      gameTime: "",
-    });
-  });
+  const confirmed = hasConfirmed || (textConfirmed && !hasExpected);
 
-  if (games.length === 0) {
-    console.warn("[RotoWireScraper] ⚠ Could not parse any games from RotoWire — page structure unknown");
-  }
-
-  return games;
+  return { name, confirmed, team: teamAbbr };
 }
 
-// ─── Goalie Name Lookup ───────────────────────────────────────────────────────
+// ─── Goalie Name Matching ─────────────────────────────────────────────────────
 
 /**
  * Fuzzy match a goalie name from RotoWire against NaturalStatTrick goalie stats.

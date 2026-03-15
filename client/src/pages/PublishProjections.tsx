@@ -1633,6 +1633,35 @@ export default function PublishProjections() {
     },
   });
 
+  // ── NHL Goalie Watcher ──────────────────────────────────────────────────────
+  const { data: lastGoalieCheck, refetch: refetchGoalieCheck } = trpc.nhlModel.getLastGoalieCheck.useQuery(undefined, {
+    refetchInterval: selectedSport === "NHL" ? 30_000 : false,
+    refetchOnWindowFocus: selectedSport === "NHL",
+    enabled: !!appUser && isOwner,
+  });
+
+  const checkGoaliesMutation = trpc.nhlModel.checkGoalies.useMutation({
+    onMutate: () => {
+      console.log(`[PublishProjections][GoalieCheck] ► Triggered manual goalie check`);
+    },
+    onSuccess: (result) => {
+      refetchGoalieCheck();
+      utils.games.listStaging.invalidate();
+      refetch();
+      const changeCount = result.changes?.length ?? 0;
+      if (changeCount > 0) {
+        toast.success(`Goalie check complete — ${changeCount} change${changeCount === 1 ? '' : 's'} detected, model re-run`);
+      } else {
+        toast.success(`Goalie check complete — no changes detected`);
+      }
+      console.log(`[PublishProjections][GoalieCheck] ✅ Complete — changes: ${changeCount} modelRerun: ${result.modelRerun}`);
+    },
+    onError: (err) => {
+      console.error(`[PublishProjections][GoalieCheck] ❌ Failed:`, err);
+      toast.error("Goalie check failed");
+    },
+  });
+
   const handleRefreshNow = () => {
     console.log(
       `[PublishProjections][RefreshNow] User clicked Refresh Now — ` +
@@ -1644,6 +1673,11 @@ export default function PublishProjections() {
     if (selectedSport === "NBA") {
       console.log(`[PublishProjections][RefreshNow] Also triggering NBA model sync…`);
       triggerNbaModelSyncMutation.mutate();
+    }
+    // NHL also triggers goalie watcher check
+    if (selectedSport === "NHL") {
+      console.log(`[PublishProjections][RefreshNow] Also triggering NHL goalie check…`);
+      checkGoaliesMutation.mutate();
     }
   };
 
@@ -1836,6 +1870,8 @@ export default function PublishProjections() {
             }
             title={selectedSport === "NBA"
               ? "Refresh VSiN NBA odds, scores, and NBA model data"
+              : selectedSport === "NHL"
+              ? "Refresh NHL odds, scores, and check for goalie changes"
               : "Refresh VSiN NCAAM odds and scores"}
           >
             <RefreshCw
@@ -2120,29 +2156,77 @@ export default function PublishProjections() {
               </>
             )}
 
-            {/* NHL Refresh Stats — only shown when NHL tab is active */}
-            {selectedSport === "NHL" && lastRefresh && (
+            {/* NHL Refresh Stats + Goalie Watcher — only shown when NHL tab is active */}
+            {selectedSport === "NHL" && (
               <>
+                <div className="col-span-2" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+                {/* NHL Refresh Stats */}
+                {lastRefresh && (
+                  <div className="col-span-2 flex items-center justify-between">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))", fontSize: '14px' }}>
+                        NHL Last Refresh Stats
+                      </span>
+                      <span className="font-mono" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px' }}>
+                        {lastRefresh.nhlTotal ?? 0} VSiN games processed
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+                      <span>
+                        <span className="font-bold" style={{ color: "rgba(57,255,20,0.8)" }}>{lastRefresh.nhlUpdated ?? 0}</span> updated
+                      </span>
+                      <span>
+                        <span className="font-bold" style={{ color: "rgba(57,255,20,0.8)" }}>{lastRefresh.nhlInserted ?? 0}</span> inserted
+                      </span>
+                      <span>
+                        <span className="font-bold" style={{ color: "rgba(100,200,255,0.8)" }}>{lastRefresh.nhlScheduleInserted ?? 0}</span> schedule-only
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {/* Goalie Watcher Status */}
                 <div className="col-span-2" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
                 <div className="col-span-2 flex items-center justify-between">
                   <div className="flex flex-col gap-0.5">
                     <span className="uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))", fontSize: '14px' }}>
-                      NHL Last Refresh Stats
+                      🥅 Goalie Watcher
                     </span>
-                    <span className="font-mono" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px' }}>
-                      {lastRefresh.nhlTotal ?? 0} VSiN games processed
+                    <span className="font-mono" style={{ color: lastGoalieCheck?.checkedAt ? "rgba(255,255,255,0.75)" : "hsl(var(--muted-foreground))", fontSize: '11px' }}>
+                      {lastGoalieCheck?.checkedAt
+                        ? "Last check: " + new Date(lastGoalieCheck.checkedAt).toLocaleTimeString("en-US", {
+                            hour: "2-digit", minute: "2-digit", second: "2-digit",
+                            timeZone: "America/New_York", hour12: true,
+                          }) + " EST"
+                        : "Not yet checked"}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
-                    <span>
-                      <span className="font-bold" style={{ color: "rgba(57,255,20,0.8)" }}>{lastRefresh.nhlUpdated ?? 0}</span> updated
-                    </span>
-                    <span>
-                      <span className="font-bold" style={{ color: "rgba(57,255,20,0.8)" }}>{lastRefresh.nhlInserted ?? 0}</span> inserted
-                    </span>
-                    <span>
-                      <span className="font-bold" style={{ color: "rgba(100,200,255,0.8)" }}>{lastRefresh.nhlScheduleInserted ?? 0}</span> schedule-only
-                    </span>
+                  <div className="flex items-center gap-3">
+                    {lastGoalieCheck && (
+                      <div className="flex items-center gap-2 text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+                        <span>
+                          <span className="font-bold" style={{ color: "rgba(255,255,255,0.6)" }}>{lastGoalieCheck.gamesChecked}</span> games checked
+                        </span>
+                        {lastGoalieCheck.changes.length > 0 && (
+                          <span>
+                            <span className="font-bold" style={{ color: "#FF6B00" }}>{lastGoalieCheck.changes.length}</span> changes
+                          </span>
+                        )}
+                        {lastGoalieCheck.modelRerun && (
+                          <span style={{ color: "#39FF14" }}>model re-run ✓</span>
+                        )}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => checkGoaliesMutation.mutate()}
+                      disabled={checkGoaliesMutation.isPending}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-all"
+                      style={checkGoaliesMutation.isPending
+                        ? { background: "rgba(0,153,230,0.08)", color: "rgba(0,153,230,0.4)", border: "1px solid rgba(0,153,230,0.15)" }
+                        : { background: "rgba(0,153,230,0.12)", color: "#0099e6", border: "1px solid rgba(0,153,230,0.3)" }
+                      }
+                    >
+                      {checkGoaliesMutation.isPending ? "Checking…" : "Check Now"}
+                    </button>
                   </div>
                 </div>
               </>

@@ -25,6 +25,8 @@ import { scrapeNhlTeamStats, scrapeNhlGoalieStats, getDefaultTeamStats, getDefau
 import { scrapeNhlStartingGoalies, matchGoalieName } from "./nhlRotoWireScraper.js";
 import { runNhlModelForGame, buildTeamStatsDict, formatNhlML } from "./nhlModelEngine.js";
 import type { NhlModelEngineInput } from "./nhlModelEngine.js";
+import { NHL_BY_DB_SLUG } from "../shared/nhlTeams.js";
+import { computeNhlRestDays } from "./nhlHockeyRefScraper.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -206,11 +208,16 @@ export async function syncNhlModelForToday(source: "auto" | "manual" = "auto"): 
 
   for (let i = 0; i < unmodeled.length; i++) {
     const game = unmodeled[i];
-    const awayAbbrev = game.awayTeam.toUpperCase();
-    const homeAbbrev = game.homeTeam.toUpperCase();
+
+    // Resolve 3-letter abbrev from dbSlug (e.g. "boston_bruins" → "BOS")
+    // The teamStatsMap from NaturalStatTrick is keyed by 3-letter abbrev.
+    const awayTeamEntry = NHL_BY_DB_SLUG.get(game.awayTeam);
+    const homeTeamEntry = NHL_BY_DB_SLUG.get(game.homeTeam);
+    const awayAbbrev = awayTeamEntry?.abbrev ?? game.awayTeam.toUpperCase();
+    const homeAbbrev = homeTeamEntry?.abbrev ?? game.homeTeam.toUpperCase();
     const gameLabel  = `${awayAbbrev} @ ${homeAbbrev}`;
 
-    console.log(`\n[NhlModelSync]${tag} ── Game ${i + 1}/${unmodeled.length}: ${gameLabel} ──`);
+    console.log(`\n[NhlModelSync]${tag} ── Game ${i + 1}/${unmodeled.length}: ${gameLabel} (${game.awayTeam} @ ${game.homeTeam}) ──`);
 
     try {
       // Resolve team stats (with fallback)
@@ -220,7 +227,7 @@ export async function syncNhlModelForToday(source: "auto" | "manual" = "auto"): 
       console.log(`[NhlModelSync]${tag}   Away (${awayAbbrev}): xGF%=${awayStats.xGF_pct} CF%=${awayStats.CF_pct} SH%=${awayStats.SH_pct} SV%=${awayStats.SV_pct}`);
       console.log(`[NhlModelSync]${tag}   Home (${homeAbbrev}): xGF%=${homeStats.xGF_pct} CF%=${homeStats.CF_pct} SH%=${homeStats.SH_pct} SV%=${homeStats.SV_pct}`);
 
-      // Resolve starting goalies
+      // Resolve starting goalies (keyed by 3-letter abbrev from RotoWire scraper)
       const awayGoalieInfo = goalieByTeam.get(awayAbbrev) ?? null;
       const homeGoalieInfo = goalieByTeam.get(homeAbbrev) ?? null;
 
@@ -250,6 +257,10 @@ export async function syncNhlModelForToday(source: "auto" | "manual" = "auto"): 
 
       console.log(`[NhlModelSync]${tag}   Market lines: PL=${mktAwayPLOdds}/${mktHomePLOdds} Total=${mktTotal} (${mktOverOdds}/${mktUnderOdds}) ML=${mktAwayML}/${mktHomeML}`);
 
+      // Compute real rest days from Hockey Reference schedule
+      const restDays = await computeNhlRestDays(game.awayTeam, game.homeTeam, gameDate);
+      console.log(`[NhlModelSync]${tag}   Rest days: away=${restDays.awayRestDays}d home=${restDays.homeRestDays}d`);
+
       // Build engine input
       const engineInput: NhlModelEngineInput = {
         away_team:                awayAbbrev,
@@ -265,9 +276,9 @@ export async function syncNhlModelForToday(source: "auto" | "manual" = "auto"): 
         // Shots faced (for workload/fatigue goalie multiplier)
         away_goalie_shots_faced:  awayGoalieStats.shots ?? undefined,
         home_goalie_shots_faced:  homeGoalieStats.shots ?? undefined,
-        // Rest days (default 2 if unknown)
-        away_rest_days:           2,
-        home_rest_days:           2,
+        // Rest days from Hockey Reference schedule (back-to-back detection)
+        away_rest_days:           restDays.awayRestDays,
+        home_rest_days:           restDays.homeRestDays,
         mkt_puck_line:            1.5,
         mkt_away_pl_odds:         mktAwayPLOdds,
         mkt_home_pl_odds:         mktHomePLOdds,

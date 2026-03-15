@@ -1452,3 +1452,15 @@
 - [x] Compare scraped goalies vs DB; if confirmed starter changed, update DB + re-run NHL model
 - [x] Register goalie watcher in server startup + add tRPC procedures for manual trigger
 - [ ] Wire real rest days into fatigue multiplier (days since last game from schedule)
+
+## Sprint Mar 15, 2026 — Part 2
+
+- [x] Build Hockey Reference schedule scraper (nhlHockeyRefScraper.ts) — parse https://www.hockey-reference.com/leagues/NHL_2026_games.html for all game dates by team
+- [x] Wire rest-days (days since last game) into nhlModelSync.ts and pass to Python model engine as away_rest_days / home_rest_days
+- [x] Fix nhlModelSync.ts team abbrev resolution — use NHL_BY_DB_SLUG instead of .toUpperCase() (was silently failing for TBL, CBJ, NJD, NYI, NYR, LAK, SJS, VGK)
+- [x] Add Utah Hockey Club AN slug alias (utah-hockey-club → utah_mammoth) in nhlTeams.ts + use getNhlTeamByAnSlug helper in vsinAutoRefresh.ts
+- [x] Audit AN NHL scraper — confirmed all markets (PL, total, ML) and both books (Open + DK NJ) are captured and written to DB correctly
+- [x] Display goalie name + confirmed/expected status below each team name in NHL Publish Projections game cards (desktop + mobile)
+- [x] Add Goalie Watcher last-check timestamp + change count + model re-run indicator to NHL stats bar
+- [x] Trigger goalie watcher check when "Refresh Now" is clicked while NHL tab is active
+- [x] Write 30 unit tests for all new NHL features (rest days, abbrev resolution, Utah alias, americanOddsToBreakEven, matchGameToDb) — all passing

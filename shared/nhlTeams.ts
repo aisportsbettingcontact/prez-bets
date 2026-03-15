@@ -317,7 +317,13 @@ export const VSIN_NHL_HREF_ALIASES: Record<string, string> = {
 
 // ─── Helper functions ─────────────────────────────────────────────────────────
 
+// AN slug aliases — old/alternate slugs that map to the same team
+const NHL_AN_SLUG_ALIASES: Record<string, string> = {
+  "utah-hockey-club": "utah-mammoth",  // Utah rebranded from Hockey Club to Mammoth
+};
+
 /** Get team by Action Network url_slug (from AN API) */
 export function getNhlTeamByAnSlug(anSlug: string): NhlTeam | undefined {
-  return NHL_BY_AN_SLUG.get(anSlug);
+  const canonical = NHL_AN_SLUG_ALIASES[anSlug] ?? anSlug;
+  return NHL_BY_AN_SLUG.get(canonical);
 }
