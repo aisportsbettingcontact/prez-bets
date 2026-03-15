@@ -1377,3 +1377,13 @@
 - [x] Confirm EST timestamp: DST-aware (10:59am PDT → 1:59pm EDT; 10:59am PST → 1:59pm EST)
 - [x] Write vitest tests for odds freeze logic and history insertion
 - [x] Save checkpoint
+
+## Publish Projections UX Fixes (March 15, 2026 - Round 2)
+- [x] Verify OddsHistoryPanel is visible and functional on every game card in Publish Projections
+- [x] Fix OddsHistoryPanel to render correctly (tRPC procedure wired, component placement confirmed)
+- [x] Scope "Refresh Now" button to only refresh the active sport tab (NCAAM/NBA/NHL)
+- [x] Scope "Publish All" button to only publish games on the active sport tab
+- [x] Pass active sport to triggerRefresh tRPC procedure so server only refreshes that sport
+- [x] Add deep server-side logging to refresh pipeline (sport-scoped, per-game, freeze detection)
+- [x] Add deep server-side logging to publish pipeline (sport-scoped, per-game publish confirmation)
+- [x] Add deep client-side logging for Refresh Now and Publish All button actions

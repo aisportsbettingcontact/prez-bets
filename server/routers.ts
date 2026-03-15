@@ -271,7 +271,15 @@ export const appRouter = router({
     publishAll: ownerProcedure
       .input(z.object({ gameDate: z.string(), sport: z.string().optional() }))
       .mutation(async ({ input }) => {
+        const sportLabel = input.sport ?? "ALL";
+        console.log(
+          `[tRPC][publishAll] ► Owner triggered Publish All — scope: ${sportLabel} | ` +
+          `date: ${input.gameDate} | timestamp: ${new Date().toISOString()}`
+        );
         await publishAllStagingGames(input.gameDate, input.sport);
+        console.log(
+          `[tRPC][publishAll] ✅ Complete — all ${sportLabel} games for ${input.gameDate} published to feed`
+        );
         return { success: true };
       }),
 
@@ -548,35 +556,67 @@ export const appRouter = router({
       }),
 
     /**
-     * Manually trigger an immediate VSiN + NCAA refresh.
+     * Manually trigger an immediate VSiN + AN odds refresh.
      * Owner-only.
+     *
+     * @param sport - Optional scope. When provided, only that sport is refreshed.
+     *                When omitted, all three sports (NCAAM, NBA, NHL) are refreshed.
      */
-    triggerRefresh: ownerProcedure.mutation(async () => {
-      // Run VSiN odds/lines refresh first (manual variant tags history rows as source='manual'),
-      // then immediately refresh all scores
-      const [result] = await Promise.allSettled([runVsinRefreshManual()]);
-      // Always refresh scores regardless of whether VSiN succeeded
-      await refreshAllScoresNow();
-      const now = new Date().toISOString();
-      const oddsResult = result.status === 'fulfilled' ? result.value : null;
-      return oddsResult ?? {
-        refreshedAt: now,
-        scoresRefreshedAt: now,
-        updated: 0,
-        inserted: 0,
-        ncaaInserted: 0,
-        nbaUpdated: 0,
-        nbaInserted: 0,
-        nbaScheduleInserted: 0,
-        total: 0,
-        nbaTotal: 0,
-        nhlUpdated: 0,
-        nhlInserted: 0,
-        nhlScheduleInserted: 0,
-        nhlTotal: 0,
-        gameDate: "",
-      };
-    }),
+    triggerRefresh: ownerProcedure
+      .input(
+        z.object({
+          sport: z.enum(["NCAAM", "NBA", "NHL"]).optional(),
+        }).optional()
+      )
+      .mutation(async ({ input }) => {
+        const sport = input?.sport;
+        const sportLabel = sport ?? "ALL";
+        console.log(
+          `[tRPC][triggerRefresh] Owner triggered manual refresh — scope: ${sportLabel} | ` +
+          `timestamp: ${new Date().toISOString()}`
+        );
+
+        // Run VSiN odds/lines refresh first (manual variant tags history rows as source='manual'),
+        // then immediately refresh all scores
+        const [result] = await Promise.allSettled([runVsinRefreshManual(sport)]);
+
+        // Always refresh scores regardless of whether VSiN succeeded
+        console.log(`[tRPC][triggerRefresh] Refreshing scores (all sports, always)…`);
+        await refreshAllScoresNow();
+        console.log(`[tRPC][triggerRefresh] Score refresh complete.`);
+
+        const now = new Date().toISOString();
+        const oddsResult = result.status === 'fulfilled' ? result.value : null;
+
+        if (result.status === 'rejected') {
+          console.error(`[tRPC][triggerRefresh] runVsinRefreshManual failed:`, result.reason);
+        } else {
+          console.log(
+            `[tRPC][triggerRefresh] ✅ Manual refresh complete — scope: ${sportLabel} | ` +
+            `NCAAM updated: ${oddsResult?.updated ?? 0} | ` +
+            `NBA updated: ${oddsResult?.nbaUpdated ?? 0} | ` +
+            `NHL updated: ${oddsResult?.nhlUpdated ?? 0}`
+          );
+        }
+
+        return oddsResult ?? {
+          refreshedAt: now,
+          scoresRefreshedAt: now,
+          updated: 0,
+          inserted: 0,
+          ncaaInserted: 0,
+          nbaUpdated: 0,
+          nbaInserted: 0,
+          nbaScheduleInserted: 0,
+          total: 0,
+          nbaTotal: 0,
+          nhlUpdated: 0,
+          nhlInserted: 0,
+          nhlScheduleInserted: 0,
+          nhlTotal: 0,
+          gameDate: "",
+        };
+      }),
   }),
 
   // ─── Favorites ──────────────────────────────────────────────────────────────

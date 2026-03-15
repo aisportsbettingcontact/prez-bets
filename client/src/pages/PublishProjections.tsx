@@ -697,11 +697,12 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full rounded-xl overflow-hidden relative"
+      className="w-full rounded-xl relative"
       style={{
         background: "hsl(var(--card))",
         border: "1px solid hsl(var(--border))",
         borderLeft: `3px solid ${borderColor}`,
+        overflow: "hidden",
       }}
     >
       {/* Top-right button group: Delete (conditional) + Publish toggle */}
@@ -1354,14 +1355,39 @@ export default function PublishProjections() {
   );
 
   const publishAllMutation = trpc.games.publishAll.useMutation({
-    onSuccess: () => {
-      toast.success("All games published to feed!");
+    onMutate: (vars) => {
+      console.log(
+        `[PublishProjections][PublishAll] ► Publishing all ${vars.sport} games — ` +
+        `date: ${vars.gameDate} | scope: ${vars.sport} | timestamp: ${new Date().toISOString()}`
+      );
+    },
+    onSuccess: (_data, vars) => {
+      console.log(
+        `[PublishProjections][PublishAll] ✅ Complete — all ${vars.sport} games published to feed | ` +
+        `date: ${vars.gameDate}`
+      );
+      toast.success(`✅ All ${vars.sport} games published to feed!`);
       refetch();
     },
-    onError: () => toast.error("Failed to publish all games"),
+    onError: (err, vars) => {
+      console.error(
+        `[PublishProjections][PublishAll] ❌ Failed — sport: ${vars.sport} | date: ${vars.gameDate} | error:`, err
+      );
+      toast.error(`Failed to publish ${vars.sport} games`);
+    },
   });
   const bulkApproveModelsMutation = trpc.games.bulkApproveModels.useMutation({
-    onSuccess: (data) => {
+    onMutate: (vars) => {
+      console.log(
+        `[PublishProjections][BulkApprove] ► Approving all pending ${vars.sport} model projections | ` +
+        `date: ${vars.gameDate}`
+      );
+    },
+    onSuccess: (data, vars) => {
+      console.log(
+        `[PublishProjections][BulkApprove] ✅ Complete — approved: ${data.approved} | ` +
+        `sport: ${vars.sport} | date: ${vars.gameDate}`
+      );
       if (data.approved === 0) {
         toast.info("No pending model projections to approve — all are already live or missing model data.");
       } else {
@@ -1369,7 +1395,12 @@ export default function PublishProjections() {
       }
       refetch();
     },
-    onError: (e) => toast.error(`Bulk approve failed: ${e.message}`),
+    onError: (e, vars) => {
+      console.error(
+        `[PublishProjections][BulkApprove] ❌ Failed — sport: ${vars.sport} | error:`, e
+      );
+      toast.error(`Bulk approve failed: ${e.message}`);
+    },
   });
   // Count games with model data that are not yet approved (pending approval)
   const pendingApprovalCount = (games ?? []).filter(
@@ -1377,37 +1408,70 @@ export default function PublishProjections() {
   ).length;
 
   const triggerRefreshMutation = trpc.games.triggerRefresh.useMutation({
-    onMutate: () => setIsRefreshing(true),
+    onMutate: () => {
+      setIsRefreshing(true);
+      console.log(
+        `[PublishProjections][RefreshNow] ► Triggered manual refresh — scope: ${selectedSport} | ` +
+        `date: ${gameDate} | timestamp: ${new Date().toISOString()}`
+      );
+    },
     onSuccess: (result) => {
       setIsRefreshing(false);
-      const oddsMsg = result.updated + result.nbaUpdated > 0
-        ? `${result.updated + result.nbaUpdated} odds updated`
-        : "odds refreshed";
-      toast.success(`Full refresh complete — ${oddsMsg}, scores updated`);
-      // Invalidate all staging queries so all dates refresh
+      const scope = selectedSport;
+      const ncaamUpdated = result.updated ?? 0;
+      const nbaUpdated   = result.nbaUpdated ?? 0;
+      const nhlUpdated   = result.nhlUpdated ?? 0;
+      const totalUpdated = ncaamUpdated + nbaUpdated + nhlUpdated;
+      console.log(
+        `[PublishProjections][RefreshNow] ✅ Complete — scope: ${scope} | ` +
+        `NCAAM: ${ncaamUpdated} updated | NBA: ${nbaUpdated} updated | NHL: ${nhlUpdated} updated | ` +
+        `total: ${totalUpdated} | refreshedAt: ${result.refreshedAt}`
+      );
+      const oddsMsg = totalUpdated > 0
+        ? `${totalUpdated} ${scope} odds updated`
+        : `${scope} odds refreshed (no changes)`;
+      toast.success(`✅ ${scope} refresh complete — ${oddsMsg}, scores updated`);
+      // Invalidate staging queries so the game list re-fetches with fresh data
       utils.games.listStaging.invalidate();
       utils.games.lastRefresh.invalidate();
       refetch();
     },
-    onError: () => {
+    onError: (err) => {
       setIsRefreshing(false);
-      toast.error("Refresh failed");
+      console.error(
+        `[PublishProjections][RefreshNow] ❌ Failed — scope: ${selectedSport} | error:`, err
+      );
+      toast.error(`${selectedSport} refresh failed`);
     },
   });
 
   const triggerNbaModelSyncMutation = trpc.games.triggerNbaModelSync.useMutation({
+    onMutate: () => {
+      console.log(`[PublishProjections][NbaModelSync] ► Triggered NBA model sync | date: ${gameDate}`);
+    },
     onSuccess: (result) => {
       utils.games.lastNbaModelSync.invalidate();
       utils.games.listStaging.invalidate();
       refetch();
+      console.log(`[PublishProjections][NbaModelSync] ✅ Complete — ${result.synced} games synced`);
       toast.success(`NBA model synced — ${result.synced} games updated`);
     },
-    onError: () => toast.error("NBA model sync failed"),
+    onError: (err) => {
+      console.error(`[PublishProjections][NbaModelSync] ❌ Failed:`, err);
+      toast.error("NBA model sync failed");
+    },
   });
 
   const handleRefreshNow = () => {
-    triggerRefreshMutation.mutate();
+    console.log(
+      `[PublishProjections][RefreshNow] User clicked Refresh Now — ` +
+      `activeSport: ${selectedSport} | date: ${gameDate}`
+    );
+    // Pass the active sport so the server only refreshes that sport's data
+    triggerRefreshMutation.mutate({ sport: selectedSport as "NCAAM" | "NBA" | "NHL" });
+    // NBA also triggers model sync (NBA-specific model pipeline)
     if (selectedSport === "NBA") {
+      console.log(`[PublishProjections][RefreshNow] Also triggering NBA model sync…`);
       triggerNbaModelSyncMutation.mutate();
     }
   };

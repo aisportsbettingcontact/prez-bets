@@ -221,12 +221,13 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
   ncaaInserted: number;
   total: number;
 }> {
+  console.log(`[refreshNcaam] ► START — today: ${todayStr} | dates: [${allDates.join(", ")}]`);
   // Scrape VSiN CBB betting splits (today only)
   let vsinSplits: VsinSplitsGame[] = [];
   try {
     const allSplits = await scrapeVsinBettingSplits("front");
     vsinSplits = allSplits.filter(g => g.sport === "CBB");
-    console.log(`[VSiNAutoRefresh] VSiN CBB splits: ${vsinSplits.length} games`);
+    console.log(`[refreshNcaam] VSiN CBB splits fetched: ${vsinSplits.length} games`);
   } catch (err) {
     console.warn("[VSiNAutoRefresh] VSiN CBB splits scrape failed (non-fatal):", err);
   }
@@ -398,10 +399,13 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
     }
   }
 
+  console.log(
+    `[refreshNcaam] ✅ DONE — updated=${totalUpdated} inserted=${totalInserted} ncaaInserted=${ncaaInserted} total=${vsinSplits.length}`
+  );
   return { updated: totalUpdated, inserted: totalInserted, ncaaInserted, total: vsinSplits.length };
 }
 
-// ─── NBA refresh ──────────────────────────────────────────────────────────────
+// ─── NBA refresh ──────────────────────────────────────────────────────────────────────────────
 
 async function refreshNba(todayStr: string, allDates: string[]): Promise<{
   updated: number;
@@ -409,12 +413,13 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
   scheduleInserted: number;
   total: number;
 }> {
+  console.log(`[refreshNba] ► START — today: ${todayStr} | dates: [${allDates.join(", ")}]`);
   // Scrape VSiN NBA betting splits (today only)
   let vsinSplits: VsinSplitsGame[] = [];
   try {
     const allSplits = await scrapeVsinBettingSplits("front");
     vsinSplits = allSplits.filter(g => g.sport === "NBA");
-    console.log(`[VSiNAutoRefresh] VSiN NBA splits: ${vsinSplits.length} games`);
+    console.log(`[refreshNba] VSiN NBA splits fetched: ${vsinSplits.length} games`);
   } catch (err) {
     console.warn("[VSiNAutoRefresh] VSiN NBA splits scrape failed (non-fatal):", err);
   }
@@ -537,10 +542,13 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
     }
   }
 
+  console.log(
+    `[refreshNba] ✅ DONE — updated=${totalUpdated} inserted=${totalInserted} scheduleInserted=${scheduleInserted} total=${vsinSplits.length}`
+  );
   return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: vsinSplits.length };
 }
 
-// ─── NHL Refresh ─────────────────────────────────────────────────────────────
+// ─── NHL Refresh ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────═
 
 async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
   updated: number;
@@ -548,12 +556,13 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
   scheduleInserted: number;
   total: number;
 }> {
+  console.log(`[refreshNhl] ► START — today: ${todayStr} | dates: [${allDates.join(", ")}]`);
   // Scrape VSiN NHL betting splits (today only)
   let vsinSplits: VsinSplitsGame[] = [];
   try {
     const allSplits = await scrapeVsinBettingSplits("front");
     vsinSplits = allSplits.filter(g => g.sport === "NHL");
-    console.log(`[VSiNAutoRefresh] VSiN NHL splits: ${vsinSplits.length} games`);
+    console.log(`[refreshNhl] VSiN NHL splits fetched: ${vsinSplits.length} games`);
   } catch (err) {
     console.warn("[VSiNAutoRefresh] VSiN NHL splits scrape failed (non-fatal):", err);
   }
@@ -679,6 +688,9 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
     }
   }
 
+  console.log(
+    `[refreshNhl] ✅ DONE — updated=${totalUpdated} inserted=${totalInserted} scheduleInserted=${scheduleInserted} total=${vsinSplits.length}`
+  );
   return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: vsinSplits.length };
 }
 
@@ -1079,35 +1091,108 @@ export async function refreshAllScoresNow(): Promise<void> {
  * Manual refresh variant — same as runVsinRefresh() but passes source='manual'
  * to refreshAnApiOdds so every odds snapshot is tagged as a manual trigger.
  * Called by the owner's "Refresh Now" button in Publish Projections.
+ *
+ * @param sport - Optional sport scope: 'NCAAM' | 'NBA' | 'NHL'. When provided, only that
+ *                sport's VSiN data and AN odds are refreshed. When omitted, all three sports
+ *                are refreshed (legacy full-refresh behaviour).
  */
-export async function runVsinRefreshManual(): Promise<RefreshResult | null> {
+export async function runVsinRefreshManual(
+  sport?: "NCAAM" | "NBA" | "NHL"
+): Promise<RefreshResult | null> {
   const todayStr = datePst();
+  const sportLabel = sport ?? "ALL";
 
-  console.log(`[VSiNAutoRefresh][MANUAL] Starting manual refresh — today: ${todayStr}`);
+  console.log(
+    `[VSiNAutoRefresh][MANUAL][${sportLabel}] ════════════════════════════════════════`
+  );
+  console.log(
+    `[VSiNAutoRefresh][MANUAL][${sportLabel}] Starting manual refresh — today: ${todayStr} | scope: ${sportLabel}`
+  );
+  console.log(
+    `[VSiNAutoRefresh][MANUAL][${sportLabel}] ════════════════════════════════════════`
+  );
 
   try {
     const rangeEnd = datePst(RANGE_DAYS_AHEAD);
     const allDates = dateRange(todayStr, rangeEnd);
 
-    // Run NCAAM, NBA, and NHL refreshes in sequence
-    const ncaamResult = await refreshNcaam(todayStr, allDates);
-    const nbaResult = await refreshNba(todayStr, allDates);
-    const nhlResult = await refreshNhl(todayStr, allDates);
+    // ── Per-sport VSiN splits + schedule refresh ──────────────────────────────
+    const doNcaam = !sport || sport === "NCAAM";
+    const doNba   = !sport || sport === "NBA";
+    const doNhl   = !sport || sport === "NHL";
 
-    // Manual AN odds update — tagged source='manual' so history rows are labeled correctly
-    const anOddsResult = await refreshAnApiOdds(todayStr, ["ncaab", "nba", "nhl"], "manual");
+    let ncaamResult = { updated: 0, inserted: 0, ncaaInserted: 0, total: 0 };
+    let nbaResult   = { updated: 0, inserted: 0, scheduleInserted: 0, total: 0 };
+    let nhlResult   = { updated: 0, inserted: 0, scheduleInserted: 0, total: 0 };
+
+    if (doNcaam) {
+      console.log(`[VSiNAutoRefresh][MANUAL][NCAAM] ── Refreshing NCAAM VSiN splits + schedule…`);
+      ncaamResult = await refreshNcaam(todayStr, allDates);
+      console.log(
+        `[VSiNAutoRefresh][MANUAL][NCAAM] ✓ VSiN done — ` +
+        `updated=${ncaamResult.updated} inserted=${ncaamResult.inserted} ` +
+        `ncaaInserted=${ncaamResult.ncaaInserted} total=${ncaamResult.total}`
+      );
+    } else {
+      console.log(`[VSiNAutoRefresh][MANUAL][${sportLabel}] Skipping NCAAM VSiN refresh (not in scope)`);
+    }
+
+    if (doNba) {
+      console.log(`[VSiNAutoRefresh][MANUAL][NBA] ── Refreshing NBA VSiN splits + schedule…`);
+      nbaResult = await refreshNba(todayStr, allDates);
+      console.log(
+        `[VSiNAutoRefresh][MANUAL][NBA] ✓ VSiN done — ` +
+        `updated=${nbaResult.updated} inserted=${nbaResult.inserted} ` +
+        `scheduleInserted=${nbaResult.scheduleInserted} total=${nbaResult.total}`
+      );
+    } else {
+      console.log(`[VSiNAutoRefresh][MANUAL][${sportLabel}] Skipping NBA VSiN refresh (not in scope)`);
+    }
+
+    if (doNhl) {
+      console.log(`[VSiNAutoRefresh][MANUAL][NHL] ── Refreshing NHL VSiN splits + schedule…`);
+      nhlResult = await refreshNhl(todayStr, allDates);
+      console.log(
+        `[VSiNAutoRefresh][MANUAL][NHL] ✓ VSiN done — ` +
+        `updated=${nhlResult.updated} inserted=${nhlResult.inserted} ` +
+        `scheduleInserted=${nhlResult.scheduleInserted} total=${nhlResult.total}`
+      );
+    } else {
+      console.log(`[VSiNAutoRefresh][MANUAL][${sportLabel}] Skipping NHL VSiN refresh (not in scope)`);
+    }
+
+    // ── AN API DK odds refresh (scoped to active sport) ───────────────────────
+    const anSports: AnSport[] = [];
+    if (doNcaam) anSports.push("ncaab");
+    if (doNba)   anSports.push("nba");
+    if (doNhl)   anSports.push("nhl");
+
     console.log(
-      `[VSiNAutoRefresh][MANUAL] AN API DK odds: updated=${anOddsResult.updated} ` +
-      `skipped=${anOddsResult.skipped} frozen=${anOddsResult.frozen} errors=${anOddsResult.errors.length}`
+      `[VSiNAutoRefresh][MANUAL][${sportLabel}] ── AN API DK odds refresh for sports: [${anSports.join(", ")}]…`
     );
-
-    // Pre-populate tomorrow's splits and DK odds
-    const tomorrowStr = datePst(1);
-    await runTomorrowSplitsUpdate(tomorrowStr);
-    const anOddsTomorrow = await refreshAnApiOdds(tomorrowStr, ["ncaab", "nba", "nhl"], "manual");
+    const anOddsResult = await refreshAnApiOdds(todayStr, anSports, "manual");
     console.log(
-      `[VSiNAutoRefresh][MANUAL] AN API DK odds (tomorrow): updated=${anOddsTomorrow.updated} ` +
-      `frozen=${anOddsTomorrow.frozen}`
+      `[VSiNAutoRefresh][MANUAL][${sportLabel}] ✓ AN API DK odds (today) — ` +
+      `updated=${anOddsResult.updated} skipped=${anOddsResult.skipped} ` +
+      `frozen=${anOddsResult.frozen} errors=${anOddsResult.errors.length}`
+    );
+    if (anOddsResult.errors.length > 0) {
+      console.warn(
+        `[VSiNAutoRefresh][MANUAL][${sportLabel}] AN API errors:`,
+        anOddsResult.errors
+      );
+    }
+
+    // ── Tomorrow's splits + DK odds (scoped) ─────────────────────────────────
+    const tomorrowStr = datePst(1);
+    console.log(
+      `[VSiNAutoRefresh][MANUAL][${sportLabel}] ── Pre-populating tomorrow (${tomorrowStr}) splits + DK odds…`
+    );
+    await runTomorrowSplitsUpdate(tomorrowStr);
+    const anOddsTomorrow = await refreshAnApiOdds(tomorrowStr, anSports, "manual");
+    console.log(
+      `[VSiNAutoRefresh][MANUAL][${sportLabel}] ✓ AN API DK odds (tomorrow) — ` +
+      `updated=${anOddsTomorrow.updated} frozen=${anOddsTomorrow.frozen}`
     );
 
     const result: RefreshResult = {
@@ -1130,12 +1215,21 @@ export async function runVsinRefreshManual(): Promise<RefreshResult | null> {
 
     lastRefreshResult = result;
     console.log(
-      `[VSiNAutoRefresh][MANUAL] Done — ` +
-      `NCAAM: ${ncaamResult.updated} updated | NBA: ${nbaResult.updated} updated | NHL: ${nhlResult.updated} updated`
+      `[VSiNAutoRefresh][MANUAL][${sportLabel}] ════════════════════════════════════════`
+    );
+    console.log(
+      `[VSiNAutoRefresh][MANUAL][${sportLabel}] ✅ COMPLETE — ` +
+      `NCAAM: ${ncaamResult.updated} updated | ` +
+      `NBA: ${nbaResult.updated} updated | ` +
+      `NHL: ${nhlResult.updated} updated | ` +
+      `AN odds: ${anOddsResult.updated} updated, ${anOddsResult.frozen} frozen`
+    );
+    console.log(
+      `[VSiNAutoRefresh][MANUAL][${sportLabel}] ════════════════════════════════════════`
     );
     return result;
   } catch (err) {
-    console.error("[VSiNAutoRefresh][MANUAL] Refresh failed:", err);
+    console.error(`[VSiNAutoRefresh][MANUAL][${sportLabel}] ❌ Refresh failed:`, err);
     return null;
   }
 }
