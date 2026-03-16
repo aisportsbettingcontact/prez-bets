@@ -546,7 +546,7 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
   console.log(
     `[refreshNba] ✅ DONE — updated=${totalUpdated} inserted=${totalInserted} scheduleInserted=${scheduleInserted} total=${vsinSplits.length}`
   );
-  return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: vsinSplits.length, newlyInsertedDates: [] as string[] };
+  return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: vsinSplits.length };
 }
 
 // ─── NHL Refresh ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────═
