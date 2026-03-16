@@ -3115,175 +3115,129 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             ];
 
             // ── Shared odds table (used by both BOOK and MODEL tabs) ──────────
-            const OddsTable = () => (
-              <div className="flex flex-col w-full px-2 pt-0 pb-1">
-                {/* Header block: 30px height to align with status row in frozen left panel */}
-                <div style={{ height: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly', borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
-                {/* Column headers: SPREAD | TOTAL | MONEYLINE */}
-                <div className="grid grid-cols-3">
-                  {['SPREAD', 'TOTAL', 'ML'].map(h => (
-                    <span key={h} className="text-center font-extrabold uppercase tracking-widest"
-                      style={{ fontSize: 'clamp(10.25px, 2.5vw, 12.25px)', color: '#E8E8E8' }}>{h}</span>
-                  ))}
+            // ── Mobile market card helpers ─────────────────────────────────────────
+            // Each market card has: header label, then 2 rows (away/home), each row has BOOK | MODEL sub-cols
+            // The card background dims when neither side has an edge; glows neon when either side does
+            const MktCard = ({
+              label,
+              awayBook, awayBookOdds, awayModel, awayModelOdds, awayEdge,
+              homeBook, homeBookOdds, homeModel, homeModelOdds, homeEdge,
+            }: {
+              label: string;
+              awayBook: string; awayBookOdds: string | null;
+              awayModel: string; awayModelOdds: string | null; awayEdge: boolean;
+              homeBook: string; homeBookOdds: string | null;
+              homeModel: string; homeModelOdds: string | null; homeEdge: boolean;
+            }) => {
+              const cardEdge = awayEdge || homeEdge;
+              const cardBg = 'rgba(255,255,255,0.06)';
+              const cardBorder = cardEdge && (isDualTab || isModelTab)
+                ? '1px solid rgba(57,255,20,0.45)'
+                : '1px solid rgba(255,255,255,0.10)';
+              const cardGlow = cardEdge && (isDualTab || isModelTab)
+                ? '0 0 8px rgba(57,255,20,0.18)'
+                : 'none';
+
+              // Sub-column label colors
+              const bkLabelColor = (isDualTab || isBookTab) ? 'rgba(255,255,255,0.85)' : isModelTab ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.30)';
+              const mdlLabelColor = (isDualTab || isModelTab) ? '#39FF14' : isBookTab ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.30)';
+
+              // Cell renderer: line on top (white), odds below (neon green for model / muted for book)
+              const Cell = ({ line, odds, isEdgeCell, isBook: cellIsBook }: { line: string; odds: string | null; isEdgeCell: boolean; isBook: boolean }) => {
+                const lineColor = isEdgeCell && (isDualTab || (cellIsBook ? isBookTab : isModelTab)) ? '#39FF14' : '#FFFFFF';
+                const oddsColor = cellIsBook
+                  ? (isEdgeCell ? 'rgba(57,255,20,0.80)' : 'rgba(180,180,180,0.70)')
+                  : (isEdgeCell ? '#39FF14' : 'rgba(57,255,20,0.65)');
+                const lineFs = 'clamp(11px, 2.8vw, 13.5px)';
+                const oddsFs = 'clamp(9.5px, 2.3vw, 11px)';
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1px', padding: '4px 2px', minWidth: 0 }}>
+                    <span style={{ fontSize: lineFs, fontWeight: 700, color: lineColor, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{line}</span>
+                    {odds && <span style={{ fontSize: oddsFs, fontWeight: 500, color: oddsColor, lineHeight: 1.1, whiteSpace: 'nowrap' }}>{odds}</span>}
+                  </div>
+                );
+              };
+
+              return (
+                <div style={{
+                  display: 'flex', flexDirection: 'column',
+                  background: cardBg, border: cardBorder, borderRadius: '10px',
+                  boxShadow: cardGlow, overflow: 'hidden', flex: '1 1 0', minWidth: 0,
+                }}>
+                  {/* Card header: market label + BOOK/MODEL sub-labels */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '3px 4px 2px' }}>
+                    <span style={{ fontSize: '7.5px', fontWeight: 700, color: bkLabelColor, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.06em' }}>BOOK</span>
+                    <span style={{ fontSize: '7.5px', fontWeight: 700, color: mdlLabelColor, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.06em' }}>MDL</span>
+                  </div>
+                  {/* Away row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <Cell line={awayBook} odds={awayBookOdds} isEdgeCell={awayEdge} isBook={true} />
+                    <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)' }}>
+                      <Cell line={awayModel} odds={awayModelOdds} isEdgeCell={awayEdge && isModelTab} isBook={false} />
+                    </div>
+                  </div>
+                  {/* Home row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+                    <Cell line={homeBook} odds={homeBookOdds} isEdgeCell={homeEdge} isBook={true} />
+                    <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)' }}>
+                      <Cell line={homeModel} odds={homeModelOdds} isEdgeCell={homeEdge && isModelTab} isBook={false} />
+                    </div>
+                  </div>
                 </div>
-                {/* Sub-headers: BOOK and MODEL are tab-responsive
-                     BOOK-only:  BOOK = white BOLD,    MODEL = white unbolded
-                     MODEL-only: BOOK = white unbolded, MODEL = neon green BOLD
-                     DUAL:       BOOK = white BOLD,    MODEL = neon green BOLD (both active)
-                     Other tabs: BOOK = gray 50%,      MODEL = gray 50%
-                */}
-                <div className="grid grid-cols-3">
-                  {[0,1,2].map(i => (
-                    <div key={i} className="grid grid-cols-2">
-                      <span className="text-center uppercase tracking-widest"
-                        style={{
-                          fontSize: '8.25px',
-                          // DUAL: white bold | BOOK-only: white bold | MODEL-only: white unbolded | other: gray
-                          fontWeight: (isDualTab || isBookTab) ? 700 : 400,
-                          color: (isDualTab || isBookTab)
-                            ? 'rgba(255,255,255,1)'          // DUAL or BOOK active: white bold
-                            : isModelTab
-                              ? 'rgba(255,255,255,0.75)'     // MODEL-only: white unbolded
-                              : 'rgba(255,255,255,0.40)',     // SPLITS/EDGE: gray
-                          letterSpacing: '0.05em',
-                        }}>BOOK</span>
-                      <span className="text-center uppercase tracking-widest"
-                        style={{
-                          fontSize: '8.25px',
-                          // DUAL: neon green bold | MODEL-only: neon green bold | BOOK-only: white unbolded | other: gray
-                          fontWeight: (isDualTab || isModelTab) ? 700 : 400,
-                          color: (isDualTab || isModelTab)
-                            ? '#39FF14'                      // DUAL or MODEL active: neon green bold
-                            : isBookTab
-                              ? 'rgba(255,255,255,0.75)'     // BOOK-only: white unbolded
-                              : 'rgba(255,255,255,0.40)',     // SPLITS/EDGE: gray
-                          letterSpacing: '0.05em',
-                        }}>MODEL</span>
+              );
+            };
+
+            const OddsTable = () => (
+              <div style={{ display: 'flex', flexDirection: 'column', width: '100%', padding: '0 6px 4px' }}>
+                {/* Market label row: SPREAD | TOTAL | ML — 22px to align with left panel status row */}
+                <div style={{ display: 'flex', gap: '5px', paddingBottom: '3px', height: '22px', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
+                  {['SPREAD', 'TOTAL', 'ML'].map(h => (
+                    <div key={h} style={{ flex: '1 1 0', textAlign: 'center' }}>
+                      <span style={{ fontSize: 'clamp(8.5px, 2.1vw, 10px)', fontWeight: 800, color: '#E8E8E8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
                     </div>
                   ))}
                 </div>
-                </div>{/* end 30px header block */}
-                {/* Away row — OddsCell pills, height: 50px (increased for two-line pills) */}
-                <div className="grid grid-cols-3" style={{ minHeight: '50px', alignItems: 'center', padding: '3px 0' }}>
-                  {/* SPREAD */}
-                  <div className="grid grid-cols-2 items-center gap-0.5">
-                    <OddsCell
-                      mainValue={!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}
-                      juiceStr={mbAwaySpreadOdds ?? null}
-                      isBook={true}
-                      isEdge={awaySpreadIsEdge}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                    <OddsCell
-                      mainValue={mdlAwaySplit.line}
-                      juiceStr={mdlAwaySplit.odds}
-                      isBook={false}
-                      isEdge={awaySpreadIsEdge && isModelTab}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                  </div>
-                  {/* TOTAL */}
-                  <div className="grid grid-cols-2 items-center gap-0.5">
-                    <OddsCell
-                      mainValue={!isNaN(bookTotal) ? `o${bkTotalStr}` : 'o—'}
-                      juiceStr={mbOverOdds ?? null}
-                      isBook={true}
-                      isEdge={overTotalIsEdge}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                    <OddsCell
-                      mainValue={`o${mdlOverSplit.line}`}
-                      juiceStr={mdlOverSplit.odds}
-                      isBook={false}
-                      isEdge={overTotalIsEdge && isModelTab}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                  </div>
-                  {/* MONEYLINE */}
-                  <div className="grid grid-cols-2 items-center gap-0.5">
-                    <OddsCell
-                      mainValue={bkAwayMl}
-                      juiceStr={null}
-                      isBook={true}
-                      isEdge={awayMlIsEdge}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                    <OddsCell
-                      mainValue={mdlAwayMl}
-                      juiceStr={null}
-                      isBook={false}
-                      isEdge={awayMlIsEdge && isModelTab}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                  </div>
-                </div>
-                {/* Divider */}
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
-                {/* Home row — OddsCell pills, height: 50px (increased for two-line pills) */}
-                <div className="grid grid-cols-3" style={{ minHeight: '50px', alignItems: 'center', padding: '3px 0' }}>
-                  {/* SPREAD */}
-                  <div className="grid grid-cols-2 items-center gap-0.5">
-                    <OddsCell
-                      mainValue={!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—'}
-                      juiceStr={mbHomeSpreadOdds ?? null}
-                      isBook={true}
-                      isEdge={homeSpreadIsEdge}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                    <OddsCell
-                      mainValue={mdlHomeSplit.line}
-                      juiceStr={mdlHomeSplit.odds}
-                      isBook={false}
-                      isEdge={homeSpreadIsEdge && isModelTab}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                  </div>
-                  {/* TOTAL */}
-                  <div className="grid grid-cols-2 items-center gap-0.5">
-                    <OddsCell
-                      mainValue={!isNaN(bookTotal) ? `u${bkTotalStr}` : 'u—'}
-                      juiceStr={mbUnderOdds ?? null}
-                      isBook={true}
-                      isEdge={underTotalIsEdge}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                    <OddsCell
-                      mainValue={`u${mdlUnderSplit.line}`}
-                      juiceStr={mdlUnderSplit.odds}
-                      isBook={false}
-                      isEdge={underTotalIsEdge && isModelTab}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                  </div>
-                  {/* MONEYLINE */}
-                  <div className="grid grid-cols-2 items-center gap-0.5">
-                    <OddsCell
-                      mainValue={bkHomeMl}
-                      juiceStr={null}
-                      isBook={true}
-                      isEdge={homeMlIsEdge}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                    <OddsCell
-                      mainValue={mdlHomeMl}
-                      juiceStr={null}
-                      isBook={false}
-                      isEdge={homeMlIsEdge && isModelTab}
-                      size="sm"
-                      wrapperStyle={{ justifySelf: 'center', width: '100%' }}
-                    />
-                  </div>
+                {/* Away row: 3 market cards side by side */}
+                <div style={{ display: 'flex', gap: '5px', marginBottom: '4px' }}>
+                  <MktCard
+                    label="SPREAD"
+                    awayBook={!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}
+                    awayBookOdds={mbAwaySpreadOdds ? String(mbAwaySpreadOdds) : null}
+                    awayModel={mdlAwaySplit.line}
+                    awayModelOdds={mdlAwaySplit.odds}
+                    awayEdge={awaySpreadIsEdge}
+                    homeBook={!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—'}
+                    homeBookOdds={mbHomeSpreadOdds ? String(mbHomeSpreadOdds) : null}
+                    homeModel={mdlHomeSplit.line}
+                    homeModelOdds={mdlHomeSplit.odds}
+                    homeEdge={homeSpreadIsEdge}
+                  />
+                  <MktCard
+                    label="TOTAL"
+                    awayBook={!isNaN(bookTotal) ? `o${bkTotalStr}` : 'o—'}
+                    awayBookOdds={mbOverOdds ? String(mbOverOdds) : null}
+                    awayModel={`o${mdlOverSplit.line}`}
+                    awayModelOdds={mdlOverSplit.odds}
+                    awayEdge={overTotalIsEdge}
+                    homeBook={!isNaN(bookTotal) ? `u${bkTotalStr}` : 'u—'}
+                    homeBookOdds={mbUnderOdds ? String(mbUnderOdds) : null}
+                    homeModel={`u${mdlUnderSplit.line}`}
+                    homeModelOdds={mdlUnderSplit.odds}
+                    homeEdge={underTotalIsEdge}
+                  />
+                  <MktCard
+                    label="ML"
+                    awayBook={bkAwayMl}
+                    awayBookOdds={null}
+                    awayModel={mdlAwayMl}
+                    awayModelOdds={null}
+                    awayEdge={awayMlIsEdge}
+                    homeBook={bkHomeMl}
+                    homeBookOdds={null}
+                    homeModel={mdlHomeMl}
+                    homeModelOdds={null}
+                    homeEdge={homeMlIsEdge}
+                  />
                 </div>
               </div>
             );
@@ -3310,15 +3264,15 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   alignSelf: 'stretch',
                 }}>
 
-                  {/* Status row: star + LIVE/FINAL/time — sits ABOVE the away team row, aligned with OddsTable header block */}
+                  {/* Status row: star + LIVE/FINAL/time — sits ABOVE the away team row, aligned with OddsTable market label row */}
                   <div style={{
                     display: 'flex',
                     flexDirection: 'row',
                     alignItems: 'center',
-                    height: '30px',
+                    height: '22px',
                     paddingLeft: '2px',
                     gap: '4px',
-                    borderBottom: '1px solid rgba(255,255,255,0.12)',
+                    borderBottom: '1px solid rgba(255,255,255,0.10)',
                   }}>
                     {isAppAuthed && (
                       <button
@@ -3356,8 +3310,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     )}
                   </div>
 
-                  {/* Away row: minHeight: 50px — matches OddsTable away row exactly */}
-                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', minHeight: '50px' }}>
+                  {/* Away row: flex-1 to fill half the remaining height after status row */}
+                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', flex: '1 1 0', minHeight: '44px' }}>
                     {/* Logo + name block */}
                     <div className="flex items-center gap-2 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
                       {/* Logo centered between school+nickname lines */}
@@ -3387,8 +3341,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   {/* Divider */}
                   <div style={{ height: 1, background: 'hsl(var(--border) / 0.4)' }} />
 
-                  {/* Home row: minHeight: 50px — matches OddsTable home row exactly */}
-                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', minHeight: '50px' }}>
+                  {/* Home row: flex-1 to fill half the remaining height after status row */}
+                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', flex: '1 1 0', minHeight: '44px' }}>
                     {/* Logo + name block */}
                     <div className="flex items-center gap-2 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
                       {/* Logo centered between school+nickname lines */}
