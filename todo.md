@@ -1571,3 +1571,11 @@
 - [ ] Wire EdgeEngine into NBA model engine for per-market logging (pending NBA model build)
 - [ ] Wire EdgeEngine into NCAAM model engine for per-market logging (pending NCAAM model rebuild)
 - [x] Write vitest tests for EdgeEngine: 53 tests covering americanToProbability, payoutFromOdds, calculateEdgeResult, classifyEdge, NSH vs EDM worked examples, validation — 361/362 passing
+- [x] Remove Edge tab from mobile tab bar (BOOK LINES / MODEL LINES / SPLITS only)
+- [x] Remove Edge column (60px EdgeBadge) from mobile GameCard OddsTable row
+- [x] Add ROI% display inline inside each BettingCell beneath model odds (format: "TEAM LINE X.XX% ROI" or "NO EDGE")
+- [x] Apply 5-tier ROI color gradient: ≤0 gray/50%, 0.01-2% soft gray-green, 2-5% medium green, 5-8% bright green, 8%+ neon #39FF14
+- [x] Remove Edge tab from desktop/compact GameCard view (tab removed from TABS array)
+- [x] Remove Edge column from desktop/compact GameCard view (EdgeBadge removed from OddsTable)
+- [x] Add ROI% inline to desktop BettingCell beneath model odds
+- [x] Verify ROI display works for all sports (NHL, NBA, NCAAM) — EdgeEngine is sport-agnostic

@@ -1895,8 +1895,8 @@ interface GameCardProps {
    * and this value is used instead. The card will call onMobileTabChange when the user
    * interacts with the tab bar (but the tab bar is now rendered at the feed level).
    */
-  mobileTab?: 'book' | 'model' | 'splits' | 'edge' | 'dual';
-  onMobileTabChange?: (tab: 'book' | 'model' | 'splits' | 'edge' | 'dual') => void;
+  mobileTab?: 'book' | 'model' | 'splits' | 'dual';
+  onMobileTabChange?: (tab: 'book' | 'model' | 'splits' | 'dual') => void;
 }
 
 export function GameCard({ game, mode = "full", showModel: showModelProp, onToggleModel: onToggleModelProp, favoriteGameIds, onToggleFavorite, onFavoriteNotify, isAppAuthed: isAppAuthedProp, mobileTab: mobileTabProp, onMobileTabChange }: GameCardProps) {
@@ -2037,12 +2037,12 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   //   1. At least one tab must always be active (cannot deselect last active tab)
   //   2. SPLITS and EDGE are exclusive single-select (cannot combine with BOOK/MODEL)
   //   3. BOOK + MODEL can be active simultaneously (dual mode)
-  type MobileTab = 'book' | 'model' | 'splits' | 'edge' | 'dual';
+  type MobileTab = 'book' | 'model' | 'splits' | 'dual';
   const MOBILE_TAB_KEY = 'prez_bets_mobile_tab';
   const getPersistedTab = (): MobileTab => {
     try {
       const stored = localStorage.getItem(MOBILE_TAB_KEY);
-      if (stored === 'book' || stored === 'model' || stored === 'splits' || stored === 'edge' || stored === 'dual') {
+      if (stored === 'book' || stored === 'model' || stored === 'splits' || stored === 'dual') {
         return stored;
       }
     } catch { /* localStorage unavailable (private browsing, etc.) */ }
@@ -3253,6 +3253,39 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               const vals = [spreadEdgePP, totalEdgePP, mlEdgePP].filter(v => !isNaN(v));
               return vals.length > 0 ? Math.max(...vals) : NaN;
             })();
+
+            // ── ROI% computations for inline display inside each MktCard ─────────
+            // Format: "TEAM LINE  X.XX% ROI" — best side per market
+            // Uses getMarketEdge which returns roiPercent from EdgeEngine
+            const awaySpreadROI  = getMarketEdge(toNum(game.awaySpreadOdds),  toNum(game.modelAwayPLOdds));
+            const homeSpreadROI  = getMarketEdge(toNum(game.homeSpreadOdds),  toNum(game.modelHomePLOdds));
+            const overROI        = getMarketEdge(toNum(game.overOdds),         toNum(game.modelOverOdds));
+            const underROI       = getMarketEdge(toNum(game.underOdds),        toNum(game.modelUnderOdds));
+            const awayMlROI      = getMarketEdge(toNum(game.awayML),           toNum(game.modelAwayML));
+            const homeMlROI      = getMarketEdge(toNum(game.homeML),           toNum(game.modelHomeML));
+
+            // Best side per market: pick the side with higher ROI%
+            const spreadBestROI  = (() => {
+              const a = awaySpreadROI?.roiPercent ?? -Infinity;
+              const h = homeSpreadROI?.roiPercent ?? -Infinity;
+              if (a >= h && awaySpreadROI) return { ...awaySpreadROI, side: 'away' as const };
+              if (homeSpreadROI) return { ...homeSpreadROI, side: 'home' as const };
+              return null;
+            })();
+            const totalBestROI   = (() => {
+              const o = overROI?.roiPercent ?? -Infinity;
+              const u = underROI?.roiPercent ?? -Infinity;
+              if (o >= u && overROI) return { ...overROI, side: 'over' as const };
+              if (underROI) return { ...underROI, side: 'under' as const };
+              return null;
+            })();
+            const mlBestROI      = (() => {
+              const a = awayMlROI?.roiPercent ?? -Infinity;
+              const h = homeMlROI?.roiPercent ?? -Infinity;
+              if (a >= h && awayMlROI) return { ...awayMlROI, side: 'away' as const };
+              if (homeMlROI) return { ...homeMlROI, side: 'home' as const };
+              return null;
+            })();
             if (process.env.NODE_ENV === 'development') {
               console.log(
                 `%c[GameCard:EdgePP] game=${game.id}` +
@@ -3272,7 +3305,6 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               { id: 'book',   label: 'BOOK LINES' },
               { id: 'model',  label: 'MODEL LINES' },
               { id: 'splits', label: 'SPLITS' },
-              { id: 'edge',   label: 'EDGE' },
             ];
 
             // ── Shared odds table (used by both BOOK and MODEL tabs) ──────────
@@ -3288,12 +3320,16 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               homeBookLine, homeBookJuice,
               homeModelLine, homeModelJuice, homeModelHasEdge,
               isML = false,
+              roiResult = null,
+              roiLabel = '',
             }: {
               awayBookLine: string; awayBookJuice: string;
               awayModelLine: string; awayModelJuice: string; awayModelHasEdge: boolean;
               homeBookLine: string; homeBookJuice: string;
               homeModelLine: string; homeModelJuice: string; homeModelHasEdge: boolean;
               isML?: boolean;
+              roiResult?: { roiPercent: number; verdict: string; color: string; edgePts: number } | null;
+              roiLabel?: string;
             }) => {
               // SubCol: line row (dim 9px) + juice row (bold 14px)
               // modelJuiceColor: neon green only when this side has an edge, otherwise white
@@ -3320,6 +3356,15 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 </div>
               );
 
+              // ROI% footer row
+              const hasROI = roiResult !== null && roiResult !== undefined;
+              const roiPct = hasROI ? roiResult!.roiPercent : 0;
+              const hasPositiveROI = hasROI && roiPct > 0;
+              const roiColor = hasROI ? roiResult!.color : 'rgba(255,255,255,0.20)';
+              const roiStr = hasROI
+                ? `${roiPct >= 0 ? '+' : ''}${roiPct.toFixed(2)}% ROI`
+                : 'NO EDGE';
+
               return (
                 <div style={{
                   display: 'flex', flexDirection: 'column',
@@ -3337,103 +3382,106 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0 4px' }} />
                   {/* Home row */}
                   <TeamRow bookLine={homeBookLine} bookJuice={homeBookJuice} modelLine={homeModelLine} modelJuice={homeModelJuice} modelHasEdge={homeModelHasEdge} />
+                  {/* ROI% footer row — inline edge display replacing the EdgeBadge column */}
+                  <div style={{
+                    borderTop: `1px solid ${hasPositiveROI ? roiColor + '40' : 'rgba(255,255,255,0.06)'}`,
+                    background: hasPositiveROI ? roiColor + '12' : 'transparent',
+                    padding: '3px 4px 4px',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
+                  }}>
+                    {/* Label: e.g. "CGY +1.5" or "U5.5" or "CGY ML" */}
+                    {roiLabel ? (
+                      <span style={{ fontSize: '7px', fontWeight: 600, color: hasPositiveROI ? roiColor : 'rgba(255,255,255,0.25)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', letterSpacing: '0.02em', lineHeight: 1 }}>
+                        {roiLabel}
+                      </span>
+                    ) : null}
+                    {/* ROI value */}
+                    <span style={{ fontSize: '8px', fontWeight: 700, color: hasPositiveROI ? roiColor : 'rgba(255,255,255,0.20)', textAlign: 'center', whiteSpace: 'nowrap', letterSpacing: '0.01em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
+                      {roiStr}
+                    </span>
+                  </div>
                 </div>
               );
             };
 
             const OddsTable = () => (
               <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', width: '100%', padding: '4px 6px 4px', gap: '4px' }}>
-                {/* Market cards row: SPREAD | TOTAL | ML | EDGE — all flex-1 equal width */}
-                {/* SPREAD card — edge flags drive MODEL juice color */}
-                <MktCard
-                  awayBookLine={!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}
-                  awayBookJuice={mbAwaySpreadOdds ? String(mbAwaySpreadOdds) : '—110'}
-                  awayModelLine={mdlAwaySplit.line || '—'}
-                  awayModelJuice={mdlAwaySplit.odds || '—'}
-                  awayModelHasEdge={!isNaN(awaySpreadEdgePP) && awaySpreadEdgePP >= 1.5}
-                  homeBookLine={!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—'}
-                  homeBookJuice={mbHomeSpreadOdds ? String(mbHomeSpreadOdds) : '—110'}
-                  homeModelLine={mdlHomeSplit.line || '—'}
-                  homeModelJuice={mdlHomeSplit.odds || '—'}
-                  homeModelHasEdge={!isNaN(homeSpreadEdgePP) && homeSpreadEdgePP >= 1.5}
-                />
-                {/* TOTAL card */}
-                <MktCard
-                  awayBookLine={!isNaN(bookTotal) ? `o${bkTotalStr}` : 'o—'}
-                  awayBookJuice={mbOverOdds ? String(mbOverOdds) : '—110'}
-                  awayModelLine={`o${mdlOverSplit.line || '—'}`}
-                  awayModelJuice={mdlOverSplit.odds || '—'}
-                  awayModelHasEdge={!isNaN(overEdgePP) && overEdgePP >= 1.5}
-                  homeBookLine={!isNaN(bookTotal) ? `u${bkTotalStr}` : 'u—'}
-                  homeBookJuice={mbUnderOdds ? String(mbUnderOdds) : '—110'}
-                  homeModelLine={`u${mdlUnderSplit.line || '—'}`}
-                  homeModelJuice={mdlUnderSplit.odds || '—'}
-                  homeModelHasEdge={!isNaN(underEdgePP) && underEdgePP >= 1.5}
-                />
-                {/* ML card — juice IS the value; empty spacer row keeps height aligned */}
-                <MktCard
-                  awayBookLine={''}
-                  awayBookJuice={bkAwayMl || '—'}
-                  awayModelLine={''}
-                  awayModelJuice={mdlAwayMl || '—'}
-                  awayModelHasEdge={!isNaN(awayMlEdgePP) && awayMlEdgePP >= 1.5}
-                  homeBookLine={''}
-                  homeBookJuice={bkHomeMl || '—'}
-                  homeModelLine={''}
-                  homeModelJuice={mdlHomeMl || '—'}
-                  homeModelHasEdge={!isNaN(homeMlEdgePP) && homeMlEdgePP >= 1.5}
-                  isML={true}
-                />
-                {/* EdgeBadge: spec-compliant — 3 independent market rows (SPR/TOT/ML), verdict tier + pp value */}
+                {/* Market cards row: SPREAD | TOTAL | ML — all flex-1 equal width, ROI% inline in each card footer */}
+                {/* SPREAD card */}
                 {(() => {
-                  // Three markets, three independent edges. Never combined, never averaged.
-                  // Each row: market label | verdict tier | pp value
-                  // Container bg/border driven by bestEdgePP across all 3 markets
-                  const containerBg = isNaN(bestEdgePP) || bestEdgePP < 1.5
-                    ? 'rgba(255,255,255,0.03)'
-                    : 'rgba(57,255,20,0.07)';  // neon green tint for any edge
-                  const containerBorder = isNaN(bestEdgePP) || bestEdgePP < 1.5
-                    ? '1px solid rgba(255,255,255,0.07)'
-                    : `1px solid ${getEdgeColorFromPP(bestEdgePP)}`;
-
-                  // Per-market row renderer
-                  const EdgeRow = ({ mkt, edgePP }: { mkt: string; edgePP: number }) => {
-                    const verdict = getVerdictFromPP(edgePP);
-                    const color = getEdgeColorFromPP(edgePP);
-                    const hasEdge = !isNaN(edgePP) && edgePP >= 1.5;
-                    const ppStr = isNaN(edgePP) ? '—' : (edgePP >= 0 ? `+${edgePP.toFixed(1)}` : edgePP.toFixed(1));
-                    return (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2px 2px', borderBottom: '1px solid rgba(255,255,255,0.05)', width: '100%' }}>
-                        {/* Market label */}
-                        <span style={{ fontSize: '7px', fontWeight: 700, color: 'rgba(255,255,255,0.40)', textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1 }}>{mkt}</span>
-                        {/* Verdict tier */}
-                        <span style={{ fontSize: 'clamp(6.5px, 1.6vw, 8px)', fontWeight: 800, color: hasEdge ? color : 'rgba(255,255,255,0.20)', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.1, textAlign: 'center' }}>
-                          {hasEdge ? verdict : 'PASS'}
-                        </span>
-                        {/* pp value */}
-                        <span style={{ fontSize: 'clamp(8px, 2vw, 10px)', fontWeight: 700, color: hasEdge ? color : 'rgba(255,255,255,0.18)', lineHeight: 1.1 }}>
-                          {ppStr}
-                        </span>
-                      </div>
-                    );
-                  };
-
+                  // Build roiLabel: "AWAY_ABBR LINE" or "HOME_ABBR LINE" for best side
+                  const best = spreadBestROI;
+                  const label = best
+                    ? best.side === 'away'
+                      ? `${awayAbbr} ${mdlAwaySplit.line || ''}`.trim()
+                      : `${homeAbbr} ${mdlHomeSplit.line || ''}`.trim()
+                    : '';
                   return (
-                    <div style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'space-evenly',
-                      background: containerBg,
-                      border: containerBorder,
-                      borderRadius: '10px', width: '60px', flexShrink: 0,
-                      alignSelf: 'stretch', overflow: 'hidden',
-                    }}>
-                      {/* EDGE header */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2px 2px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                        <span style={{ fontSize: '7px', fontWeight: 800, color: isNaN(bestEdgePP) || bestEdgePP < 1.5 ? 'rgba(255,255,255,0.35)' : getEdgeColorFromPP(bestEdgePP), textTransform: 'uppercase', letterSpacing: '0.08em' }}>EDGE</span>
-                      </div>
-                      <EdgeRow mkt="SPR" edgePP={spreadEdgePP} />
-                      <EdgeRow mkt="TOT" edgePP={totalEdgePP} />
-                      <EdgeRow mkt="ML" edgePP={mlEdgePP} />
-                    </div>
+                    <MktCard
+                      awayBookLine={!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}
+                      awayBookJuice={mbAwaySpreadOdds ? String(mbAwaySpreadOdds) : '—110'}
+                      awayModelLine={mdlAwaySplit.line || '—'}
+                      awayModelJuice={mdlAwaySplit.odds || '—'}
+                      awayModelHasEdge={!isNaN(awaySpreadEdgePP) && awaySpreadEdgePP >= 1.5}
+                      homeBookLine={!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—'}
+                      homeBookJuice={mbHomeSpreadOdds ? String(mbHomeSpreadOdds) : '—110'}
+                      homeModelLine={mdlHomeSplit.line || '—'}
+                      homeModelJuice={mdlHomeSplit.odds || '—'}
+                      homeModelHasEdge={!isNaN(homeSpreadEdgePP) && homeSpreadEdgePP >= 1.5}
+                      roiResult={best ? { roiPercent: best.roiPercent, verdict: best.verdict, color: best.color, edgePts: best.edgePts } : null}
+                      roiLabel={label}
+                    />
+                  );
+                })()}
+                {/* TOTAL card */}
+                {(() => {
+                  const best = totalBestROI;
+                  const label = best
+                    ? best.side === 'over'
+                      ? `O${mdlOverSplit.line || ''}`.trim()
+                      : `U${mdlUnderSplit.line || ''}`.trim()
+                    : '';
+                  return (
+                    <MktCard
+                      awayBookLine={!isNaN(bookTotal) ? `o${bkTotalStr}` : 'o—'}
+                      awayBookJuice={mbOverOdds ? String(mbOverOdds) : '—110'}
+                      awayModelLine={`o${mdlOverSplit.line || '—'}`}
+                      awayModelJuice={mdlOverSplit.odds || '—'}
+                      awayModelHasEdge={!isNaN(overEdgePP) && overEdgePP >= 1.5}
+                      homeBookLine={!isNaN(bookTotal) ? `u${bkTotalStr}` : 'u—'}
+                      homeBookJuice={mbUnderOdds ? String(mbUnderOdds) : '—110'}
+                      homeModelLine={`u${mdlUnderSplit.line || '—'}`}
+                      homeModelJuice={mdlUnderSplit.odds || '—'}
+                      homeModelHasEdge={!isNaN(underEdgePP) && underEdgePP >= 1.5}
+                      roiResult={best ? { roiPercent: best.roiPercent, verdict: best.verdict, color: best.color, edgePts: best.edgePts } : null}
+                      roiLabel={label}
+                    />
+                  );
+                })()}
+                {/* ML card — juice IS the value; empty spacer row keeps height aligned */}
+                {(() => {
+                  const best = mlBestROI;
+                  const label = best
+                    ? best.side === 'away'
+                      ? `${awayAbbr} ML`
+                      : `${homeAbbr} ML`
+                    : '';
+                  return (
+                    <MktCard
+                      awayBookLine={''}
+                      awayBookJuice={bkAwayMl || '—'}
+                      awayModelLine={''}
+                      awayModelJuice={mdlAwayMl || '—'}
+                      awayModelHasEdge={!isNaN(awayMlEdgePP) && awayMlEdgePP >= 1.5}
+                      homeBookLine={''}
+                      homeBookJuice={bkHomeMl || '—'}
+                      homeModelLine={''}
+                      homeModelJuice={mdlHomeMl || '—'}
+                      homeModelHasEdge={!isNaN(homeMlEdgePP) && homeMlEdgePP >= 1.5}
+                      isML={true}
+                      roiResult={best ? { roiPercent: best.roiPercent, verdict: best.verdict, color: best.color, edgePts: best.edgePts } : null}
+                      roiLabel={label}
+                    />
                   );
                 })()}
               </div>
@@ -3563,25 +3611,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     </div>
                   )}
 
-                  {/* ── EDGE tab (additional content below OddsTable) ────────── */}
-                  {mobileTab === 'edge' && (
-                    <div className="flex items-center justify-center w-full" style={{ minHeight: 72, padding: '8px 4px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                      <EdgeVerdict
-                        spreadDiff={isNaN(spreadDiff) ? null : spreadDiff}
-                        spreadEdge={computedSpreadEdge}
-                        totalDiff={isNaN(totalDiff) ? null : totalDiff}
-                        totalEdge={computedTotalEdge}
-                        awayLogoUrl={awayLogoUrl}
-                        homeLogoUrl={homeLogoUrl}
-                        awaySlug={game.awayTeam}
-                        homeSlug={game.homeTeam}
-                        awayDisplayName={awayDisplayName}
-                        homeDisplayName={homeDisplayName}
-                        awayAbbr={awayAbbr}
-                        homeAbbr={homeAbbr}
-                      />
-                    </div>
-                  )}
+                  {/* EDGE tab removed — ROI% is now displayed inline inside each MktCard */}
                 </div>
                 </div>
               </div>

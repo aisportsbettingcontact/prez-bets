@@ -272,12 +272,12 @@ export default function ModelProjections() {
 
   // ── Feed-wide mobile tab filter ───────────────────────────────────────────
   // Shared across all game cards on this page. Default: 'dual' (BOOK + MODEL both active).
-  type FeedMobileTab = 'book' | 'model' | 'splits' | 'edge' | 'dual';
+  type FeedMobileTab = 'book' | 'model' | 'splits' | 'dual';
   const FEED_TAB_KEY = 'prez_bets_mobile_tab';
   const getPersistedFeedTab = (): FeedMobileTab => {
     try {
       const stored = localStorage.getItem(FEED_TAB_KEY);
-      if (stored === 'book' || stored === 'model' || stored === 'splits' || stored === 'edge' || stored === 'dual') return stored;
+      if (stored === 'book' || stored === 'model' || stored === 'splits' || stored === 'dual') return stored;
     } catch { /* ignore */ }
     return 'dual';
   };
@@ -291,7 +291,6 @@ export default function ModelProjections() {
     { id: 'book',   label: 'BOOK LINES' },
     { id: 'model',  label: 'MODEL LINES' },
     { id: 'splits', label: 'SPLITS' },
-    { id: 'edge',   label: 'EDGE' },
   ];
 
   // ── Favorites tab ──────────────────────────────────────────────────────────
