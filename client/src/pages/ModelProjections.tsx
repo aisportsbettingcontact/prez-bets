@@ -856,6 +856,37 @@ export default function ModelProjections() {
           </div>
       </header>
 
+      {/* ── Sticky global column header (mobile only) — TEAM | SPREAD | TOTAL | ML | EDGE ── */}
+      {/* Only shown when BOOK, MODEL, or DUAL tab is active. Hidden for SPLITS/EDGE tabs. */}
+      {(feedMobileTab === 'book' || feedMobileTab === 'model' || feedMobileTab === 'dual') && (
+        <div className="lg:hidden" style={{
+          position: 'sticky', top: 0, zIndex: 10,
+          display: 'grid',
+          gridTemplateColumns: 'clamp(170px, 14vw, 220px) 1fr',
+          background: 'hsl(var(--card))',
+          borderBottom: '1px solid rgba(255,255,255,0.10)',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          {/* Left: TEAM label */}
+          <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', borderRight: '1px solid rgba(255,255,255,0.10)' }}>
+            <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>TEAM</span>
+          </div>
+          {/* Right: SPREAD | TOTAL | ML | EDGE labels aligned to card columns */}
+          <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <div style={{ display: 'flex', gap: '5px', flex: '1 1 0', minWidth: 0 }}>
+              {['SPREAD', 'TOTAL', 'ML'].map(h => (
+                <div key={h} style={{ flex: '1 1 0', textAlign: 'center' }}>
+                  <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ minWidth: '48px', maxWidth: '60px', flexShrink: 0, textAlign: 'center' }}>
+              <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: '#39FF14', textTransform: 'uppercase', letterSpacing: '0.07em' }}>EDGE</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Main Feed ── */}
       {/* touch-action: pan-y — allows vertical scrolling while blocking horizontal
            interference from the frozen panel scroll containers inside GameCard.

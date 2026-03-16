@@ -3131,12 +3131,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             }) => {
               const cardEdge = awayEdge || homeEdge;
               const cardBg = 'rgba(255,255,255,0.06)';
-              const cardBorder = cardEdge && (isDualTab || isModelTab)
-                ? '1px solid rgba(57,255,20,0.45)'
-                : '1px solid rgba(255,255,255,0.10)';
-              const cardGlow = cardEdge && (isDualTab || isModelTab)
-                ? '0 0 8px rgba(57,255,20,0.18)'
-                : 'none';
+              const cardBorder = '1px solid rgba(255,255,255,0.10)';
+              const cardGlow = 'none';
 
               // Sub-column label colors
               const bkLabelColor = (isDualTab || isBookTab) ? 'rgba(255,255,255,0.85)' : isModelTab ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.30)';
@@ -3167,7 +3163,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   {/* Card header: market label + BOOK/MODEL sub-labels */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '3px 4px 2px' }}>
                     <span style={{ fontSize: '7.5px', fontWeight: 700, color: bkLabelColor, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.06em' }}>BOOK</span>
-                    <span style={{ fontSize: '7.5px', fontWeight: 700, color: mdlLabelColor, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.06em' }}>MDL</span>
+                    <span style={{ fontSize: '7.5px', fontWeight: 700, color: mdlLabelColor, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.06em' }}>MODEL</span>
                   </div>
                   {/* Away row */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -3188,17 +3184,9 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             };
 
             const OddsTable = () => (
-              <div style={{ display: 'flex', flexDirection: 'column', width: '100%', padding: '0 6px 4px' }}>
-                {/* Market label row: SPREAD | TOTAL | ML — 22px to align with left panel status row */}
-                <div style={{ display: 'flex', gap: '5px', paddingBottom: '3px', height: '22px', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
-                  {['SPREAD', 'TOTAL', 'ML'].map(h => (
-                    <div key={h} style={{ flex: '1 1 0', textAlign: 'center' }}>
-                      <span style={{ fontSize: 'clamp(8.5px, 2.1vw, 10px)', fontWeight: 800, color: '#E8E8E8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
-                    </div>
-                  ))}
-                </div>
-                {/* Away row: 3 market cards side by side */}
-                <div style={{ display: 'flex', gap: '5px', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', width: '100%', padding: '4px 6px 4px', gap: '5px' }}>
+                {/* Market cards row: SPREAD | TOTAL | ML | EDGE — no per-card header (global sticky header in feed) */}
+                <div style={{ display: 'flex', gap: '5px', flex: '1 1 0', minWidth: 0 }}>
                   <MktCard
                     label="SPREAD"
                     awayBook={!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}
@@ -3239,6 +3227,47 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     homeEdge={homeMlIsEdge}
                   />
                 </div>
+                {/* EdgeBadge: rightmost column — compact neon pill showing best edge, or muted dash */}
+                {(() => {
+                  const hasAnyEdge = awaySpreadIsEdge || homeSpreadIsEdge || overTotalIsEdge || underTotalIsEdge || awayMlIsEdge || homeMlIsEdge;
+                  const rawSpreadEdge = computedSpreadEdge && computedSpreadEdge !== 'PASS' ? computedSpreadEdge : null;
+                  const rawTotalEdge  = computedTotalEdge  && computedTotalEdge  !== 'PASS' ? computedTotalEdge  : null;
+                  const bestRaw = rawSpreadEdge ?? rawTotalEdge;
+                  const parseEdgeLabel = (raw: string | null): { team: string; line: string; tier: string } | null => {
+                    if (!raw) return null;
+                    const m = raw.match(/^(.+?)\s+([+-][\d.]+)\s+\[([^\]]+)\]/);
+                    if (m) return { team: m[1].trim(), line: m[2], tier: m[3].replace(' EDGE', '').replace(' LEAN', '') };
+                    const t = raw.match(/^(OVER|UNDER)\s+([\d.]+)\s+\[([^\]]+)\]/);
+                    if (t) return { team: t[1], line: t[2], tier: t[3].replace(' EDGE', '').replace(' LEAN', '') };
+                    return null;
+                  };
+                  const parsed = parseEdgeLabel(bestRaw);
+                  const tierColor = (tier: string) => {
+                    const t = tier.toUpperCase();
+                    if (t.includes('ELITE') || t.includes('STRONG')) return '#39FF14';
+                    if (t.includes('PLAYABLE')) return 'rgba(57,255,20,0.85)';
+                    return 'rgba(57,255,20,0.60)';
+                  };
+                  return (
+                    <div style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                      background: hasAnyEdge ? 'rgba(57,255,20,0.07)' : 'rgba(255,255,255,0.04)',
+                      border: hasAnyEdge ? '1px solid rgba(57,255,20,0.30)' : '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: '10px', padding: '5px 4px', minWidth: '48px', maxWidth: '60px', flexShrink: 0,
+                      gap: '2px', alignSelf: 'stretch',
+                    }}>
+                      {parsed ? (
+                        <>
+                          <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 800, color: tierColor(parsed.tier), textAlign: 'center', lineHeight: 1.1, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{parsed.tier}</span>
+                          <span style={{ fontSize: 'clamp(8.5px, 2.1vw, 10px)', fontWeight: 700, color: '#FFFFFF', textAlign: 'center', lineHeight: 1.15 }}>{parsed.team}</span>
+                          <span style={{ fontSize: 'clamp(8.5px, 2.1vw, 10px)', fontWeight: 700, color: tierColor(parsed.tier), textAlign: 'center', lineHeight: 1.15 }}>{parsed.line}</span>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 'clamp(9px, 2.2vw, 11px)', fontWeight: 500, color: 'rgba(255,255,255,0.22)', textAlign: 'center' }}>—</span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
 

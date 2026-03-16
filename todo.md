@@ -1534,3 +1534,9 @@
 - [x] Fix any incorrect edge direction logic in Python engine
 - [x] Add deep diagnostic logging for all edge calculations (break-even, implied prob, edge pp, verdict)
 - [x] Fix mobile odds cell overlap: redesign OddsCell to two-line dark card style (line value top white, odds bottom neon green), fix grid spacing
+- [ ] Fix 1: One sticky global column header (SPREAD/TOTAL/ML + BOOK/MODEL sub-labels) — remove per-card headers
+- [ ] Fix 2: Collapse FINAL/LIVE status into card top-left — remove full-width status row
+- [ ] Fix 3: Remove green borders from MODEL cells — color-only distinction (bright green text, dark cell, no border)
+- [ ] Fix 4: Bind score tightly to team name — same row, adjacent, brand green when live
+- [ ] Fix 5: Add Edge Badge as rightmost column on each game card
+- [ ] Rename MDL → MODEL everywhere in UI
