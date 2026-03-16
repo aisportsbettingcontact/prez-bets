@@ -23,7 +23,7 @@ import type { AppRouter } from "@/lib/trpc";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
-type MobileTab = 'book' | 'model' | 'splits' | 'edge' | 'dual';
+type MobileTab = 'model' | 'splits';
 
 // Threshold: only virtualize when game count >= this value
 const VIRTUALIZE_THRESHOLD = 15;
