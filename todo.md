@@ -1579,3 +1579,12 @@
 - [x] Remove Edge column from desktop/compact GameCard view (EdgeBadge removed from OddsTable)
 - [x] Add ROI% inline to desktop BettingCell beneath model odds
 - [x] Verify ROI display works for all sports (NHL, NBA, NCAAM) — EdgeEngine is sport-agnostic
+
+## UI Refactor — Single Projection Interface (Spec pasted_content_7)
+- [x] Reduce tab bar to 2 tabs: MODEL PROJECTIONS and BETTING SPLITS (remove BOOK LINES tab)
+- [x] Add PUCK LINE (NHL) or SPREAD (NBA/NCAAM) / TOTAL / ML column headers above game cards
+- [x] Simplify MktCard: BOOK value (bold white) stacked above MODEL value (bold neon #39FF14 always)
+- [x] ROI footer: show "LABEL +X.XX% ROI" or "NO EDGE" — never show negative ROI
+- [ ] Move ROI computation server-side: store roiSpread/roiTotal/roiMl in DB, serve pre-computed values
+- [ ] Add structured ROI_ENGINE_LOG per market per game on server
+- [ ] Remove frontend edge math (getMarketEdge calls) — use server-provided ROI values only

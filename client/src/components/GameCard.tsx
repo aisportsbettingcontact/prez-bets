@@ -1895,8 +1895,8 @@ interface GameCardProps {
    * and this value is used instead. The card will call onMobileTabChange when the user
    * interacts with the tab bar (but the tab bar is now rendered at the feed level).
    */
-  mobileTab?: 'book' | 'model' | 'splits' | 'dual';
-  onMobileTabChange?: (tab: 'book' | 'model' | 'splits' | 'dual') => void;
+  mobileTab?: 'model' | 'splits';
+  onMobileTabChange?: (tab: 'model' | 'splits') => void;
 }
 
 export function GameCard({ game, mode = "full", showModel: showModelProp, onToggleModel: onToggleModelProp, favoriteGameIds, onToggleFavorite, onFavoriteNotify, isAppAuthed: isAppAuthedProp, mobileTab: mobileTabProp, onMobileTabChange }: GameCardProps) {
@@ -2037,16 +2037,14 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   //   1. At least one tab must always be active (cannot deselect last active tab)
   //   2. SPLITS and EDGE are exclusive single-select (cannot combine with BOOK/MODEL)
   //   3. BOOK + MODEL can be active simultaneously (dual mode)
-  type MobileTab = 'book' | 'model' | 'splits' | 'dual';
-  const MOBILE_TAB_KEY = 'prez_bets_mobile_tab';
+  type MobileTab = 'model' | 'splits';
+  const MOBILE_TAB_KEY = 'prez_bets_mobile_tab_v2';
   const getPersistedTab = (): MobileTab => {
     try {
       const stored = localStorage.getItem(MOBILE_TAB_KEY);
-      if (stored === 'book' || stored === 'model' || stored === 'splits' || stored === 'dual') {
-        return stored;
-      }
+      if (stored === 'model' || stored === 'splits') return stored as MobileTab;
     } catch { /* localStorage unavailable (private browsing, etc.) */ }
-    return 'dual'; // fallback default for new users
+    return 'model'; // default: MODEL PROJECTIONS
   };
   const [mobileTabInternal, setMobileTabInternal] = useState<MobileTab>(getPersistedTab);
   // When a feed-level prop is provided, use it; otherwise fall back to internal state
@@ -3046,11 +3044,11 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             }
 
             // ── Tab state ─────────────────────────────────────────────────────
-            // isDualTab: BOOK + MODEL both active simultaneously
-            // isBookTab / isModelTab: true when that tab is active OR dual is active
-            const isDualTab  = mobileTab === 'dual';
-            const isBookTab  = mobileTab === 'book'  || isDualTab;
-            const isModelTab = mobileTab === 'model' || isDualTab;
+            // 2-tab system: MODEL PROJECTIONS | BETTING SPLITS
+            // MODEL tab is always the projections view (BOOK + MODEL both shown)
+            const isDualTab  = false; // no longer used
+            const isBookTab  = mobileTab === 'model'; // book column always shown in MODEL tab
+            const isModelTab = mobileTab === 'model'; // model column always shown in MODEL tab
 
             // ── Value style factories (reference image spec) ──────────────────
             // The table is ALWAYS visible. Tab controls which column is "primary":
@@ -3301,10 +3299,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             }
 
             // ── Tab bar config ────────────────────────────────────────────────
+            // Tab bar: 2 tabs only — MODEL PROJECTIONS | BETTING SPLITS
             const TABS: { id: MobileTab; label: string }[] = [
-              { id: 'book',   label: 'BOOK LINES' },
-              { id: 'model',  label: 'MODEL LINES' },
-              { id: 'splits', label: 'SPLITS' },
+              { id: 'model',  label: 'MODEL PROJECTIONS' },
+              { id: 'splits', label: 'BETTING SPLITS' },
             ];
 
             // ── Shared odds table (used by both BOOK and MODEL tabs) ──────────
@@ -3316,27 +3314,27 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             // ML card has an empty spacer row above the juice to align height with SPREAD/TOTAL.
             const MktCard = ({
               awayBookLine, awayBookJuice,
-              awayModelLine, awayModelJuice, awayModelHasEdge,
+              awayModelLine, awayModelJuice,
               homeBookLine, homeBookJuice,
-              homeModelLine, homeModelJuice, homeModelHasEdge,
+              homeModelLine, homeModelJuice,
               isML = false,
               roiResult = null,
               roiLabel = '',
             }: {
               awayBookLine: string; awayBookJuice: string;
-              awayModelLine: string; awayModelJuice: string; awayModelHasEdge: boolean;
+              awayModelLine: string; awayModelJuice: string;
               homeBookLine: string; homeBookJuice: string;
-              homeModelLine: string; homeModelJuice: string; homeModelHasEdge: boolean;
+              homeModelLine: string; homeModelJuice: string;
               isML?: boolean;
               roiResult?: { roiPercent: number; verdict: string; color: string; edgePts: number } | null;
               roiLabel?: string;
             }) => {
               // SubCol: line row (dim 9px) + juice row (bold 14px)
               // modelJuiceColor: neon green only when this side has an edge, otherwise white
-              const SubCol = ({ line, juice, isBook, hasEdge }: { line: string; juice: string; isBook: boolean; hasEdge: boolean }) => {
+              const SubCol = ({ line, juice, isBook }: { line: string; juice: string; isBook: boolean; hasEdge?: boolean }) => {
                 const juiceColor = isBook
-                  ? 'rgba(255,255,255,0.90)'                      // BOOK: always white
-                  : hasEdge ? '#39FF14' : 'rgba(255,255,255,0.90)'; // MODEL: neon if edge, white if not
+                  ? 'rgba(255,255,255,0.90)'  // BOOK: always white
+                  : '#39FF14';                 // MODEL: always neon green
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', minWidth: 0, flex: 1 }}>
                     {/* Spacer/line row: always rendered to keep height consistent */}
@@ -3349,10 +3347,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 );
               };
 
-              const TeamRow = ({ bookLine, bookJuice, modelLine, modelJuice, modelHasEdge }: { bookLine: string; bookJuice: string; modelLine: string; modelJuice: string; modelHasEdge: boolean }) => (
+              const TeamRow = ({ bookLine, bookJuice, modelLine, modelJuice }: { bookLine: string; bookJuice: string; modelLine: string; modelJuice: string }) => (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px', padding: '4px 3px' }}>
-                  <SubCol line={bookLine} juice={bookJuice} isBook={true} hasEdge={false} />
-                  <SubCol line={modelLine} juice={modelJuice} isBook={false} hasEdge={modelHasEdge} />
+                  <SubCol line={bookLine} juice={bookJuice} isBook={true} />
+                  <SubCol line={modelLine} juice={modelJuice} isBook={false} />
                 </div>
               );
 
@@ -3360,9 +3358,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               const hasROI = roiResult !== null && roiResult !== undefined;
               const roiPct = hasROI ? roiResult!.roiPercent : 0;
               const hasPositiveROI = hasROI && roiPct > 0;
-              const roiColor = hasROI ? roiResult!.color : 'rgba(255,255,255,0.20)';
-              const roiStr = hasROI
-                ? `${roiPct >= 0 ? '+' : ''}${roiPct.toFixed(2)}% ROI`
+              const roiColor = hasPositiveROI ? roiResult!.color : 'rgba(255,255,255,0.22)';
+              // roiStr: show +X.XX% ROI for positive, NO EDGE for zero/negative
+              const roiStr = hasPositiveROI
+                ? `+${roiPct.toFixed(2)}% ROI`
                 : 'NO EDGE';
 
               return (
@@ -3377,11 +3376,11 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     <span style={{ fontSize: '6.5px', fontWeight: 700, color: 'rgba(255,255,255,0.70)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>MODEL</span>
                   </div>
                   {/* Away row */}
-                  <TeamRow bookLine={awayBookLine} bookJuice={awayBookJuice} modelLine={awayModelLine} modelJuice={awayModelJuice} modelHasEdge={awayModelHasEdge} />
+                  <TeamRow bookLine={awayBookLine} bookJuice={awayBookJuice} modelLine={awayModelLine} modelJuice={awayModelJuice} />
                   {/* Divider */}
                   <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0 4px' }} />
                   {/* Home row */}
-                  <TeamRow bookLine={homeBookLine} bookJuice={homeBookJuice} modelLine={homeModelLine} modelJuice={homeModelJuice} modelHasEdge={homeModelHasEdge} />
+                  <TeamRow bookLine={homeBookLine} bookJuice={homeBookJuice} modelLine={homeModelLine} modelJuice={homeModelJuice} />
                   {/* ROI% footer row — inline edge display replacing the EdgeBadge column */}
                   <div style={{
                     borderTop: `1px solid ${hasPositiveROI ? roiColor + '40' : 'rgba(255,255,255,0.06)'}`,
@@ -3389,14 +3388,14 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     padding: '3px 4px 4px',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
                   }}>
-                    {/* Label: e.g. "CGY +1.5" or "U5.5" or "CGY ML" */}
-                    {roiLabel ? (
-                      <span style={{ fontSize: '7px', fontWeight: 600, color: hasPositiveROI ? roiColor : 'rgba(255,255,255,0.25)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', letterSpacing: '0.02em', lineHeight: 1 }}>
+                    {/* Label: e.g. "CGY +1.5" or "U5.5" or "CGY ML" — only when positive ROI */}
+                    {hasPositiveROI && roiLabel ? (
+                      <span style={{ fontSize: '7px', fontWeight: 600, color: roiColor, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', letterSpacing: '0.02em', lineHeight: 1 }}>
                         {roiLabel}
                       </span>
                     ) : null}
-                    {/* ROI value */}
-                    <span style={{ fontSize: '8px', fontWeight: 700, color: hasPositiveROI ? roiColor : 'rgba(255,255,255,0.20)', textAlign: 'center', whiteSpace: 'nowrap', letterSpacing: '0.01em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
+                    {/* ROI value: +X.XX% ROI or NO EDGE */}
+                    <span style={{ fontSize: hasPositiveROI ? '8px' : '7px', fontWeight: hasPositiveROI ? 700 : 500, color: roiColor, textAlign: 'center', whiteSpace: 'nowrap', letterSpacing: '0.01em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
                       {roiStr}
                     </span>
                   </div>
@@ -3422,12 +3421,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       awayBookJuice={mbAwaySpreadOdds ? String(mbAwaySpreadOdds) : '—110'}
                       awayModelLine={mdlAwaySplit.line || '—'}
                       awayModelJuice={mdlAwaySplit.odds || '—'}
-                      awayModelHasEdge={!isNaN(awaySpreadEdgePP) && awaySpreadEdgePP >= 1.5}
                       homeBookLine={!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—'}
                       homeBookJuice={mbHomeSpreadOdds ? String(mbHomeSpreadOdds) : '—110'}
                       homeModelLine={mdlHomeSplit.line || '—'}
                       homeModelJuice={mdlHomeSplit.odds || '—'}
-                      homeModelHasEdge={!isNaN(homeSpreadEdgePP) && homeSpreadEdgePP >= 1.5}
                       roiResult={best ? { roiPercent: best.roiPercent, verdict: best.verdict, color: best.color, edgePts: best.edgePts } : null}
                       roiLabel={label}
                     />
@@ -3447,12 +3444,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       awayBookJuice={mbOverOdds ? String(mbOverOdds) : '—110'}
                       awayModelLine={`o${mdlOverSplit.line || '—'}`}
                       awayModelJuice={mdlOverSplit.odds || '—'}
-                      awayModelHasEdge={!isNaN(overEdgePP) && overEdgePP >= 1.5}
                       homeBookLine={!isNaN(bookTotal) ? `u${bkTotalStr}` : 'u—'}
                       homeBookJuice={mbUnderOdds ? String(mbUnderOdds) : '—110'}
                       homeModelLine={`u${mdlUnderSplit.line || '—'}`}
                       homeModelJuice={mdlUnderSplit.odds || '—'}
-                      homeModelHasEdge={!isNaN(underEdgePP) && underEdgePP >= 1.5}
                       roiResult={best ? { roiPercent: best.roiPercent, verdict: best.verdict, color: best.color, edgePts: best.edgePts } : null}
                       roiLabel={label}
                     />
@@ -3472,12 +3467,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       awayBookJuice={bkAwayMl || '—'}
                       awayModelLine={''}
                       awayModelJuice={mdlAwayMl || '—'}
-                      awayModelHasEdge={!isNaN(awayMlEdgePP) && awayMlEdgePP >= 1.5}
                       homeBookLine={''}
                       homeBookJuice={bkHomeMl || '—'}
                       homeModelLine={''}
                       homeModelJuice={mdlHomeMl || '—'}
-                      homeModelHasEdge={!isNaN(homeMlEdgePP) && homeMlEdgePP >= 1.5}
                       isML={true}
                       roiResult={best ? { roiPercent: best.roiPercent, verdict: best.verdict, color: best.color, edgePts: best.edgePts } : null}
                       roiLabel={label}
@@ -3592,9 +3585,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 {/* ── RIGHT PANEL: content only (tab bar moved to full-width header) ── */}
                 <div style={{ gridColumn: '2', display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
-                  {/* ── OddsTable: visible only when BOOK, MODEL, or DUAL tab is active ── */}
-                  {/* Hidden entirely when SPLITS or EDGE tab is active               */}
-                  {(mobileTab === 'book' || mobileTab === 'model' || mobileTab === 'dual') && (
+                  {/* ── OddsTable: visible when MODEL PROJECTIONS tab is active ── */}
+                  {mobileTab === 'model' && (
                     <OddsTable />
                   )}
 

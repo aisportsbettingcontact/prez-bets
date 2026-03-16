@@ -272,25 +272,25 @@ export default function ModelProjections() {
 
   // ── Feed-wide mobile tab filter ───────────────────────────────────────────
   // Shared across all game cards on this page. Default: 'dual' (BOOK + MODEL both active).
-  type FeedMobileTab = 'book' | 'model' | 'splits' | 'dual';
-  const FEED_TAB_KEY = 'prez_bets_mobile_tab';
+  // Two tabs: MODEL PROJECTIONS | BETTING SPLITS
+  type FeedMobileTab = 'model' | 'splits';
+  const FEED_TAB_KEY = 'prez_bets_mobile_tab_v2';
   const getPersistedFeedTab = (): FeedMobileTab => {
     try {
       const stored = localStorage.getItem(FEED_TAB_KEY);
-      if (stored === 'book' || stored === 'model' || stored === 'splits' || stored === 'dual') return stored;
+      if (stored === 'model' || stored === 'splits') return stored as FeedMobileTab;
     } catch { /* ignore */ }
-    return 'dual';
+    return 'model';
   };
   const [feedMobileTab, setFeedMobileTab] = useState<FeedMobileTab>(getPersistedFeedTab);
   const handleFeedTabChange = (next: FeedMobileTab) => {
     setFeedMobileTab(next);
     try { localStorage.setItem(FEED_TAB_KEY, next); } catch { /* ignore */ }
   };
-  const feedIsDual  = feedMobileTab === 'dual';
+  const feedIsDual = false; // no longer used — single MODEL view
   const FEED_TABS: { id: FeedMobileTab; label: string }[] = [
-    { id: 'book',   label: 'BOOK LINES' },
-    { id: 'model',  label: 'MODEL LINES' },
-    { id: 'splits', label: 'SPLITS' },
+    { id: 'model',  label: 'MODEL PROJECTIONS' },
+    { id: 'splits', label: 'BETTING SPLITS' },
   ];
 
   // ── Favorites tab ──────────────────────────────────────────────────────────
@@ -806,27 +806,14 @@ export default function ModelProjections() {
         {/* Row 5: Feed-wide mobile tab filter — BOOK LINES | MODEL LINES | SPLITS | EDGE */}
         {/* Only shown on mobile (< lg). Hidden on desktop where the full 3-panel layout is used. */}
         <div className="grid lg:hidden" style={{
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(2, 1fr)',
             borderBottom: '2px solid hsl(var(--border) / 0.5)',
             background: 'hsl(var(--card))',
           }}>
             {FEED_TABS.map(tab => {
-              const isActive = feedMobileTab === tab.id ||
-                (feedIsDual && (tab.id === 'book' || tab.id === 'model'));
+              const isActive = feedMobileTab === tab.id;
               const handleClick = () => {
-                let next: FeedMobileTab = feedMobileTab;
-                if (tab.id === 'book') {
-                  if (feedMobileTab === 'model') next = 'dual';
-                  else if (feedIsDual) next = 'model';
-                  else next = 'book';
-                } else if (tab.id === 'model') {
-                  if (feedMobileTab === 'book') next = 'dual';
-                  else if (feedIsDual) next = 'book';
-                  else next = 'model';
-                } else {
-                  next = tab.id as FeedMobileTab;
-                }
-                handleFeedTabChange(next);
+                handleFeedTabChange(tab.id);
               };
               return (
                 <button
@@ -855,32 +842,29 @@ export default function ModelProjections() {
           </div>
       </header>
 
-      {/* ── Sticky global column header (mobile only) — TEAM | SPREAD | TOTAL | ML | EDGE ── */}
-      {/* Only shown when BOOK, MODEL, or DUAL tab is active. Hidden for SPLITS/EDGE tabs. */}
-      {(feedMobileTab === 'book' || feedMobileTab === 'model' || feedMobileTab === 'dual') && (
+      {/* ── Sticky global column header (mobile only) — TEAM | PUCK LINE/SPREAD | TOTAL | ML ── */}
+      {/* Only shown when MODEL PROJECTIONS tab is active. Hidden for BETTING SPLITS. */}
+      {feedMobileTab === 'model' && (
         <div className="lg:hidden" style={{
           position: 'sticky', top: 0, zIndex: 10,
           display: 'grid',
-          gridTemplateColumns: 'clamp(170px, 14vw, 220px) 1fr',
+          gridTemplateColumns: '80px 1fr',
           background: 'hsl(var(--card))',
           borderBottom: '1px solid rgba(255,255,255,0.10)',
           borderTop: '1px solid rgba(255,255,255,0.06)',
         }}>
           {/* Left: TEAM label */}
           <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', borderRight: '1px solid rgba(255,255,255,0.10)' }}>
-            <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>TEAM</span>
+            <span style={{ fontSize: '8px', fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>TEAM</span>
           </div>
-          {/* Right: SPREAD | TOTAL | ML | EDGE labels aligned to card columns */}
-          <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <div style={{ display: 'flex', gap: '5px', flex: '1 1 0', minWidth: 0 }}>
-              {['SPREAD', 'TOTAL', 'ML'].map(h => (
+          {/* Right: PUCK LINE (NHL) or SPREAD (NBA/NCAAM) | TOTAL | ML */}
+          <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '4px', flex: '1 1 0', minWidth: 0 }}>
+              {[selectedSport === 'NHL' ? 'PUCK LINE' : 'SPREAD', 'TOTAL', 'ML'].map(h => (
                 <div key={h} style={{ flex: '1 1 0', textAlign: 'center' }}>
-                  <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
+                  <span style={{ fontSize: '7.5px', fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</span>
                 </div>
               ))}
-            </div>
-            <div style={{ minWidth: '48px', maxWidth: '60px', flexShrink: 0, textAlign: 'center' }}>
-              <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: '#39FF14', textTransform: 'uppercase', letterSpacing: '0.07em' }}>EDGE</span>
             </div>
           </div>
         </div>
