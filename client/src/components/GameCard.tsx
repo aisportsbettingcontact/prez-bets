@@ -3320,6 +3320,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               isML = false,
               roiResult = null,
               roiLabel = '',
+              awayIsEdge = false,
+              homeIsEdge = false,
             }: {
               awayBookLine: string; awayBookJuice: string;
               awayModelLine: string; awayModelJuice: string;
@@ -3328,29 +3330,34 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               isML?: boolean;
               roiResult?: { roiPercent: number; verdict: string; color: string; edgePts: number } | null;
               roiLabel?: string;
+              awayIsEdge?: boolean;
+              homeIsEdge?: boolean;
             }) => {
               // SubCol: line row (dim 9px) + juice row (bold 14px)
-              // modelJuiceColor: neon green only when this side has an edge, otherwise white
-              const SubCol = ({ line, juice, isBook }: { line: string; juice: string; isBook: boolean; hasEdge?: boolean }) => {
+              // BOOK: always neutral gray (secondary reference)
+              // MODEL: neon green ONLY when this specific side is the edge; neutral gray otherwise
+              const NEUTRAL = 'rgba(200,200,200,0.75)';
+              const NEON    = '#39FF14';
+              const SubCol = ({ line, juice, isBook, isEdgeSide = false }: { line: string; juice: string; isBook: boolean; isEdgeSide?: boolean }) => {
                 const juiceColor = isBook
-                  ? 'rgba(255,255,255,0.90)'  // BOOK: always white
-                  : '#39FF14';                 // MODEL: always neon green
+                  ? NEUTRAL                           // BOOK: always neutral gray
+                  : isEdgeSide ? NEON : NEUTRAL;      // MODEL: neon green only for edge side
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', minWidth: 0, flex: 1 }}>
                     {/* Spacer/line row: always rendered to keep height consistent */}
                     {isML
                       ? <span style={{ fontSize: '9px', lineHeight: 1, visibility: 'hidden' }}>&nbsp;</span>  // empty spacer for ML
-                      : <span style={{ fontSize: '9px', fontWeight: 400, color: 'rgba(255,255,255,0.55)', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{line}</span>
+                      : <span style={{ fontSize: '9px', fontWeight: 400, color: 'rgba(255,255,255,0.45)', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{line}</span>
                     }
                     <span style={{ fontSize: '14px', fontWeight: 700, color: juiceColor, lineHeight: 1.15, whiteSpace: 'nowrap', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{juice}</span>
                   </div>
                 );
               };
 
-              const TeamRow = ({ bookLine, bookJuice, modelLine, modelJuice }: { bookLine: string; bookJuice: string; modelLine: string; modelJuice: string }) => (
+              const TeamRow = ({ bookLine, bookJuice, modelLine, modelJuice, isEdgeSide = false }: { bookLine: string; bookJuice: string; modelLine: string; modelJuice: string; isEdgeSide?: boolean }) => (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px', padding: '4px 3px' }}>
-                  <SubCol line={bookLine} juice={bookJuice} isBook={true} />
-                  <SubCol line={modelLine} juice={modelJuice} isBook={false} />
+                  <SubCol line={bookLine} juice={bookJuice} isBook={true} isEdgeSide={false} />
+                  <SubCol line={modelLine} juice={modelJuice} isBook={false} isEdgeSide={isEdgeSide} />
                 </div>
               );
 
@@ -3376,11 +3383,11 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     <span style={{ fontSize: '6.5px', fontWeight: 700, color: 'rgba(255,255,255,0.70)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>MODEL</span>
                   </div>
                   {/* Away row */}
-                  <TeamRow bookLine={awayBookLine} bookJuice={awayBookJuice} modelLine={awayModelLine} modelJuice={awayModelJuice} />
+                  <TeamRow bookLine={awayBookLine} bookJuice={awayBookJuice} modelLine={awayModelLine} modelJuice={awayModelJuice} isEdgeSide={awayIsEdge} />
                   {/* Divider */}
                   <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0 4px' }} />
                   {/* Home row */}
-                  <TeamRow bookLine={homeBookLine} bookJuice={homeBookJuice} modelLine={homeModelLine} modelJuice={homeModelJuice} />
+                  <TeamRow bookLine={homeBookLine} bookJuice={homeBookJuice} modelLine={homeModelLine} modelJuice={homeModelJuice} isEdgeSide={homeIsEdge} />
                   {/* ROI% footer row — inline edge display replacing the EdgeBadge column */}
                   <div style={{
                     borderTop: `1px solid ${hasPositiveROI ? roiColor + '40' : 'rgba(255,255,255,0.06)'}`,
@@ -3415,6 +3422,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       ? `${awayAbbr} ${mdlAwaySplit.line || ''}`.trim()
                       : `${homeAbbr} ${mdlHomeSplit.line || ''}`.trim()
                     : '';
+                  // Only the best-edge side gets neon green; no edge → both neutral
+                  const hasEdge = best !== null && best.roiPercent > 0;
+                  const spreadAwayIsEdge = hasEdge && best!.side === 'away';
+                  const spreadHomeIsEdge = hasEdge && best!.side === 'home';
                   return (
                     <MktCard
                       awayBookLine={!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}
@@ -3425,6 +3436,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       homeBookJuice={mbHomeSpreadOdds ? String(mbHomeSpreadOdds) : '—110'}
                       homeModelLine={mdlHomeSplit.line || '—'}
                       homeModelJuice={mdlHomeSplit.odds || '—'}
+                      awayIsEdge={spreadAwayIsEdge}
+                      homeIsEdge={spreadHomeIsEdge}
                       roiResult={best ? { roiPercent: best.roiPercent, verdict: best.verdict, color: best.color, edgePts: best.edgePts } : null}
                       roiLabel={label}
                     />
@@ -3438,6 +3451,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       ? `O${mdlOverSplit.line || ''}`.trim()
                       : `U${mdlUnderSplit.line || ''}`.trim()
                     : '';
+                  // Over = away row, Under = home row in the MktCard layout
+                  const hasEdge = best !== null && best.roiPercent > 0;
+                  const totalOverIsEdge  = hasEdge && best!.side === 'over';
+                  const totalUnderIsEdge = hasEdge && best!.side === 'under';
                   return (
                     <MktCard
                       awayBookLine={!isNaN(bookTotal) ? `o${bkTotalStr}` : 'o—'}
@@ -3448,6 +3465,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       homeBookJuice={mbUnderOdds ? String(mbUnderOdds) : '—110'}
                       homeModelLine={`u${mdlUnderSplit.line || '—'}`}
                       homeModelJuice={mdlUnderSplit.odds || '—'}
+                      awayIsEdge={totalOverIsEdge}
+                      homeIsEdge={totalUnderIsEdge}
                       roiResult={best ? { roiPercent: best.roiPercent, verdict: best.verdict, color: best.color, edgePts: best.edgePts } : null}
                       roiLabel={label}
                     />
@@ -3461,6 +3480,9 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       ? `${awayAbbr} ML`
                       : `${homeAbbr} ML`
                     : '';
+                  const hasEdge = best !== null && best.roiPercent > 0;
+                  const mlAwayIsEdge = hasEdge && best!.side === 'away';
+                  const mlHomeIsEdge = hasEdge && best!.side === 'home';
                   return (
                     <MktCard
                       awayBookLine={''}
@@ -3472,6 +3494,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       homeModelLine={''}
                       homeModelJuice={mdlHomeMl || '—'}
                       isML={true}
+                      awayIsEdge={mlAwayIsEdge}
+                      homeIsEdge={mlHomeIsEdge}
                       roiResult={best ? { roiPercent: best.roiPercent, verdict: best.verdict, color: best.color, edgePts: best.edgePts } : null}
                       roiLabel={label}
                     />

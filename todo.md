@@ -1588,3 +1588,11 @@
 - [ ] Move ROI computation server-side: store roiSpread/roiTotal/roiMl in DB, serve pre-computed values
 - [ ] Add structured ROI_ENGINE_LOG per market per game on server
 - [ ] Remove frontend edge math (getMarketEdge calls) — use server-provided ROI values only
+
+## Spec render_game_card (Pasted_content_04)
+- [ ] Only the best-edge outcome renders neon green — all other odds values neutral gray (#A0A0A0)
+- [ ] ROI bar shows: "LABEL ROI%" in neon green when edge exists, "NO EDGE" in neutral gray when not
+- [ ] Add MATCHUP as first column header (left panel header label)
+- [ ] Non-edge MODEL juice values: neutral gray (not neon green)
+- [ ] Non-edge BOOK juice values: neutral gray (not white)
+- [ ] Add server-side ROI_ENGINE_LOG per market per game (debug logging per spec)

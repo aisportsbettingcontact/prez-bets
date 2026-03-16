@@ -853,9 +853,9 @@ export default function ModelProjections() {
           borderBottom: '1px solid rgba(255,255,255,0.10)',
           borderTop: '1px solid rgba(255,255,255,0.06)',
         }}>
-          {/* Left: TEAM label */}
+          {/* Left: MATCHUP label */}
           <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', borderRight: '1px solid rgba(255,255,255,0.10)' }}>
-            <span style={{ fontSize: '8px', fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>TEAM</span>
+            <span style={{ fontSize: '8px', fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>MATCHUP</span>
           </div>
           {/* Right: PUCK LINE (NHL) or SPREAD (NBA/NCAAM) | TOTAL | ML */}
           <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center' }}>
