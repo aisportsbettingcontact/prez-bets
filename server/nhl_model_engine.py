@@ -801,13 +801,22 @@ def detect_edges(
         p_away_pl_market, p_home_pl_market = remove_vig(p_away_pl_raw, p_home_pl_raw)
 
         # Distribution-translated model probabilities at the MARKET's puck line threshold.
-        # The market always prices ±1.5 (threshold=2 goals), so we evaluate
-        # P(margin >= 2) and P(margin <= -2) from the simulation margin distribution.
-        # This is correct even if the model originated ±2.5 — the edge comparison
-        # must be at the SAME threshold the market is pricing.
+        # The market always prices ±1.5 (threshold=2 goals).
+        # CRITICAL: must be favorite-aware.
+        # margin = home_goals - away_goals
+        #   If HOME is favorite (-1.5): P(home covers -1.5) = P(margin >= 2); P(away covers +1.5) = 1 - that
+        #   If AWAY is favorite (-1.5): P(away covers -1.5) = P(margin <= -2); P(home covers +1.5) = 1 - that
+        # Using home_covers=True for p_home_pl when away is the favorite gives P(home wins by 2+),
+        # which is the UNDERDOG winning by 2+ — not the probability of covering +1.5.
         mkt_pl_threshold = 2  # market ±1.5 → need to win by 2+ goals to cover
-        p_home_pl_model = prob_margin_cover(margin_dist, mkt_pl_threshold, n, home_covers=True)
-        p_away_pl_model = prob_margin_cover(margin_dist, mkt_pl_threshold, n, home_covers=False)
+        if probs["fav_is_home"]:
+            # Home is the -1.5 favorite
+            p_home_pl_model = prob_margin_cover(margin_dist, mkt_pl_threshold, n, home_covers=True)
+            p_away_pl_model = 1.0 - p_home_pl_model
+        else:
+            # Away is the -1.5 favorite
+            p_away_pl_model = prob_margin_cover(margin_dist, mkt_pl_threshold, n, home_covers=False)
+            p_home_pl_model = 1.0 - p_away_pl_model
 
         # Fair odds
         fair_away_pl_odds = prob_to_ml(p_away_pl_model)
@@ -1137,12 +1146,31 @@ def originate_game(inp: dict) -> dict:
         mkt_total_model_under_odds = model_under_odds
 
     # Model fair odds at BOOK puck line (always ±1.5 in NHL)
-    # threshold=2 means: home must win by 2+ to cover -1.5
-    p_home_pl_at_mkt = prob_margin_cover(margin_dist, 2, n_sim, home_covers=True)
-    p_away_pl_at_mkt = prob_margin_cover(margin_dist, 2, n_sim, home_covers=False)
+    # CRITICAL: must determine which team is the -1.5 favorite before computing cover probabilities.
+    # margin = home_goals - away_goals (positive = home winning)
+    #
+    # If HOME is favorite (-1.5):
+    #   P(home covers -1.5) = P(home wins by 2+) = P(margin >= 2)
+    #   P(away covers +1.5) = 1 - P(home covers -1.5)
+    #
+    # If AWAY is favorite (-1.5):
+    #   P(away covers -1.5) = P(away wins by 2+) = P(margin <= -2)
+    #   P(home covers +1.5) = 1 - P(away covers -1.5)
+    #
+    # Using home_covers=True for BOTH teams when away is the favorite gives P(home wins by 2+)
+    # for p_home_pl — which is the probability of the UNDERDOG winning by 2+, not covering +1.5.
+    fav_is_home_sim = probs["fav_is_home"]
+    if fav_is_home_sim:
+        # Home is the -1.5 favorite
+        p_home_pl_at_mkt = prob_margin_cover(margin_dist, 2, n_sim, home_covers=True)  # P(home wins by 2+)
+        p_away_pl_at_mkt = 1.0 - p_home_pl_at_mkt  # P(away covers +1.5)
+    else:
+        # Away is the -1.5 favorite
+        p_away_pl_at_mkt = prob_margin_cover(margin_dist, 2, n_sim, home_covers=False)  # P(away wins by 2+)
+        p_home_pl_at_mkt = 1.0 - p_away_pl_at_mkt  # P(home covers +1.5)
     mkt_pl_model_home_odds = prob_to_ml(p_home_pl_at_mkt)
     mkt_pl_model_away_odds = prob_to_ml(p_away_pl_at_mkt)
-    print(f"[NHLModel]   Model odds @ book PL ±1.5: away={format_ml(mkt_pl_model_away_odds)} home={format_ml(mkt_pl_model_home_odds)}", file=sys.stderr)
+    print(f"[NHLModel]   Model odds @ book PL ±1.5 (fav={'HOME' if fav_is_home_sim else 'AWAY'}): away={format_ml(mkt_pl_model_away_odds)} ({p_away_pl_at_mkt*100:.2f}%) home={format_ml(mkt_pl_model_home_odds)} ({p_home_pl_at_mkt*100:.2f}%)", file=sys.stderr)
 
     elapsed = time.time() - t0
     print(f"[NHLModel]   ✓ Done in {elapsed:.3f}s | Edges detected: {len(edges)}", file=sys.stderr)

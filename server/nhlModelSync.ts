@@ -424,9 +424,16 @@ export async function syncNhlModelForToday(
           modelUnderRate:      String(modelResult.under_pct),
           modelAwayPLCoverPct: String(modelResult.away_pl_cover_pct),
           modelHomePLCoverPct: String(modelResult.home_pl_cover_pct),
-          // Puck line spread and fair value odds from model
-          modelAwayPuckLine:   modelResult.away_puck_line,        // e.g. "+1.5" or "-2.5"
-          modelHomePuckLine:   modelResult.home_puck_line,        // e.g. "-1.5" or "+2.5"
+          // Puck line spread for MODEL column must MIRROR the BOOK's spread (not model's own origination).
+          // e.g. if book has STL +1.5 (away underdog), model must show +1.5 (not -1.5).
+          // The model's fair odds for that side are mkt_pl_away_odds / mkt_pl_home_odds.
+          // game.awayBookSpread is a decimal (e.g. 1.5 or -1.5); format as "+1.5" or "-1.5".
+          modelAwayPuckLine:   game.awayBookSpread != null
+            ? (parseFloat(String(game.awayBookSpread)) >= 0 ? `+${parseFloat(String(game.awayBookSpread))}` : String(parseFloat(String(game.awayBookSpread))))
+            : modelResult.away_puck_line,
+          modelHomePuckLine:   game.homeBookSpread != null
+            ? (parseFloat(String(game.homeBookSpread)) >= 0 ? `+${parseFloat(String(game.homeBookSpread))}` : String(parseFloat(String(game.homeBookSpread))))
+            : modelResult.home_puck_line,
           // Model fair odds AT the BOOK's ±1.5 puck line (for side-by-side display)
           // e.g. book shows +1.5 (-198), model shows +1.5 (-143) → edge detected
           modelAwayPLOdds:     fmtML(modelResult.mkt_pl_away_odds ?? modelResult.away_puck_line_odds),

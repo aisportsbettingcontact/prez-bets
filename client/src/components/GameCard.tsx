@@ -817,6 +817,16 @@ function DesktopMergedPanel({
   })();
   const totalEdgeIsOver = (() => {
     if (isNaN(totalDiff) || totalDiff <= 0) return null;
+    // For NHL: edge direction must come from computedTotalEdge (set by Python engine from model odds
+    // at the book's line), NOT from comparing model expected total vs book line.
+    // The model could have E_total > book line but P(over) < 50% due to distribution shape.
+    if (isNhlGame) {
+      if (!computedTotalEdge || computedTotalEdge === 'PASS') return null;
+      const normalized = computedTotalEdge.toUpperCase();
+      if (normalized.startsWith('OVER')) return true;
+      if (normalized.startsWith('UNDER')) return false;
+      return null;
+    }
     if (!isNaN(mdlTotal) && !isNaN(bkTotal)) return mdlTotal > bkTotal;
     return null;
   })();
@@ -1565,6 +1575,11 @@ function OddsLinesPanel({
   // Determine which side has the spread edge (away or home)
   const spreadEdgeIsAway = (() => {
     if (isNaN(spreadDiff) || spreadDiff <= 0) return null;
+    // For NHL: use computedSpreadEdge string (set by Python engine) — line comparison is meaningless
+    if (isNhlGame) {
+      if (!computedSpreadEdge || computedSpreadEdge === 'PASS') return null;
+      return computedSpreadEdge.includes('+1.5') || computedSpreadEdge.includes('+2.5');
+    }
     if (!isNaN(mdlAwaySpread) && !isNaN(awaySpread)) {
       return mdlAwaySpread < awaySpread; // model favors away more than book → away edge
     }
@@ -1572,6 +1587,15 @@ function OddsLinesPanel({
   })();
   const totalEdgeIsOver = (() => {
     if (isNaN(totalDiff) || totalDiff <= 0) return null;
+    // For NHL: edge direction must come from computedTotalEdge (set by Python engine from model odds
+    // at the book's line), NOT from comparing model expected total vs book line.
+    if (isNhlGame) {
+      if (!computedTotalEdge || computedTotalEdge === 'PASS') return null;
+      const normalized = computedTotalEdge.toUpperCase();
+      if (normalized.startsWith('OVER')) return true;
+      if (normalized.startsWith('UNDER')) return false;
+      return null;
+    }
     if (!isNaN(mdlTotal) && !isNaN(bkTotal)) {
       return mdlTotal > bkTotal; // model higher than book → over edge
     }
@@ -1846,9 +1870,15 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
     : (!isNaN(awayModelSpread) && !isNaN(awayBookSpread))
       ? Math.round(Math.abs(awayModelSpread - awayBookSpread) * 10) / 10
       : toNum(game.spreadDiff);
-  const totalDiff = (!isNaN(modelTotal) && !isNaN(bookTotal))
-    ? Math.round(Math.abs(modelTotal - bookTotal) * 10) / 10
-    : toNum(game.totalDiff);
+  // For NHL: totalDiff is a probability edge in percentage points (set by Python engine).
+  // Do NOT recalculate from |modelTotal - bookTotal| — that produces a goal difference (0.49)
+  // which is always below the 8pp threshold, suppressing all total edges.
+  // For NCAAM/NBA: compute diff from line values as before.
+  const totalDiff = isNhlGame
+    ? toNum(game.totalDiff)
+    : (!isNaN(modelTotal) && !isNaN(bookTotal))
+      ? Math.round(Math.abs(modelTotal - bookTotal) * 10) / 10
+      : toNum(game.totalDiff);
   // ── Open line strings (from AN HTML ingest) — available in GameCard scope ─
   const _fmtLine = (line: string | null | undefined, odds: string | null | undefined): string | null => {
     if (!line) return null;
@@ -2018,6 +2048,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
   const computedTotalEdge: string | null = (() => {
     if (isNaN(totalDiff) || totalDiff <= 0) return "PASS";
+    // For NHL: edge direction must come from model odds at the book's line, NOT from comparing
+    // model expected total vs book line. The model could have E_total > book line but still have
+    // P(over) < 50% due to distribution shape. Use game.totalEdge (set by Python engine) for NHL.
+    if (isNhlGame) return game.totalEdge ?? null;
     if (isNaN(modelTotal) || isNaN(bookTotal)) return game.totalEdge;
     return modelTotal > bookTotal ? `Over ${bookTotal}` : `Under ${bookTotal}`;
   })();
@@ -2851,6 +2885,15 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             })();
             const totalEdgeIsOver = (() => {
               if (isNaN(totalDiff) || totalDiff <= 0) return null;
+              // For NHL: edge direction must come from computedTotalEdge (set by Python engine from
+              // model odds at the book's line), NOT from comparing model expected total vs book line.
+              if (isNhlGame) {
+                if (!computedTotalEdge || computedTotalEdge === 'PASS') return null;
+                const normalized = computedTotalEdge.toUpperCase();
+                if (normalized.startsWith('OVER')) return true;
+                if (normalized.startsWith('UNDER')) return false;
+                return null;
+              }
               if (!isNaN(modelTotal) && !isNaN(bookTotal)) return modelTotal > bookTotal;
               return null;
             })();

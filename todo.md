@@ -1509,3 +1509,17 @@
 - [x] Add 6 new vitest tests for Bayesian goalie multiplier regression behavior (308 total passing)
 - [x] Raise edge detection thresholds: ML=5pp, PL=6pp, Total=8pp to reduce noise
 - [x] Re-run all 6 March 15 NHL games with corrected goalie model
+- [ ] Fix total edge direction: book u6.5 +114 vs model u6.5 -118 should flag UNDER edge, not OVER
+- [ ] Fix puck line model odds: +468/+155 are wildly wrong (should be realistic ±1.5 cover probabilities)
+- [ ] Add nightly league-average recalibration cron job (scrape NST each morning, update engine constants)
+- [ ] Add C3 violation alerts to Publish Projections admin panel (P(home-1.5) > P(home_win) flag)
+- [ ] Full audit: NHL puck line odds calculation (Python engine) - mkt_pl_away_odds bug
+- [ ] Full audit: NHL total odds calculation and edge direction (Python engine + GameCard)
+- [ ] Full audit: NHL moneyline odds calculation (Python engine)
+- [ ] Full audit: DB storage of model odds (nhlModelSync writes)
+- [ ] Full audit: GameCard display of all NHL model values across all 3 panels
+- [ ] Fix all identified bugs in puck line, total, ML calculations and display
+- [x] Fix NHL puck line mkt_pl computation: favorite-aware logic (away-fav games were computing P(home wins by 2+) instead of P(away wins by 2+))
+- [x] Fix NHL puck line edge detection: same favorite-aware fix applied to edge detection section
+- [x] Fix NHL model spread display: modelAwayPuckLine/modelHomePuckLine now mirrors book spread (not model origination)
+- [x] Fix NHL total edge direction: GameCard now uses model odds at book line to determine over/under edge direction
