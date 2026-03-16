@@ -23,7 +23,8 @@ import { fetchNbaGamesForDate, buildNbaStartTimeMap, fetchNbaLiveScores } from "
 import { fetchNhlGamesForRange, buildNhlStartTimeMap, buildNhlGameMap, fetchNhlLiveScores, type NhlScheduleGame } from "./nhlSchedule";
 import { VALID_DB_SLUGS, BY_DB_SLUG, BY_VSIN_SLUG, BY_AN_SLUG as NCAAM_BY_AN, getTeamByAnSlug as getNcaamTeamByAnSlug } from "../shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS, NBA_BY_VSIN_SLUG, NBA_BY_AN_SLUG, getNbaTeamByVsinSlug } from "../shared/nbaTeams";
-import { NHL_VALID_DB_SLUGS, NHL_BY_ABBREV, NHL_BY_DB_SLUG, NHL_BY_VSIN_SLUG, NHL_BY_AN_SLUG, getNhlTeamByAnSlug } from "../shared/nhlTeams";
+import { NHL_VALID_DB_SLUGS, NHL_BY_ABBREV, NHL_BY_DB_SLUG, NHL_BY_VSIN_SLUG, NHL_BY_AN_SLUG, getNhlTeamByAnSlug, VSIN_NHL_HREF_ALIASES } from "../shared/nhlTeams";
+import { scrapeNhlVsinOdds, type NhlScrapedOdds } from "./nhlVsinScraper";
 import { NBA_BY_DB_SLUG } from "../shared/nbaTeams";
 import type { InsertGame } from "../drizzle/schema";
 
@@ -557,25 +558,78 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
   total: number;
 }> {
   console.log(`[refreshNhl] ► START — today: ${todayStr} | dates: [${allDates.join(", ")}]`);
-  // Scrape VSiN NHL betting splits (today only)
-  let vsinSplits: VsinSplitsGame[] = [];
-  try {
-    const allSplits = await scrapeVsinBettingSplits("front");
-    vsinSplits = allSplits.filter(g => g.sport === "NHL");
-    console.log(`[refreshNhl] VSiN NHL splits fetched: ${vsinSplits.length} games`);
-  } catch (err) {
-    console.warn("[VSiNAutoRefresh] VSiN NHL splits scrape failed (non-fatal):", err);
-  }
 
-  // Build a map: dbSlug pair → VsinSplitsGame for fast lookup
-  const vsinSplitsMap = new Map<string, VsinSplitsGame>();
-  for (const g of vsinSplits) {
-    const awayTeam = NHL_BY_VSIN_SLUG.get(g.awayVsinSlug);
-    const homeTeam = NHL_BY_VSIN_SLUG.get(g.homeVsinSlug);
-    if (awayTeam && homeTeam) {
-      vsinSplitsMap.set(`${awayTeam.dbSlug}@${homeTeam.dbSlug}`, g);
-    } else {
-      console.log(`[VSiNAutoRefresh][NHL] Unknown VSiN slug: ${g.awayVsinSlug} @ ${g.homeVsinSlug}`);
+  // ── Strategy: Use authenticated NHL-specific scraper as primary source.
+  // It already resolves all VSiN href aliases (e.g. "ny-rangers" → "new_york_rangers").
+  // Fall back to the public DK splits page with manual alias resolution if auth fails.
+  // Build a unified map: dbSlug pair → splits data for fast lookup.
+  interface NhlSplitsEntry {
+    spreadAwayBetsPct: number | null;
+    spreadAwayMoneyPct: number | null;
+    totalOverBetsPct: number | null;
+    totalOverMoneyPct: number | null;
+    mlAwayBetsPct: number | null;
+    mlAwayMoneyPct: number | null;
+  }
+  const vsinSplitsMap = new Map<string, NhlSplitsEntry>();
+  let totalScraped = 0;
+
+  // ── Primary: authenticated NHL VSiN page (nhlVsinScraper.ts) ────────────────
+  try {
+    const todayLabel = todayStr.replace(/-/g, ""); // "2026-03-16" → "20260316"
+    const nhlGames = await scrapeNhlVsinOdds(todayLabel);
+    totalScraped = nhlGames.length;
+    console.log(`[refreshNhl] Authenticated NHL scraper: ${nhlGames.length} games`);
+    for (const g of nhlGames) {
+      // awaySlug/homeSlug are already resolved DB slugs from nhlVsinScraper
+      const key = `${g.awaySlug}@${g.homeSlug}`;
+      vsinSplitsMap.set(key, {
+        spreadAwayBetsPct: g.spreadAwayBetsPct,
+        spreadAwayMoneyPct: g.spreadAwayMoneyPct,
+        totalOverBetsPct: g.totalOverBetsPct,
+        totalOverMoneyPct: g.totalOverMoneyPct,
+        mlAwayBetsPct: g.mlAwayBetsPct,
+        mlAwayMoneyPct: g.mlAwayMoneyPct,
+      });
+      console.log(`[refreshNhl]   ✓ Mapped: ${g.awaySlug} @ ${g.homeSlug} | spreadBets=${g.spreadAwayBetsPct}% mlBets=${g.mlAwayBetsPct}%`);
+    }
+  } catch (err) {
+    console.warn("[refreshNhl] Authenticated NHL scraper failed — falling back to public DK page:", err);
+
+    // ── Fallback: public DK splits page with alias resolution ─────────────────
+    try {
+      const allPublic = await scrapeVsinBettingSplits("front");
+      const nhlPublic = allPublic.filter(g => g.sport === "NHL");
+      totalScraped = nhlPublic.length;
+      console.log(`[refreshNhl] Public DK page fallback: ${nhlPublic.length} NHL games`);
+      let fallbackMissed = 0;
+      for (const g of nhlPublic) {
+        // Apply alias resolution before registry lookup
+        const awaySlugRaw = VSIN_NHL_HREF_ALIASES[g.awayVsinSlug] ?? g.awayVsinSlug;
+        const homeSlugRaw = VSIN_NHL_HREF_ALIASES[g.homeVsinSlug] ?? g.homeVsinSlug;
+        const awayTeam = NHL_BY_VSIN_SLUG.get(awaySlugRaw) ?? NHL_BY_VSIN_SLUG.get(g.awayVsinSlug);
+        const homeTeam = NHL_BY_VSIN_SLUG.get(homeSlugRaw) ?? NHL_BY_VSIN_SLUG.get(g.homeVsinSlug);
+        if (!awayTeam || !homeTeam) {
+          console.warn(`[refreshNhl] FALLBACK MISS: away="${g.awayVsinSlug}" (alias: ${awaySlugRaw}) → ${awayTeam?.dbSlug ?? 'UNRESOLVED'}, home="${g.homeVsinSlug}" (alias: ${homeSlugRaw}) → ${homeTeam?.dbSlug ?? 'UNRESOLVED'}`);
+          fallbackMissed++;
+          continue;
+        }
+        const key = `${awayTeam.dbSlug}@${homeTeam.dbSlug}`;
+        vsinSplitsMap.set(key, {
+          spreadAwayBetsPct: g.spreadAwayBetsPct,
+          spreadAwayMoneyPct: g.spreadAwayMoneyPct,
+          totalOverBetsPct: g.totalOverBetsPct,
+          totalOverMoneyPct: g.totalOverMoneyPct,
+          mlAwayBetsPct: g.mlAwayBetsPct,
+          mlAwayMoneyPct: g.mlAwayMoneyPct,
+        });
+        console.log(`[refreshNhl]   ✓ Fallback mapped: ${awayTeam.dbSlug} @ ${homeTeam.dbSlug}`);
+      }
+      if (fallbackMissed > 0) {
+        console.error(`[refreshNhl] ⚠ FALLBACK: ${fallbackMissed}/${nhlPublic.length} NHL games could not be resolved — splits will be missing`);
+      }
+    } catch (err2) {
+      console.error("[refreshNhl] BOTH NHL scrapers failed — no splits will be updated:", err2);
     }
   }
 
@@ -689,9 +743,9 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
   }
 
   console.log(
-    `[refreshNhl] ✅ DONE — updated=${totalUpdated} inserted=${totalInserted} scheduleInserted=${scheduleInserted} total=${vsinSplits.length}`
+    `[refreshNhl] ✅ DONE — updated=${totalUpdated} inserted=${totalInserted} scheduleInserted=${scheduleInserted} total=${totalScraped}`
   );
-  return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: vsinSplits.length };
+  return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: totalScraped };
 }
 
 // ─── AN API DK Odds Auto-Population ──────────────────────────────────────────

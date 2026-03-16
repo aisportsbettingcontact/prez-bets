@@ -1561,3 +1561,7 @@
 - [x] Fix edge tab: away team edge rows showing home team logo — fixed by checking abbr (e.g. "CGY") before display name
 - [x] Fix LAK vs NYR splits: confirmed data gap (VSiN hasn’t published splits yet), not a display bug — will auto-populate on next refresh
 - [x] Reorder sports to NHL → NBA → NCAAM, NHL is now the default landing sport
+- [x] Deep-debug VSiN splits scraper: verbose logging to find LAK vs NYR mismatch root cause
+- [x] Implement bulletproof team name matching: refreshNhl now uses authenticated scraper (alias-resolved) with public DK page + alias map as fallback
+- [x] Add retry logic + validation alerts: primary/fallback dual-scraper with WARN/ERROR logs on any miss
+- [x] Verify all 5 March 16 NHL games have splits populated: 5/5 matched including LAK @ NYR (spreadBets 22%, mlBets 52%)
