@@ -1248,18 +1248,18 @@ function OddsCell({
   }
 
   // ── Sizing ─────────────────────────────────────────────────────────────────
-  // sm (mobile): mainValue 11-13px, juice 9-10px, pill padding 3px 6px
+  // sm (mobile): mainValue 11-13px, juice 9-10px, pill padding 3px 5px
   // md (desktop): mainValue 13-17px, juice 10-12px, pill padding 4px 8px
   const mainFs = size === 'sm'
-    ? 'clamp(11px, 2.8vw, 13px)'
+    ? 'clamp(10.5px, 2.6vw, 12.5px)'
     : 'clamp(13px, 1.1vw, 17px)';
   const juiceFs = size === 'sm'
-    ? 'clamp(9px, 2.2vw, 10.5px)'
+    ? 'clamp(9px, 2.1vw, 10.5px)'
     : 'clamp(10px, 0.85vw, 12px)';
   const openFs = size === 'sm'
-    ? 'clamp(7.5px, 1.8vw, 9px)'
+    ? 'clamp(7px, 1.7vw, 8.5px)'
     : 'clamp(8px, 0.65vw, 10px)';
-  const pillPadding = size === 'sm' ? '3px 6px' : '4px 8px';
+  const pillPadding = size === 'sm' ? '3px 5px' : '4px 8px';
   const borderRadius = size === 'sm' ? '8px' : '10px';
 
   // ── Colors ─────────────────────────────────────────────────────────────────
@@ -1280,7 +1280,10 @@ function OddsCell({
         : '1px solid transparent');
   const mainColor = isEdge ? '#39FF14' : (isBook ? '#FFFFFF' : '#FFFFFF');
   const mainWeight = isEdge ? 800 : (isBook ? 700 : 700);
-  const juiceColor = isEdge ? 'rgba(57,255,20,0.70)' : 'rgba(200,200,200,0.60)';
+  // Model cells: juice is always neon green (edge = full, non-edge = 60%); book cells: muted gray
+  const juiceColor = isBook
+    ? (isEdge ? 'rgba(57,255,20,0.70)' : 'rgba(200,200,200,0.60)')
+    : (isEdge ? '#39FF14' : 'rgba(57,255,20,0.65)');
 
   return (
     <div
@@ -1317,7 +1320,7 @@ function OddsCell({
           borderRadius,
           background: pillBg,
           border: pillBorder,
-          minWidth: size === 'sm' ? 38 : 48,
+          minWidth: size === 'sm' ? 42 : 48,
           gap: 1,
           transition: 'background 200ms, border 200ms',
         }}
@@ -2848,6 +2851,18 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             const mdlUnderTotalStr = !isNaN(mdlDisplayTotal)
               ? (isNhlGame && game.modelUnderOdds ? `${mdlTotalStr} (${game.modelUnderOdds})` : mdlTotalStr)
               : '—';
+            // ── Split helpers: parse "value (odds)" → { line, odds } for two-line pill rendering ──
+            // Used by mobile OddsTable to pass mainValue and juiceStr separately to OddsCell
+            const splitOddsStr = (s: string): { line: string; odds: string | null } => {
+              const m = s.match(/^([^(]+?)\s*\(([^)]+)\)\s*$/);
+              if (m) return { line: m[1].trim(), odds: m[2].trim() };
+              return { line: s, odds: null };
+            };
+            const mdlAwaySplit  = splitOddsStr(mdlAwaySpreadStr);
+            const mdlHomeSplit  = splitOddsStr(mdlHomeSpreadStr);
+            const mdlOverSplit  = splitOddsStr(mdlOverTotalStr);
+            const mdlUnderSplit = splitOddsStr(mdlUnderTotalStr);
+
             // ML values — always show + prefix for positive (underdog) values
             // +100 displays as 'EV' (even money; -100 does not exist as a valid ML)
             // LOG: [GameCard:ML] logs raw→formatted for every game in dev
@@ -3148,10 +3163,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   ))}
                 </div>
                 </div>{/* end 30px header block */}
-                {/* Away row — OddsCell pills, height: 44px */}
-                <div className="grid grid-cols-3" style={{ height: '44px', alignItems: 'center' }}>
+                {/* Away row — OddsCell pills, height: 50px (increased for two-line pills) */}
+                <div className="grid grid-cols-3" style={{ minHeight: '50px', alignItems: 'center', padding: '3px 0' }}>
                   {/* SPREAD */}
-                  <div className="grid grid-cols-2 items-center">
+                  <div className="grid grid-cols-2 items-center gap-0.5">
                     <OddsCell
                       mainValue={!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}
                       juiceStr={mbAwaySpreadOdds ?? null}
@@ -3161,8 +3176,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       wrapperStyle={{ justifySelf: 'center', width: '100%' }}
                     />
                     <OddsCell
-                      mainValue={mdlAwaySpreadStr}
-                      juiceStr={null}
+                      mainValue={mdlAwaySplit.line}
+                      juiceStr={mdlAwaySplit.odds}
                       isBook={false}
                       isEdge={awaySpreadIsEdge && isModelTab}
                       size="sm"
@@ -3170,7 +3185,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     />
                   </div>
                   {/* TOTAL */}
-                  <div className="grid grid-cols-2 items-center">
+                  <div className="grid grid-cols-2 items-center gap-0.5">
                     <OddsCell
                       mainValue={!isNaN(bookTotal) ? `o${bkTotalStr}` : 'o—'}
                       juiceStr={mbOverOdds ?? null}
@@ -3180,8 +3195,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       wrapperStyle={{ justifySelf: 'center', width: '100%' }}
                     />
                     <OddsCell
-                      mainValue={`o${mdlOverTotalStr}`}
-                      juiceStr={null}
+                      mainValue={`o${mdlOverSplit.line}`}
+                      juiceStr={mdlOverSplit.odds}
                       isBook={false}
                       isEdge={overTotalIsEdge && isModelTab}
                       size="sm"
@@ -3189,7 +3204,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     />
                   </div>
                   {/* MONEYLINE */}
-                  <div className="grid grid-cols-2 items-center">
+                  <div className="grid grid-cols-2 items-center gap-0.5">
                     <OddsCell
                       mainValue={bkAwayMl}
                       juiceStr={null}
@@ -3210,10 +3225,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 </div>
                 {/* Divider */}
                 <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
-                {/* Home row — OddsCell pills, height: 44px */}
-                <div className="grid grid-cols-3" style={{ height: '44px', alignItems: 'center' }}>
+                {/* Home row — OddsCell pills, height: 50px (increased for two-line pills) */}
+                <div className="grid grid-cols-3" style={{ minHeight: '50px', alignItems: 'center', padding: '3px 0' }}>
                   {/* SPREAD */}
-                  <div className="grid grid-cols-2 items-center">
+                  <div className="grid grid-cols-2 items-center gap-0.5">
                     <OddsCell
                       mainValue={!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—'}
                       juiceStr={mbHomeSpreadOdds ?? null}
@@ -3223,8 +3238,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       wrapperStyle={{ justifySelf: 'center', width: '100%' }}
                     />
                     <OddsCell
-                      mainValue={mdlHomeSpreadStr}
-                      juiceStr={null}
+                      mainValue={mdlHomeSplit.line}
+                      juiceStr={mdlHomeSplit.odds}
                       isBook={false}
                       isEdge={homeSpreadIsEdge && isModelTab}
                       size="sm"
@@ -3232,7 +3247,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     />
                   </div>
                   {/* TOTAL */}
-                  <div className="grid grid-cols-2 items-center">
+                  <div className="grid grid-cols-2 items-center gap-0.5">
                     <OddsCell
                       mainValue={!isNaN(bookTotal) ? `u${bkTotalStr}` : 'u—'}
                       juiceStr={mbUnderOdds ?? null}
@@ -3242,8 +3257,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       wrapperStyle={{ justifySelf: 'center', width: '100%' }}
                     />
                     <OddsCell
-                      mainValue={`u${mdlUnderTotalStr}`}
-                      juiceStr={null}
+                      mainValue={`u${mdlUnderSplit.line}`}
+                      juiceStr={mdlUnderSplit.odds}
                       isBook={false}
                       isEdge={underTotalIsEdge && isModelTab}
                       size="sm"
@@ -3251,7 +3266,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     />
                   </div>
                   {/* MONEYLINE */}
-                  <div className="grid grid-cols-2 items-center">
+                  <div className="grid grid-cols-2 items-center gap-0.5">
                     <OddsCell
                       mainValue={bkHomeMl}
                       juiceStr={null}
@@ -3341,8 +3356,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     )}
                   </div>
 
-                  {/* Away row: height: 44px — matches OddsTable away row exactly */}
-                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', height: '44px' }}>
+                  {/* Away row: minHeight: 50px — matches OddsTable away row exactly */}
+                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', minHeight: '50px' }}>
                     {/* Logo + name block */}
                     <div className="flex items-center gap-2 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
                       {/* Logo centered between school+nickname lines */}
@@ -3372,8 +3387,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   {/* Divider */}
                   <div style={{ height: 1, background: 'hsl(var(--border) / 0.4)' }} />
 
-                  {/* Home row: height: 44px — matches OddsTable home row exactly */}
-                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', height: '44px' }}>
+                  {/* Home row: minHeight: 50px — matches OddsTable home row exactly */}
+                  <div className="flex items-center justify-between gap-1 w-full" style={{ alignItems: 'center', minHeight: '50px' }}>
                     {/* Logo + name block */}
                     <div className="flex items-center gap-2 min-w-0" style={{ flex: '1 1 0', overflow: 'hidden' }}>
                       {/* Logo centered between school+nickname lines */}

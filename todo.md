@@ -1533,3 +1533,4 @@
 - [x] Audit Python engine edge detection: verify model implied prob > book break-even prob for ML, PL, total
 - [x] Fix any incorrect edge direction logic in Python engine
 - [x] Add deep diagnostic logging for all edge calculations (break-even, implied prob, edge pp, verdict)
+- [x] Fix mobile odds cell overlap: redesign OddsCell to two-line dark card style (line value top white, odds bottom neon green), fix grid spacing
