@@ -1530,3 +1530,6 @@
 - [ ] NHL puck line best odds: display best available odds between DK NJ and FD NJ for each side of the puck line
 - [ ] Revert NHL puck line to DK NJ only — remove FD fallback and ML-based override, use DK spread as-is
 - [x] Fix STL@WPG spread: DK NJ has WPG Jets -1.5 (+235), STL Blues +1.5 (-290) — DB corrected + model re-run + edge label fix
+- [x] Audit Python engine edge detection: verify model implied prob > book break-even prob for ML, PL, total
+- [x] Fix any incorrect edge direction logic in Python engine
+- [x] Add deep diagnostic logging for all edge calculations (break-even, implied prob, edge pp, verdict)

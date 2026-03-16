@@ -719,6 +719,16 @@ def detect_edges(
     3. EV calculation: p_model * payout - (1 - p_model)
     4. Price edge: fair_odds - market_odds
     5. Edge classification: ELITE/STRONG/PLAYABLE/SMALL/NO EDGE
+
+    EDGE DIRECTION RULE (confirmed):
+      An edge exists ONLY when model implied probability > book break-even probability.
+      i.e. edge = p_model - p_market_no_vig > 0 (and above threshold)
+      - Underdog (+odds): edge if model gives HIGHER probability than book prices
+        e.g. book +170 (37.0% BE) vs model 40.0% → edge = +3.0pp → EDGE
+        e.g. book +170 (37.0% BE) vs model 34.0% → edge = -3.0pp → NO EDGE
+      - Favorite (-odds): edge if model gives HIGHER probability than book prices
+        e.g. book -112 (52.8% BE) vs model 55.0% → edge = +2.2pp → EDGE
+        e.g. book -112 (52.8% BE) vs model 51.5% → edge = -1.3pp → NO EDGE
     """
     n = len(away_scores)
     edges = []
@@ -726,6 +736,13 @@ def detect_edges(
     # Build score and margin distributions
     total_dist   = build_total_distribution(away_scores, home_scores)
     margin_dist  = build_margin_distribution(away_scores, home_scores)
+
+    print(f"[EdgeDetect] ┌─────────────────────────────────────────────────────", file=sys.stderr)
+    print(f"[EdgeDetect] │  EDGE DETECTION AUDIT (N={n:,} simulations)", file=sys.stderr)
+    print(f"[EdgeDetect] │  Rule: edge = p_model - p_market_no_vig > 0 → EDGE", file=sys.stderr)
+    print(f"[EdgeDetect] │  Thresholds: ML≥5pp PLAYABLE, PL≥6pp PLAYABLE, TOT≥8pp PLAYABLE", file=sys.stderr)
+    print(f"[EdgeDetect] │  Minimum to report: ≥1.5pp (SMALL EDGE)", file=sys.stderr)
+    print(f"[EdgeDetect] ├─────────────────────────────────────────────────────", file=sys.stderr)
 
     # ── TOTAL MARKET ─────────────────────────────────────────────────────────
     if mkt_over_odds is not None and mkt_under_odds is not None and mkt_total is not None:
@@ -760,6 +777,21 @@ def detect_edges(
         # Step 8: Classify and emit edges
         classification_over  = classify_edge(edge_over)
         classification_under = classify_edge(edge_under)
+
+        # ── DEEP DIAGNOSTIC LOG: TOTAL ──
+        vig_pct_total = (p_over_raw + p_under_raw - 1.0) * 100
+        print(f"[EdgeDetect] │  TOTAL @ {mkt_total}", file=sys.stderr)
+        print(f"[EdgeDetect] │    Book odds: OVER {mkt_over_odds:+d}  UNDER {mkt_under_odds:+d}  (vig={vig_pct_total:.2f}%)", file=sys.stderr)
+        print(f"[EdgeDetect] │    Book implied (raw):    OVER={p_over_raw*100:.2f}%  UNDER={p_under_raw*100:.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Book break-even (no-vig): OVER={p_over_market*100:.2f}%  UNDER={p_under_market*100:.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Model probability @{mkt_total}: OVER={p_over_model*100:.2f}%  UNDER={p_under_model*100:.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Edge (model - break-even): OVER={edge_over*100:+.2f}pp  UNDER={edge_under*100:+.2f}pp", file=sys.stderr)
+        print(f"[EdgeDetect] │    Fair odds: OVER={fair_over_odds:+d}  UNDER={fair_under_odds:+d}", file=sys.stderr)
+        print(f"[EdgeDetect] │    Price edge: OVER={price_edge_over:+.0f}  UNDER={price_edge_under:+.0f}", file=sys.stderr)
+        print(f"[EdgeDetect] │    EV: OVER={ev_over*100:+.2f}%  UNDER={ev_under*100:+.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Verdict: OVER={classification_over}  UNDER={classification_under}", file=sys.stderr)
+        print(f"[EdgeDetect] │    Threshold check: OVER edge {edge_over*100:+.2f}pp {'≥' if edge_over >= 0.015 else '<'} 1.5pp → {'REPORT' if edge_over >= 0.015 else 'SUPPRESS'}", file=sys.stderr)
+        print(f"[EdgeDetect] │    Threshold check: UNDER edge {edge_under*100:+.2f}pp {'≥' if edge_under >= 0.015 else '<'} 1.5pp → {'REPORT' if edge_under >= 0.015 else 'SUPPRESS'}", file=sys.stderr)
 
         if edge_over >= 0.015:  # SMALL EDGE or better
             edges.append({
@@ -854,6 +886,22 @@ def detect_edges(
         away_pl_label = f"AWAY {probs['away_pl_spread']:+.1f}"
         home_pl_label = f"HOME {probs['home_pl_spread']:+.1f}"
 
+        # ── DEEP DIAGNOSTIC LOG: PUCK LINE ──
+        vig_pct_pl = (p_away_pl_raw + p_home_pl_raw - 1.0) * 100
+        book_fav_label = 'HOME' if book_fav_is_home else 'AWAY'
+        print(f"[EdgeDetect] │  PUCK LINE ±1.5 (book fav={book_fav_label}, model fav={'HOME' if probs['fav_is_home'] else 'AWAY'})", file=sys.stderr)
+        print(f"[EdgeDetect] │    Book odds: AWAY {mkt_away_pl_odds:+d}  HOME {mkt_home_pl_odds:+d}  (vig={vig_pct_pl:.2f}%)", file=sys.stderr)
+        print(f"[EdgeDetect] │    Book implied (raw):    AWAY={p_away_pl_raw*100:.2f}%  HOME={p_home_pl_raw*100:.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Book break-even (no-vig): AWAY={p_away_pl_market*100:.2f}%  HOME={p_home_pl_market*100:.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Model probability @±1.5: AWAY={p_away_pl_model*100:.2f}%  HOME={p_home_pl_model*100:.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Edge (model - break-even): AWAY={edge_away_pl*100:+.2f}pp  HOME={edge_home_pl*100:+.2f}pp", file=sys.stderr)
+        print(f"[EdgeDetect] │    Fair odds: AWAY={fair_away_pl_odds:+d}  HOME={fair_home_pl_odds:+d}", file=sys.stderr)
+        print(f"[EdgeDetect] │    Price edge: AWAY={price_edge_away_pl:+.0f}  HOME={price_edge_home_pl:+.0f}", file=sys.stderr)
+        print(f"[EdgeDetect] │    EV: AWAY={ev_away_pl*100:+.2f}%  HOME={ev_home_pl*100:+.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Verdict: AWAY={class_away_pl}  HOME={class_home_pl}", file=sys.stderr)
+        print(f"[EdgeDetect] │    Threshold check: AWAY edge {edge_away_pl*100:+.2f}pp {'≥' if edge_away_pl >= 0.015 else '<'} 1.5pp → {'REPORT' if edge_away_pl >= 0.015 else 'SUPPRESS'}", file=sys.stderr)
+        print(f"[EdgeDetect] │    Threshold check: HOME edge {edge_home_pl*100:+.2f}pp {'≥' if edge_home_pl >= 0.015 else '<'} 1.5pp → {'REPORT' if edge_home_pl >= 0.015 else 'SUPPRESS'}", file=sys.stderr)
+
         if edge_away_pl >= 0.015:
             edges.append({
                 "type":           "PUCK_LINE",
@@ -917,6 +965,21 @@ def detect_edges(
         class_away_ml = classify_edge(edge_away_ml)
         class_home_ml = classify_edge(edge_home_ml)
 
+        # ── DEEP DIAGNOSTIC LOG: MONEYLINE ──
+        vig_pct_ml = (p_away_ml_raw + p_home_ml_raw - 1.0) * 100
+        print(f"[EdgeDetect] │  MONEYLINE", file=sys.stderr)
+        print(f"[EdgeDetect] │    Book odds: AWAY {mkt_away_ml:+d}  HOME {mkt_home_ml:+d}  (vig={vig_pct_ml:.2f}%)", file=sys.stderr)
+        print(f"[EdgeDetect] │    Book implied (raw):    AWAY={p_away_ml_raw*100:.2f}%  HOME={p_home_ml_raw*100:.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Book break-even (no-vig): AWAY={p_away_ml_market*100:.2f}%  HOME={p_home_ml_market*100:.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Model probability: AWAY={p_away_ml_model*100:.2f}%  HOME={p_home_ml_model*100:.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Edge (model - break-even): AWAY={edge_away_ml*100:+.2f}pp  HOME={edge_home_ml*100:+.2f}pp", file=sys.stderr)
+        print(f"[EdgeDetect] │    Fair odds: AWAY={fair_away_ml_odds:+d}  HOME={fair_home_ml_odds:+d}", file=sys.stderr)
+        print(f"[EdgeDetect] │    Price edge: AWAY={price_edge_away_ml:+.0f}  HOME={price_edge_home_ml:+.0f}", file=sys.stderr)
+        print(f"[EdgeDetect] │    EV: AWAY={ev_away_ml*100:+.2f}%  HOME={ev_home_ml*100:+.2f}%", file=sys.stderr)
+        print(f"[EdgeDetect] │    Verdict: AWAY={class_away_ml}  HOME={class_home_ml}", file=sys.stderr)
+        print(f"[EdgeDetect] │    Threshold check: AWAY edge {edge_away_ml*100:+.2f}pp {'≥' if edge_away_ml >= 0.015 else '<'} 1.5pp → {'REPORT' if edge_away_ml >= 0.015 else 'SUPPRESS'}", file=sys.stderr)
+        print(f"[EdgeDetect] │    Threshold check: HOME edge {edge_home_ml*100:+.2f}pp {'≥' if edge_home_ml >= 0.015 else '<'} 1.5pp → {'REPORT' if edge_home_ml >= 0.015 else 'SUPPRESS'}", file=sys.stderr)
+
         if edge_away_ml >= 0.015:
             edges.append({
                 "type":           "ML",
@@ -947,10 +1010,20 @@ def detect_edges(
                 "conf":           "HIGH" if edge_home_ml >= 0.08 else ("MOD" if edge_home_ml >= 0.05 else "LOW"),
             })
 
+    # ── FINAL EDGE SUMMARY ──
+    print(f"[EdgeDetect] ├─────────────────────────────────────────────────────", file=sys.stderr)
+    if edges:
+        print(f"[EdgeDetect] │  EDGES FLAGGED ({len(edges)}):", file=sys.stderr)
+        for e in edges:
+            print(f"[EdgeDetect] │    ► {e['type']} {e['side']}: {e['classification']} | model={e['model_prob']:.2f}% BE={e['mkt_prob']:.2f}% edge={e['edge_vs_be']:+.2f}pp EV={e['ev']:+.2f}% fair={e['fair_odds']:+d}", file=sys.stderr)
+    else:
+        print(f"[EdgeDetect] │  NO EDGES FLAGGED (all markets within threshold)", file=sys.stderr)
+    print(f"[EdgeDetect] └─────────────────────────────────────────────────────", file=sys.stderr)
+
     return edges
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # SECTION 11 — CONSISTENCY VALIDATION
 # ─────────────────────────────────────────────────────────────────────────────
 
