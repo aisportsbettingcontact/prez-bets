@@ -59,6 +59,15 @@ export const appUsers = mysqlTable("app_users", {
    * forceLogoutAll(): increment ALL users' tokenVersion in one SQL UPDATE
    */
   tokenVersion: int("tokenVersion").default(1).notNull(),
+  // ─── Discord account linking ────────────────────────────────────────────────
+  /** Discord user ID (snowflake string), NULL = not linked */
+  discordId: varchar("discordId", { length: 32 }),
+  /** Discord username, e.g. "prezb3ts" */
+  discordUsername: varchar("discordUsername", { length: 64 }),
+  /** Discord avatar hash for CDN URL construction */
+  discordAvatar: varchar("discordAvatar", { length: 128 }),
+  /** UTC timestamp (ms) when the Discord account was linked */
+  discordConnectedAt: bigint("discordConnectedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn"),

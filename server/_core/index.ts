@@ -4,6 +4,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import { registerDiscordAuthRoutes } from "../discordAuth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -13,7 +14,6 @@ import { startNbaModelSyncScheduler } from "../nbaModelSync";
 import { startModelWatcher } from "../ncaamModelWatcher";
 import { startNhlModelSyncScheduler } from "../nhlModelSync";
 import { startNhlGoalieWatcher } from "../nhlGoalieWatcher";
-import { validateDiscordConfig } from "./env";
 
 // ─── Global crash protection ─────────────────────────────────────────────────
 // Prevent unhandled promise rejections and uncaught exceptions from killing the
@@ -46,11 +46,6 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
-  // ─── Discord configuration validation ──────────────────────────────────────
-  // Runs before any server setup. Throws and halts startup if any required
-  // Discord secret is missing. Never prints secret values.
-  validateDiscordConfig();
-
   const app = express();
   const server = createServer(app);
 
@@ -86,6 +81,9 @@ async function startServer() {
 
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Discord account linking routes
+  registerDiscordAuthRoutes(app);
 
   // tRPC API
   app.use(

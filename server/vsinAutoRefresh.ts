@@ -26,7 +26,6 @@ import { NBA_VALID_DB_SLUGS, NBA_BY_VSIN_SLUG, NBA_BY_AN_SLUG, getNbaTeamByVsinS
 import { NHL_VALID_DB_SLUGS, NHL_BY_ABBREV, NHL_BY_DB_SLUG, NHL_BY_VSIN_SLUG, NHL_BY_AN_SLUG, getNhlTeamByAnSlug } from "../shared/nhlTeams";
 import { NBA_BY_DB_SLUG } from "../shared/nbaTeams";
 import type { InsertGame } from "../drizzle/schema";
-import { syncNhlModelForToday } from "./nhlModelSync";
 
 const INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -556,7 +555,6 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
   inserted: number;
   scheduleInserted: number;
   total: number;
-  newlyInsertedDates: string[];
 }> {
   console.log(`[refreshNhl] ► START — today: ${todayStr} | dates: [${allDates.join(", ")}]`);
   // Scrape VSiN NHL betting splits (today only)
@@ -693,7 +691,7 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
   console.log(
     `[refreshNhl] ✅ DONE — updated=${totalUpdated} inserted=${totalInserted} scheduleInserted=${scheduleInserted} total=${vsinSplits.length}`
   );
-  return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: vsinSplits.length, newlyInsertedDates: [] as string[] };
+  return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: vsinSplits.length };
 }
 
 // ─── AN API DK Odds Auto-Population ──────────────────────────────────────────
@@ -899,58 +897,6 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
       `[VSiNAutoRefresh] AN API DK odds (tomorrow): updated=${anOddsTomorrow.updated} ` +
       `skipped=${anOddsTomorrow.skipped} frozen=${anOddsTomorrow.frozen} errors=${anOddsTomorrow.errors.length}`
     );
-
-    // ── Next-day NHL auto-model trigger ─────────────────────────────────────────
-    // After tomorrow's games are inserted and DK odds are populated, check if any
-    // future-date NHL games need to be modeled (book odds are now available).
-    // This runs for ALL future dates that had new games inserted this cycle.
-    // We also check tomorrow specifically in case games existed before but now have odds.
-    const futureDatesToModel = new Set<string>(nhlResult.newlyInsertedDates);
-    // Always include tomorrow if it has unmodeled NHL games with book odds
-    futureDatesToModel.add(tomorrowStr);
-
-    for (const futureDate of Array.from(futureDatesToModel)) {
-      try {
-        const { getDb } = await import("./db.js");
-        const { games: gamesTable } = await import("../drizzle/schema.js");
-        const { and, eq, isNull } = await import("drizzle-orm");
-
-        const db = await getDb();
-        // Check if there are any unmodeled NHL games with book odds for this date
-        const unmodeledFuture = await db
-          .select({ id: gamesTable.id, awayTeam: gamesTable.awayTeam, homeTeam: gamesTable.homeTeam,
-                    awayML: gamesTable.awayML, bookTotal: gamesTable.bookTotal, modelRunAt: gamesTable.modelRunAt })
-          .from(gamesTable)
-          .where(and(
-            eq(gamesTable.gameDate, futureDate),
-            eq(gamesTable.sport, "NHL"),
-            eq(gamesTable.gameStatus, "upcoming"),
-            isNull(gamesTable.modelRunAt)
-          ));
-
-        const withOdds = unmodeledFuture.filter((g: { awayML: string | null; bookTotal: string | null | number; modelRunAt: number | null }) => g.awayML != null || g.bookTotal != null);
-
-        console.log(
-          `[VSiNAutoRefresh][NextDayModel] ${futureDate}: ` +
-          `${unmodeledFuture.length} unmodeled NHL games, ` +
-          `${withOdds.length} have book odds — ` +
-          (withOdds.length > 0 ? "TRIGGERING MODEL" : "skipping (no odds yet)")
-        );
-
-        if (withOdds.length > 0) {
-          console.log(`[VSiNAutoRefresh][NextDayModel] Running NHL model for ${futureDate}...`);
-          // syncNhlModelForToday(source, forceRerun, runAllStatuses, targetDate)
-          const modelResult = await syncNhlModelForToday("auto", false, false, futureDate);
-          console.log(
-            `[VSiNAutoRefresh][NextDayModel] ✅ NHL model for ${futureDate}: ` +
-            `synced=${modelResult.synced} skipped=${modelResult.skipped} errors=${modelResult.errors.length}`
-          );
-        }
-      } catch (nextDayErr) {
-        const msg = nextDayErr instanceof Error ? nextDayErr.message : String(nextDayErr);
-        console.warn(`[VSiNAutoRefresh][NextDayModel] ⚠ Failed for ${futureDate} (non-fatal): ${msg}`);
-      }
-    }
 
     const result: RefreshResult = {
       refreshedAt: new Date().toISOString(),
@@ -1184,7 +1130,7 @@ export async function runVsinRefreshManual(
 
     let ncaamResult = { updated: 0, inserted: 0, ncaaInserted: 0, total: 0 };
     let nbaResult   = { updated: 0, inserted: 0, scheduleInserted: 0, total: 0 };
-    let nhlResult   = { updated: 0, inserted: 0, scheduleInserted: 0, total: 0, newlyInsertedDates: [] as string[] };
+    let nhlResult   = { updated: 0, inserted: 0, scheduleInserted: 0, total: 0 };
 
     if (doNcaam) {
       console.log(`[VSiNAutoRefresh][MANUAL][NCAAM] ── Refreshing NCAAM VSiN splits + schedule…`);

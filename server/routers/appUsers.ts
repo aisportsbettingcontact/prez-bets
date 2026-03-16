@@ -203,6 +203,9 @@ export const appUsersRouter = router({
       hasAccess: user.hasAccess,
       expiryDate: user.expiryDate,
       termsAccepted: user.termsAccepted,
+      discordId: user.discordId ?? null,
+      discordUsername: user.discordUsername ?? null,
+      discordConnectedAt: user.discordConnectedAt ?? null,
     };
   }),
 
@@ -231,6 +234,9 @@ export const appUsersRouter = router({
       lastSignedIn: u.lastSignedIn,
       termsAccepted: u.termsAccepted,
       termsAcceptedAt: u.termsAcceptedAt,
+      discordId: u.discordId ?? null,
+      discordUsername: u.discordUsername ?? null,
+      discordConnectedAt: u.discordConnectedAt ?? null,
     }));
   }),
 

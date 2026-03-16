@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { User, LogOut, BarChart3, Loader2, Crown, Send, Search, X, Clock, Star } from "lucide-react";
+import { User, LogOut, BarChart3, Loader2, Crown, Send, Search, X, Clock, Star, Link2 } from "lucide-react";
 import { CalendarPicker, todayUTC } from "@/components/CalendarPicker";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -256,7 +256,7 @@ export default function ModelProjections() {
   const [, setLocation] = useLocation();
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA" | "NHL">("NHL");
+  const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA" | "NHL">("NCAAM");
   const [selectedStatuses, setSelectedStatuses] = useState<Set<"upcoming" | "live" | "final">>(new Set());
   const [selectedDate, setSelectedDate] = useState<string>(() => todayUTC());
   const [searchQuery, setSearchQuery] = useState("");
@@ -272,25 +272,26 @@ export default function ModelProjections() {
 
   // ── Feed-wide mobile tab filter ───────────────────────────────────────────
   // Shared across all game cards on this page. Default: 'dual' (BOOK + MODEL both active).
-  // Two tabs: MODEL PROJECTIONS | BETTING SPLITS
-  type FeedMobileTab = 'model' | 'splits';
-  const FEED_TAB_KEY = 'prez_bets_mobile_tab_v2';
+  type FeedMobileTab = 'book' | 'model' | 'splits' | 'edge' | 'dual';
+  const FEED_TAB_KEY = 'prez_bets_mobile_tab';
   const getPersistedFeedTab = (): FeedMobileTab => {
     try {
       const stored = localStorage.getItem(FEED_TAB_KEY);
-      if (stored === 'model' || stored === 'splits') return stored as FeedMobileTab;
+      if (stored === 'book' || stored === 'model' || stored === 'splits' || stored === 'edge' || stored === 'dual') return stored;
     } catch { /* ignore */ }
-    return 'model';
+    return 'dual';
   };
   const [feedMobileTab, setFeedMobileTab] = useState<FeedMobileTab>(getPersistedFeedTab);
   const handleFeedTabChange = (next: FeedMobileTab) => {
     setFeedMobileTab(next);
     try { localStorage.setItem(FEED_TAB_KEY, next); } catch { /* ignore */ }
   };
-  const feedIsDual = false; // no longer used — single MODEL view
+  const feedIsDual  = feedMobileTab === 'dual';
   const FEED_TABS: { id: FeedMobileTab; label: string }[] = [
-    { id: 'model',  label: 'MODEL PROJECTIONS' },
-    { id: 'splits', label: 'BETTING SPLITS' },
+    { id: 'book',   label: 'BOOK LINES' },
+    { id: 'model',  label: 'MODEL LINES' },
+    { id: 'splits', label: 'SPLITS' },
+    { id: 'edge',   label: 'EDGE' },
   ];
 
   // ── Favorites tab ──────────────────────────────────────────────────────────
@@ -605,6 +606,42 @@ export default function ModelProjections() {
             <span className="font-black text-white whitespace-nowrap" style={{ fontSize: "clamp(13px, 3vw, 22px)", letterSpacing: "0.08em" }}>PREZ BETS</span>
           </div>
           <div className="flex-1" />
+          {/* Discord link button */}
+          {appUser && (
+            <div className="flex-shrink-0 mr-2">
+              {appUser.discordId ? (
+                <button
+                  title={`Discord: @${appUser.discordUsername ?? appUser.discordId}`}
+                  className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold tracking-wide transition-colors"
+                  style={{ background: "rgba(88,101,242,0.18)", color: "#7289da", border: "1px solid rgba(88,101,242,0.45)" }}
+                  onClick={async () => {
+                    if (confirm(`Disconnect Discord account @${appUser.discordUsername ?? appUser.discordId}?`)) {
+                      await fetch("/auth/discord/disconnect", { method: "POST", credentials: "include" });
+                      window.location.reload();
+                    }
+                  }}
+                >
+                  {/* Discord logo SVG */}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
+                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057.1 18.08.11 18.1.132 18.115a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+                  </svg>
+                  <span className="hidden sm:inline">@{appUser.discordUsername ?? appUser.discordId}</span>
+                </button>
+              ) : (
+                <a
+                  href="/auth/discord/connect"
+                  title="Link your Discord account"
+                  className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold tracking-wide transition-colors"
+                  style={{ background: "rgba(88,101,242,0.12)", color: "rgba(114,137,218,0.75)", border: "1px solid rgba(88,101,242,0.3)" }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
+                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057.1 18.08.11 18.1.132 18.115a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+                  </svg>
+                  <span className="hidden sm:inline">Connect Discord</span>
+                </a>
+              )}
+            </div>
+          )}
           {/* User menu */}
           <div className="flex-shrink-0 relative">
             <button onClick={() => setShowUserMenu(!showUserMenu)} className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center hover:bg-accent transition-colors" title={user ? user.name ?? "Account" : "Sign in"}>
@@ -686,26 +723,26 @@ export default function ModelProjections() {
             isAdmin={isOwner || user?.role === "admin"}
           />
 
-          {/* NHL pill — first, default sport */}
+          {/* NCAAM pill — always visible, even in favorites tab */}
           {/* Mobile: px-1.5 py-1 text-[10px] icon-11px | sm+: px-2 py-1 var(--fs-nav) icon-14px */}
-          <button onClick={() => setSelectedSport("NHL")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
-            style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NHL" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
-            <img src="https://media.d3.nhle.com/image/private/t_q-best/prd/assets/nhl/logos/nhl_shield_wm_on_dark_fqkbph" alt="NHL" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NHL" ? 1 : 0.5, flexShrink: 0 }} />
-            NHL
+          <button onClick={() => setSelectedSport("NCAAM")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+            style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NCAAM" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
+            <img src={CDN_MARCH_MADNESS} alt="NCAAM" width={11} height={8} style={{ objectFit: "contain", filter: selectedSport === "NCAAM" ? "invert(1)" : "invert(0.45)", flexShrink: 0 }} />
+            NCAAM
           </button>
 
-          {/* NBA pill */}
+          {/* NBA pill — always visible, even in favorites tab */}
           <button onClick={() => setSelectedSport("NBA")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
             style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NBA" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
             <img src={CDN_NBA} alt="NBA" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NBA" ? 1 : 0.5, flexShrink: 0 }} />
             NBA
           </button>
 
-          {/* NCAAM pill — last */}
-          <button onClick={() => setSelectedSport("NCAAM")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
-            style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NCAAM" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
-            <img src={CDN_MARCH_MADNESS} alt="NCAAM" width={11} height={8} style={{ objectFit: "contain", filter: selectedSport === "NCAAM" ? "invert(1)" : "invert(0.45)", flexShrink: 0 }} />
-            NCAAM
+          {/* NHL pill — always visible */}
+          <button onClick={() => setSelectedSport("NHL")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+            style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NHL" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
+            <img src="https://media.d3.nhle.com/image/private/t_q-best/prd/assets/nhl/logos/nhl_shield_wm_on_dark_fqkbph" alt="NHL" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NHL" ? 1 : 0.5, flexShrink: 0 }} />
+            NHL
           </button>
 
           {/* Search bar — always visible, shrinks when Favorites button is present */}
@@ -806,14 +843,27 @@ export default function ModelProjections() {
         {/* Row 5: Feed-wide mobile tab filter — BOOK LINES | MODEL LINES | SPLITS | EDGE */}
         {/* Only shown on mobile (< lg). Hidden on desktop where the full 3-panel layout is used. */}
         <div className="grid lg:hidden" style={{
-            gridTemplateColumns: 'repeat(2, 1fr)',
+            gridTemplateColumns: 'repeat(4, 1fr)',
             borderBottom: '2px solid hsl(var(--border) / 0.5)',
             background: 'hsl(var(--card))',
           }}>
             {FEED_TABS.map(tab => {
-              const isActive = feedMobileTab === tab.id;
+              const isActive = feedMobileTab === tab.id ||
+                (feedIsDual && (tab.id === 'book' || tab.id === 'model'));
               const handleClick = () => {
-                handleFeedTabChange(tab.id);
+                let next: FeedMobileTab = feedMobileTab;
+                if (tab.id === 'book') {
+                  if (feedMobileTab === 'model') next = 'dual';
+                  else if (feedIsDual) next = 'model';
+                  else next = 'book';
+                } else if (tab.id === 'model') {
+                  if (feedMobileTab === 'book') next = 'dual';
+                  else if (feedIsDual) next = 'book';
+                  else next = 'model';
+                } else {
+                  next = tab.id as FeedMobileTab;
+                }
+                handleFeedTabChange(next);
               };
               return (
                 <button
@@ -842,29 +892,32 @@ export default function ModelProjections() {
           </div>
       </header>
 
-      {/* ── Sticky global column header (mobile only) — TEAM | PUCK LINE/SPREAD | TOTAL | ML ── */}
-      {/* Only shown when MODEL PROJECTIONS tab is active. Hidden for BETTING SPLITS. */}
-      {feedMobileTab === 'model' && (
+      {/* ── Sticky global column header (mobile only) — TEAM | SPREAD | TOTAL | ML | EDGE ── */}
+      {/* Only shown when BOOK, MODEL, or DUAL tab is active. Hidden for SPLITS/EDGE tabs. */}
+      {(feedMobileTab === 'book' || feedMobileTab === 'model' || feedMobileTab === 'dual') && (
         <div className="lg:hidden" style={{
           position: 'sticky', top: 0, zIndex: 10,
           display: 'grid',
-          gridTemplateColumns: '80px 1fr',
+          gridTemplateColumns: 'clamp(170px, 14vw, 220px) 1fr',
           background: 'hsl(var(--card))',
           borderBottom: '1px solid rgba(255,255,255,0.10)',
           borderTop: '1px solid rgba(255,255,255,0.06)',
         }}>
-          {/* Left: MATCHUP label */}
+          {/* Left: TEAM label */}
           <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', borderRight: '1px solid rgba(255,255,255,0.10)' }}>
-            <span style={{ fontSize: '8px', fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>MATCHUP</span>
+            <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>TEAM</span>
           </div>
-          {/* Right: PUCK LINE (NHL) or SPREAD (NBA/NCAAM) | TOTAL | ML */}
-          <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: '4px', flex: '1 1 0', minWidth: 0 }}>
-              {[selectedSport === 'NHL' ? 'PUCK LINE' : 'SPREAD', 'TOTAL', 'ML'].map(h => (
+          {/* Right: SPREAD | TOTAL | ML | EDGE labels aligned to card columns */}
+          <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <div style={{ display: 'flex', gap: '5px', flex: '1 1 0', minWidth: 0 }}>
+              {['SPREAD', 'TOTAL', 'ML'].map(h => (
                 <div key={h} style={{ flex: '1 1 0', textAlign: 'center' }}>
-                  <span style={{ fontSize: '7.5px', fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</span>
+                  <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
                 </div>
               ))}
+            </div>
+            <div style={{ minWidth: '48px', maxWidth: '60px', flexShrink: 0, textAlign: 'center' }}>
+              <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: '#39FF14', textTransform: 'uppercase', letterSpacing: '0.07em' }}>EDGE</span>
             </div>
           </div>
         </div>

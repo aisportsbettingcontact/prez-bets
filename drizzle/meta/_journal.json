@@ -239,6 +239,13 @@
       "when": 1773613819532,
       "tag": "0033_greedy_randall_flagg",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1773703961612,
+      "tag": "0034_sparkling_mantis",
+      "breakpoints": true
     }
   ]
 }
