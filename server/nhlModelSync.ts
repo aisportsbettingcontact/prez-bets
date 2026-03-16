@@ -309,6 +309,10 @@ export async function syncNhlModelForToday(
         away_rest_days:           restDays.awayRestDays,
         home_rest_days:           restDays.homeRestDays,
         mkt_puck_line:            1.5,
+        // Book's signed spread for away team: +1.5 if home is the -1.5 favorite, -1.5 if away is the -1.5 favorite.
+        // Used by Python engine to determine book_fav_is_home reliably (odds-based detection fails
+        // when underdog's +1.5 odds are more negative than favorite's -1.5 odds).
+        mkt_away_spread:          game.awayBookSpread != null ? parseFloat(String(game.awayBookSpread)) : null,
         mkt_away_pl_odds:         mktAwayPLOdds,
         mkt_home_pl_odds:         mktHomePLOdds,
         mkt_total:                mktTotal,

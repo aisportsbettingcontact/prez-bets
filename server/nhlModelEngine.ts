@@ -42,6 +42,7 @@ export interface NhlModelEngineInput {
   away_goalie_gsax:  number;
   home_goalie_gsax:  number;
   mkt_puck_line:     number;   // Always -1.5 (home) / +1.5 (away)
+  mkt_away_spread:   number | null;  // Book's signed spread for away team: +1.5 if home is -1.5 fav, -1.5 if away is -1.5 fav
   mkt_away_pl_odds:  number | null;
   mkt_home_pl_odds:  number | null;
   mkt_total:         number | null;

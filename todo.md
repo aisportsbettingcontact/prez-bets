@@ -1523,3 +1523,4 @@
 - [x] Fix NHL puck line edge detection: same favorite-aware fix applied to edge detection section
 - [x] Fix NHL model spread display: modelAwayPuckLine/modelHomePuckLine now mirrors book spread (not model origination)
 - [x] Fix NHL total edge direction: GameCard now uses model odds at book line to determine over/under edge direction
+- [x] Fix ML vs puck line mathematical inconsistency: WPG ML=+106 (48.6% win) but WPG -1.5 puck line=-273 (73% cover) — impossible, team with 48.6% win rate cannot be 73% to win by 2+

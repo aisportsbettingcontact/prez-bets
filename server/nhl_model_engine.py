@@ -802,21 +802,33 @@ def detect_edges(
 
         # Distribution-translated model probabilities at the MARKET's puck line threshold.
         # The market always prices ±1.5 (threshold=2 goals).
-        # CRITICAL: must be favorite-aware.
+        # CRITICAL: must use the BOOK's favorite, NOT the model's favorite.
+        # The model and book can disagree on who the favorite is (e.g. model has STL -1.5
+        # but book has WPG -1.5). Using probs["fav_is_home"] (model's favorite) would compute
+        # the model's odds at its OWN line, not the book's line.
         # margin = home_goals - away_goals
-        #   If HOME is favorite (-1.5): P(home covers -1.5) = P(margin >= 2); P(away covers +1.5) = 1 - that
-        #   If AWAY is favorite (-1.5): P(away covers -1.5) = P(margin <= -2); P(home covers +1.5) = 1 - that
-        # Using home_covers=True for p_home_pl when away is the favorite gives P(home wins by 2+),
-        # which is the UNDERDOG winning by 2+ — not the probability of covering +1.5.
+        #   If BOOK HOME is -1.5 favorite: P(home covers -1.5) = P(margin >= 2); P(away covers +1.5) = 1 - that
+        #   If BOOK AWAY is -1.5 favorite: P(away covers -1.5) = P(margin <= -2); P(home covers +1.5) = 1 - that
         mkt_pl_threshold = 2  # market ±1.5 → need to win by 2+ goals to cover
-        if probs["fav_is_home"]:
-            # Home is the -1.5 favorite
-            p_home_pl_model = prob_margin_cover(margin_dist, mkt_pl_threshold, n, home_covers=True)
-            p_away_pl_model = 1.0 - p_home_pl_model
+        # Book's -1.5 favorite: use mkt_away_spread (signed spread for away team).
+        # mkt_away_spread > 0 means away is at +1.5 (underdog) → home is the -1.5 favorite.
+        # mkt_away_spread < 0 means away is at -1.5 (favorite) → away is the -1.5 favorite.
+        # NEVER use odds to determine this: underdog's +1.5 odds can be more negative than
+        # favorite's -1.5 odds (e.g. STL +1.5 at -290 vs WPG -1.5 at +100).
+        mkt_away_spread = inp.get("mkt_away_spread")
+        if mkt_away_spread is not None:
+            book_fav_is_home = float(mkt_away_spread) > 0  # away at +1.5 → home is -1.5 fav
         else:
-            # Away is the -1.5 favorite
-            p_away_pl_model = prob_margin_cover(margin_dist, mkt_pl_threshold, n, home_covers=False)
-            p_home_pl_model = 1.0 - p_away_pl_model
+            # Fallback: use model's own favorite determination
+            book_fav_is_home = probs["fav_is_home"]
+        if book_fav_is_home:
+            # Book: home is the -1.5 favorite
+            p_home_pl_model = prob_margin_cover(margin_dist, mkt_pl_threshold, n, home_covers=True)  # P(home wins by 2+)
+            p_away_pl_model = 1.0 - p_home_pl_model  # P(away covers +1.5)
+        else:
+            # Book: away is the -1.5 favorite
+            p_away_pl_model = prob_margin_cover(margin_dist, mkt_pl_threshold, n, home_covers=False)  # P(away wins by 2+)
+            p_home_pl_model = 1.0 - p_away_pl_model  # P(home covers +1.5)
 
         # Fair odds
         fair_away_pl_odds = prob_to_ml(p_away_pl_model)
@@ -1157,20 +1169,29 @@ def originate_game(inp: dict) -> dict:
     #   P(away covers -1.5) = P(away wins by 2+) = P(margin <= -2)
     #   P(home covers +1.5) = 1 - P(away covers -1.5)
     #
-    # Using home_covers=True for BOTH teams when away is the favorite gives P(home wins by 2+)
-    # for p_home_pl — which is the probability of the UNDERDOG winning by 2+, not covering +1.5.
-    fav_is_home_sim = probs["fav_is_home"]
-    if fav_is_home_sim:
-        # Home is the -1.5 favorite
+    # CRITICAL: use the BOOK's favorite to determine which team covers -1.5 at the market line.
+    # The model and book can disagree on who the favorite is. Using the model's fav_is_home
+    # would compute the model's odds at its OWN origination line, not the book's ±1.5 line.
+    # Use mkt_away_spread (signed spread for away team) — the only reliable indicator.
+    # mkt_away_spread > 0 means away is at +1.5 (underdog) → home is the -1.5 favorite.
+    # mkt_away_spread < 0 means away is at -1.5 (favorite) → away is the -1.5 favorite.
+    mkt_away_spread_val = inp.get("mkt_away_spread")
+    if mkt_away_spread_val is not None:
+        book_fav_is_home_disp = float(mkt_away_spread_val) > 0
+    else:
+        # Fallback: use model's own favorite determination
+        book_fav_is_home_disp = probs["fav_is_home"]
+    if book_fav_is_home_disp:
+        # Book: home is the -1.5 favorite
         p_home_pl_at_mkt = prob_margin_cover(margin_dist, 2, n_sim, home_covers=True)  # P(home wins by 2+)
         p_away_pl_at_mkt = 1.0 - p_home_pl_at_mkt  # P(away covers +1.5)
     else:
-        # Away is the -1.5 favorite
+        # Book: away is the -1.5 favorite
         p_away_pl_at_mkt = prob_margin_cover(margin_dist, 2, n_sim, home_covers=False)  # P(away wins by 2+)
         p_home_pl_at_mkt = 1.0 - p_away_pl_at_mkt  # P(home covers +1.5)
     mkt_pl_model_home_odds = prob_to_ml(p_home_pl_at_mkt)
     mkt_pl_model_away_odds = prob_to_ml(p_away_pl_at_mkt)
-    print(f"[NHLModel]   Model odds @ book PL ±1.5 (fav={'HOME' if fav_is_home_sim else 'AWAY'}): away={format_ml(mkt_pl_model_away_odds)} ({p_away_pl_at_mkt*100:.2f}%) home={format_ml(mkt_pl_model_home_odds)} ({p_home_pl_at_mkt*100:.2f}%)", file=sys.stderr)
+    print(f"[NHLModel]   Model odds @ book PL ±1.5 (book_fav={'HOME' if book_fav_is_home_disp else 'AWAY'}, model_fav={'HOME' if probs['fav_is_home'] else 'AWAY'}): away={format_ml(mkt_pl_model_away_odds)} ({p_away_pl_at_mkt*100:.2f}%) home={format_ml(mkt_pl_model_home_odds)} ({p_home_pl_at_mkt*100:.2f}%)", file=sys.stderr)
 
     elapsed = time.time() - t0
     print(f"[NHLModel]   ✓ Done in {elapsed:.3f}s | Edges detected: {len(edges)}", file=sys.stderr)
