@@ -1855,8 +1855,8 @@ interface GameCardProps {
    * and this value is used instead. The card will call onMobileTabChange when the user
    * interacts with the tab bar (but the tab bar is now rendered at the feed level).
    */
-  mobileTab?: 'book' | 'model' | 'splits' | 'edge' | 'dual';
-  onMobileTabChange?: (tab: 'book' | 'model' | 'splits' | 'edge' | 'dual') => void;
+  mobileTab?: 'dual' | 'splits';
+  onMobileTabChange?: (tab: 'dual' | 'splits') => void;
 }
 
 export function GameCard({ game, mode = "full", showModel: showModelProp, onToggleModel: onToggleModelProp, favoriteGameIds, onToggleFavorite, onFavoriteNotify, isAppAuthed: isAppAuthedProp, mobileTab: mobileTabProp, onMobileTabChange }: GameCardProps) {
@@ -1990,27 +1990,20 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const toggleModel = onToggleModelProp ?? (() => setShowModelInternal((v) => !v));
 
   // Mobile tab state — controls which section is active on mobile full mode
-  // Tabs: 'book' | 'model' | 'splits' | 'edge' | 'dual' (BOOK+MODEL both selected)
-  // DEFAULT: 'dual' — BOOK + MODEL both active on every card mount and sport switch
-  // Persisted in localStorage so the user's preference survives page reloads and sport switches.
-  // Rules:
-  //   1. At least one tab must always be active (cannot deselect last active tab)
-  //   2. SPLITS and EDGE are exclusive single-select (cannot combine with BOOK/MODEL)
-  //   3. BOOK + MODEL can be active simultaneously (dual mode)
-  type MobileTab = 'book' | 'model' | 'splits' | 'edge' | 'dual';
-  const MOBILE_TAB_KEY = 'prez_bets_mobile_tab';
+  // Two tabs only: 'dual' (MODEL PROJECTIONS — BOOK+MODEL both active) | 'splits' (BETTING SPLITS)
+  // DEFAULT: 'dual'
+  type MobileTab = 'dual' | 'splits';
+  const MOBILE_TAB_KEY = 'prez_bets_mobile_tab_v2';
   const getPersistedTab = (): MobileTab => {
     try {
       const stored = localStorage.getItem(MOBILE_TAB_KEY);
-      if (stored === 'book' || stored === 'model' || stored === 'splits' || stored === 'edge' || stored === 'dual') {
-        return stored;
-      }
+      if (stored === 'dual' || stored === 'splits') return stored;
     } catch { /* localStorage unavailable (private browsing, etc.) */ }
-    return 'dual'; // fallback default for new users
+    return 'dual'; // fallback default
   };
   const [mobileTabInternal, setMobileTabInternal] = useState<MobileTab>(getPersistedTab);
   // When a feed-level prop is provided, use it; otherwise fall back to internal state
-  const mobileTab: MobileTab = mobileTabProp ?? mobileTabInternal;
+  const mobileTab: MobileTab = (mobileTabProp === 'dual' || mobileTabProp === 'splits') ? mobileTabProp : mobileTabInternal;
   const setMobileTab = (next: MobileTab) => {
     if (onMobileTabChange) {
       onMobileTabChange(next); // bubble up to feed
@@ -3007,8 +3000,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             // isDualTab: BOOK + MODEL both active simultaneously
             // isBookTab / isModelTab: true when that tab is active OR dual is active
             const isDualTab  = mobileTab === 'dual';
-            const isBookTab  = mobileTab === 'book'  || isDualTab;
-            const isModelTab = mobileTab === 'model' || isDualTab;
+            const isBookTab  = isDualTab; // MODEL PROJECTIONS tab = BOOK+MODEL both active
+            const isModelTab = isDualTab;
 
             // ── Value style factories (reference image spec) ──────────────────
             // The table is ALWAYS visible. Tab controls which column is "primary":
@@ -3226,11 +3219,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             }
 
             // ── Tab bar config ────────────────────────────────────────────────
+            // Only 2 tabs: MODEL PROJECTIONS (dual) and BETTING SPLITS (splits)
             const TABS: { id: MobileTab; label: string }[] = [
-              { id: 'book',   label: 'BOOK LINES' },
-              { id: 'model',  label: 'MODEL LINES' },
-              { id: 'splits', label: 'SPLITS' },
-              { id: 'edge',   label: 'EDGE' },
+              { id: 'dual',   label: 'MODEL PROJECTIONS' },
+              { id: 'splits', label: 'BETTING SPLITS' },
             ];
 
             // ── Shared odds table (used by both BOOK and MODEL tabs) ──────────
@@ -3502,9 +3494,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 {/* ── RIGHT PANEL: content only (tab bar moved to full-width header) ── */}
                 <div style={{ gridColumn: '2', display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
-                  {/* ── OddsTable: visible only when BOOK, MODEL, or DUAL tab is active ── */}
-                  {/* Hidden entirely when SPLITS or EDGE tab is active               */}
-                  {(mobileTab === 'book' || mobileTab === 'model' || mobileTab === 'dual') && (
+                  {/* ── OddsTable: visible only when MODEL PROJECTIONS (dual) tab is active ── */}
+                  {mobileTab === 'dual' && (
                     <OddsTable />
                   )}
 
@@ -3521,23 +3512,6 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     </div>
                   )}
 
-                  {/* ── EDGE tab (additional content below OddsTable) ────────── */}
-                  {mobileTab === 'edge' && (
-                    <div className="flex items-center justify-center w-full" style={{ minHeight: 72, padding: '8px 4px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                      <EdgeVerdict
-                        spreadDiff={isNaN(spreadDiff) ? null : spreadDiff}
-                        spreadEdge={computedSpreadEdge}
-                        totalDiff={isNaN(totalDiff) ? null : totalDiff}
-                        totalEdge={computedTotalEdge}
-                        awayLogoUrl={awayLogoUrl}
-                        homeLogoUrl={homeLogoUrl}
-                        awaySlug={game.awayTeam}
-                        homeSlug={game.homeTeam}
-                        awayDisplayName={awayDisplayName}
-                        homeDisplayName={homeDisplayName}
-                      />
-                    </div>
-                  )}
                 </div>
                 </div>
               </div>

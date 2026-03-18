@@ -66,8 +66,10 @@ export function registerDiscordAuthRoutes(app: Express) {
     const state = generateState();
     pendingStates.set(state, { userId: payload.userId, expiresAt: Date.now() + 10 * 60 * 1000 });
 
-    // Build the redirect_uri from the request origin so it works on any domain
-    const origin = `${req.protocol}://${req.get("host")}`;
+    // Build the redirect_uri — respect x-forwarded headers for production proxy
+    const proto = req.get("x-forwarded-proto") ?? req.protocol;
+    const host  = req.get("x-forwarded-host")  ?? req.get("host");
+    const origin = `${proto}://${host}`;
     const redirectUri = `${origin}/auth/discord/callback`;
 
     const params = new URLSearchParams({
@@ -111,7 +113,10 @@ export function registerDiscordAuthRoutes(app: Express) {
     pendingStates.delete(state);
 
     const { userId } = stateData;
-    const origin = `${req.protocol}://${req.get("host")}`;
+    // Build the redirect_uri — respect x-forwarded headers for production proxy
+    const proto = req.get("x-forwarded-proto") ?? req.protocol;
+    const host  = req.get("x-forwarded-host")  ?? req.get("host");
+    const origin = `${proto}://${host}`;
     const redirectUri = `${origin}/auth/discord/callback`;
 
     try {
