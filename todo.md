@@ -1596,3 +1596,16 @@
 - [x] Both test scripts PASS: state_mismatch eliminated, token_exchange_failed on fake code (expected)
 - [x] TypeScript: 0 errors. 23/23 Discord tests passing.
 - [ ] Test Discord OAuth end-to-end on published site after publishing
+
+## Discord Button Branding & One-Time Lock (March 18, 2026)
+- [x] Restyle Discord button: solid #738ADB bg, white text, GG Sans font, Discord SVG logo — no opacity/transparency
+- [x] Not connected state: Discord logo + "CONNECT DISCORD" (white, GG Sans, read-only link to /api/auth/discord/connect)
+- [x] Connected state: Discord logo + "@DISPLAYNAME" (white, GG Sans, read-only div — no click, no disconnect)
+- [x] Remove all user-facing disconnect options from ModelProjections.tsx (confirmed by test)
+- [x] Remove disconnect mutation call from frontend (users cannot disconnect their own Discord)
+- [x] Add owner-only Disconnect button in User Management table (Discord logo icon, hover Discord purple)
+- [x] Add appUsers.adminDisconnectDiscord ownerProcedure on server (clears discordId/Username/Avatar/ConnectedAt)
+- [x] Load GG Sans woff2 fonts via @font-face in index.html (CDN-hosted, 4 weights: 400/500/600/700)
+- [x] Apply GG Sans to Discord button only via inline fontFamily style (not global font change)
+- [x] Updated discordAuth.test.ts: replaced disconnect URL test with one-time-only policy invariant test
+- [x] TypeScript: 0 errors. 331/332 tests passing (1 pre-existing KenPom env var test)

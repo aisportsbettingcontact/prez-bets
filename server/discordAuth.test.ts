@@ -80,13 +80,20 @@ describe("Discord route prefix invariant", () => {
     expect(src).not.toContain('href="/auth/discord/connect"');
   });
 
-  it("frontend disconnect fetch uses /api/auth/discord/disconnect", async () => {
+  it("frontend does NOT expose a user-facing disconnect button (one-time-only policy)", async () => {
+    // POLICY: Users cannot disconnect their own Discord account.
+    // Once linked, it is permanent from the user's perspective.
+    // Only the owner (@prez) can unlink via the User Management admin panel.
+    // This test enforces that no user-facing disconnect call exists in ModelProjections.tsx.
     const fs = await import("fs");
     const path = await import("path");
     const frontendPath = path.resolve(__dirname, "../client/src/pages/ModelProjections.tsx");
     const src = fs.readFileSync(frontendPath, "utf-8");
-    expect(src).toContain('"/api/auth/discord/disconnect"');
+    // Must NOT have a user-facing disconnect fetch call
+    expect(src).not.toContain('"/api/auth/discord/disconnect"');
     expect(src).not.toContain('"/auth/discord/disconnect"');
+    // Must still have the connect link
+    expect(src).toContain('"/api/auth/discord/connect"');
   });
 });
 

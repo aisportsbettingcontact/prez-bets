@@ -350,4 +350,58 @@ export const appUsersRouter = router({
       console.log(`[AppAuth] forceLogoutAll: invalidated sessions for ${count} users (excluded owner userId=${ctx.appUser.id})`);
       return { success: true, usersAffected: count };
     }),
+
+  // ─── Discord Admin Controls ────────────────────────────────────────────────
+  /**
+   * OWNER-ONLY: Disconnect a user's Discord account.
+   *
+   * POLICY: Users cannot disconnect their own Discord — once linked, it is
+   * permanent from the user's perspective. Only the owner (@prez) can unlink
+   * a Discord account via the User Management admin panel.
+   *
+   * CHECKPOINT:ADMIN_DISCORD_DISCONNECT — logs who disconnected whom and when.
+   */
+  adminDisconnectDiscord: ownerProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      console.log(`[CHECKPOINT:ADMIN_DISCORD_DISCONNECT.1] ` +
+        `owner=${ctx.appUser.username}(id=${ctx.appUser.id}) ` +
+        `target=userId(${input.id}) ` +
+        `action=UNLINK_DISCORD ` +
+        `timestamp=${new Date().toISOString()}`);
+
+      const user = await getAppUserById(input.id);
+      if (!user) {
+        console.log(`[CHECKPOINT:ADMIN_DISCORD_DISCONNECT.ERR] userId=${input.id} NOT_FOUND`);
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+
+      if (!user.discordId) {
+        console.log(`[CHECKPOINT:ADMIN_DISCORD_DISCONNECT.SKIP] userId=${input.id} username=${user.username} — no Discord linked, nothing to do`);
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This user has no Discord account linked" });
+      }
+
+      console.log(`[CHECKPOINT:ADMIN_DISCORD_DISCONNECT.2] ` +
+        `unlinking discordId=${user.discordId} discordUsername=${user.discordUsername} ` +
+        `from userId=${input.id} username=${user.username}`);
+
+      await updateAppUser(input.id, {
+        discordId: null,
+        discordUsername: null,
+        discordAvatar: null,
+        discordConnectedAt: null,
+      });
+
+      console.log(`[CHECKPOINT:ADMIN_DISCORD_DISCONNECT.SUCCESS] ` +
+        `userId=${input.id} username=${user.username} ` +
+        `previousDiscordId=${user.discordId} previousDiscordUsername=${user.discordUsername} ` +
+        `unlinkedBy=owner(${ctx.appUser.username}) ` +
+        `timestamp=${new Date().toISOString()}`);
+
+      return {
+        success: true,
+        unlinkedDiscordId: user.discordId,
+        unlinkedDiscordUsername: user.discordUsername,
+      };
+    }),
 });
