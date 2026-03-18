@@ -26,21 +26,26 @@
  * │    cvrl7uon6e-pbhflwecra-uk.a.run.app                                  │
  * │  NOT the public domain: aisportsbettingmodels.com                      │
  * │                                                                         │
- * │  Discord compares the redirect_uri in the OAuth request against the    │
- * │  list of registered URIs in the Developer Portal. If the URI contains  │
- * │  the internal Cloud Run hostname, Discord rejects it with:             │
- * │    "Invalid OAuth2 redirect_uri"                                        │
- * │                                                                         │
  * │  Fix: PUBLIC_ORIGIN env var is the canonical public-facing origin.     │
  * │  Set it to https://aisportsbettingmodels.com in production secrets.    │
- * │  In local dev (no PUBLIC_ORIGIN set), falls back to request-derived    │
- * │  origin (http://localhost:3000) which is safe because there's no proxy.│
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │  ARCHITECTURE NOTE — WHY CSRF STATE IS DB-BACKED                       │
+ * │                                                                         │
+ * │  Cloud Run can run MULTIPLE INSTANCES simultaneously. If the /connect  │
+ * │  request hits instance A (stores state in memory) and the /callback    │
+ * │  request hits instance B (empty pendingStates), the state lookup fails │
+ * │  with state_mismatch and the OAuth flow breaks silently.               │
+ * │                                                                         │
+ * │  Fix: State is stored in the discord_oauth_states DB table (TTL 10min).│
+ * │  All instances share the same DB, so state is always found.            │
  * └─────────────────────────────────────────────────────────────────────────┘
  *
  * Security:
  *   - Discord access_token is NEVER stored in the DB or logged
  *   - Secrets are read from ENV (server-side only, never exposed to frontend)
- *   - State parameter prevents CSRF on the callback
+ *   - State parameter prevents CSRF on the callback (DB-backed, TTL 10 min)
  *   - discordId uniqueness is enforced before saving (prevents account takeover)
  *
  * Checkpoint logging convention:
@@ -54,8 +59,8 @@ import { parse as parseCookieHeader } from "cookie";
 import { ENV } from "./_core/env";
 import { verifyAppUserToken } from "./routers/appUsers";
 import { getAppUserById, updateAppUser, getDb } from "./db";
-import { appUsers } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { appUsers, discordOAuthStates } from "../drizzle/schema";
+import { eq, lt } from "drizzle-orm";
 
 const APP_USER_COOKIE = "app_session";
 const DISCORD_API = "https://discord.com/api/v10";
@@ -64,8 +69,8 @@ const DISCORD_API = "https://discord.com/api/v10";
 // See architecture note above. DO NOT change this to /auth/discord/*.
 const ROUTE_PREFIX = "/api/auth/discord";
 
-// In-memory CSRF state store (TTL 10 min)
-const pendingStates = new Map<string, { userId: number; expiresAt: number }>();
+// ── CSRF state TTL: 10 minutes ─────────────────────────────────────────────
+const STATE_TTL_MS = 10 * 60 * 1000;
 
 function getAppCookie(req: Request): string | undefined {
   const cookies = parseCookieHeader(req.headers.cookie ?? "");
@@ -73,14 +78,7 @@ function getAppCookie(req: Request): string | undefined {
 }
 
 function generateState(): string {
-  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-}
-
-function cleanExpiredStates() {
-  const now = Date.now();
-  for (const [key, val] of Array.from(pendingStates.entries())) {
-    if (val.expiresAt < now) pendingStates.delete(key);
-  }
+  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 }
 
 /**
@@ -93,8 +91,6 @@ function cleanExpiredStates() {
  *   3. req.protocol + req.hostname — Express-derived (unreliable behind proxy)
  *
  * In production, PUBLIC_ORIGIN MUST be set to https://aisportsbettingmodels.com.
- * Without it, the redirect_uri will contain the internal Cloud Run hostname and
- * Discord will reject the OAuth request with "Invalid OAuth2 redirect_uri".
  */
 function buildPublicOrigin(req: Request, requestId: string): string {
   // ── Source 1: Hardcoded PUBLIC_ORIGIN env var (most reliable) ─────────────
@@ -110,18 +106,12 @@ function buildPublicOrigin(req: Request, requestId: string): string {
   }
 
   // ── Source 2: x-forwarded-proto + x-forwarded-host (Cloudflare proxy) ─────
-  // WARNING: x-forwarded-host behind Cloud Run resolves to the internal
-  // Cloud Run hostname (*.a.run.app), NOT the public domain.
-  // Only use this as a fallback in local dev where there is no proxy.
   const fwdProto = req.get("x-forwarded-proto");
   const fwdHost  = req.get("x-forwarded-host");
-
-  // ── Source 3: Express req.protocol + req.hostname ─────────────────────────
   const reqProto    = req.protocol;
   const reqHostname = req.hostname;
   const reqHost     = req.get("host");
 
-  // Log ALL proxy headers so we can diagnose any future issues
   console.warn(
     `[DiscordAuth][ORIGIN][WARN] requestId=${requestId}` +
     ` PUBLIC_ORIGIN env var is NOT SET — falling back to request-derived origin.` +
@@ -136,24 +126,20 @@ function buildPublicOrigin(req: Request, requestId: string): string {
     ` | NODE_ENV="${process.env.NODE_ENV ?? "none"}"`
   );
 
-  // Use forwarded headers if available (Cloudflare sets these)
   if (fwdProto && fwdHost) {
     const origin = `${fwdProto}://${fwdHost}`;
     console.log(
       `[DiscordAuth][ORIGIN] requestId=${requestId}` +
-      ` SOURCE=X_FORWARDED_HEADERS` +
-      ` origin="${origin}"` +
+      ` SOURCE=X_FORWARDED_HEADERS origin="${origin}"` +
       ` (WARNING: fwdHost may be internal Cloud Run hostname, not public domain)`
     );
     return origin;
   }
 
-  // Last resort: Express-derived origin
   const origin = `${reqProto}://${reqHost ?? reqHostname}`;
   console.log(
     `[DiscordAuth][ORIGIN] requestId=${requestId}` +
-    ` SOURCE=EXPRESS_REQ` +
-    ` origin="${origin}"` +
+    ` SOURCE=EXPRESS_REQ origin="${origin}"` +
     ` (WARNING: may be wrong behind proxy)`
   );
   return origin;
@@ -161,8 +147,6 @@ function buildPublicOrigin(req: Request, requestId: string): string {
 
 export function registerDiscordAuthRoutes(app: Express) {
   // ── Startup confirmation log ─────────────────────────────────────────────
-  // This fires once at server startup. If you see this in logs, the routes
-  // ARE registered. If you don't see it, the import/call failed silently.
   const publicOriginStatus = ENV.publicOrigin
     ? `SET="${ENV.publicOrigin}"`
     : "NOT_SET (WILL FAIL IN PRODUCTION — set PUBLIC_ORIGIN secret)";
@@ -170,6 +154,7 @@ export function registerDiscordAuthRoutes(app: Express) {
   console.log(
     `[DiscordAuth][STARTUP] Registering Discord OAuth routes` +
     ` | routePrefix="${ROUTE_PREFIX}"` +
+    ` | STATE_STORAGE=DB_BACKED (discord_oauth_states table — survives restarts & multi-instance)` +
     ` | PUBLIC_ORIGIN=${publicOriginStatus}` +
     ` | clientId=${ENV.discordClientId ? `${ENV.discordClientId.slice(0,8)}…` : "MISSING"}` +
     ` | clientSecret=${ENV.discordClientSecret ? "SET" : "MISSING"}` +
@@ -179,7 +164,7 @@ export function registerDiscordAuthRoutes(app: Express) {
 
   if (!ENV.publicOrigin) {
     console.warn(
-      `[DiscordAuth][STARTUP][WARN] PUBLIC_ORIGIN is not set.` +
+      `[DiscordAuth][STARTUP][CRITICAL_WARN] PUBLIC_ORIGIN is not set.` +
       ` In production, the redirect_uri will be built from x-forwarded-host` +
       ` which resolves to the internal Cloud Run hostname (*.a.run.app).` +
       ` Discord will reject this with "Invalid OAuth2 redirect_uri".` +
@@ -190,14 +175,13 @@ export function registerDiscordAuthRoutes(app: Express) {
   // ─── Step 1: Redirect to Discord OAuth ────────────────────────────────────
   //
   // CHECKPOINT 1: Request received — log ALL proxy headers for diagnosis
-  // CHECKPOINT 2: Session cookie validated — JWT verified
-  // CHECKPOINT 3: CSRF state generated — redirect_uri constructed
+  // CHECKPOINT 2: Session cookie validated — JWT verified, userId extracted
+  // CHECKPOINT 3: DB-backed CSRF state created — redirect_uri constructed
   // CHECKPOINT 4: Redirecting to Discord OAuth consent screen
   app.get(`${ROUTE_PREFIX}/connect`, async (req: Request, res: Response) => {
     const requestId = Math.random().toString(36).slice(2, 8).toUpperCase();
 
     // ── CHECKPOINT 1: Full request context dump ──────────────────────────────
-    // Log every proxy header so we can diagnose redirect_uri construction issues
     console.log(
       `[DiscordAuth][CHECKPOINT:1] /connect — requestId=${requestId}` +
       `\n  → x-forwarded-proto   : "${req.get("x-forwarded-proto") ?? "NOT_SET"}"` +
@@ -210,7 +194,8 @@ export function registerDiscordAuthRoutes(app: Express) {
       `\n  → req.hostname        : "${req.hostname}"` +
       `\n  → ENV.publicOrigin    : "${ENV.publicOrigin || "NOT_SET"}"` +
       `\n  → NODE_ENV            : "${process.env.NODE_ENV ?? "NOT_SET"}"` +
-      `\n  → cookie_present      : ${!!(req.headers.cookie)}`
+      `\n  → cookie_present      : ${!!(req.headers.cookie)}` +
+      `\n  → cookie_keys         : ${JSON.stringify(Object.keys(parseCookieHeader(req.headers.cookie ?? "")))}`
     );
 
     // ── CHECKPOINT 2: Session cookie validation ──────────────────────────────
@@ -218,15 +203,16 @@ export function registerDiscordAuthRoutes(app: Express) {
     if (!token) {
       console.log(
         `[DiscordAuth][CHECKPOINT:2.FAIL] /connect — requestId=${requestId}` +
-        ` REJECTED: no app_session cookie present` +
-        ` | all_cookie_keys=${JSON.stringify(Object.keys(parseCookieHeader(req.headers.cookie ?? "")))}`
+        ` REJECTED: no app_session cookie present.` +
+        ` User must be logged into the site before connecting Discord.` +
+        ` Redirecting to /?error=not_logged_in`
       );
       res.redirect(302, "/?error=not_logged_in");
       return;
     }
 
     console.log(
-      `[DiscordAuth][CHECKPOINT:2.OK] /connect — requestId=${requestId}` +
+      `[DiscordAuth][CHECKPOINT:2.COOKIE_FOUND] /connect — requestId=${requestId}` +
       ` app_session cookie found (length=${token.length}) — verifying JWT…`
     );
 
@@ -234,7 +220,8 @@ export function registerDiscordAuthRoutes(app: Express) {
     if (!payload) {
       console.log(
         `[DiscordAuth][CHECKPOINT:2.FAIL] /connect — requestId=${requestId}` +
-        ` REJECTED: JWT verification failed (expired or tampered token)`
+        ` REJECTED: JWT verification failed (expired or tampered token).` +
+        ` User must log in again. Redirecting to /?error=invalid_session`
       );
       res.redirect(302, "/?error=invalid_session");
       return;
@@ -242,13 +229,52 @@ export function registerDiscordAuthRoutes(app: Express) {
 
     console.log(
       `[DiscordAuth][CHECKPOINT:2.OK] /connect — requestId=${requestId}` +
-      ` JWT valid: userId=${payload.userId}`
+      ` JWT valid: userId=${payload.userId} — proceeding to CSRF state creation`
     );
 
-    // ── CHECKPOINT 3: Build redirect_uri and CSRF state ──────────────────────
-    cleanExpiredStates();
-    const state = generateState();
-    pendingStates.set(state, { userId: payload.userId, expiresAt: Date.now() + 10 * 60 * 1000 });
+    // ── CHECKPOINT 3: Build DB-backed CSRF state ─────────────────────────────
+    // CRITICAL: State is stored in the DB (not in-memory) so it survives
+    // server restarts and is shared across all Cloud Run instances.
+    // In-memory state fails when /connect hits instance A and /callback hits
+    // instance B — the state is not found and the OAuth flow breaks silently.
+    const state     = generateState();
+    const now       = Date.now();
+    const expiresAt = now + STATE_TTL_MS;
+
+    const db = await getDb();
+    if (!db) {
+      console.error(
+        `[DiscordAuth][CHECKPOINT:3.FAIL] /connect — requestId=${requestId}` +
+        ` FATAL: getDb() returned null — cannot store CSRF state in DB.` +
+        ` DATABASE_URL may be missing or DB connection failed.` +
+        ` Redirecting to /dashboard?discord_error=db_unavailable`
+      );
+      res.redirect(302, "/dashboard?discord_error=db_unavailable");
+      return;
+    }
+
+    // Clean up expired states before inserting (housekeeping)
+    try {
+      const deleted = await db.delete(discordOAuthStates).where(lt(discordOAuthStates.expiresAt, now));
+      console.log(
+        `[DiscordAuth][CHECKPOINT:3.CLEANUP] /connect — requestId=${requestId}` +
+        ` Cleaned up expired CSRF states: ${(deleted as { rowsAffected?: number }).rowsAffected ?? 0} rows deleted`
+      );
+    } catch (cleanErr) {
+      // Non-fatal — log and continue
+      console.warn(
+        `[DiscordAuth][CHECKPOINT:3.CLEANUP_WARN] /connect — requestId=${requestId}` +
+        ` Failed to clean expired states (non-fatal):`, cleanErr
+      );
+    }
+
+    // Insert the new CSRF state into the DB
+    await db.insert(discordOAuthStates).values({
+      state,
+      userId: payload.userId,
+      expiresAt,
+      createdAt: now,
+    });
 
     // Build the canonical public origin — see buildPublicOrigin() docs above
     const publicOrigin = buildPublicOrigin(req, requestId);
@@ -267,11 +293,13 @@ export function registerDiscordAuthRoutes(app: Express) {
     console.log(
       `[DiscordAuth][CHECKPOINT:3.OK] /connect — requestId=${requestId}` +
       ` userId=${payload.userId}` +
-      `\n  → publicOrigin  : "${publicOrigin}"` +
-      `\n  → redirectUri   : "${redirectUri}"` +
-      `\n  → state         : "${state.slice(0, 8)}…"` +
-      `\n  → authorizeUrl  : "${authorizeUrl.slice(0, 120)}…"` +
-      `\n  → CSRF state stored, expires in 10 min`
+      `\n  → STATE_STORAGE      : DB (discord_oauth_states table)` +
+      `\n  → state              : "${state.slice(0, 8)}…" (${state.length} chars)` +
+      `\n  → state_expires_at   : ${new Date(expiresAt).toISOString()} (${STATE_TTL_MS/60000} min from now)` +
+      `\n  → publicOrigin       : "${publicOrigin}"` +
+      `\n  → redirectUri        : "${redirectUri}"` +
+      `\n  → Discord Portal must have this URI registered: "${redirectUri}"` +
+      `\n  → authorizeUrl       : "${authorizeUrl.slice(0, 140)}…"`
     );
 
     // ── CHECKPOINT 4: Redirect ───────────────────────────────────────────────
@@ -285,11 +313,12 @@ export function registerDiscordAuthRoutes(app: Express) {
   // ─── Step 2: Handle Discord OAuth callback ─────────────────────────────────
   //
   // CHECKPOINT 5: Callback received — validate code + state params
-  // CHECKPOINT 6: CSRF state validated — exchange code for access token
-  // CHECKPOINT 7: Token exchanged — fetch Discord user profile
-  // CHECKPOINT 8: Profile fetched — check for discordId conflicts in DB
-  // CHECKPOINT 9: Conflict check passed — write Discord fields to DB
-  // CHECKPOINT 10: SUCCESS — redirect to dashboard with discord_linked=1
+  // CHECKPOINT 6: DB CSRF state lookup — validates state is in DB and not expired
+  // CHECKPOINT 7: Token exchange — POST to Discord /oauth2/token
+  // CHECKPOINT 8: Profile fetch — GET Discord /users/@me
+  // CHECKPOINT 9: Conflict check — ensure discordId not already linked to another user
+  // CHECKPOINT 10: DB write — save discordId/username/avatar/connectedAt to app_users
+  // CHECKPOINT 11: SUCCESS — redirect to /dashboard?discord_linked=1
   app.get(`${ROUTE_PREFIX}/callback`, async (req: Request, res: Response) => {
     const requestId = Math.random().toString(36).slice(2, 8).toUpperCase();
     const code  = typeof req.query.code  === "string" ? req.query.code  : null;
@@ -298,18 +327,20 @@ export function registerDiscordAuthRoutes(app: Express) {
 
     console.log(
       `[DiscordAuth][CHECKPOINT:5] /callback — requestId=${requestId}` +
-      `\n  → code_present  : ${!!code}` +
-      `\n  → state_present : ${!!state}` +
-      `\n  → discord_error : "${error ?? "none"}"` +
-      `\n  → query_keys    : ${JSON.stringify(Object.keys(req.query))}` +
+      `\n  → code_present     : ${!!code}` +
+      `\n  → state_present    : ${!!state}` +
+      `\n  → state_length     : ${state?.length ?? 0}` +
+      `\n  → discord_error    : "${error ?? "none"}"` +
+      `\n  → query_keys       : ${JSON.stringify(Object.keys(req.query))}` +
       `\n  → x-forwarded-host : "${req.get("x-forwarded-host") ?? "NOT_SET"}"` +
       `\n  → ENV.publicOrigin : "${ENV.publicOrigin || "NOT_SET"}"`
     );
 
     if (error) {
       console.log(
-        `[DiscordAuth][CHECKPOINT:5.FAIL] /callback — requestId=${requestId}` +
-        ` Discord returned error="${error}" (user denied OAuth or Discord error)`
+        `[DiscordAuth][CHECKPOINT:5.DISCORD_ERROR] /callback — requestId=${requestId}` +
+        ` Discord returned error="${error}" (user denied OAuth or Discord-side error).` +
+        ` Redirecting to /dashboard?discord_error=denied`
       );
       res.redirect(302, "/dashboard?discord_error=denied");
       return;
@@ -318,51 +349,109 @@ export function registerDiscordAuthRoutes(app: Express) {
     if (!code || !state) {
       console.log(
         `[DiscordAuth][CHECKPOINT:5.FAIL] /callback — requestId=${requestId}` +
-        ` REJECTED: missing code=${!code} state=${!state}`
+        ` REJECTED: missing required params.` +
+        ` code_missing=${!code} state_missing=${!state}.` +
+        ` Redirecting to /dashboard?discord_error=invalid_request`
       );
       res.redirect(302, "/dashboard?discord_error=invalid_request");
       return;
     }
 
-    cleanExpiredStates();
-    const stateData = pendingStates.get(state);
+    // ── CHECKPOINT 6: DB CSRF state lookup ──────────────────────────────────
+    // CRITICAL FIX: State is now looked up from the DB, not from in-memory Map.
+    // This ensures the lookup works even if /callback hits a different Cloud Run
+    // instance than /connect, or if the server restarted between the two requests.
+    const db = await getDb();
+    if (!db) {
+      console.error(
+        `[DiscordAuth][CHECKPOINT:6.FAIL] /callback — requestId=${requestId}` +
+        ` FATAL: getDb() returned null — cannot look up CSRF state from DB.` +
+        ` Redirecting to /dashboard?discord_error=db_unavailable`
+      );
+      res.redirect(302, "/dashboard?discord_error=db_unavailable");
+      return;
+    }
+
+    // Clean up expired states (housekeeping)
+    const now = Date.now();
+    try {
+      await db.delete(discordOAuthStates).where(lt(discordOAuthStates.expiresAt, now));
+    } catch (_) { /* non-fatal */ }
+
+    // Look up the state in the DB
+    const stateRows = await db
+      .select()
+      .from(discordOAuthStates)
+      .where(eq(discordOAuthStates.state, state))
+      .limit(1);
+
+    const stateRow = stateRows[0] ?? null;
 
     console.log(
       `[DiscordAuth][CHECKPOINT:6] /callback — requestId=${requestId}` +
-      ` validating CSRF state="${state.slice(0, 8)}…"` +
-      ` | pendingStates_size=${pendingStates.size}` +
-      ` | state_found=${!!stateData}` +
-      ` | state_expired=${stateData ? stateData.expiresAt < Date.now() : "N/A"}`
+      ` DB CSRF state lookup:` +
+      `\n  → state_prefix   : "${state.slice(0, 8)}…"` +
+      `\n  → state_found_in_db : ${!!stateRow}` +
+      `\n  → state_expired  : ${stateRow ? stateRow.expiresAt < now : "N/A"}` +
+      `\n  → state_userId   : ${stateRow?.userId ?? "N/A"}` +
+      `\n  → state_createdAt: ${stateRow ? new Date(stateRow.createdAt).toISOString() : "N/A"}` +
+      `\n  → state_expiresAt: ${stateRow ? new Date(stateRow.expiresAt).toISOString() : "N/A"}`
     );
 
-    if (!stateData || stateData.expiresAt < Date.now()) {
-      console.log(
+    if (!stateRow) {
+      console.error(
         `[DiscordAuth][CHECKPOINT:6.FAIL] /callback — requestId=${requestId}` +
-        ` REJECTED: state "${state.slice(0, 8)}…" is ${!stateData ? "not found in pendingStates" : "expired"}` +
-        ` | This can happen if the server restarted between /connect and /callback (pendingStates is in-memory)`
+        ` REJECTED: state "${state.slice(0, 8)}…" NOT FOUND in discord_oauth_states DB table.` +
+        ` POSSIBLE CAUSES:` +
+        `\n  1. State expired (TTL=${STATE_TTL_MS/60000} min) — user took too long to authorize` +
+        `\n  2. State was already consumed (duplicate callback request)` +
+        `\n  3. DB migration not applied (run pnpm db:push)` +
+        `\n  4. State was never inserted (DB write failed in /connect)` +
+        ` Redirecting to /dashboard?discord_error=state_mismatch`
       );
       res.redirect(302, "/dashboard?discord_error=state_mismatch");
       return;
     }
 
-    pendingStates.delete(state);
-    const { userId } = stateData;
+    if (stateRow.expiresAt < now) {
+      console.error(
+        `[DiscordAuth][CHECKPOINT:6.FAIL] /callback — requestId=${requestId}` +
+        ` REJECTED: state "${state.slice(0, 8)}…" EXPIRED at ${new Date(stateRow.expiresAt).toISOString()}` +
+        ` (${Math.round((now - stateRow.expiresAt) / 1000)}s ago).` +
+        ` User must restart the OAuth flow. Redirecting to /dashboard?discord_error=state_expired`
+      );
+      await db.delete(discordOAuthStates).where(eq(discordOAuthStates.state, state));
+      res.redirect(302, "/dashboard?discord_error=state_expired");
+      return;
+    }
+
+    // Consume the state (delete it so it can't be replayed)
+    await db.delete(discordOAuthStates).where(eq(discordOAuthStates.state, state));
+    const { userId } = stateRow;
 
     // Build the redirect_uri — must EXACTLY match what was sent in /connect
-    // and what is registered in the Discord Developer Portal
     const publicOrigin = buildPublicOrigin(req, requestId);
     const redirectUri  = `${publicOrigin}${ROUTE_PREFIX}/callback`;
 
     console.log(
       `[DiscordAuth][CHECKPOINT:6.OK] /callback — requestId=${requestId}` +
-      ` CSRF state valid: userId=${userId}` +
+      ` CSRF state valid and consumed: userId=${userId}` +
       `\n  → publicOrigin : "${publicOrigin}"` +
       `\n  → redirectUri  : "${redirectUri}"` +
-      `\n  → Exchanging authorization code for access token…`
+      `\n  → Proceeding to Discord token exchange…`
     );
 
     try {
-      // ── Token exchange ────────────────────────────────────────────────────
+      // ── CHECKPOINT 7: Token exchange ─────────────────────────────────────
+      console.log(
+        `[DiscordAuth][CHECKPOINT:7] /callback — requestId=${requestId}` +
+        ` POST ${DISCORD_API}/oauth2/token` +
+        `\n  → grant_type  : "authorization_code"` +
+        `\n  → redirect_uri: "${redirectUri}"` +
+        `\n  → code_length : ${code.length}` +
+        `\n  → client_id   : "${ENV.discordClientId.slice(0,8)}…"`
+      );
+
       const tokenRes = await fetch(`${DISCORD_API}/oauth2/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -376,9 +465,9 @@ export function registerDiscordAuthRoutes(app: Express) {
       });
 
       console.log(
-        `[DiscordAuth][CHECKPOINT:7] /callback — requestId=${requestId}` +
-        ` token exchange response: HTTP ${tokenRes.status} ok=${tokenRes.ok}` +
-        `\n  → redirectUri used in token exchange: "${redirectUri}"` +
+        `[DiscordAuth][CHECKPOINT:7.RESPONSE] /callback — requestId=${requestId}` +
+        ` Discord token exchange: HTTP ${tokenRes.status} ok=${tokenRes.ok}` +
+        `\n  → redirectUri used: "${redirectUri}"` +
         `\n  → NOTE: This redirectUri must EXACTLY match the one sent in /connect AND registered in Discord Portal`
       );
 
@@ -386,24 +475,42 @@ export function registerDiscordAuthRoutes(app: Express) {
         const errText = await tokenRes.text();
         console.error(
           `[DiscordAuth][CHECKPOINT:7.FAIL] /callback — requestId=${requestId}` +
-          ` token exchange FAILED: HTTP ${tokenRes.status}` +
-          `\n  → body: "${errText.slice(0, 300)}"` +
-          `\n  → redirectUri: "${redirectUri}"` +
-          `\n  → LIKELY CAUSE: redirect_uri mismatch — Discord app must have "${redirectUri}" registered` +
-          `\n  → Check Discord Developer Portal → OAuth2 → Redirects`
+          ` Token exchange FAILED: HTTP ${tokenRes.status}` +
+          `\n  → Discord error body: "${errText.slice(0, 500)}"` +
+          `\n  → redirectUri used: "${redirectUri}"` +
+          `\n  → LIKELY CAUSE: redirect_uri mismatch between /connect and /callback,` +
+          `\n    OR the URI is not registered in Discord Developer Portal → OAuth2 → Redirects.` +
+          `\n  → REGISTERED URI must be: "${redirectUri}"` +
+          ` Redirecting to /dashboard?discord_error=token_exchange_failed`
         );
         res.redirect(302, "/dashboard?discord_error=token_exchange_failed");
         return;
       }
 
-      const tokenData = await tokenRes.json() as { access_token: string; token_type: string };
-      const accessToken = tokenData.access_token;
-      // NOTE: access_token is intentionally NOT stored anywhere
+      const tokenData = await tokenRes.json() as {
+        access_token:  string;
+        token_type:    string;
+        expires_in?:   number;
+        scope?:        string;
+      };
 
-      // ── Profile fetch ─────────────────────────────────────────────────────
+      // NOTE: access_token is intentionally NOT stored anywhere
+      const accessToken = tokenData.access_token;
+
+      console.log(
+        `[DiscordAuth][CHECKPOINT:7.OK] /callback — requestId=${requestId}` +
+        ` Token exchange SUCCESS` +
+        `\n  → token_type   : "${tokenData.token_type}"` +
+        `\n  → expires_in   : ${tokenData.expires_in ?? "N/A"}s` +
+        `\n  → scope        : "${tokenData.scope ?? "N/A"}"` +
+        `\n  → access_token : [REDACTED — never stored]` +
+        `\n  → Proceeding to fetch Discord user profile…`
+      );
+
+      // ── CHECKPOINT 8: Profile fetch ──────────────────────────────────────
       console.log(
         `[DiscordAuth][CHECKPOINT:8] /callback — requestId=${requestId}` +
-        ` userId=${userId} — fetching Discord /users/@me profile…`
+        ` GET ${DISCORD_API}/users/@me — fetching Discord user profile for userId=${userId}…`
       );
 
       const profileRes = await fetch(`${DISCORD_API}/users/@me`, {
@@ -411,88 +518,134 @@ export function registerDiscordAuthRoutes(app: Express) {
       });
 
       console.log(
-        `[DiscordAuth][CHECKPOINT:8] /callback — requestId=${requestId}` +
-        ` profile fetch: HTTP ${profileRes.status} ok=${profileRes.ok}`
+        `[DiscordAuth][CHECKPOINT:8.RESPONSE] /callback — requestId=${requestId}` +
+        ` Discord profile fetch: HTTP ${profileRes.status} ok=${profileRes.ok}`
       );
 
       if (!profileRes.ok) {
         const errText = await profileRes.text();
         console.error(
           `[DiscordAuth][CHECKPOINT:8.FAIL] /callback — requestId=${requestId}` +
-          ` profile fetch FAILED: HTTP ${profileRes.status} body="${errText.slice(0, 200)}"`
+          ` Profile fetch FAILED: HTTP ${profileRes.status}` +
+          `\n  → body: "${errText.slice(0, 300)}"` +
+          ` Redirecting to /dashboard?discord_error=profile_fetch_failed`
         );
         res.redirect(302, "/dashboard?discord_error=profile_fetch_failed");
         return;
       }
 
       const profile = await profileRes.json() as {
-        id: string;
-        username: string;
+        id:             string;
+        username:       string;
         discriminator?: string;
-        avatar?: string;
+        avatar?:        string;
+        global_name?:   string;
       };
 
-      const discordId       = profile.id;
-      const discordUsername = profile.discriminator && profile.discriminator !== "0"
+      const discordId = profile.id;
+      // Discord new username system: discriminator is "0" for new-style usernames
+      const discordUsername = (profile.discriminator && profile.discriminator !== "0")
         ? `${profile.username}#${profile.discriminator}`
-        : profile.username;
-      const discordAvatar   = profile.avatar ?? null;
+        : (profile.global_name || profile.username);
+      const discordAvatar = profile.avatar ?? null;
 
       console.log(
         `[DiscordAuth][CHECKPOINT:8.OK] /callback — requestId=${requestId}` +
-        ` Discord profile fetched:` +
+        ` Discord profile fetched for userId=${userId}:` +
         `\n  → discordId       : "${discordId}"` +
         `\n  → discordUsername : "${discordUsername}"` +
-        `\n  → avatar          : ${discordAvatar ? "present" : "none"}`
+        `\n  → global_name     : "${profile.global_name ?? "none"}"` +
+        `\n  → discriminator   : "${profile.discriminator ?? "none"}"` +
+        `\n  → avatar          : ${discordAvatar ? `"${discordAvatar}"` : "none"}` +
+        `\n  → Proceeding to conflict check…`
       );
 
-      // ── Conflict check ────────────────────────────────────────────────────
+      // ── CHECKPOINT 9: Conflict check ─────────────────────────────────────
       console.log(
         `[DiscordAuth][CHECKPOINT:9] /callback — requestId=${requestId}` +
-        ` checking DB: is discordId="${discordId}" already linked to a different user?`
+        ` Checking DB: is discordId="${discordId}" already linked to a DIFFERENT user?`
       );
 
-      const db = await getDb();
-      if (db) {
-        const existing = await db
-          .select({ id: appUsers.id })
-          .from(appUsers)
-          .where(eq(appUsers.discordId, discordId))
-          .limit(1);
+      const existing = await db
+        .select({ id: appUsers.id, username: appUsers.username })
+        .from(appUsers)
+        .where(eq(appUsers.discordId, discordId))
+        .limit(1);
 
-        if (existing.length > 0 && existing[0].id !== userId) {
-          console.warn(
-            `[DiscordAuth][CHECKPOINT:9.FAIL] /callback — requestId=${requestId}` +
-            ` CONFLICT: discordId="${discordId}" already linked to userId=${existing[0].id}` +
-            ` (attempted link from userId=${userId}) — blocking to prevent account takeover`
-          );
-          res.redirect(302, "/dashboard?discord_error=already_linked");
-          return;
-        }
+      console.log(
+        `[DiscordAuth][CHECKPOINT:9.RESULT] /callback — requestId=${requestId}` +
+        ` Conflict check: existing_links=${existing.length}` +
+        `\n  → existing_userId   : ${existing[0]?.id ?? "none"}` +
+        `\n  → existing_username : "${existing[0]?.username ?? "none"}"` +
+        `\n  → requesting_userId : ${userId}` +
+        `\n  → is_conflict       : ${existing.length > 0 && existing[0].id !== userId}`
+      );
 
-        console.log(
-          `[DiscordAuth][CHECKPOINT:9.OK] /callback — requestId=${requestId}` +
-          ` no conflict (existing_links=${existing.length}) — writing Discord fields to DB for userId=${userId}…`
-        );
-      } else {
+      if (existing.length > 0 && existing[0].id !== userId) {
         console.warn(
-          `[DiscordAuth][CHECKPOINT:9.WARN] /callback — requestId=${requestId}` +
-          ` getDb() returned null — skipping conflict check, proceeding with write`
+          `[DiscordAuth][CHECKPOINT:9.FAIL] /callback — requestId=${requestId}` +
+          ` CONFLICT: discordId="${discordId}" (@${discordUsername}) is already linked to` +
+          ` userId=${existing[0].id} ("${existing[0].username}").` +
+          ` Blocking link from userId=${userId} to prevent account takeover.` +
+          ` Redirecting to /dashboard?discord_error=already_linked`
         );
+        res.redirect(302, "/dashboard?discord_error=already_linked");
+        return;
       }
 
-      // ── Write to DB ───────────────────────────────────────────────────────
+      console.log(
+        `[DiscordAuth][CHECKPOINT:9.OK] /callback — requestId=${requestId}` +
+        ` No conflict. Proceeding to write Discord fields to DB for userId=${userId}…`
+      );
+
+      // ── CHECKPOINT 10: Write to DB ────────────────────────────────────────
+      console.log(
+        `[DiscordAuth][CHECKPOINT:10] /callback — requestId=${requestId}` +
+        ` Writing Discord fields to app_users for userId=${userId}:` +
+        `\n  → discordId         : "${discordId}"` +
+        `\n  → discordUsername   : "${discordUsername}"` +
+        `\n  → discordAvatar     : ${discordAvatar ? `"${discordAvatar}"` : "null"}` +
+        `\n  → discordConnectedAt: ${now} (${new Date(now).toISOString()})`
+      );
+
       await updateAppUser(userId, {
         discordId,
         discordUsername,
         discordAvatar,
-        discordConnectedAt: Date.now(),
+        discordConnectedAt: now,
       } as Parameters<typeof updateAppUser>[1]);
 
+      // Verify the write succeeded by reading back the user
+      const updatedUser = await getAppUserById(userId);
+      const writeVerified = updatedUser?.discordId === discordId;
+
       console.log(
-        `[DiscordAuth][CHECKPOINT:10.SUCCESS] /callback — requestId=${requestId}` +
-        ` userId=${userId} successfully linked to Discord @${discordUsername} (id=${discordId})` +
-        ` → redirecting to /dashboard?discord_linked=1`
+        `[DiscordAuth][CHECKPOINT:10.VERIFY] /callback — requestId=${requestId}` +
+        ` DB write verification:` +
+        `\n  → write_verified    : ${writeVerified}` +
+        `\n  → db_discordId      : "${updatedUser?.discordId ?? "null"}"` +
+        `\n  → db_discordUsername: "${updatedUser?.discordUsername ?? "null"}"` +
+        `\n  → expected_discordId: "${discordId}"`
+      );
+
+      if (!writeVerified) {
+        console.error(
+          `[DiscordAuth][CHECKPOINT:10.FAIL] /callback — requestId=${requestId}` +
+          ` DB write FAILED: discordId not found in DB after updateAppUser().` +
+          ` updatedUser.discordId="${updatedUser?.discordId ?? "null"}" expected="${discordId}".` +
+          ` This may indicate a schema mismatch or DB write error.` +
+          ` Redirecting to /dashboard?discord_error=db_write_failed`
+        );
+        res.redirect(302, "/dashboard?discord_error=db_write_failed");
+        return;
+      }
+
+      // ── CHECKPOINT 11: SUCCESS ────────────────────────────────────────────
+      console.log(
+        `[DiscordAuth][CHECKPOINT:11.SUCCESS] /callback — requestId=${requestId}` +
+        ` ✅ userId=${userId} ("${updatedUser?.username}") successfully linked to` +
+        ` Discord @${discordUsername} (id=${discordId}).` +
+        ` DB write verified. Redirecting to /dashboard?discord_linked=1`
       );
 
       res.redirect(302, "/dashboard?discord_linked=1");
@@ -553,6 +706,7 @@ export function registerDiscordAuthRoutes(app: Express) {
       `[DiscordAuth][CHECKPOINT:B.OK] /disconnect — requestId=${requestId}` +
       ` userId=${payload.userId} username="${user.username}"` +
       ` current discordId="${user.discordId ?? "none"}"` +
+      ` current discordUsername="${user.discordUsername ?? "none"}"` +
       ` → clearing Discord fields from DB…`
     );
 
@@ -565,7 +719,7 @@ export function registerDiscordAuthRoutes(app: Express) {
 
     console.log(
       `[DiscordAuth][CHECKPOINT:C.SUCCESS] /disconnect — requestId=${requestId}` +
-      ` userId=${payload.userId} Discord account unlinked successfully`
+      ` userId=${payload.userId} ("${user.username}") Discord account unlinked successfully`
     );
 
     res.json({ success: true });

@@ -246,6 +246,13 @@
       "when": 1773703961612,
       "tag": "0034_sparkling_mantis",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1773864923127,
+      "tag": "0035_nebulous_shocker",
+      "breakpoints": true
     }
   ]
 }

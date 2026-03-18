@@ -1582,3 +1582,17 @@
 - [x] Updated colSpan from 9 to 10 for loading/empty state rows in UserManagement table
 - [x] Hard-lock EDGE ROI footer in GameCard - remove EDGE column rendering permanently
 - [x] Ensure edge footer shows for all sports (NHL, NBA, NCAAM) in MODEL PROJECTIONS
+
+## Discord DB-Backed State Fix (March 18, 2026)
+- [x] Root cause identified: in-memory CSRF state fails across Cloud Run instances (state_mismatch)
+- [x] Add discord_oauth_states table to schema (state, userId, expiresAt, createdAt)
+- [x] Run db:push to migrate discord_oauth_states table to production DB
+- [x] Rewrite discordAuth.ts: DB-backed state storage (insert on /connect, lookup+delete on /callback)
+- [x] Add exhaustive CHECKPOINT:1-11 + A-C logging at every step of the OAuth flow
+- [x] Add DB write verification in CHECKPOINT:10 (read-back after updateAppUser to confirm write)
+- [x] Add cleanup of expired states on each /connect and /callback request
+- [x] Write test-discord-connect.ts: verifies JWT → /connect → DB state row inserted → correct redirect_uri
+- [x] Write test-discord-callback.ts: verifies DB state lookup → token exchange → state consumed
+- [x] Both test scripts PASS: state_mismatch eliminated, token_exchange_failed on fake code (expected)
+- [x] TypeScript: 0 errors. 23/23 Discord tests passing.
+- [ ] Test Discord OAuth end-to-end on published site after publishing

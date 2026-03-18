@@ -76,6 +76,29 @@ export const appUsers = mysqlTable("app_users", {
 export type AppUser = typeof appUsers.$inferSelect;
 export type InsertAppUser = typeof appUsers.$inferInsert;
 
+// ─── Discord OAuth CSRF state store (DB-backed, survives server restarts) ────
+//
+// WHY DB-BACKED:
+//   Cloud Run can run multiple instances simultaneously. The /connect request
+//   may hit instance A (stores state in memory) while the /callback request
+//   hits instance B (empty pendingStates → state_mismatch → OAuth fails).
+//   Storing state in the DB ensures all instances share the same state store.
+//
+// TTL: 10 minutes. Expired rows are cleaned up on each /callback request.
+export const discordOAuthStates = mysqlTable("discord_oauth_states", {
+  /** Random CSRF state token generated in /connect */
+  state:     varchar("state",     { length: 64 }).primaryKey(),
+  /** app_users.id of the user who initiated the OAuth flow */
+  userId:    int("userId").notNull(),
+  /** UTC timestamp (ms) when this state expires (10 min from creation) */
+  expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
+  /** UTC timestamp (ms) when this row was created */
+  createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+});
+
+export type DiscordOAuthState = typeof discordOAuthStates.$inferSelect;
+export type InsertDiscordOAuthState = typeof discordOAuthStates.$inferInsert;
+
 // ─── Model files (uploaded CSVs) ────────────────────────────────────────────
 
 export const modelFiles = mysqlTable("model_files", {
