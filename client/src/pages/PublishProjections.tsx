@@ -2040,7 +2040,7 @@ export default function PublishProjections() {
               height={16}
               style={{ opacity: selectedSport === "NCAAM" ? 1 : 0.5 }}
             />
-            NCAAM
+            MARCH MADNESS
           </button>
           {/* NBA button */}
           <button

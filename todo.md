@@ -1623,3 +1623,12 @@
 - [x] PREZ BETS left-aligned, Discord button + user icon right-aligned via flex-1 spacer
 - [x] Dynamic font scaling via clamp(12px, 3.5vw, 18px) for brand text, clamp(14px, 3.5vw, 20px) for icon
 - [x] TypeScript: 0 errors
+
+## March Madness Focus (March 2026)
+- [x] Rename NCAAM → MARCH MADNESS in all UI labels (tabs, headers, subtitles)
+- [x] Create MARCH_MADNESS_TEAMS allowlist (68 bracket teams) in shared/marchMadnessTeams.ts
+- [x] Filter NCAAM feed to only show March Madness bracket teams
+- [x] Populate First Four games (PV A&M vs Lehigh, Miami OH vs SMU) with VSiN odds/splits
+- [x] Publish First Four games to feed
+- [x] Ensure auto-refresh pipeline only ingests March Madness games going forward (VSiN scraper accepts all D1; feed API filters to bracket teams only)
+- [x] Cross-reference First Four game odds (VSiN vs Action Network) for PV A&M vs Lehigh and Miami OH vs SMU

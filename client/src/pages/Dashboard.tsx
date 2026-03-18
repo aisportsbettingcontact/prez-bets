@@ -497,7 +497,7 @@ export default function Dashboard() {
 
         {/* Row 2: Sport filter toggle + splits timestamp */}
         <div className="px-4 pb-1 flex items-center gap-2">
-          {/* NCAAM button */}
+          {/* MARCH MADNESS button */}
           <button
             onClick={() => setSelectedSport("NCAAM")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
@@ -508,12 +508,12 @@ export default function Dashboard() {
           >
             <img
               src="https://www.ncaa.com/march-madness-live/assets/icons/ncaa/disc.svg"
-              alt="NCAA"
+              alt="March Madness"
               width={16}
               height={16}
               style={{ opacity: selectedSport === "NCAAM" ? 1 : 0.5 }}
             />
-            NCAAM
+            MARCH MADNESS
           </button>
           {/* NBA button */}
           <button
@@ -717,7 +717,7 @@ export default function Dashboard() {
                   <span
                     className="font-semibold"
                     style={{ color: '#a3a3a3', letterSpacing: '0.06em', fontSize: 'clamp(9px, 2.8vw, 17px)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}
-                  >{selectedSport === 'NCAAM' ? "MEN'S COLLEGE BASKETBALL" : selectedSport === 'NBA' ? 'NBA BASKETBALL' : 'NHL HOCKEY'}</span>
+                  >{selectedSport === 'NCAAM' ? 'NCAA MARCH MADNESS' : selectedSport === 'NBA' ? 'NBA BASKETBALL' : 'NHL HOCKEY'}</span>
                 </div>
                 <div className="flex-1" />
               </div>
