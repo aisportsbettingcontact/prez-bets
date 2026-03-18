@@ -1632,3 +1632,12 @@
 - [x] Publish First Four games to feed
 - [x] Ensure auto-refresh pipeline only ingests March Madness games going forward (VSiN scraper accepts all D1; feed API filters to bracket teams only)
 - [x] Cross-reference First Four game odds (VSiN vs Action Network) for PV A&M vs Lehigh and Miami OH vs SMU
+
+## March Madness Full Feed Audit (March 18, 2026)
+- [x] Identify and fix 2 missing Round of 64 games — confirmed 30 R64 in DB + 2 TBD (FF-dependent, not yet in DB)
+- [x] March 17 First Four games (UMBC vs Howard, Texas vs NC State) — already played, not added (daily purge would delete them; historical only)
+- [x] VSiN has not yet posted R64 odds (March 19-20 games) — auto-refresh will pick them up as they go live
+- [x] Publish BYU vs Texas and Howard vs Michigan (R64 games with complete odds+splits) — published ✅
+- [x] Unpublish 4 non-bracket contaminating games (navy/wake_forest, dayton/bradley, george_washington/utah_valley, sam_houston_st/new_mexico)
+- [x] isValidGame filter in routers.ts confirmed working — blocks all non-bracket NCAAM teams at API layer
+- [x] Re-run full audit — confirmed: 4 games on feed (2 FF + 2 R64), all with complete odds+splits, zero contamination

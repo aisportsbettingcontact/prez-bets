@@ -33,8 +33,8 @@ export const MARCH_MADNESS_DB_SLUGS = new Set<string>([
   // ── First Four ────────────────────────────────────────────────────────────
   "umbc",                   // 16-seed East (played 3/17, lost)
   "howard",                 // 16-seed Midwest (played 3/17, won → advances)
-  "texas",                  // 11-seed West (played 3/17, lost)
-  "nc_state",               // 11-seed East (played 3/17, won → advances)
+  "texas",                  // 11-seed West (played 3/17, WON → advances to play BYU)
+  "nc_state",               // 11-seed West (played 3/17, lost to Texas)
   "prairie_view_a_and_m",   // 16-seed South (3/18)
   "lehigh",                 // 16-seed South (3/18)
   "miami_oh",               // 11-seed Midwest (3/18)
