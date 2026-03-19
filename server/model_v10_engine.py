@@ -48,14 +48,25 @@ TOTAL_EDGE_THRESH   = 3.0
 def round_to_half(x: float) -> float:
     return round(x * 2) / 2.0
 
-def prob_to_ml(p: float) -> int:
+def prob_to_ml(p: float, cap: int = 0) -> int:
+    """Convert probability to American ML odds. If cap > 0, clamp to [-cap, +cap]."""
     p = max(0.001, min(0.999, p))
     if abs(p - 0.5) < 0.001:
         return 100
     if p > 0.5:
-        return int(round(-(p / (1.0 - p)) * 100.0))
+        ml = int(round(-(p / (1.0 - p)) * 100.0))
     else:
-        return int(round(((1.0 - p) / p) * 100.0))
+        ml = int(round(((1.0 - p) / p) * 100.0))
+    if cap > 0:
+        if ml < 0:
+            ml = max(ml, -cap)   # e.g. -326 → -130
+        else:
+            ml = min(ml, cap)    # e.g. +326 → +130
+    return ml
+
+def prob_to_ml_capped(p: float) -> int:
+    """Spread/total odds capped at ±130 per product spec."""
+    return prob_to_ml(p, cap=130)
 
 def vig_removed_be(odds_a: int, odds_b: int):
     def to_prob(o):
@@ -399,10 +410,11 @@ def originate_market(sim: dict, mkt_sp: float, mkt_to: float) -> dict:
     under_book = 100.0 - over_book
 
     # FAIR ODDS AT BOOK LINE (what the model says the book's line is worth)
-    spread_A_fair = prob_to_ml(away_cover_book / 100.0)
-    spread_B_fair = prob_to_ml(home_cover_book / 100.0)
-    over_fair     = prob_to_ml(over_book / 100.0)
-    under_fair    = prob_to_ml(under_book / 100.0)
+    # Spread/total odds capped at ±130 per product spec
+    spread_A_fair = prob_to_ml_capped(away_cover_book / 100.0)
+    spread_B_fair = prob_to_ml_capped(home_cover_book / 100.0)
+    over_fair     = prob_to_ml_capped(over_book / 100.0)
+    under_fair    = prob_to_ml_capped(under_book / 100.0)
 
     # For over_rate/under_rate fields (used for display)
     p_over  = p_over_model
