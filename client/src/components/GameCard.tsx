@@ -128,6 +128,22 @@ function toNum(v: string | number | null | undefined): number {
   return typeof v === "number" ? v : parseFloat(v);
 }
 
+// ── Parse ROI% from edge label ───────────────────────────────────────────────
+// Label format: "HIGH | TCU +2.5 | 56.12% | +3.74% vs BE | 7.13% ROI"
+function parseRoiFromLabel(label: string | null | undefined): number | null {
+  if (!label) return null;
+  const m = label.match(/([\d.]+)%\s*ROI/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+// Parse the betting side from the label (e.g. "TCU +2.5" or "OVER 145.5")
+function parseSideFromLabel(label: string | null | undefined): string | null {
+  if (!label) return null;
+  const parts = label.split('|');
+  if (parts.length < 2) return null;
+  return parts[1].trim();
+}
+
 // ── Normalize edge label ──────────────────────────────────────────────────────
 function normalizeEdgeLabel(label: string | null | undefined): string {
   if (!label || label.toUpperCase() === "PASS") return "PASS";
@@ -348,6 +364,9 @@ function VerdictSide({ diff, label, isStrong, logoUrl, teamSlug, teamName, compa
   const normalized = normalizeEdgeLabel(label);
   const isPass = normalized === "PASS" || (diff ?? 0) <= 0;
   const color = getEdgeColor(diff ?? 0);
+  // Parse ROI% and side label from the full edge string
+  const roi = parseRoiFromLabel(label);
+  const sideLabel = parseSideFromLabel(label);
 
   if (isPass) {
     return (
@@ -360,8 +379,9 @@ function VerdictSide({ diff, label, isStrong, logoUrl, teamSlug, teamName, compa
   }
 
   if (compact) {
-    // Compact inline version: logo + name + edge pts all on one line
+    // Compact inline version: side label + ROI% on one line
     const showArrow = (diff ?? 0) >= 3;
+    const displayLabel = sideLabel ?? normalized;
     return (
       <div className="flex items-center gap-1 px-1.5 py-0.5">
         {(logoUrl || teamSlug) && (
@@ -369,17 +389,24 @@ function VerdictSide({ diff, label, isStrong, logoUrl, teamSlug, teamName, compa
         )}
         <span className="font-bold leading-none whitespace-nowrap uppercase tracking-wide text-[11px]" style={{ color: "hsl(var(--foreground))" }}>
           {showArrow && <span className="mr-0.5 text-[9px]" style={{ color }}>▲</span>}
-          {normalized}
+          {displayLabel}
         </span>
-        <span className="text-[10px] leading-none" style={{ color: "hsl(var(--muted-foreground))", fontWeight: 500 }}>
-          <span style={{ color, fontWeight: 800 }}>{diff}{diff === 1 ? "PT" : "PTS"}</span>
-        </span>
+        {roi !== null ? (
+          <span className="text-[10px] leading-none font-extrabold" style={{ color }}>
+            {roi.toFixed(2)}% ROI
+          </span>
+        ) : (
+          <span className="text-[10px] leading-none" style={{ color: "hsl(var(--muted-foreground))", fontWeight: 500 }}>
+            <span style={{ color, fontWeight: 800 }}>{diff}{diff === 1 ? "PT" : "PTS"}</span>
+          </span>
+        )}
       </div>
     );
   }
 
   const betNameSize = isStrong ? "17px" : "15px";
   const showArrow = (diff ?? 0) >= 3;
+  const displayLabel = sideLabel ?? normalized;
 
   return (
     <div className="flex flex-col items-center gap-1 py-0.5">
@@ -389,13 +416,19 @@ function VerdictSide({ diff, label, isStrong, logoUrl, teamSlug, teamName, compa
         )}
         <span className="font-bold leading-none whitespace-nowrap uppercase tracking-wide" style={{ fontSize: betNameSize, color: "hsl(var(--foreground))" }}>
           {showArrow && <span className="mr-0.5 text-[10px]" style={{ color }}>▲</span>}
-          {normalized}
+          {displayLabel}
         </span>
       </div>
-      <span className="text-[13px] leading-none" style={{ color: "hsl(var(--muted-foreground))", fontWeight: 500 }}>
-        EDGE:{" "}
-        <span style={{ color, fontWeight: 800 }}>{diff} {diff === 1 ? "PT" : "PTS"}</span>
-      </span>
+      {roi !== null ? (
+        <span className="text-[13px] leading-none font-extrabold" style={{ color }}>
+          {roi.toFixed(2)}% ROI
+        </span>
+      ) : (
+        <span className="text-[13px] leading-none" style={{ color: "hsl(var(--muted-foreground))", fontWeight: 500 }}>
+          EDGE:{" "}
+          <span style={{ color, fontWeight: 800 }}>{diff} {diff === 1 ? "PT" : "PTS"}</span>
+        </span>
+      )}
     </div>
   );
 }
@@ -810,27 +843,43 @@ function DesktopMergedPanel({
   const displayAwayML     = game.awayML ?? '—';
   const displayHomeML     = game.homeML ?? '—';
 
-  // For NHL games, append model puck line odds and model over/under odds in parentheses
-  const isNhlGame = game.sport === 'NHL';
+  // For NHL/NCAAM games, append model odds in parentheses
+  const isNhlGame   = game.sport === 'NHL';
+  const isNcaamGame = game.sport === 'NCAAM';
   const mdlAwayPLOdds = game.modelAwayPLOdds ?? null;
   const mdlHomePLOdds = game.modelHomePLOdds ?? null;
   const mdlOverOdds   = game.modelOverOdds ?? null;
   const mdlUnderOdds  = game.modelUnderOdds ?? null;
+  // NCAAM model fair odds at book's spread line (computed by Python engine)
+  const mdlAwaySpreadOdds = (game as unknown as Record<string, string | null>).modelAwaySpreadOdds ?? null;
+  const mdlHomeSpreadOdds = (game as unknown as Record<string, string | null>).modelHomeSpreadOdds ?? null;
 
   const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread)
-    ? (isNhlGame && mdlAwayPLOdds ? `${spreadSign(mdlAwaySpread)} (${mdlAwayPLOdds})` : spreadSign(mdlAwaySpread))
+    ? (isNhlGame && mdlAwayPLOdds
+        ? `${spreadSign(mdlAwaySpread)} (${mdlAwayPLOdds})`
+        : isNcaamGame && mdlAwaySpreadOdds
+          ? `${spreadSign(mdlAwaySpread)} (${mdlAwaySpreadOdds})`
+          : spreadSign(mdlAwaySpread))
     : '—';
   const mdlHomeSpreadStr = hasModelData && !isNaN(mdlHomeSpread)
-    ? (isNhlGame && mdlHomePLOdds ? `${spreadSign(mdlHomeSpread)} (${mdlHomePLOdds})` : spreadSign(mdlHomeSpread))
+    ? (isNhlGame && mdlHomePLOdds
+        ? `${spreadSign(mdlHomeSpread)} (${mdlHomePLOdds})`
+        : isNcaamGame && mdlHomeSpreadOdds
+          ? `${spreadSign(mdlHomeSpread)} (${mdlHomeSpreadOdds})`
+          : spreadSign(mdlHomeSpread))
     : '—';
-  // For NHL: display the BOOK's total line with the model's fair odds at that line
-  // e.g. book O/U 6.5 → model shows "6.5 (+138)" not "6.0 (+141)"
+  // For NHL: display BOOK's total line with model fair odds at that line
+  // For NCAAM: display model's own total with model fair odds at that line
   const mdlDisplayTotal = isNhlGame && !isNaN(bkTotal) ? bkTotal : mdlTotal;
   const mdlOver = hasModelData && !isNaN(mdlDisplayTotal)
-    ? (isNhlGame && mdlOverOdds ? `${String(mdlDisplayTotal)} (${mdlOverOdds})` : String(mdlDisplayTotal))
+    ? ((isNhlGame || isNcaamGame) && mdlOverOdds
+        ? `${String(mdlDisplayTotal)} (${mdlOverOdds})`
+        : String(mdlDisplayTotal))
     : '—';
   const mdlUnder = hasModelData && !isNaN(mdlDisplayTotal)
-    ? (isNhlGame && mdlUnderOdds ? `${String(mdlDisplayTotal)} (${mdlUnderOdds})` : String(mdlDisplayTotal))
+    ? ((isNhlGame || isNcaamGame) && mdlUnderOdds
+        ? `${String(mdlDisplayTotal)} (${mdlUnderOdds})`
+        : String(mdlDisplayTotal))
     : '—';
   const mdlAwayMlStr     = hasModelData ? (modelAwayML ?? '—') : '—';
   const mdlHomeMlStr     = hasModelData ? (modelHomeML ?? '—') : '—';
@@ -1516,6 +1565,9 @@ interface OddsLinesPanelProps {
   modelHomePLOdds?: string | null;
   modelOverOdds?: string | null;
   modelUnderOdds?: string | null;
+  // NCAAM model fair odds at book's spread line
+  modelAwaySpreadOdds?: string | null;
+  modelHomeSpreadOdds?: string | null;
 }
 
 function OddsLinesPanel({
@@ -1562,6 +1614,8 @@ function OddsLinesPanel({
   modelHomePLOdds,
   modelOverOdds,
   modelUnderOdds,
+  modelAwaySpreadOdds,
+  modelHomeSpreadOdds,
 }: OddsLinesPanelProps) {
 
   const mdlAwayMl = modelAwayML ?? '—';
@@ -1590,22 +1644,35 @@ function OddsLinesPanel({
   const awayMlDisplay = dkAwayMlProp ?? awayMl;
   const homeMlDisplay = dkHomeMlProp ?? homeMl;
 
-  // Model values — for NHL games, append puck line and total odds in parentheses
-  const isNhlGame = sport === 'NHL';
+  // Model values — for NHL/NCAAM games, append odds in parentheses
+  const isNhlGame   = sport === 'NHL';
+  const isNcaamGame = sport === 'NCAAM';
   const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread)
-    ? (isNhlGame && modelAwayPLOdds ? `${spreadSign(mdlAwaySpread)} (${modelAwayPLOdds})` : spreadSign(mdlAwaySpread))
+    ? (isNhlGame && modelAwayPLOdds
+        ? `${spreadSign(mdlAwaySpread)} (${modelAwayPLOdds})`
+        : isNcaamGame && modelAwaySpreadOdds
+          ? `${spreadSign(mdlAwaySpread)} (${modelAwaySpreadOdds})`
+          : spreadSign(mdlAwaySpread))
     : '—';
   const mdlHomeSpreadStr = hasModelData && !isNaN(mdlHomeSpread)
-    ? (isNhlGame && modelHomePLOdds ? `${spreadSign(mdlHomeSpread)} (${modelHomePLOdds})` : spreadSign(mdlHomeSpread))
+    ? (isNhlGame && modelHomePLOdds
+        ? `${spreadSign(mdlHomeSpread)} (${modelHomePLOdds})`
+        : isNcaamGame && modelHomeSpreadOdds
+          ? `${spreadSign(mdlHomeSpread)} (${modelHomeSpreadOdds})`
+          : spreadSign(mdlHomeSpread))
     : '—';
-  // For NHL: display the BOOK's total line with the model's fair odds at that line
-  // e.g. book O/U 6.5 → model shows "6.5 (+138)" not "6.0 (+141)"
+  // For NHL: display BOOK's total line with model fair odds at that line
+  // For NCAAM: display model's own total with model fair odds at that line
   const mdlDisplayTotal = isNhlGame && !isNaN(bkTotal) ? bkTotal : mdlTotal;
   const mdlOverTotal = hasModelData && !isNaN(mdlDisplayTotal)
-    ? (isNhlGame && modelOverOdds ? `${String(mdlDisplayTotal)} (${modelOverOdds})` : String(mdlDisplayTotal))
+    ? ((isNhlGame || isNcaamGame) && modelOverOdds
+        ? `${String(mdlDisplayTotal)} (${modelOverOdds})`
+        : String(mdlDisplayTotal))
     : '—';
   const mdlUnderTotal = hasModelData && !isNaN(mdlDisplayTotal)
-    ? (isNhlGame && modelUnderOdds ? `${String(mdlDisplayTotal)} (${modelUnderOdds})` : String(mdlDisplayTotal))
+    ? ((isNhlGame || isNcaamGame) && modelUnderOdds
+        ? `${String(mdlDisplayTotal)} (${modelUnderOdds})`
+        : String(mdlDisplayTotal))
     : '—';
   const mdlAwayMlStr     = hasModelData ? mdlAwayMl : '—';
   const mdlHomeMlStr     = hasModelData ? mdlHomeMl : '—';
@@ -2565,6 +2632,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 modelHomePLOdds={game.modelHomePLOdds}
                 modelOverOdds={game.modelOverOdds}
                 modelUnderOdds={game.modelUnderOdds}
+                modelAwaySpreadOdds={(game as unknown as Record<string, string | null>).modelAwaySpreadOdds ?? null}
+                modelHomeSpreadOdds={(game as unknown as Record<string, string | null>).modelHomeSpreadOdds ?? null}
               />
             </div>
           )}
@@ -2679,6 +2748,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       modelHomePLOdds={game.modelHomePLOdds}
                       modelOverOdds={game.modelOverOdds}
                       modelUnderOdds={game.modelUnderOdds}
+                      modelAwaySpreadOdds={(game as unknown as Record<string, string | null>).modelAwaySpreadOdds ?? null}
+                      modelHomeSpreadOdds={(game as unknown as Record<string, string | null>).modelHomeSpreadOdds ?? null}
                     />
                   </div>
                 </div>

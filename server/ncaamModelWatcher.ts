@@ -87,22 +87,38 @@ function formatML(val: number): string {
   return rounded > 0 ? `+${rounded}` : `${rounded}`;
 }
 
-function formatSpreadEdge(orig: number, mkt: number, overRate: number): string | null {
-  const delta = Math.abs(orig - mkt);
-  if (delta < 1.5) return null;
-  const coverPct = orig < mkt ? overRate : 100 - overRate;
-  if (coverPct < 55) return null;
+const BREAKEVEN_PCT = 52.38; // breakeven win% at -110 juice
+
+function formatSpreadEdge(
+  orig: number, mkt: number, overRate: number,
+  awayName: string, homeName: string
+): string | null {
+  const delta = orig - mkt; // positive = model favors home
+  if (Math.abs(delta) < 1.5) return null;
+  // If model spread < mkt spread → away team has edge (they cover more often)
+  const side = delta < 0
+    ? `${awayName} +${Math.abs(mkt).toFixed(1)}`
+    : `${homeName} -${Math.abs(mkt).toFixed(1)}`;
+  const coverPct = delta < 0 ? (100 - overRate) : overRate; // away cover = under-like, home cover = over-like
+  if (coverPct < 52.38) return null;
   const conf = coverPct >= 65 ? "HIGH" : coverPct >= 60 ? "MOD" : "LOW";
-  return conf;
+  const edgeVsBe = coverPct - BREAKEVEN_PCT;
+  const roi = ((coverPct / BREAKEVEN_PCT) - 1.0) * 100.0;
+  return `${conf} | ${side} | ${coverPct.toFixed(2)}% | +${edgeVsBe.toFixed(2)}% vs BE | ${roi.toFixed(2)}% ROI`;
 }
 
-function formatTotalEdge(origTotal: number, mktTotal: number, overRate: number): string | null {
+function formatTotalEdge(
+  origTotal: number, mktTotal: number, overRate: number
+): string | null {
   const delta = origTotal - mktTotal;
-  if (Math.abs(delta) < 2.5) return null;
+  if (Math.abs(delta) < 3.0) return null;
+  const side = delta > 0 ? `OVER ${mktTotal}` : `UNDER ${mktTotal}`;
   const hitPct = delta > 0 ? overRate : 100 - overRate;
-  if (hitPct < 55) return null;
+  if (hitPct < 52.38) return null;
   const conf = hitPct >= 65 ? "HIGH" : hitPct >= 60 ? "MOD" : "LOW";
-  return conf;
+  const edgeVsBe = hitPct - BREAKEVEN_PCT;
+  const roi = ((hitPct / BREAKEVEN_PCT) - 1.0) * 100.0;
+  return `${conf} | ${side} | ${hitPct.toFixed(2)}% | +${edgeVsBe.toFixed(2)}% vs BE | ${roi.toFixed(2)}% ROI`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -185,7 +201,9 @@ async function processGame(game: Awaited<ReturnType<typeof listGamesByDate>>[num
   const modelTotal      = roundHalf(result.orig_total);
 
   // Build edge labels (use the corrected away spread vs book away spread)
-  const spreadEdge = formatSpreadEdge(awayModelSpread, mktSp, result.over_rate);
+  const awayDisplayName = awayInfo.ncaaName ?? awayInfo.kenpomSlug;
+  const homeDisplayName = homeInfo.ncaaName ?? homeInfo.kenpomSlug;
+  const spreadEdge = formatSpreadEdge(awayModelSpread, mktSp, result.over_rate, awayDisplayName, homeDisplayName);
   const totalEdge  = formatTotalEdge(modelTotal, mktTo, result.over_rate);
   const spreadDiff = spreadEdge
     ? String(Math.abs(awayModelSpread - mktSp).toFixed(1))

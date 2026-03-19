@@ -260,6 +260,13 @@
       "when": 1773879003292,
       "tag": "0036_normal_hannibal_king",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1773888373524,
+      "tag": "0037_steady_triathlon",
+      "breakpoints": true
     }
   ]
 }

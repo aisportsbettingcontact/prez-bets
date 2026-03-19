@@ -157,7 +157,7 @@ SPREAD_EDGE_THRESH  = 1.5     # minimum spread delta to flag an edge
 TOTAL_EDGE_THRESH   = 3.0     # minimum total delta to flag an edge
 REG_OE_DE           = 0.82    # regression weight for OE/DE toward national avg
 REG_APLO            = 0.85    # regression weight for APLO toward national avg
-N_SIMS              = 50_000
+N_SIMS              = 250_000
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -173,11 +173,53 @@ def ot_adj(score, is_ot, ot_count=1):
     return score * (40.0 / (40.0 + 5.0 * ot_count)) if is_ot else score
 
 def win_pct_to_fair_ml(pct):
+    """Legacy: takes 0-100 percentage, returns float ML. Use prob_to_ml for new code."""
     pct = max(0.01, min(99.99, pct))
     if pct >= 50.0:
         return -(pct / (100.0 - pct)) * 100.0
     else:
         return +((100.0 - pct) / pct) * 100.0
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ODDS / PROBABILITY HELPERS  (NHL-identical framework)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def prob_to_ml(p: float) -> int:
+    """Convert win probability (0-1) to American moneyline integer.
+    p >= 0.5 -> favorite (negative odds, e.g. -133)
+    p <  0.5 -> underdog (positive odds, e.g. +133)
+    """
+    p = max(0.001, min(0.999, p))
+    if p >= 0.5:
+        return -int(round((p / (1.0 - p)) * 100))
+    else:
+        return int(round(((1.0 - p) / p) * 100))
+
+def ml_to_prob(ml: int) -> float:
+    """Convert American moneyline to raw implied win probability (no vig removal)."""
+    if ml < 0:
+        return abs(ml) / (abs(ml) + 100.0)
+    else:
+        return 100.0 / (ml + 100.0)
+
+def remove_vig(prob_a: float, prob_b: float):
+    """Remove vig: true_A = prob_A / (prob_A + prob_B)."""
+    total = prob_a + prob_b
+    if total <= 0:
+        return 0.5, 0.5
+    return prob_a / total, prob_b / total
+
+def payout_from_odds(odds: int) -> float:
+    """Payout per $1 wagered (not including stake)."""
+    if odds < 0:
+        return 100.0 / abs(odds)
+    else:
+        return odds / 100.0
+
+def expected_value(probability: float, odds: int) -> float:
+    """EV = p * payout - (1 - p). Naturally accounts for distribution variance."""
+    payout = payout_from_odds(odds)
+    return probability * payout - (1.0 - probability)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONF PPG
@@ -447,12 +489,13 @@ def monte_carlo(mean_a, mean_h, sa, sh, mkt_sp, mkt_to, n=N_SIMS):
         clamped_to = raw_td
         to_cl = False
 
-    sp_impl_h = float(norm.cdf(clamped_sp / max(sp_std, 0.01))) * 100
-    sp_impl_a = 100.0 - sp_impl_h
-    ml_h_pct  = 0.70 * hw_pct + 0.30 * sp_impl_h
-    ml_a_pct  = 100.0 - ml_h_pct
-    h_ml = win_pct_to_fair_ml(ml_h_pct)
-    a_ml = win_pct_to_fair_ml(ml_a_pct)
+    # ML: use direct simulation win probability (250k sims already capture the full distribution)
+    # Do NOT blend with sp_impl_h — that creates inconsistency between spread and ML direction
+    ml_h_pct  = hw_pct
+    ml_a_pct  = aw_pct
+    # prob_to_ml takes 0-1 probability and returns correct-sign integer
+    h_ml = prob_to_ml(ml_h_pct / 100.0)
+    a_ml = prob_to_ml(ml_a_pct / 100.0)
 
     return {
         'originated_spread': round(clamped_sp, 4),
@@ -484,66 +527,138 @@ def monte_carlo(mean_a, mean_h, sa, sh, mkt_sp, mkt_to, n=N_SIMS):
 # EDGE DETECTION
 # ─────────────────────────────────────────────────────────────────────────────
 
-def detect_edges(sim, mkt_sp, mkt_to, mkt_ml_h, mkt_ml_a, away, home):
-    BREAKEVEN = 52.38
+def detect_edges(sim, mkt_sp, mkt_to, mkt_ml_h, mkt_ml_a, away, home,
+                 spread_away_odds=-110, spread_home_odds=-110,
+                 over_odds=-110, under_odds=-110):
+    """
+    NHL-identical edge detection framework.
+    - Uses vig-removed breakeven (not hardcoded 52.38%) when book odds are available
+    - ROI = EV per $1 wagered = p_model * payout - (1 - p_model)
+    - Accounts for actual book juice on spread and total lines
+    - std dev is inherently factored in via the 250k simulation distribution
+    """
     edges = []
+
+    def vig_removed_be(odds_a: int, odds_b: int) -> tuple:
+        """Return vig-removed (true_a, true_b) probabilities."""
+        p_a = ml_to_prob(odds_a)
+        p_b = ml_to_prob(odds_b)
+        return remove_vig(p_a, p_b)
+
+    def ev_roi(p_model: float, book_odds: int) -> float:
+        """Expected value per $1 wagered, expressed as percentage."""
+        ev = expected_value(p_model, book_odds)
+        return round(ev * 100.0, 2)
+
+    def edge_conf(prob_edge: float, pt_delta: float = 0.0) -> str:
+        """Classify edge strength."""
+        if prob_edge >= 0.08 or abs(pt_delta) >= 4.0:
+            return 'HIGH'
+        if prob_edge >= 0.04 or abs(pt_delta) >= 2.5:
+            return 'MOD'
+        return 'SMALL'
+
     sd = sim['originated_spread'] - mkt_sp
     td = sim['originated_total']  - mkt_to
 
+    # ── SPREAD EDGE ──────────────────────────────────────────────────────────
     if abs(sd) >= SPREAD_EDGE_THRESH:
+        # Vig-removed breakeven for spread
+        true_away_sp, true_home_sp = vig_removed_be(spread_away_odds, spread_home_odds)
         if sd < 0:
-            edges.append({
-                'type': 'SPREAD', 'side': f'{away} +{abs(mkt_sp):.1f}',
-                'signal': f'Model {sim["originated_spread"]:+.4f} vs mkt {mkt_sp:+.1f} (Δ{sd:+.4f}pt)',
-                'cover_pct': sim['away_cover'],
-                'edge_vs_be': round(sim['away_cover'] - BREAKEVEN, 4),
-                'conf': 'HIGH' if abs(sd) >= 3.5 else 'MOD',
-            })
-        else:
-            edges.append({
-                'type': 'SPREAD', 'side': f'{home} -{abs(mkt_sp):.1f}',
-                'signal': f'Model {sim["originated_spread"]:+.4f} vs mkt {mkt_sp:+.1f} (Δ{sd:+.4f}pt)',
-                'cover_pct': sim['home_cover'],
-                'edge_vs_be': round(sim['home_cover'] - BREAKEVEN, 4),
-                'conf': 'HIGH' if abs(sd) >= 3.5 else 'MOD',
-            })
-
-    if abs(td) >= TOTAL_EDGE_THRESH:
-        if td < 0:
-            edges.append({
-                'type': 'TOTAL', 'side': f'UNDER {mkt_to}',
-                'signal': f'Model {sim["originated_total"]:.4f} vs mkt {mkt_to} (Δ{td:+.4f}pt)',
-                'cover_pct': sim['under_rate'],
-                'edge_vs_be': round(sim['under_rate'] - BREAKEVEN, 4),
-                'conf': 'HIGH' if abs(td) >= 5.5 else 'MOD',
-            })
-        else:
-            edges.append({
-                'type': 'TOTAL', 'side': f'OVER {mkt_to}',
-                'signal': f'Model {sim["originated_total"]:.4f} vs mkt {mkt_to} (Δ{td:+.4f}pt)',
-                'cover_pct': sim['over_rate'],
-                'edge_vs_be': round(sim['over_rate'] - BREAKEVEN, 4),
-                'conf': 'HIGH' if abs(td) >= 5.5 else 'MOD',
-            })
-
-    def ml_impl(ml):
-        if ml is None or ml == 0:
-            return None
-        return abs(ml) / (abs(ml) + 100) * 100 if ml < 0 else 100 / (ml + 100) * 100
-
-    if mkt_ml_h is not None and mkt_ml_h != 0:
-        mi = ml_impl(mkt_ml_h)
-        if mi is not None:
-            md = sim['ml_home_pct'] - mi
-            if abs(md) >= 8.0:
-                side = home if md > 0 else away
+            # Model says away team covers (model spread < market spread)
+            p_model = sim['away_cover'] / 100.0
+            p_be    = true_away_sp
+            prob_edge = p_model - p_be
+            if prob_edge > 0:
                 edges.append({
-                    'type': 'ML', 'side': side,
-                    'signal': f'Model win% {sim["ml_home_pct"]}% vs mkt implied {round(mi, 4)}% (Δ{md:+.4f}%)',
-                    'cover_pct': sim['ml_home_pct'] if md > 0 else sim['ml_away_pct'],
-                    'edge_vs_be': round(abs(md), 4),
-                    'conf': 'HIGH' if abs(md) >= 12 else 'MOD',
+                    'type': 'SPREAD',
+                    'side': f'{away} +{abs(mkt_sp):.1f}',
+                    'signal': f'Model {sim["originated_spread"]:+.4f} vs mkt {mkt_sp:+.1f} (Δ{sd:+.4f}pt)',
+                    'cover_pct': round(sim['away_cover'], 4),
+                    'edge_vs_be': round(prob_edge * 100.0, 4),
+                    'roi_pct': ev_roi(p_model, spread_away_odds),
+                    'conf': edge_conf(prob_edge, sd),
                 })
+        else:
+            # Model says home team covers
+            p_model = sim['home_cover'] / 100.0
+            p_be    = true_home_sp
+            prob_edge = p_model - p_be
+            if prob_edge > 0:
+                edges.append({
+                    'type': 'SPREAD',
+                    'side': f'{home} -{abs(mkt_sp):.1f}',
+                    'signal': f'Model {sim["originated_spread"]:+.4f} vs mkt {mkt_sp:+.1f} (Δ{sd:+.4f}pt)',
+                    'cover_pct': round(sim['home_cover'], 4),
+                    'edge_vs_be': round(prob_edge * 100.0, 4),
+                    'roi_pct': ev_roi(p_model, spread_home_odds),
+                    'conf': edge_conf(prob_edge, sd),
+                })
+
+    # ── TOTAL EDGE ───────────────────────────────────────────────────────────
+    if abs(td) >= TOTAL_EDGE_THRESH:
+        true_over, true_under = vig_removed_be(over_odds, under_odds)
+        if td < 0:
+            # Model says UNDER
+            p_model = sim['under_rate'] / 100.0
+            p_be    = true_under
+            prob_edge = p_model - p_be
+            if prob_edge > 0:
+                edges.append({
+                    'type': 'TOTAL',
+                    'side': f'UNDER {mkt_to}',
+                    'signal': f'Model {sim["originated_total"]:.4f} vs mkt {mkt_to} (Δ{td:+.4f}pt)',
+                    'cover_pct': round(sim['under_rate'], 4),
+                    'edge_vs_be': round(prob_edge * 100.0, 4),
+                    'roi_pct': ev_roi(p_model, under_odds),
+                    'conf': edge_conf(prob_edge, td),
+                })
+        else:
+            # Model says OVER
+            p_model = sim['over_rate'] / 100.0
+            p_be    = true_over
+            prob_edge = p_model - p_be
+            if prob_edge > 0:
+                edges.append({
+                    'type': 'TOTAL',
+                    'side': f'OVER {mkt_to}',
+                    'signal': f'Model {sim["originated_total"]:.4f} vs mkt {mkt_to} (Δ{td:+.4f}pt)',
+                    'cover_pct': round(sim['over_rate'], 4),
+                    'edge_vs_be': round(prob_edge * 100.0, 4),
+                    'roi_pct': ev_roi(p_model, over_odds),
+                    'conf': edge_conf(prob_edge, td),
+                })
+
+    # ── ML EDGE ──────────────────────────────────────────────────────────────
+    if mkt_ml_h is not None and mkt_ml_h != 0 and mkt_ml_a is not None and mkt_ml_a != 0:
+        true_away_ml, true_home_ml = vig_removed_be(mkt_ml_a, mkt_ml_h)
+        # Home ML edge
+        p_h = sim['ml_home_pct'] / 100.0
+        prob_edge_h = p_h - true_home_ml
+        if prob_edge_h >= 0.08:
+            edges.append({
+                'type': 'ML',
+                'side': home,
+                'signal': f'Model win% {sim["ml_home_pct"]:.2f}% vs mkt vig-free {true_home_ml*100:.2f}% (Δ{prob_edge_h*100:+.2f}%)',
+                'cover_pct': round(sim['ml_home_pct'], 4),
+                'edge_vs_be': round(prob_edge_h * 100.0, 4),
+                'roi_pct': ev_roi(p_h, mkt_ml_h),
+                'conf': edge_conf(prob_edge_h),
+            })
+        # Away ML edge
+        p_a = sim['ml_away_pct'] / 100.0
+        prob_edge_a = p_a - true_away_ml
+        if prob_edge_a >= 0.08:
+            edges.append({
+                'type': 'ML',
+                'side': away,
+                'signal': f'Model win% {sim["ml_away_pct"]:.2f}% vs mkt vig-free {true_away_ml*100:.2f}% (Δ{prob_edge_a*100:+.2f}%)',
+                'cover_pct': round(sim['ml_away_pct'], 4),
+                'edge_vs_be': round(prob_edge_a * 100.0, 4),
+                'roi_pct': ev_roi(p_a, mkt_ml_a),
+                'conf': edge_conf(prob_edge_a),
+            })
 
     return edges
 
@@ -613,7 +728,26 @@ def run_engine(inp: dict) -> dict:
     orig_away_sp   = -orig_sp
     raw_away_sp    = -raw_sp
 
-    edges = detect_edges(sim, mkt_sp, mkt_to, mkt_ml_h, mkt_ml_a, away_name, home_name)
+    # Book odds for spread and total (default to -110 if not provided)
+    spread_away_odds = int(inp.get('spread_away_odds') or -110)
+    spread_home_odds = int(inp.get('spread_home_odds') or -110)
+    over_odds_val    = int(inp.get('over_odds') or -110)
+    under_odds_val   = int(inp.get('under_odds') or -110)
+
+    edges = detect_edges(
+        sim, mkt_sp, mkt_to, mkt_ml_h, mkt_ml_a, away_name, home_name,
+        spread_away_odds=spread_away_odds,
+        spread_home_odds=spread_home_odds,
+        over_odds=over_odds_val,
+        under_odds=under_odds_val,
+    )
+
+    # Model fair odds at book's line (using 250k simulation distribution)
+    # These are the odds the model would post for each side at the book's line
+    mkt_spread_away_odds = prob_to_ml(sim['away_cover'] / 100.0)
+    mkt_spread_home_odds = prob_to_ml(sim['home_cover'] / 100.0)
+    mkt_total_over_odds  = prob_to_ml(sim['over_rate']  / 100.0)
+    mkt_total_under_odds = prob_to_ml(sim['under_rate'] / 100.0)
 
     return {
         'ok':              True,
@@ -654,6 +788,11 @@ def run_engine(inp: dict) -> dict:
         'def_suppression': matchup['def_suppression'],
         'sigma_away':      sim['sigma_away'],
         'sigma_home':      sim['sigma_home'],
+        # Model fair odds at book's line
+        'mkt_spread_away_odds': mkt_spread_away_odds,
+        'mkt_spread_home_odds': mkt_spread_home_odds,
+        'mkt_total_over_odds':  mkt_total_over_odds,
+        'mkt_total_under_odds': mkt_total_under_odds,
         # Edges
         'edges':           edges,
         'error':           None,

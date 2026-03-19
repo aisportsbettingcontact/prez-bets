@@ -230,6 +230,7 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }): P
     'modelOverRate', 'modelUnderRate', 'modelAwayWinPct', 'modelHomeWinPct',
     'modelSpreadClamped', 'modelTotalClamped', 'modelCoverDirection', 'modelRunAt',
     'spreadEdge', 'spreadDiff', 'totalEdge', 'totalDiff',
+    'modelAwaySpreadOdds', 'modelHomeSpreadOdds', 'modelOverOdds', 'modelUnderOdds',
   ] as const;
   const gated = rows.map((row: Game) => {
     // Only gate NCAAM games
@@ -439,6 +440,9 @@ export async function updateGameProjections(
     modelHomePLOdds?: string | null;
     modelOverOdds?: string | null;
     modelUnderOdds?: string | null;
+    // NCAAM model fair odds at book's spread line
+    modelAwaySpreadOdds?: string | null;
+    modelHomeSpreadOdds?: string | null;
   }
 ) {
   const db = await getDb();

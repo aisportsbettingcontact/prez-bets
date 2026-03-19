@@ -11,7 +11,7 @@
  *   5. Returns a typed ModelGameResult
  *
  * The Python engine handles all KenPom fetching, conference calibration,
- * 50k Monte Carlo simulation, and edge detection internally.
+ * 250k Monte Carlo simulation, and edge detection internally.
  */
 
 import { spawn } from "child_process";
@@ -38,6 +38,12 @@ export interface ModelGameInput {
   /** Market ML (null if not posted) */
   mkt_ml_a: number | null;
   mkt_ml_h: number | null;
+  /** Book odds for spread sides (default -110 if not provided) */
+  spread_away_odds?: number;
+  spread_home_odds?: number;
+  /** Book odds for total sides (default -110 if not provided) */
+  over_odds?: number;
+  under_odds?: number;
   kenpom_email: string;
   kenpom_pass: string;
 }
@@ -49,6 +55,8 @@ export interface ModelEdge {
   signal: string;
   cover_pct: number;
   edge_vs_be: number;
+  /** True ROI per $100 wagered at -110 juice: (cover_pct / 52.38 - 1) * 100 */
+  roi_pct: number;
 }
 
 export interface ModelGameResult {
@@ -90,6 +98,11 @@ export interface ModelGameResult {
   def_suppression: number;
   sigma_away: number;
   sigma_home: number;
+  // Model fair odds at book's line (integer American odds)
+  mkt_spread_away_odds: number;
+  mkt_spread_home_odds: number;
+  mkt_total_over_odds: number;
+  mkt_total_under_odds: number;
   // Edges
   edges: ModelEdge[];
   error: string | null;
@@ -167,6 +180,8 @@ export async function runModelForGame(
         spread_clamped: false, total_clamped: false,
         cover_direction: "NONE", cover_adj: 0,
         def_suppression: 0, sigma_away: 0, sigma_home: 0,
+        mkt_spread_away_odds: -110, mkt_spread_home_odds: -110,
+        mkt_total_over_odds: -110, mkt_total_under_odds: -110,
         edges: [],
         error: `Timeout after ${ENGINE_TIMEOUT_MS / 1000}s`,
       });
@@ -197,6 +212,8 @@ export async function runModelForGame(
           spread_clamped: false, total_clamped: false,
           cover_direction: "NONE", cover_adj: 0,
           def_suppression: 0, sigma_away: 0, sigma_home: 0,
+          mkt_spread_away_odds: -110, mkt_spread_home_odds: -110,
+          mkt_total_over_odds: -110, mkt_total_under_odds: -110,
           edges: [],
           error: `Parse error (exit ${code}): ${stderr.slice(0, 500)}`,
         });

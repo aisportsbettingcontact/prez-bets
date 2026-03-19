@@ -66,17 +66,20 @@ async function runWithConcurrency<T>(
 function formatSpreadEdge(result: ModelGameResult): string | null {
   const spreadEdge = result.edges.find((e) => e.type === "SPREAD");
   if (!spreadEdge) return null;
-  return `${spreadEdge.conf} | ${spreadEdge.side} | ${spreadEdge.cover_pct.toFixed(2)}% | +${spreadEdge.edge_vs_be.toFixed(2)}% vs BE`;
+  const roi = (spreadEdge as typeof spreadEdge & { roi_pct?: number }).roi_pct ?? 0;
+  return `${spreadEdge.conf} | ${spreadEdge.side} | ${spreadEdge.cover_pct.toFixed(2)}% | +${spreadEdge.edge_vs_be.toFixed(2)}% vs BE | ${roi.toFixed(2)}% ROI`;
 }
 
 function formatTotalEdge(result: ModelGameResult): string | null {
   const totalEdge = result.edges.find((e) => e.type === "TOTAL");
   if (!totalEdge) return null;
-  return `${totalEdge.conf} | ${totalEdge.side} | ${totalEdge.cover_pct.toFixed(2)}% | +${totalEdge.edge_vs_be.toFixed(2)}% vs BE`;
+  const roi = (totalEdge as typeof totalEdge & { roi_pct?: number }).roi_pct ?? 0;
+  return `${totalEdge.conf} | ${totalEdge.side} | ${totalEdge.cover_pct.toFixed(2)}% | +${totalEdge.edge_vs_be.toFixed(2)}% vs BE | ${roi.toFixed(2)}% ROI`;
 }
 
 function formatML(ml: number): string {
-  return ml >= 0 ? `+${ml.toFixed(2)}` : ml.toFixed(2);
+  const rounded = Math.round(ml);
+  return rounded >= 0 ? `+${rounded}` : `${rounded}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,12 +112,12 @@ export async function syncModelForDate(
   const {
     skipExisting = false,
     concurrency = 3,
-    kenpomEmail = ENV.vsinEmail ?? "",
-    kenpomPass  = ENV.vsinPassword ?? "",
+    kenpomEmail = ENV.kenpomEmail || ENV.vsinEmail || "",
+    kenpomPass  = ENV.kenpomPassword || ENV.vsinPassword || "",
   } = options;
 
   if (!kenpomEmail || !kenpomPass) {
-    throw new Error("KenPom credentials not configured. Set VSIN_EMAIL and VSIN_PASSWORD env vars.");
+    throw new Error("KenPom credentials not configured. Set KENPOM_EMAIL and KENPOM_PASSWORD env vars.");
   }
 
   // 1. Fetch all NCAAM games for the date
@@ -157,18 +160,27 @@ export async function syncModelForDate(
       const mktTo = parseFloat(String(game.bookTotal ?? "0"));
       const mktMlA = game.awayML ? parseInt(game.awayML, 10) : null;
       const mktMlH = game.homeML ? parseInt(game.homeML, 10) : null;
+      // Parse actual book odds for spread and total (for vig-removed edge calculation)
+      const spreadAwayOdds = game.awaySpreadOdds ? parseInt(game.awaySpreadOdds, 10) : -110;
+      const spreadHomeOdds = game.homeSpreadOdds ? parseInt(game.homeSpreadOdds, 10) : -110;
+      const overOddsVal    = game.overOdds  ? parseInt(game.overOdds,  10) : -110;
+      const underOddsVal   = game.underOdds ? parseInt(game.underOdds, 10) : -110;
 
       const input: ModelGameInput = {
-        away_team:    awayInfo.kenpomSlug,
-        home_team:    homeInfo.kenpomSlug,
-        conf_a:       awayInfo.conference,
-        conf_h:       homeInfo.conference,
-        mkt_sp:       mktSp,
-        mkt_to:       mktTo,
-        mkt_ml_a:     mktMlA,
-        mkt_ml_h:     mktMlH,
-        kenpom_email: kenpomEmail,
-        kenpom_pass:  kenpomPass,
+        away_team:        awayInfo.kenpomSlug,
+        home_team:        homeInfo.kenpomSlug,
+        conf_a:           awayInfo.conference,
+        conf_h:           homeInfo.conference,
+        mkt_sp:           mktSp,
+        mkt_to:           mktTo,
+        mkt_ml_a:         mktMlA,
+        mkt_ml_h:         mktMlH,
+        spread_away_odds: spreadAwayOdds,
+        spread_home_odds: spreadHomeOdds,
+        over_odds:        overOddsVal,
+        under_odds:       underOddsVal,
+        kenpom_email:     kenpomEmail,
+        kenpom_pass:      kenpomPass,
       };
 
       console.log(`[ModelSync] Running: ${awayInfo.kenpomSlug} @ ${homeInfo.kenpomSlug} (${awayInfo.conference} vs ${homeInfo.conference})`);
@@ -206,6 +218,11 @@ export async function syncModelForDate(
           modelTotalClamped:  result.total_clamped,
           modelCoverDirection: result.cover_direction,
           modelRunAt:         Date.now(),
+          // Model fair odds at book's line
+          modelAwaySpreadOdds: String(result.mkt_spread_away_odds),
+          modelHomeSpreadOdds: String(result.mkt_spread_home_odds),
+          modelOverOdds:       String(result.mkt_total_over_odds),
+          modelUnderOdds:      String(result.mkt_total_under_odds),
           // Edge labels
           spreadEdge: formatSpreadEdge(result),
           spreadDiff: result.edges.find((e) => e.type === "SPREAD")
