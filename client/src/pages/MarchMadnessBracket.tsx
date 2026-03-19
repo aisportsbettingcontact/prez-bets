@@ -134,6 +134,7 @@ interface MatchupData {
   gameDate: string;
   spread: string | null;
   total: string | null;
+  isTbd: boolean; // true when both teams are tbd_* placeholders
 }
 
 // ─── Build bracket structure from flat game list ──────────────────────────────
@@ -199,6 +200,7 @@ function buildBracketStructure(games: BracketGame[]) {
       gameDate: g.gameDate,
       spread: g.awayBookSpread || g.homeBookSpread || null,
       total: g.bookTotal || null,
+      isTbd: (awaySlug.startsWith('tbd_') || awaySlug === 'tbd') && (homeSlug.startsWith('tbd_') || homeSlug === 'tbd'),
     };
   }
 
@@ -245,18 +247,16 @@ function TeamStrip({ slug, seed, isWinner, score }: {
   isWinner: boolean | null;
   score?: number | null;
 }) {
-  const team = TEAM_BY_SLUG.get(slug);
-  const color = team?.primaryColor ?? '#1a1a2e';
-  // Always white text — textColor always returns '#fff'
-  const tc = textColor(color);
-  const displayName = team ? team.ncaaName : slug.replace(/_/g, ' ').toUpperCase();
-  const logoUrl = team?.logoUrl ?? null;
-
+  // Detect TBD placeholder slugs (e.g. "tbd_301_away") — render as blank dark slot
+  const isPlaceholder = slug.startsWith('tbd_') || slug === 'tbd';
+  const team = isPlaceholder ? null : TEAM_BY_SLUG.get(slug);
+  const color = isPlaceholder ? '#111' : (team?.primaryColor ?? '#1a1a2e');
+  const displayName = isPlaceholder ? '' : (team ? team.ncaaName : slug.replace(/_/g, ' ').toUpperCase());
+  const logoUrl = isPlaceholder ? null : (team?.logoUrl ?? null);
   // Logo circle: always semi-transparent white for visibility on any team color
   const logoBg = 'rgba(255,255,255,.15)';
-
   const stateClass = isWinner === true ? 'strip-winner' : isWinner === false ? 'strip-loser' : '';
-  const hasScore = score !== undefined && score !== null;
+  const hasScore = !isPlaceholder && score !== undefined && score !== null;;
 
   return (
     <div
@@ -269,40 +269,46 @@ function TeamStrip({ slug, seed, isWinner, score }: {
       {/* Bottom shadow */}
       <div className="strip-shadow" />
 
-      {/* Left: team logo circle */}
-      <div className="strip-logo-left">
-        <div className="logo-circle" style={{ background: logoBg }}>
-          {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt={displayName}
-              width={20}
-              height={20}
-              style={{ objectFit: 'contain', display: 'block' }}
-              onError={(e) => {
-                const el = e.currentTarget;
-                el.style.display = 'none';
-                if (el.parentElement) {
-                  el.parentElement.innerHTML = `<span style="font-size:6px;font-weight:900;color:#fff;letter-spacing:-0.5px">${displayName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase()}</span>`;
-                }
-              }}
-            />
-          ) : (
-            <span style={{ fontSize: 6, fontWeight: 900, color: '#fff', letterSpacing: -0.5 }}>
-              {displayName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase()}
-            </span>
-          )}
+      {/* Left: team logo circle — hidden for placeholder slots */}
+      {!isPlaceholder && (
+        <div className="strip-logo-left">
+          <div className="logo-circle" style={{ background: logoBg }}>
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={displayName}
+                width={20}
+                height={20}
+                style={{ objectFit: 'contain', display: 'block' }}
+                onError={(e) => {
+                  const el = e.currentTarget;
+                  el.style.display = 'none';
+                  if (el.parentElement) {
+                    el.parentElement.innerHTML = `<span style="font-size:6px;font-weight:900;color:#fff;letter-spacing:-0.5px">${displayName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase()}</span>`;
+                  }
+                }}
+              />
+            ) : (
+              <span style={{ fontSize: 6, fontWeight: 900, color: '#fff', letterSpacing: -0.5 }}>
+                {displayName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase()}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Center: seed + name — NO truncation, always white with text-shadow */}
+      {/* Center: seed + name — hidden for placeholder slots */}
       <div className="strip-center">
-        <span className="strip-seed" style={{ color: 'rgba(255,255,255,.6)', textShadow: '0 1px 3px rgba(0,0,0,.8)' }}>
-          {seed}
-        </span>
-        <span className="strip-name" style={{ color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,.9)' }}>
-          {displayName}
-        </span>
+        {!isPlaceholder && seed > 0 && (
+          <span className="strip-seed" style={{ color: 'rgba(255,255,255,.6)', textShadow: '0 1px 3px rgba(0,0,0,.8)' }}>
+            {seed}
+          </span>
+        )}
+        {!isPlaceholder && (
+          <span className="strip-name" style={{ color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,.9)' }}>
+            {displayName}
+          </span>
+        )}
       </div>
 
       {/* Right: score — always white with text-shadow */}
@@ -354,7 +360,7 @@ function Matchup({ data, size = 'normal' }: { data: MatchupData | null; size?: '
         FINAL
       </div>
     );
-  } else if (isUpcoming && data.startTimeEst) {
+  } else if (isUpcoming && !data.isTbd && data.startTimeEst && data.startTimeEst !== 'TBD') {
     statusLabel = (
       <div style={{ fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,.4)', letterSpacing: 0.5, marginBottom: 2, textAlign: 'center' }}>
         {data.startTimeEst} EST
@@ -411,13 +417,13 @@ function RoundCol({ matchups, gap, width, animDelay }: {
 function drawConnectors(
   wrapEl: HTMLElement,
   colEls: HTMLElement[],
-  svgEl: SVGSVGElement
+  svgEl: SVGSVGElement,
+  direction: 'ltr' | 'rtl'
 ) {
   svgEl.innerHTML = '';
   const wrapRect = wrapEl.getBoundingClientRect();
   svgEl.setAttribute('width', `${wrapEl.scrollWidth}px`);
   svgEl.setAttribute('height', `${wrapEl.scrollHeight}px`);
-
   function cy(el: Element): number {
     const r = el.getBoundingClientRect();
     return r.top - wrapRect.top + r.height / 2;
@@ -430,7 +436,6 @@ function drawConnectors(
     const r = el.getBoundingClientRect();
     return r.left - wrapRect.left;
   }
-
   function addPath(d: string) {
     const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     p.setAttribute('d', d);
@@ -440,29 +445,36 @@ function drawConnectors(
     p.setAttribute('stroke-linecap', 'square');
     svgEl.appendChild(p);
   }
-
   for (let ri = 0; ri < colEls.length - 1; ri++) {
     const currCol = colEls[ri];
     const nextCol = colEls[ri + 1];
     const currMatchups = Array.from(currCol.querySelectorAll('.bracket-matchup'));
     const nextMatchups = Array.from(nextCol.querySelectorAll('.bracket-matchup'));
-
     for (let ni = 0; ni < nextMatchups.length; ni++) {
       const topFeeder = currMatchups[ni * 2];
       const botFeeder = currMatchups[ni * 2 + 1];
       const target = nextMatchups[ni];
       if (!topFeeder || !botFeeder || !target) continue;
-
-      const x1 = rx(topFeeder);
       const y1 = cy(topFeeder);
       const y2 = cy(botFeeder);
-      const x2 = lx(target);
       const yMid = (y1 + y2) / 2;
-      const xMid = x1 + (x2 - x1) / 2;
-
-      addPath(`M ${x1} ${y1} H ${xMid} V ${yMid}`);
-      addPath(`M ${x1} ${y2} H ${xMid} V ${yMid}`);
-      addPath(`M ${xMid} ${yMid} H ${x2}`);
+      if (direction === 'ltr') {
+        // LTR: feeders exit RIGHT edge → target enters LEFT edge
+        const x1 = rx(topFeeder);
+        const x2 = lx(target);
+        const xMid = x1 + (x2 - x1) / 2;
+        addPath(`M ${x1} ${y1} H ${xMid} V ${yMid}`);
+        addPath(`M ${x1} ${y2} H ${xMid} V ${yMid}`);
+        addPath(`M ${xMid} ${yMid} H ${x2}`);
+      } else {
+        // RTL: feeders exit LEFT edge → target enters RIGHT edge
+        const x1 = lx(topFeeder);
+        const x2 = rx(target);
+        const xMid = x1 - (x1 - x2) / 2;
+        addPath(`M ${x1} ${y1} H ${xMid} V ${yMid}`);
+        addPath(`M ${x1} ${y2} H ${xMid} V ${yMid}`);
+        addPath(`M ${xMid} ${yMid} H ${x2}`);
+      }
     }
   }
 }
@@ -494,8 +506,8 @@ function RegionBracket({
   const redraw = useCallback(() => {
     if (!wrapRef.current || !svgRef.current) return;
     const cols = Array.from(wrapRef.current.querySelectorAll<HTMLElement>('.round-col'));
-    drawConnectors(wrapRef.current, cols, svgRef.current);
-  }, []);
+    drawConnectors(wrapRef.current, cols, svgRef.current, direction);
+  }, [direction]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => requestAnimationFrame(redraw));

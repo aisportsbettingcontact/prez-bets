@@ -2,7 +2,7 @@
  * bracket.getGames — vitest
  *
  * Verifies that the bracket data endpoint returns the correct structure:
- * - 36 total games (4 First Four + 32 R64)
+ * - 67 total games (4 FF + 32 R64 + 16 R32 + 8 S16 + 4 E8 + 2 FF + 1 Champ)
  * - All required fields present
  * - bracketGameId values are unique
  * - All 4 regions represented (EAST, SOUTH, WEST, MIDWEST)
@@ -14,9 +14,9 @@ import { describe, it, expect } from "vitest";
 import { getBracketGames } from "./db";
 
 describe("getBracketGames", () => {
-  it("returns 36 tournament games (4 First Four + 32 R64)", async () => {
+  it("returns 67 tournament games (all rounds)", async () => {
     const games = await getBracketGames();
-    expect(games.length).toBe(36);
+    expect(games.length).toBe(67);
   });
 
   it("all games have required fields", async () => {
