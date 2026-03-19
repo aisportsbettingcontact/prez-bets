@@ -3,20 +3,25 @@
  *
  * Architecture matches bracket-v2.html EXACTLY:
  *   - Flex column with explicit CSS gap per round:
- *       R64: gap=10px  R32: gap=74px  S16: gap=154px  E8: gap=314px
+ *       R64: gap=10px  R32: gap=85px  S16: gap=235px  E8: gap=0px
  *   - Status label is OUTSIDE the flex item (rendered as a separate absolute overlay)
  *     so it does NOT affect gap geometry
  *   - SVG connectors drawn via getBoundingClientRect() after layout paint
  *     (double rAF, same as bracket-v2.html)
  *   - LEFT  half: EAST (top) + SOUTH (bottom) — LTR
  *   - RIGHT half: WEST (top) + MIDWEST (bottom) — RTL (column order reversed)
- *   - CENTER: Final Four + Championship
+ *   - CENTER: First Four results + Final Four + Championship
  *
- * Gap derivation (STRIP_H=32, DIVIDER=1, MATCHUP_H=65):
- *   R64: gap=10
- *   R32: gap = MATCHUP_H + 2*10 - 11 = 74  (STATUS_H=11 adjustment)
- *   S16: gap = MATCHUP_H + 2*74 - 11 = 202  ... actually use HTML values directly
- *   HTML values: R64=10, R32=74, S16=154, E8=314 — use these verbatim.
+ * Visual features (matching bracket-v2.html):
+ *   - Fire background with radial gradient overlays + grain texture
+ *   - Animated ember particles (30 floating fire embers)
+ *   - Column entrance animations (fade + slide in with staggered delays)
+ *   - Round label headers above each column (R64, R32, S16, E8)
+ *   - First Four section showing game results
+ *   - Champion column with trophy emoji + glowing animation
+ *   - Winner/loser strip visual states (gold border / dimmed)
+ *   - Right logo circle on each team strip (dual logos)
+ *   - Laminate sheen effect on strips
  */
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
@@ -30,12 +35,18 @@ const COL_W     = 190;  // px — matchup card width
 const COL_GAP   = 40;   // px — horizontal gap between round columns (connector zone)
 
 // Gap between matchup CARDS in each round column.
-// These are the exact values from bracket-v2.html (no status label in flex item).
 const ROUND_GAP: Record<string, number> = {
   r64: 10,
-  r32: 74,
-  s16: 154,
-  e8:  314,
+  r32: 85,
+  s16: 235,
+  e8:  0,
+};
+// Per-round padding-top so card[0] center aligns with feeder midpoint
+const ROUND_PADDING_TOP: Record<string, number> = {
+  r64: 18,
+  r32: 55.5,
+  s16: 130.5,
+  e8:  280.5,
 };
 
 // ─── Team registry ────────────────────────────────────────────────────────────
@@ -87,6 +98,9 @@ const REGION_IDS = {
 } as const;
 type RegionKey = keyof typeof REGION_IDS;
 
+// First Four game IDs and their region associations
+const FIRST_FOUR_IDS = [101, 102, 103, 104];
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface BracketGame {
   bracketGameId: number;
@@ -118,21 +132,13 @@ interface Matchup {
 function buildBracket(games: BracketGame[]) {
   const byId = new Map(games.map(g => [g.bracketGameId, g]));
 
-  console.group('[Bracket] buildBracket');
-  console.log(`API returned ${games.length} games`);
-
   function makeMatchup(id: number): Matchup | null {
     const g = byId.get(id);
-    if (!g) { console.warn(`  ⚠ Game ${id} not found`); return null; }
+    if (!g) return null;
 
     const seeds = SEED_MAP[id] ?? { away: 0, home: 0 };
     const aSlug = resolveSlug(g.awayTeam);
     const hSlug = resolveSlug(g.homeTeam);
-
-    if (!isTbd(aSlug) && !TEAM_BY_SLUG.has(aSlug))
-      console.warn(`  ⚠ Unknown slug "${aSlug}" (raw:"${g.awayTeam}") game ${id}`);
-    if (!isTbd(hSlug) && !TEAM_BY_SLUG.has(hSlug))
-      console.warn(`  ⚠ Unknown slug "${hSlug}" (raw:"${g.homeTeam}") game ${id}`);
 
     const isFinal = g.gameStatus === 'final';
     const isLive  = g.gameStatus === 'live' || g.gameStatus === 'in_progress';
@@ -171,22 +177,19 @@ function buildBracket(games: BracketGame[]) {
 
   const regions = {} as Record<RegionKey, { r64:(Matchup|null)[]; r32:(Matchup|null)[]; s16:(Matchup|null)[]; e8:(Matchup|null)[] }>;
   for (const [key, ids] of Object.entries(REGION_IDS) as [RegionKey, typeof REGION_IDS[RegionKey]][]) {
-    const r = {
+    regions[key] = {
       r64: ids.r64.map(makeMatchup),
       r32: ids.r32.map(makeMatchup),
       s16: ids.s16.map(makeMatchup),
       e8:  ids.e8.map(makeMatchup),
     };
-    console.log(`  ${key}: R64=${r.r64.filter(Boolean).length}/8 R32=${r.r32.filter(Boolean).length}/4 S16=${r.s16.filter(Boolean).length}/2 E8=${r.e8.filter(Boolean).length}/1`);
-    regions[key] = r;
   }
 
-  const ff    = [601, 602].map(makeMatchup);
-  const champ = [701].map(makeMatchup);
-  console.log(`  FF=${ff.filter(Boolean).length}/2 Champ=${champ.filter(Boolean).length}/1`);
-  console.groupEnd();
+  const firstFour = FIRST_FOUR_IDS.map(makeMatchup);
+  const ff        = [601, 602].map(makeMatchup);
+  const champ     = [701].map(makeMatchup);
 
-  return { regions, ff, champ };
+  return { regions, firstFour, ff, champ };
 }
 
 // ─── Luminance helpers ────────────────────────────────────────────────────────
@@ -197,10 +200,11 @@ function lum(hex: string): number {
   const b = parseInt(h.slice(4,6),16)/255;
   return 0.2126*r + 0.7152*g + 0.0722*b;
 }
-function txtColor(hex: string): string { return lum(hex) > 0.45 ? '#111' : '#fff'; }
+// Always white — team names are always white regardless of background
+function txtColor(_hex: string): string { return '#fff'; }
 
 // ─── StripRow ─────────────────────────────────────────────────────────────────
-function StripRow({ s }: { s: Strip }) {
+function StripRow({ s, compact = false }: { s: Strip; compact?: boolean }) {
   const placeholder = isTbd(s.slug);
   const team   = placeholder ? null : TEAM_BY_SLUG.get(s.slug);
   const bg     = placeholder ? '#111318' : (team?.primaryColor ?? '#1a1a2e');
@@ -216,63 +220,68 @@ function StripRow({ s }: { s: Strip }) {
     s.winner === true  ? 'strip-winner' :
     s.winner === false ? 'strip-loser'  : '';
 
+  const logoEl = (side: 'left' | 'right') => (
+    !placeholder ? (
+      <div className={`bk-logo bk-logo-${side}`}>
+        <div className="bk-circle" style={{ background: circleBg, borderColor: circleBorder }}>
+          {logo ? (
+            <img
+              src={logo} alt={name}
+              width={16} height={16}
+              style={{ objectFit:'contain', display:'block' }}
+              onError={e => {
+                const el = e.currentTarget;
+                el.style.display = 'none';
+                if (el.parentElement) {
+                  el.parentElement.innerHTML =
+                    `<span style="font-size:5.5px;font-weight:900;color:#fff;letter-spacing:-.3px;line-height:1">${name.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()}</span>`;
+                }
+              }}
+            />
+          ) : (
+            <span style={{ fontSize:5.5, fontWeight:900, color:'#fff', letterSpacing:-.3, lineHeight:1 }}>
+              {name.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()}
+            </span>
+          )}
+        </div>
+      </div>
+    ) : null
+  );
+
   return (
     <div className={`bk-strip ${stateClass}`} style={{ background: bg }}>
       {/* Sheen overlay */}
       <div className="bk-sheen" />
 
       {/* Left logo circle */}
-      {!placeholder && (
-        <div className="bk-logo">
-          <div className="bk-circle" style={{ background: circleBg, borderColor: circleBorder }}>
-            {logo ? (
-              <img
-                src={logo} alt={name}
-                width={16} height={16}
-                style={{ objectFit:'contain', display:'block' }}
-                onError={e => {
-                  const el = e.currentTarget;
-                  el.style.display = 'none';
-                  if (el.parentElement) {
-                    el.parentElement.innerHTML =
-                      `<span style="font-size:5.5px;font-weight:900;color:#fff;letter-spacing:-.3px;line-height:1">${name.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()}</span>`;
-                  }
-                }}
-              />
-            ) : (
-              <span style={{ fontSize:5.5, fontWeight:900, color:'#fff', letterSpacing:-.3, lineHeight:1 }}>
-                {name.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
+      {logoEl('left')}
 
       {/* Seed + Name */}
-      <div className="bk-center" style={{ paddingLeft: placeholder ? 8 : 36 }}>
+      <div className="bk-center" style={{ paddingLeft: placeholder ? 8 : 36, paddingRight: placeholder ? 8 : (s.score !== null ? 58 : 36) }}>
         {!placeholder && s.seed > 0 && (
-          <span className="bk-seed" style={{ color: seedTc }}>{s.seed}</span>
+          <span className="bk-seed" style={{ color: 'rgba(255,255,255,.55)' }}>{s.seed}</span>
         )}
         {!placeholder && (
-          <span className="bk-name" style={{ color: tc }}>{name}</span>
+          <span className="bk-name" style={{ color: '#fff' }}>{name}</span>
         )}
       </div>
 
-      {/* Score */}
+      {/* Score — sits between name area and right logo */}
       {s.score !== null && (
         <div className="bk-score">
-          <span style={{ color: tc, fontSize:13, fontWeight:900, textShadow:'0 1px 4px rgba(0,0,0,.9)' }}>
+          <span style={{ color: '#fff', fontSize:13, fontWeight:900, textShadow:'0 1px 4px rgba(0,0,0,.9)' }}>
             {s.score}
           </span>
         </div>
       )}
+
+      {/* Right logo circle */}
+      {logoEl('right')}
     </div>
   );
 }
 
 // ─── MatchupCard ──────────────────────────────────────────────────────────────
-// The card is JUST the two strips + divider — no status label inside.
-// Status label is rendered separately above the card.
 function MatchupCard({ m, champ = false }: { m: Matchup | null; champ?: boolean }) {
   const cls = `bk-card${champ ? ' bk-card-champ' : ''}`;
   if (!m) {
@@ -294,26 +303,25 @@ function MatchupCard({ m, champ = false }: { m: Matchup | null; champ?: boolean 
 }
 
 // ─── RoundColumn ─────────────────────────────────────────────────────────────
-// Renders a flex column of matchup cards with the correct gap.
-// Status label is rendered ABOVE each card as a separate div — it is NOT
-// part of the flex item, so it does not affect the gap geometry.
-// We use position:relative + a negative-margin trick:
-//   Each flex item = just the card (CARD_H px)
-//   Status label is absolute-positioned above the card
-function RoundColumn({ matchups, roundKey, colRef }: {
+function RoundColumn({ matchups, roundKey, colRef, animDelay = 0 }: {
   matchups: (Matchup | null)[];
   roundKey: string;
   colRef?: React.RefObject<HTMLDivElement | null>;
+  animDelay?: number;
 }) {
   const gap = ROUND_GAP[roundKey] ?? 10;
-  console.log(`[RoundColumn] ${roundKey.toUpperCase()} | ${matchups.length} matchups | gap=${gap}px | total=${matchups.length * CARD_H + (matchups.length - 1) * gap}px`);
+  const paddingTop = ROUND_PADDING_TOP[roundKey] ?? 18;
 
   return (
     <div
       ref={colRef}
       className="bk-round-col"
       data-round={roundKey}
-      style={{ gap: `${gap}px` }}
+      style={{
+        gap: `${gap}px`,
+        paddingTop: `${paddingTop}px`,
+        animationDelay: `${animDelay}s`,
+      }}
     >
       {matchups.map((m, i) => {
         const tl = m?.timeLabel ?? '';
@@ -335,15 +343,6 @@ function RoundColumn({ matchups, roundKey, colRef }: {
 }
 
 // ─── SVG Connector drawing ────────────────────────────────────────────────────
-// Exact port of bracket-v2.html drawConnectors():
-//   For each pair of feeder matchups → one target matchup:
-//     x1 = right edge of feeder (LTR) or left edge (RTL)
-//     y1 = center of top feeder
-//     y2 = center of bottom feeder
-//     x2 = left edge of target (LTR) or right edge (RTL)
-//     xMid = midpoint between x1 and x2
-//     yMid = (y1+y2)/2
-//     Paths: M x1 y1 H xMid V yMid  |  M x1 y2 H xMid V yMid  |  M xMid yMid H x2
 function drawConnectors(
   svg: SVGSVGElement,
   wrap: HTMLElement,
@@ -367,32 +366,19 @@ function drawConnectors(
   }
 
   const validCols = cols.filter(Boolean) as HTMLElement[];
-  console.log(`[SVG:${dir}] ${validCols.length} cols`);
 
   for (let ci = 0; ci < validCols.length - 1; ci++) {
     const curr = validCols[ci];
     const next = validCols[ci + 1];
-    // Query .bk-card elements — these are the actual matchup card divs
     const currCards = Array.from(curr.querySelectorAll('.bk-card'));
     const nextCards = Array.from(next.querySelectorAll('.bk-card'));
 
-    console.log(`  col[${ci}→${ci+1}]: feeder=${currCards.length} target=${nextCards.length}`);
-
-    // For LTR: currCards has MORE cards, nextCards has FEWER.
-    //   Each pair of curr cards → one next card.
-    //   Iterate over nextCards (fewer), pick curr[ni*2] and curr[ni*2+1].
-    // For RTL: currCards has FEWER cards, nextCards has MORE.
-    //   Each curr card is the "winner slot" that came from two next cards.
-    //   Iterate over currCards (fewer), pick next[ni*2] and next[ni*2+1].
     if (dir === 'ltr') {
       for (let ni = 0; ni < nextCards.length; ni++) {
         const top = currCards[ni * 2];
         const bot = currCards[ni * 2 + 1];
         const tgt = nextCards[ni];
-        if (!top || !bot || !tgt) {
-          console.warn(`  ⚠ LTR[${ni}]: top=${!!top} bot=${!!bot} tgt=${!!tgt}`);
-          continue;
-        }
+        if (!top || !bot || !tgt) continue;
         const x1   = rx(top);
         const y1   = cy(top);
         const y2   = cy(bot);
@@ -402,44 +388,33 @@ function drawConnectors(
         line(`M ${x1} ${y1} H ${xMid} V ${yMid}`);
         line(`M ${x1} ${y2} H ${xMid} V ${yMid}`);
         line(`M ${xMid} ${yMid} H ${x2}`);
-        console.log(`    LTR[${ni}] x1=${x1.toFixed(0)} y1=${y1.toFixed(0)} y2=${y2.toFixed(0)} x2=${x2.toFixed(0)} xMid=${xMid.toFixed(0)} yMid=${yMid.toFixed(0)}`);
       }
     } else {
-      // RTL: col order is [E8, S16, R32, R64]
-      // curr=E8(1), next=S16(2): each curr card connects TO two next cards
-      // curr=S16(2), next=R32(4): each curr card connects TO two next cards
-      // curr=R32(4), next=R64(8): each curr card connects TO two next cards
-      // So iterate over currCards, pick next[ni*2] and next[ni*2+1]
       for (let ni = 0; ni < currCards.length; ni++) {
-        const tgt = currCards[ni];  // the "winner" slot (fewer)
+        const tgt = currCards[ni];
         const top = nextCards[ni * 2];
         const bot = nextCards[ni * 2 + 1];
-        if (!top || !bot || !tgt) {
-          console.warn(`  ⚠ RTL[${ni}]: top=${!!top} bot=${!!bot} tgt=${!!tgt}`);
-          continue;
-        }
-        // x1 = left edge of top/bot feeder (rightmost column in RTL)
-        // x2 = right edge of tgt (leftmost column in RTL)
-        const x1   = lx(top);  // left edge of feeder (right side of screen)
+        if (!top || !bot || !tgt) continue;
+        const x1   = lx(top);
         const y1   = cy(top);
         const y2   = cy(bot);
-        const x2   = rx(tgt);  // right edge of target (left side of screen)
+        const x2   = rx(tgt);
         const xMid = x2 + (x1 - x2) / 2;
         const yMid = (y1 + y2) / 2;
         line(`M ${x1} ${y1} H ${xMid} V ${yMid}`);
         line(`M ${x1} ${y2} H ${xMid} V ${yMid}`);
         line(`M ${xMid} ${yMid} H ${x2}`);
-        console.log(`    RTL[${ni}] x1=${x1.toFixed(0)} y1=${y1.toFixed(0)} y2=${y2.toFixed(0)} x2=${x2.toFixed(0)} xMid=${xMid.toFixed(0)} yMid=${yMid.toFixed(0)}`);
       }
     }
   }
 }
 
 // ─── RegionBracket ────────────────────────────────────────────────────────────
-function RegionBracket({ region, data, dir }: {
+function RegionBracket({ region, data, dir, baseDelay = 0 }: {
   region: string;
   data: { r64:(Matchup|null)[]; r32:(Matchup|null)[]; s16:(Matchup|null)[]; e8:(Matchup|null)[] };
   dir: 'ltr' | 'rtl';
+  baseDelay?: number;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef  = useRef<SVGSVGElement>(null);
@@ -462,13 +437,10 @@ function RegionBracket({ region, data, dir }: {
 
   const redraw = useCallback(() => {
     if (!svgRef.current || !wrapRef.current) return;
-    console.group(`[SVG] ${region} (${dir})`);
     drawConnectors(svgRef.current, wrapRef.current, [c0.current, c1.current, c2.current, c3.current], dir);
-    console.groupEnd();
-  }, [region, dir]);
+  }, [dir]);
 
   useEffect(() => {
-    // Double rAF — same as bracket-v2.html
     const id = requestAnimationFrame(() => requestAnimationFrame(redraw));
     return () => cancelAnimationFrame(id);
   }, [redraw, data]);
@@ -506,10 +478,36 @@ function RegionBracket({ region, data, dir }: {
               matchups={matchups}
               roundKey={roundKeys[ri]}
               colRef={colRefs[ri] as React.RefObject<HTMLDivElement | null>}
+              animDelay={baseDelay + ri * 0.12}
             />
             {ri < 3 && <div style={{ width:COL_GAP, flexShrink:0 }} />}
           </React.Fragment>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── FirstFourSection ─────────────────────────────────────────────────────────
+function FirstFourSection({ games }: { games: (Matchup|null)[] }) {
+  return (
+    <div className="bk-firstfour">
+      <div className="bk-firstfour-label">FIRST FOUR</div>
+      <div className="bk-firstfour-games">
+        {games.map((m, i) => {
+          if (!m) return null;
+          const tl = m.timeLabel;
+          const statusCls =
+            tl === 'LIVE'  ? 'bk-status-live'  :
+            tl === 'FINAL' ? 'bk-status-final' :
+            tl             ? 'bk-status-time'  : '';
+          return (
+            <div key={m.id} className="bk-firstfour-game">
+              <div className={`bk-ff-status ${statusCls}`}>{tl}</div>
+              <MatchupCard m={m} />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -543,12 +541,12 @@ function FinalFourSection({ ff, champ }: {
       {/* Championship */}
       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
         <div style={{ fontSize:9, fontWeight:700, letterSpacing:'0.22em', textTransform:'uppercase', color:'rgba(255,165,50,.7)' }}>CHAMPIONSHIP</div>
-        <div style={{ fontSize:28, lineHeight:1, filter:'drop-shadow(0 0 10px rgba(255,155,40,.8))' }}>🏆</div>
+        <div className="bk-trophy">🏆</div>
         <MatchupCard m={champGame ?? null} champ />
         {champTeam && (
           <div style={{ marginTop:6, textAlign:'center' }}>
             <div style={{ fontSize:9, color:'rgba(255,165,50,.7)', letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:3 }}>2026 CHAMPION</div>
-            <div style={{ fontSize:15, fontWeight:900, color:'#fff', textTransform:'uppercase', letterSpacing:'0.05em' }}>
+            <div className="bk-champ-name">
               {champTeam.ncaaName}
             </div>
           </div>
@@ -564,6 +562,24 @@ function FinalFourSection({ ff, champ }: {
   );
 }
 
+// ─── Ember particles ──────────────────────────────────────────────────────────
+const EMBER_DATA = Array.from({ length: 30 }, (_, i) => {
+  const sz = 1.5 + (i * 0.17) % 3;
+  const colors = ['#FF6B1A','#FF9B3A','#FFD060','#FF4422'];
+  const col = colors[i % colors.length];
+  return {
+    key: i,
+    sz,
+    col,
+    left: `${(i * 3.33) % 100}%`,
+    bottom: `${(i * 7.7) % 50}%`,
+    d: `${4 + (i * 0.6) % 9}s`,
+    delay: `${-((i * 0.4) % 12)}s`,
+    tx: `${((i % 9) - 4) * 10}px`,
+    ty: `${-(120 + (i * 20) % 320)}px`,
+  };
+});
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 export default function MarchMadnessBracket() {
   const { data: result, isLoading, error } = trpc.bracket.getGames.useQuery(undefined, {
@@ -573,7 +589,6 @@ export default function MarchMadnessBracket() {
 
   const bracket = useMemo(() => {
     if (!result?.games) return null;
-    console.log(`[Bracket] Received ${result.games.length} games`);
     return buildBracket(result.games as unknown as BracketGame[]);
   }, [result]);
 
@@ -599,6 +614,85 @@ export default function MarchMadnessBracket() {
           overflow-x: auto;
           overflow-y: auto;
           font-family: 'Barlow Condensed', 'Inter', sans-serif;
+          position: relative;
+        }
+
+        /* ── Fire background ── */
+        .bk-fire-bg {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          pointer-events: none;
+          background:
+            radial-gradient(ellipse 55% 45% at 10% 15%, rgba(255,100,20,0.28) 0%, transparent 65%),
+            radial-gradient(ellipse 45% 55% at 88% 80%, rgba(180,30,30,0.22) 0%, transparent 65%),
+            radial-gradient(ellipse 35% 35% at 55% 45%, rgba(255,140,40,0.10) 0%, transparent 55%);
+        }
+
+        /* ── Grain texture ── */
+        .bk-grain {
+          position: absolute;
+          inset: 0;
+          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+          opacity: 0.03;
+          pointer-events: none;
+          z-index: 1;
+        }
+
+        /* ── Ember particles ── */
+        .bk-ember {
+          position: absolute;
+          border-radius: 50%;
+          opacity: 0;
+          animation: bk-rise var(--d,7s) var(--delay,0s) infinite ease-in;
+          z-index: 2;
+          pointer-events: none;
+        }
+        @keyframes bk-rise {
+          0%   { opacity:0; transform:translate(0,0) scale(1); }
+          15%  { opacity:.8; }
+          85%  { opacity:.2; }
+          100% { opacity:0; transform:translate(var(--tx,20px),var(--ty,-280px)) scale(.2); }
+        }
+
+        /* ── Content wrapper (above bg) ── */
+        .bk-content {
+          position: relative;
+          z-index: 10;
+        }
+
+        /* ── Header ── */
+        .bk-header {
+          text-align: center;
+          padding: 12px 0 20px;
+        }
+        .bk-header-sub {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: .24em;
+          text-transform: uppercase;
+          color: #FF7A28;
+          margin-bottom: 4px;
+        }
+        .bk-header-main {
+          font-size: clamp(28px, 5vw, 52px);
+          font-weight: 900;
+          color: #fff;
+          line-height: .92;
+          text-transform: uppercase;
+          letter-spacing: -.01em;
+        }
+        .bk-header-fire {
+          background: linear-gradient(130deg,#FF6B1A,#FFCF60);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .bk-header-year {
+          font-size: 11px;
+          letter-spacing: .14em;
+          color: rgba(255,255,255,.28);
+          margin-top: 7px;
         }
 
         /* ── Card ── */
@@ -637,24 +731,29 @@ export default function MarchMadnessBracket() {
           transition: filter .12s;
           flex-shrink: 0;
         }
-        .bk-strip:hover { filter: brightness(1.15); }
+        .bk-strip:hover { filter: brightness(1.15); z-index: 10; }
         .bk-placeholder { background: #111318 !important; }
         .strip-winner   { box-shadow: inset 0 0 0 1.5px rgba(255,200,80,.45); }
-        .strip-loser    { filter: brightness(.5) saturate(.5); }
+        /* Loser: dim brightness + desaturate, but keep hover override above it */
+        .strip-loser    { filter: brightness(.45) saturate(.4) !important; }
+        .strip-loser:hover { filter: brightness(.6) saturate(.5) !important; }
 
-        /* Sheen */
+        /* Sheen — laminate/plastic feel */
         .bk-sheen {
           position: absolute; inset: 0;
           background: linear-gradient(180deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.06) 30%, rgba(0,0,0,.18) 100%);
           z-index: 2; pointer-events: none;
         }
 
-        /* Logo */
+        /* Logo zones — left and right */
         .bk-logo {
-          position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
+          position: absolute;
+          top: 50%; transform: translateY(-50%);
           z-index: 4; width: 28px; height: 22px;
           display: flex; align-items: center; justify-content: center;
         }
+        .bk-logo-left  { left: 4px; }
+        .bk-logo-right { right: 4px; }
         .bk-circle {
           width: 20px; height: 20px; border-radius: 50%;
           border: 1px solid rgba(255,255,255,.3);
@@ -666,7 +765,6 @@ export default function MarchMadnessBracket() {
           position: relative; z-index: 4;
           display: flex; align-items: center; gap: 4px;
           flex: 1; min-width: 0;
-          padding-right: 32px;
         }
         .bk-seed {
           font-size: 9px; font-weight: 800;
@@ -679,24 +777,26 @@ export default function MarchMadnessBracket() {
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1;
         }
 
-        /* Score */
+        /* Score — sits just left of the right logo circle (28px wide + 4px gap = 32px from right) */
         .bk-score {
-          position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-          z-index: 4; min-width: 24px; text-align: right;
+          position: absolute; right: 32px; top: 50%; transform: translateY(-50%);
+          z-index: 4; min-width: 26px; text-align: right;
         }
 
         /* ── Matchup item wrapper ── */
+        /* paddingTop creates the space for the status label above the card */
         .bk-matchup-item {
           position: relative;
           flex-shrink: 0;
+          padding-top: 16px;
         }
 
-        /* Status label — absolutely positioned ABOVE the card */
+        /* Status label — sits inside the padding-top space above the card */
         .bk-status {
           position: absolute;
-          bottom: 100%;
+          top: 0;
           left: 0; right: 0;
-          height: 14px;
+          height: 16px;
           display: flex; align-items: center; justify-content: center;
           font-size: 9px; font-weight: 700; letter-spacing: 0.12em;
           text-transform: uppercase;
@@ -707,15 +807,19 @@ export default function MarchMadnessBracket() {
         .bk-status-final { color: rgba(255,255,255,.5); }
         .bk-status-time  { color: rgba(255,255,255,.38); font-weight: 600; }
 
-        /* ── Round column ── */
+        /* ── Round column — entrance animation ── */
         .bk-round-col {
           display: flex;
           flex-direction: column;
           flex-shrink: 0;
           position: relative;
           z-index: 3;
-          /* Add top padding so status labels have room above first card */
-          padding-top: 18px;
+          opacity: 0;
+          animation: bk-colIn .5s forwards;
+        }
+        @keyframes bk-colIn {
+          from { opacity:0; transform:translateX(-6px); }
+          to   { opacity:1; transform:translateX(0); }
         }
 
         /* ── SVG connector lines ── */
@@ -738,27 +842,133 @@ export default function MarchMadnessBracket() {
           flex-direction: column;
           gap: 36px;
         }
+
+        /* ── First Four section ── */
+        .bk-firstfour {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 20px;
+        }
+        .bk-firstfour-label {
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: .22em;
+          text-transform: uppercase;
+          color: rgba(255,165,50,.7);
+          padding-bottom: 4px;
+          border-bottom: 1px solid rgba(255,255,255,.09);
+          width: 100%;
+          text-align: center;
+        }
+        .bk-firstfour-games {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 16px;
+          justify-content: center;
+        }
+        .bk-firstfour-game {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+        }
+        .bk-ff-status {
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: rgba(255,255,255,.35);
+          height: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+        }
+
+        /* ── Champion trophy ── */
+        .bk-trophy {
+          font-size: 26px;
+          line-height: 1;
+          animation: bk-glow-trophy 2.2s ease-in-out infinite;
+        }
+        @keyframes bk-glow-trophy {
+          0%,100% { filter: drop-shadow(0 0 6px rgba(255,155,40,.5)); }
+          50%      { filter: drop-shadow(0 0 16px rgba(255,155,40,.95)); }
+        }
+
+        /* ── Champion name gradient ── */
+        .bk-champ-name {
+          font-size: 15px;
+          font-weight: 900;
+          text-transform: uppercase;
+          letter-spacing: .06em;
+          background: linear-gradient(130deg,#FF6B1A,#FFD060);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          text-align: center;
+          max-width: 160px;
+          line-height: 1.1;
+        }
       `}</style>
 
-      {/* Title */}
-      <div style={{ textAlign:'center', marginBottom:20, fontSize:13, fontWeight:800, letterSpacing:'0.25em', textTransform:'uppercase', color:'rgba(255,165,50,.85)' }}>
-        2026 NCAA TOURNAMENT BRACKET
-      </div>
+      {/* Fire background */}
+      <div className="bk-fire-bg" />
+      <div className="bk-grain" />
 
-      <div className="bk-layout">
-        {/* LEFT: EAST + SOUTH */}
-        <div className="bk-half">
-          <RegionBracket region="EAST"  data={bracket.regions.EAST}  dir="ltr" />
-          <RegionBracket region="SOUTH" data={bracket.regions.SOUTH} dir="ltr" />
+      {/* Ember particles */}
+      {EMBER_DATA.map(e => (
+        <div
+          key={e.key}
+          className="bk-ember"
+          style={{
+            width: e.sz,
+            height: e.sz,
+            left: e.left,
+            bottom: e.bottom,
+            background: e.col,
+            boxShadow: `0 0 ${e.sz * 2.5}px ${e.col}`,
+            ['--d' as string]: e.d,
+            ['--delay' as string]: e.delay,
+            ['--tx' as string]: e.tx,
+            ['--ty' as string]: e.ty,
+          } as React.CSSProperties}
+        />
+      ))}
+
+      {/* Content */}
+      <div className="bk-content">
+        {/* Header */}
+        <div className="bk-header">
+          <div className="bk-header-sub">NCAA Division I Men's Basketball</div>
+          <div className="bk-header-main">
+            March <span className="bk-header-fire">Madness</span>
+          </div>
+          <div className="bk-header-year">2026 Tournament · All Regions</div>
         </div>
 
-        {/* CENTER: Final Four + Championship */}
-        <FinalFourSection ff={bracket.ff} champ={bracket.champ} />
+        {/* First Four Results */}
+        <FirstFourSection games={bracket.firstFour} />
 
-        {/* RIGHT: WEST + MIDWEST (RTL) */}
-        <div className="bk-half">
-          <RegionBracket region="WEST"    data={bracket.regions.WEST}    dir="rtl" />
-          <RegionBracket region="MIDWEST" data={bracket.regions.MIDWEST} dir="rtl" />
+        {/* Main bracket */}
+        <div className="bk-layout">
+          {/* LEFT: EAST + SOUTH */}
+          <div className="bk-half">
+            <RegionBracket region="EAST"  data={bracket.regions.EAST}  dir="ltr" baseDelay={0.2} />
+            <RegionBracket region="SOUTH" data={bracket.regions.SOUTH} dir="ltr" baseDelay={0.2} />
+          </div>
+
+          {/* CENTER: Final Four + Championship */}
+          <FinalFourSection ff={bracket.ff} champ={bracket.champ} />
+
+          {/* RIGHT: WEST + MIDWEST (RTL) */}
+          <div className="bk-half">
+            <RegionBracket region="WEST"    data={bracket.regions.WEST}    dir="rtl" baseDelay={0.2} />
+            <RegionBracket region="MIDWEST" data={bracket.regions.MIDWEST} dir="rtl" baseDelay={0.2} />
+          </div>
         </div>
       </div>
     </div>
