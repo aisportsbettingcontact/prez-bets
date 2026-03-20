@@ -1653,3 +1653,8 @@
 - [x] Fix team row layout: logos must only appear on the LEFT side; scores must appear on the RIGHT side (remove right-side logo circles)
 - [x] Audit all completed March 19 R64 games and auto-advance winners to R32 slots
 - [x] Ensure bracket advancement is fully automated (score refresh triggers advancement)
+
+## March 20 Model Runs (2026-03-20)
+- [x] Model and publish game 1: Santa Clara @ Kentucky (09:15 EST) — spread +2.0/-2.0, total 150.0, MOD edges on spread+total
+- [x] Model and publish game 2: Akron @ Texas Tech (09:40 EST) — spread +8.0/-8.0, total 150.5, LOW edge on total UNDER
+- [x] Model and publish game 3: LIU Brooklyn @ Arizona (10:35 EST) — spread +27.0/-27.0, total 143.5, HIGH edges on spread+total
