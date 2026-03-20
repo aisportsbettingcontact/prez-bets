@@ -1658,3 +1658,10 @@
 - [x] Model and publish game 1: Santa Clara @ Kentucky (09:15 EST) — spread +2.0/-2.0, total 150.0, MOD edges on spread+total
 - [x] Model and publish game 2: Akron @ Texas Tech (09:40 EST) — spread +8.0/-8.0, total 150.5, LOW edge on total UNDER
 - [x] Model and publish game 3: LIU Brooklyn @ Arizona (10:35 EST) — spread +27.0/-27.0, total 143.5, HIGH edges on spread+total
+
+## March 20 Model Runs — Games 4–8 (2026-03-20)
+- [x] Model and publish game 4: Wright St. @ Virginia (10:50 EST) — spread +15.5/-15.5, total 141.5, LOW edges on spread+total UNDER
+- [x] Model and publish game 5: Tennessee St. @ Iowa St. (11:50 EST) — spread +22.5/-22.5, total 142.5, MOD edges on spread+total UNDER
+- [x] Model and publish game 6: Hofstra @ Alabama (12:15 EST) — spread +10.0/-10.0, total 153.0, MOD edges on spread+total UNDER
+- [x] Model and publish game 7: Utah St. @ Villanova (13:10 EST) — spread -0.5/+0.5, total 143.0, LOW edge on total UNDER
+- [x] Model and publish game 8: Miami OH @ Tennessee (13:25 EST) — spread +11.5/-11.5, total 144.0, MOD edge on total UNDER
