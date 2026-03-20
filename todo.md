@@ -1691,3 +1691,10 @@
 - [x] Protect bracket games from daily purge (bracketGameId IS NOT NULL exclusion in deleteOldGames)
 - [x] Auto-scale on load: bracket fits viewport width after data loads (useLayoutEffect + setTimeout 300ms)
 - [x] Auto-scale re-runs on window resize
+
+## Bracket Mobile Fix (2026-03-20)
+- [ ] Fix auto-scale not firing on mobile (375px viewport) — bracket renders at full 2012px width- [x] Fix auto-scale on mobile — ResizeObserver on bk-layout to read offsetWidth (not scrollWidth inside overflow:hidden)
+- [x] Fix touch zoom/pan — pinch-to-zoom and drag-to-pan on iOS Safari
+- [x] Fix page scroll conflict — bracket container must capture touch events without blocking page scroll
+- [x] Fix bracket container height on mobile — must fill viewport without overflow
+- [x] Ensure transform-origin is top-left so scaled bracket starts at top-left corner of bracket canvas on all screen sizes (mobile, tablet, desktop)

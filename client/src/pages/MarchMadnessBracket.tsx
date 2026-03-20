@@ -583,41 +583,62 @@ const EMBER_DATA = Array.from({ length: 30 }, (_, i) => {
 });
 
 // ─── Zoom / Pan hook ──────────────────────────────────────────────────────────
-function useZoomPan(containerRef: React.RefObject<HTMLDivElement | null>, dataReady = false) {
+function useZoomPan(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  layoutRef: React.RefObject<HTMLDivElement | null>,
+  dataReady = false
+) {
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
   const dragging  = useRef(false);
   const lastPos   = useRef({ x: 0, y: 0 });
   const pinchDist = useRef<number | null>(null);
+  const scaledOnce = useRef(false);
 
   // Compute initial scale to fit bracket in viewport.
-  // Must run AFTER the bracket data loads and the canvas is fully painted.
-  // We use a combination of useLayoutEffect (synchronous after DOM paint) +
-  // a 200ms setTimeout to handle async data-driven renders.
+  // Key insight: on iOS Safari, scrollWidth of a child inside overflow:hidden
+  // returns the CONTAINER width, not the actual content width.
+  // Fix: read offsetWidth of bk-layout (the actual content element) directly.
   const applyAutoScale = useCallback(() => {
     const el = containerRef.current;
-    if (!el) return;
+    const layout = layoutRef.current;
+    if (!el || !layout) return;
     const vw = window.innerWidth;
-    const canvas = el.querySelector('.bk-canvas') as HTMLElement | null;
-    const bw = canvas ? canvas.scrollWidth : el.scrollWidth;
-    console.log('[BracketAutoScale] vw=' + vw + ' bw=' + bw + ' dataReady=' + dataReady);
-    if (bw > vw + 20) {
-      const s = Math.max(0.25, Math.min(1, (vw - 16) / bw));
+    // offsetWidth is the true rendered width, unaffected by overflow:hidden parent
+    const bw = layout.offsetWidth;
+    console.log('[BracketAutoScale] vw=' + vw + ' layout.offsetWidth=' + bw + ' dataReady=' + dataReady + ' scaledOnce=' + scaledOnce.current);
+    if (bw > 100 && bw > vw + 20) {
+      const s = Math.max(0.2, Math.min(1, (vw - 8) / bw));
       console.log('[BracketAutoScale] Applying scale=' + s.toFixed(3));
+      scaledOnce.current = true;
       setTransform({ scale: s, x: 0, y: 0 });
+    } else if (bw > 100 && !scaledOnce.current) {
+      console.log('[BracketAutoScale] Bracket fits viewport, no scale needed');
+      scaledOnce.current = true;
     }
-  }, [containerRef, dataReady]);
+  }, [containerRef, layoutRef, dataReady]);
 
-  // Run once on mount + re-run when data loads + 300ms delay for paint
-  useLayoutEffect(() => {
-    applyAutoScale();
-    const t = setTimeout(applyAutoScale, 300);
-    return () => clearTimeout(t);
-  }, [applyAutoScale, dataReady]);
-
-  // Also re-run when window resizes
+  // Use ResizeObserver on bk-layout to detect when content is actually painted.
+  // This is more reliable than setTimeout on mobile where paint timing varies.
   useEffect(() => {
-    window.addEventListener('resize', applyAutoScale);
-    return () => window.removeEventListener('resize', applyAutoScale);
+    const layout = layoutRef.current;
+    if (!layout) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const w = entry.contentRect.width;
+      console.log('[BracketAutoScale] ResizeObserver fired, layout.width=' + w.toFixed(0));
+      if (w > 100) applyAutoScale();
+    });
+    ro.observe(layout);
+    // Also run immediately in case layout is already painted
+    applyAutoScale();
+    return () => ro.disconnect();
+  }, [layoutRef, applyAutoScale]);
+
+  // Re-run on window resize
+  useEffect(() => {
+    const handler = () => { scaledOnce.current = false; applyAutoScale(); };
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
   }, [applyAutoScale]);
 
   // Mouse wheel zoom
@@ -646,6 +667,8 @@ function useZoomPan(containerRef: React.RefObject<HTMLDivElement | null>, dataRe
 
   // Touch pan + pinch zoom
   const onTouchStart = useCallback((e: TouchEvent) => {
+    // Stop iOS Safari page scroll from consuming our touch events
+    e.stopPropagation();
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -656,7 +679,9 @@ function useZoomPan(containerRef: React.RefObject<HTMLDivElement | null>, dataRe
     }
   }, []);
   const onTouchMove = useCallback((e: TouchEvent) => {
+    // preventDefault stops iOS rubber-band scroll; stopPropagation prevents parent scroll
     e.preventDefault();
+    e.stopPropagation();
     if (e.touches.length === 2 && pinchDist.current !== null) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -718,7 +743,8 @@ export default function MarchMadnessBracket() {
   }, [result]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const transform    = useZoomPan(containerRef, bracket !== null);
+  const layoutRef    = useRef<HTMLDivElement>(null);
+  const transform    = useZoomPan(containerRef, layoutRef, bracket !== null);
 
   if (isLoading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:300, color:'rgba(255,255,255,.5)', fontSize:14 }}>
@@ -735,7 +761,7 @@ export default function MarchMadnessBracket() {
     <div
       ref={containerRef}
       className="bk-root"
-      style={{ cursor: 'grab', userSelect: 'none', touchAction: 'none' }}
+      style={{ cursor: 'grab' }}
     >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&display=swap');
@@ -746,8 +772,17 @@ export default function MarchMadnessBracket() {
           font-family: 'Barlow Condensed', 'Inter', sans-serif;
           position: relative;
           width: 100%;
-          height: 100%;
-          min-height: 400px;
+          /* dvh = dynamic viewport height (excludes mobile browser chrome).
+             Falls back to 100vh on browsers that don't support dvh.
+             Subtract ~200px for the app header + tab bar above the bracket. */
+          height: calc(100dvh - 200px);
+          min-height: 420px;
+          /* touch-action:none tells the browser NOT to handle scroll/zoom on this element.
+             This is required for our custom pinch-zoom and drag-pan to work on iOS Safari.
+             The parent page scroll is blocked by stopPropagation in our touch handlers. */
+          touch-action: none;
+          -webkit-user-select: none;
+          user-select: none;
         }
 
         /* ── Fire background ── */
@@ -919,14 +954,15 @@ export default function MarchMadnessBracket() {
         /* ── First Four ── */
         .bk-firstfour {
           display:flex; flex-direction:column; align-items:center;
-          gap:8px; margin-bottom:20px;
+          gap:8px; margin-top:28px; margin-bottom:0;
         }
         .bk-firstfour-label {
           font-size:9px; font-weight:700; letter-spacing:.22em; text-transform:uppercase;
           color:rgba(255,165,50,.7); padding-bottom:4px;
           border-bottom:1px solid rgba(255,255,255,.09); width:100%; text-align:center;
         }
-        .bk-firstfour-games { display:flex; flex-wrap:wrap; gap:16px; justify-content:center; }
+        /* nowrap — First Four is inside the scaled canvas so it must stay in one row */
+        .bk-firstfour-games { display:flex; flex-wrap:nowrap; gap:16px; justify-content:center; }
         .bk-firstfour-game {
           position:relative; display:flex; flex-direction:column;
           align-items:center; gap:2px;
@@ -993,11 +1029,8 @@ export default function MarchMadnessBracket() {
           <div className="bk-header-year">2026 Tournament · All Regions</div>
         </div>
 
-        {/* First Four Results */}
-        <FirstFourSection games={bracket.firstFour} />
-
         {/* Main bracket */}
-        <div className="bk-layout">
+        <div ref={layoutRef} className="bk-layout">
           {/* LEFT: EAST + SOUTH */}
           <div className="bk-half">
             <RegionBracket region="EAST"  data={bracket.regions.EAST}  dir="ltr" baseDelay={0.2} />
@@ -1013,6 +1046,9 @@ export default function MarchMadnessBracket() {
             <RegionBracket region="MIDWEST" data={bracket.regions.MIDWEST} dir="rtl" baseDelay={0.2} />
           </div>
         </div>
+
+        {/* First Four Results — always at the bottom */}
+        <FirstFourSection games={bracket.firstFour} />
       </div>
     </div>
   );
