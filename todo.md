@@ -1678,3 +1678,16 @@
 - [x] Fix date for 4 games incorrectly tagged as March 20 (Michigan St, TCU, Nebraska, Arkansas) — moved to 2026-03-21 with correct VSiN lines
 - [x] Trigger model watcher for 2026-03-21 — modeled 7 games (Michigan St, TCU, Nebraska, Arkansas, Saint Louis, VCU, Liberty)
 - [x] All 16 March 20 NCAAM games: published=16/16, modeled=16/16
+
+## Bracket Tab Full Overhaul (2026-03-20)
+- [x] Teams must STAY in R64 slot with final scores; loser dimmed, winner highlighted — do NOT remove teams from R64
+- [x] Winners correctly populate R32/R16/E8/F4/Championship slots
+- [x] Connector SVG lines: gapless, no disconnected matchups in any region
+- [x] Zoom/scroll/pan: fully functional on mobile, tablet, desktop
+- [x] Responsive scaling: correct bracket sizing across all screen sizes
+- [x] Full audit: all regions (SOUTH, EAST, MIDWEST, WEST), all rounds, all scores accurate
+- [x] Debug logging: bracket data flow from DB → component → render
+- [x] Re-insert 16 missing R64 games + 4 First Four games deleted by daily purge
+- [x] Protect bracket games from daily purge (bracketGameId IS NOT NULL exclusion in deleteOldGames)
+- [x] Auto-scale on load: bracket fits viewport width after data loads (useLayoutEffect + setTimeout 300ms)
+- [x] Auto-scale re-runs on window resize

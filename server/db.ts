@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, lte, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, lte, lt, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, appUsers as appUsersTable, oddsHistory, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow } from "../drizzle/schema";
@@ -280,9 +280,13 @@ export async function deleteOldGames(): Promise<number> {
   const [mm, dd, yyyy] = estStr.split("/");
   const todayStr = `${yyyy}-${mm}-${dd}`;
 
-  const result = await db.delete(games).where(lt(games.gameDate, todayStr));
+  // IMPORTANT: bracket games (bracketGameId IS NOT NULL) must NEVER be purged —
+  // they are permanent tournament records needed for the bracket display.
+  const result = await db.delete(games).where(
+    and(lt(games.gameDate, todayStr), isNull(games.bracketGameId))
+  );
   const deleted = (result as unknown as { affectedRows?: number }).affectedRows ?? 0;
-  console.log(`[DailyPurge] Deleted ${deleted} game rows older than ${todayStr} (EST)`);
+  console.log(`[DailyPurge] Deleted ${deleted} non-bracket game rows older than ${todayStr} (EST)`);
   return deleted;
 }
 
