@@ -1665,3 +1665,16 @@
 - [x] Model and publish game 6: Hofstra @ Alabama (12:15 EST) — spread +10.0/-10.0, total 153.0, MOD edges on spread+total UNDER
 - [x] Model and publish game 7: Utah St. @ Villanova (13:10 EST) — spread -0.5/+0.5, total 143.0, LOW edge on total UNDER
 - [x] Model and publish game 8: Miami OH @ Tennessee (13:25 EST) — spread +11.5/-11.5, total 144.0, MOD edge on total UNDER
+
+## March 20 Model Runs — Remaining Games (2026-03-20)
+- [x] Publish game 9: Iowa @ Clemson (15:50) — spread -1.5/+1.5, total 131.0, no edges
+- [x] Publish game 10: N. Iowa @ St. John's (16:10) — spread +8.0/-8.0, total 128.0, LOW spread edge
+- [x] Publish game 11: UCF @ UCLA (16:25) — spread +4.5/-4.5, total 149.0, no edges
+- [x] Publish game 12: Queens NC @ Purdue (16:35) — spread +22.0/-22.0, total 159.0, LOW spread edge
+- [x] Publish game 13: Prairie View A&M @ Florida (18:25) — spread +30.5/-30.5, total 148.5, HIGH edges
+- [x] Publish game 14: Cal Baptist @ Kansas (18:45) — spread +11.5/-11.5, total 134.5, HIGH edges
+- [x] Publish game 15: Furman @ Connecticut (19:00) — spread +18.5/-18.5, total 134.5, LOW total edge
+- [x] Publish game 16: Missouri @ Miami FL (19:10) — spread +3.5/-3.5, total 145.0, LOW total edge
+- [x] Fix date for 4 games incorrectly tagged as March 20 (Michigan St, TCU, Nebraska, Arkansas) — moved to 2026-03-21 with correct VSiN lines
+- [x] Trigger model watcher for 2026-03-21 — modeled 7 games (Michigan St, TCU, Nebraska, Arkansas, Saint Louis, VCU, Liberty)
+- [x] All 16 March 20 NCAAM games: published=16/16, modeled=16/16
