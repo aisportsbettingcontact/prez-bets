@@ -759,9 +759,15 @@ async function refreshAnApiOdds(
           continue;
         }
 
-        const dbGame = existingGames.find(
+        // Try both orderings: AN may list teams as away@home while DB has them reversed
+        const dbGameDirect = existingGames.find(
           e => e.awayTeam === awayDbSlug && e.homeTeam === homeDbSlug
         );
+        const dbGameSwapped = !dbGameDirect ? existingGames.find(
+          e => e.awayTeam === homeDbSlug && e.homeTeam === awayDbSlug
+        ) : undefined;
+        const dbGame = dbGameDirect ?? dbGameSwapped;
+        const teamsSwapped = !!dbGameSwapped && !dbGameDirect;
 
         if (!dbGame) {
           const msg = `[ANApiOdds][${dbSport}] NO_MATCH: ${awayDbSlug} @ ${homeDbSlug} on ${dateStr} (anId=${anGame.gameId})`;
@@ -769,6 +775,12 @@ async function refreshAnApiOdds(
           allErrors.push(msg);
           skipped++;
           continue;
+        }
+
+        if (teamsSwapped) {
+          console.log(
+            `[ANApiOdds][${dbSport}] SWAPPED: AN has ${awayDbSlug}@${homeDbSlug} but DB has ${dbGame.awayTeam}@${dbGame.homeTeam} — flipping spreads/ML`
+          );
         }
 
         // ── ODDS FREEZE: skip games that have already started or finished ──────
@@ -783,12 +795,19 @@ async function refreshAnApiOdds(
           continue;
         }
 
-        // ── NHL PUCK LINE FAVORITE CORRECTION ──────────────────────────────────
-        // Use DK NJ spread as-is for all sports (including NHL puck lines)
-        const dkAwaySpread = anGame.dkAwaySpread;
-        const dkAwaySpreadOdds = anGame.dkAwaySpreadOdds;
-        const dkHomeSpread = anGame.dkHomeSpread;
-        const dkHomeSpreadOdds = anGame.dkHomeSpreadOdds;
+        // When teams are swapped, flip away/home spread and ML so they align with DB ordering
+        const dkAwaySpread = teamsSwapped ? anGame.dkHomeSpread : anGame.dkAwaySpread;
+        const dkAwaySpreadOdds = teamsSwapped ? anGame.dkHomeSpreadOdds : anGame.dkAwaySpreadOdds;
+        const dkHomeSpread = teamsSwapped ? anGame.dkAwaySpread : anGame.dkHomeSpread;
+        const dkHomeSpreadOdds = teamsSwapped ? anGame.dkAwaySpreadOdds : anGame.dkHomeSpreadOdds;
+        const dkAwayML = teamsSwapped ? anGame.dkHomeML : anGame.dkAwayML;
+        const dkHomeML = teamsSwapped ? anGame.dkAwayML : anGame.dkHomeML;
+        const openAwaySpread = teamsSwapped ? anGame.openHomeSpread : anGame.openAwaySpread;
+        const openAwaySpreadOdds = teamsSwapped ? anGame.openHomeSpreadOdds : anGame.openAwaySpreadOdds;
+        const openHomeSpread = teamsSwapped ? anGame.openAwaySpread : anGame.openHomeSpread;
+        const openHomeSpreadOdds = teamsSwapped ? anGame.openAwaySpreadOdds : anGame.openHomeSpreadOdds;
+        const openAwayML = teamsSwapped ? anGame.openHomeML : anGame.openAwayML;
+        const openHomeML = teamsSwapped ? anGame.openAwayML : anGame.openHomeML;
 
         // Populate DK NJ current lines + Open lines
         await updateAnOdds(dbGame.id, {
@@ -800,17 +819,17 @@ async function refreshAnApiOdds(
           bookTotal: anGame.dkTotal !== null ? String(anGame.dkTotal) : null,
           overOdds: anGame.dkOverOdds,
           underOdds: anGame.dkUnderOdds,
-          awayML: anGame.dkAwayML,
-          homeML: anGame.dkHomeML,
+          awayML: dkAwayML,
+          homeML: dkHomeML,
           // Open line (only update if AN has open data)
-          ...(anGame.openAwaySpread !== null ? {
-            openAwaySpread: anGame.openAwaySpread !== null ? String(anGame.openAwaySpread) : null,
-            openAwaySpreadOdds: anGame.openAwaySpreadOdds,
-            openHomeSpread: anGame.openHomeSpread !== null ? String(anGame.openHomeSpread) : null,
-            openHomeSpreadOdds: anGame.openHomeSpreadOdds,
+          ...(openAwaySpread !== null ? {
+            openAwaySpread: openAwaySpread !== null ? String(openAwaySpread) : null,
+            openAwaySpreadOdds: openAwaySpreadOdds,
+            openHomeSpread: openHomeSpread !== null ? String(openHomeSpread) : null,
+            openHomeSpreadOdds: openHomeSpreadOdds,
             openTotal: anGame.openTotal !== null ? String(anGame.openTotal) : null,
-            openAwayML: anGame.openAwayML,
-            openHomeML: anGame.openHomeML,
+            openAwayML: openAwayML,
+            openHomeML: openHomeML,
           } : {}),
         });
 
@@ -820,24 +839,24 @@ async function refreshAnApiOdds(
           dbSport,
           source,
           {
-            awaySpread: anGame.dkAwaySpread !== null ? String(anGame.dkAwaySpread) : null,
-            awaySpreadOdds: anGame.dkAwaySpreadOdds,
-            homeSpread: anGame.dkHomeSpread !== null ? String(anGame.dkHomeSpread) : null,
-            homeSpreadOdds: anGame.dkHomeSpreadOdds,
+            awaySpread: dkAwaySpread !== null ? String(dkAwaySpread) : null,
+            awaySpreadOdds: dkAwaySpreadOdds,
+            homeSpread: dkHomeSpread !== null ? String(dkHomeSpread) : null,
+            homeSpreadOdds: dkHomeSpreadOdds,
             total: anGame.dkTotal !== null ? String(anGame.dkTotal) : null,
             overOdds: anGame.dkOverOdds,
             underOdds: anGame.dkUnderOdds,
-            awayML: anGame.dkAwayML,
-            homeML: anGame.dkHomeML,
+            awayML: dkAwayML,
+            homeML: dkHomeML,
           }
         );
 
         updated++;
         console.log(
-          `[ANApiOdds][${dbSport}] Updated: ${awayDbSlug} @ ${homeDbSlug} (${dateStr}) source=${source} | ` +
-          `spread=${anGame.dkAwaySpread}/${anGame.dkHomeSpread} ` +
+          `[ANApiOdds][${dbSport}] Updated: ${dbGame.awayTeam} @ ${dbGame.homeTeam} (${dateStr}) source=${source}${teamsSwapped ? ' [SWAPPED]' : ''} | ` +
+          `spread=${dkAwaySpread}/${dkHomeSpread} ` +
           `total=${anGame.dkTotal} ` +
-          `ml=${anGame.dkAwayML}/${anGame.dkHomeML}`
+          `ml=${dkAwayML}/${dkHomeML}`
         );
       }
 
