@@ -144,16 +144,24 @@ async function runTomorrowSplitsUpdate(tomorrowStr: string): Promise<void> {
         const awayTeam = BY_VSIN_SLUG.get(g.awayVsinSlug) ?? BY_VSIN_SLUG.get(g.awayVsinSlug.replace(/-/g, '_'));
         const homeTeam = BY_VSIN_SLUG.get(g.homeVsinSlug) ?? BY_VSIN_SLUG.get(g.homeVsinSlug.replace(/-/g, '_'));
         if (!awayTeam || !homeTeam) continue;
-        const dbGame = existingNcaam.find(e => e.awayTeam === awayTeam.dbSlug && e.homeTeam === homeTeam.dbSlug);
+        // Try direct match first, then reversed team order
+        let dbGame = existingNcaam.find(e => e.awayTeam === awayTeam.dbSlug && e.homeTeam === homeTeam.dbSlug);
+        let teamsSwapped = false;
+        if (!dbGame) {
+          dbGame = existingNcaam.find(e => e.awayTeam === homeTeam.dbSlug && e.homeTeam === awayTeam.dbSlug);
+          if (dbGame) teamsSwapped = true;
+        }
         if (!dbGame) continue;
+        // When teams are swapped, flip the away/home percentages
         await updateBookOdds(dbGame.id, {
-          spreadAwayBetsPct: g.spreadAwayBetsPct,
-          spreadAwayMoneyPct: g.spreadAwayMoneyPct,
+          spreadAwayBetsPct: teamsSwapped ? (g.spreadAwayBetsPct != null ? 100 - g.spreadAwayBetsPct : null) : g.spreadAwayBetsPct,
+          spreadAwayMoneyPct: teamsSwapped ? (g.spreadAwayMoneyPct != null ? 100 - g.spreadAwayMoneyPct : null) : g.spreadAwayMoneyPct,
           totalOverBetsPct: g.totalOverBetsPct,
           totalOverMoneyPct: g.totalOverMoneyPct,
-          mlAwayBetsPct: g.mlAwayBetsPct,
-          mlAwayMoneyPct: g.mlAwayMoneyPct,
+          mlAwayBetsPct: teamsSwapped ? (g.mlAwayBetsPct != null ? 100 - g.mlAwayBetsPct : null) : g.mlAwayBetsPct,
+          mlAwayMoneyPct: teamsSwapped ? (g.mlAwayMoneyPct != null ? 100 - g.mlAwayMoneyPct : null) : g.mlAwayMoneyPct,
         });
+        if (teamsSwapped) console.log(`[VSiNAutoRefresh][Tomorrow][NCAAM] Swapped teams for ${awayTeam.dbSlug}@${homeTeam.dbSlug} → matched DB ${dbGame.awayTeam}@${dbGame.homeTeam}`);
         updated++;
       }
       console.log(`[VSiNAutoRefresh][Tomorrow][NCAAM] ${updated} games updated with tomorrow's splits`);
@@ -168,16 +176,22 @@ async function runTomorrowSplitsUpdate(tomorrowStr: string): Promise<void> {
         const awayTeam = getNbaTeamByVsinSlug(g.awayVsinSlug);
         const homeTeam = getNbaTeamByVsinSlug(g.homeVsinSlug);
         if (!awayTeam || !homeTeam) continue;
-        const dbGame = existingNba.find(e => e.awayTeam === awayTeam.dbSlug && e.homeTeam === homeTeam.dbSlug);
+        let dbGame = existingNba.find(e => e.awayTeam === awayTeam.dbSlug && e.homeTeam === homeTeam.dbSlug);
+        let teamsSwapped = false;
+        if (!dbGame) {
+          dbGame = existingNba.find(e => e.awayTeam === homeTeam.dbSlug && e.homeTeam === awayTeam.dbSlug);
+          if (dbGame) teamsSwapped = true;
+        }
         if (!dbGame) continue;
         await updateBookOdds(dbGame.id, {
-          spreadAwayBetsPct: g.spreadAwayBetsPct,
-          spreadAwayMoneyPct: g.spreadAwayMoneyPct,
+          spreadAwayBetsPct: teamsSwapped ? (g.spreadAwayBetsPct != null ? 100 - g.spreadAwayBetsPct : null) : g.spreadAwayBetsPct,
+          spreadAwayMoneyPct: teamsSwapped ? (g.spreadAwayMoneyPct != null ? 100 - g.spreadAwayMoneyPct : null) : g.spreadAwayMoneyPct,
           totalOverBetsPct: g.totalOverBetsPct,
           totalOverMoneyPct: g.totalOverMoneyPct,
-          mlAwayBetsPct: g.mlAwayBetsPct,
-          mlAwayMoneyPct: g.mlAwayMoneyPct,
+          mlAwayBetsPct: teamsSwapped ? (g.mlAwayBetsPct != null ? 100 - g.mlAwayBetsPct : null) : g.mlAwayBetsPct,
+          mlAwayMoneyPct: teamsSwapped ? (g.mlAwayMoneyPct != null ? 100 - g.mlAwayMoneyPct : null) : g.mlAwayMoneyPct,
         });
+        if (teamsSwapped) console.log(`[VSiNAutoRefresh][Tomorrow][NBA] Swapped teams for ${awayTeam.dbSlug}@${homeTeam.dbSlug} → matched DB ${dbGame.awayTeam}@${dbGame.homeTeam}`);
         updated++;
       }
       console.log(`[VSiNAutoRefresh][Tomorrow][NBA] ${updated} games updated with tomorrow's splits`);
@@ -192,16 +206,22 @@ async function runTomorrowSplitsUpdate(tomorrowStr: string): Promise<void> {
         const awayTeam = NHL_BY_VSIN_SLUG.get(g.awayVsinSlug);
         const homeTeam = NHL_BY_VSIN_SLUG.get(g.homeVsinSlug);
         if (!awayTeam || !homeTeam) continue;
-        const dbGame = existingNhl.find(e => e.awayTeam === awayTeam.dbSlug && e.homeTeam === homeTeam.dbSlug);
+        let dbGame = existingNhl.find(e => e.awayTeam === awayTeam.dbSlug && e.homeTeam === homeTeam.dbSlug);
+        let teamsSwapped = false;
+        if (!dbGame) {
+          dbGame = existingNhl.find(e => e.awayTeam === homeTeam.dbSlug && e.homeTeam === awayTeam.dbSlug);
+          if (dbGame) teamsSwapped = true;
+        }
         if (!dbGame) continue;
         await updateBookOdds(dbGame.id, {
-          spreadAwayBetsPct: g.spreadAwayBetsPct,
-          spreadAwayMoneyPct: g.spreadAwayMoneyPct,
+          spreadAwayBetsPct: teamsSwapped ? (g.spreadAwayBetsPct != null ? 100 - g.spreadAwayBetsPct : null) : g.spreadAwayBetsPct,
+          spreadAwayMoneyPct: teamsSwapped ? (g.spreadAwayMoneyPct != null ? 100 - g.spreadAwayMoneyPct : null) : g.spreadAwayMoneyPct,
           totalOverBetsPct: g.totalOverBetsPct,
           totalOverMoneyPct: g.totalOverMoneyPct,
-          mlAwayBetsPct: g.mlAwayBetsPct,
-          mlAwayMoneyPct: g.mlAwayMoneyPct,
+          mlAwayBetsPct: teamsSwapped ? (g.mlAwayBetsPct != null ? 100 - g.mlAwayBetsPct : null) : g.mlAwayBetsPct,
+          mlAwayMoneyPct: teamsSwapped ? (g.mlAwayMoneyPct != null ? 100 - g.mlAwayMoneyPct : null) : g.mlAwayMoneyPct,
         });
+        if (teamsSwapped) console.log(`[VSiNAutoRefresh][Tomorrow][NHL] Swapped teams for ${awayTeam.dbSlug}@${homeTeam.dbSlug} → matched DB ${dbGame.awayTeam}@${dbGame.homeTeam}`);
         updated++;
       }
       console.log(`[VSiNAutoRefresh][Tomorrow][NHL] ${updated} games updated with tomorrow's splits`);
@@ -232,13 +252,15 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
     console.warn("[VSiNAutoRefresh] VSiN CBB splits scrape failed (non-fatal):", err);
   }
 
-  // Build a map: dbSlug pair → VsinSplitsGame for fast lookup
-  const vsinSplitsMap = new Map<string, VsinSplitsGame>();
+  // Build a map: dbSlug pair → VsinSplitsGame for fast lookup (both orderings)
+  const vsinSplitsMap = new Map<string, { game: VsinSplitsGame; swapped: boolean }>();
   for (const g of vsinSplits) {
     const awayTeam = BY_VSIN_SLUG.get(g.awayVsinSlug) ?? BY_VSIN_SLUG.get(g.awayVsinSlug.replace(/-/g, '_'));
     const homeTeam = BY_VSIN_SLUG.get(g.homeVsinSlug) ?? BY_VSIN_SLUG.get(g.homeVsinSlug.replace(/-/g, '_'));
     if (awayTeam && homeTeam) {
-      vsinSplitsMap.set(`${awayTeam.dbSlug}@${homeTeam.dbSlug}`, g);
+      vsinSplitsMap.set(`${awayTeam.dbSlug}@${homeTeam.dbSlug}`, { game: g, swapped: false });
+      // Also store reversed key so DB games with swapped team order still match
+      vsinSplitsMap.set(`${homeTeam.dbSlug}@${awayTeam.dbSlug}`, { game: g, swapped: true });
     } else {
       console.log(
         `[VSiNAutoRefresh][NCAAM] Unknown VSiN slug: ${g.awayVsinSlug} @ ${g.homeVsinSlug}`
@@ -267,17 +289,19 @@ async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
   const existing = await listGamesByDate(todayStr, "NCAAM");
   for (const dbGame of existing) {
     const key = `${dbGame.awayTeam}@${dbGame.homeTeam}`;
-    const splits = vsinSplitsMap.get(key);
-    if (!splits) continue;
+    const entry = vsinSplitsMap.get(key);
+    if (!entry) continue;
+    const { game: splits, swapped } = entry;
     await updateBookOdds(dbGame.id, {
-      spreadAwayBetsPct: splits.spreadAwayBetsPct,
-      spreadAwayMoneyPct: splits.spreadAwayMoneyPct,
+      spreadAwayBetsPct: swapped ? (splits.spreadAwayBetsPct != null ? 100 - splits.spreadAwayBetsPct : null) : splits.spreadAwayBetsPct,
+      spreadAwayMoneyPct: swapped ? (splits.spreadAwayMoneyPct != null ? 100 - splits.spreadAwayMoneyPct : null) : splits.spreadAwayMoneyPct,
       totalOverBetsPct: splits.totalOverBetsPct,
       totalOverMoneyPct: splits.totalOverMoneyPct,
-      mlAwayBetsPct: splits.mlAwayBetsPct,
-      mlAwayMoneyPct: splits.mlAwayMoneyPct,
+      mlAwayBetsPct: swapped ? (splits.mlAwayBetsPct != null ? 100 - splits.mlAwayBetsPct : null) : splits.mlAwayBetsPct,
+      mlAwayMoneyPct: swapped ? (splits.mlAwayMoneyPct != null ? 100 - splits.mlAwayMoneyPct : null) : splits.mlAwayMoneyPct,
     });
     totalUpdated++;
+    if (swapped) console.log(`[VSiNAutoRefresh][NCAAM] Swapped splits for ${dbGame.awayTeam}@${dbGame.homeTeam}`);
     console.log(
       `[VSiNAutoRefresh][NCAAM] Splits updated: ${dbGame.awayTeam} @ ${dbGame.homeTeam} ` +
       `spread=${splits.spreadAwayBetsPct}%/${splits.spreadAwayMoneyPct}% ` +
@@ -424,14 +448,15 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
     console.warn("[VSiNAutoRefresh] VSiN NBA splits scrape failed (non-fatal):", err);
   }
 
-  // Build a map: dbSlug pair → VsinSplitsGame for fast lookup
+  // Build a map: dbSlug pair → VsinSplitsGame for fast lookup (both orderings)
   // Use getNbaTeamByVsinSlug() which applies alias resolution (e.g. "la-clippers" → "los-angeles-clippers")
-  const vsinSplitsMap = new Map<string, VsinSplitsGame>();
+  const vsinSplitsMap = new Map<string, { game: VsinSplitsGame; swapped: boolean }>();
   for (const g of vsinSplits) {
     const awayTeam = getNbaTeamByVsinSlug(g.awayVsinSlug);
     const homeTeam = getNbaTeamByVsinSlug(g.homeVsinSlug);
     if (awayTeam && homeTeam) {
-      vsinSplitsMap.set(`${awayTeam.dbSlug}@${homeTeam.dbSlug}`, g);
+      vsinSplitsMap.set(`${awayTeam.dbSlug}@${homeTeam.dbSlug}`, { game: g, swapped: false });
+      vsinSplitsMap.set(`${homeTeam.dbSlug}@${awayTeam.dbSlug}`, { game: g, swapped: true });
     } else {
       console.log(`[VSiNAutoRefresh][NBA] Unknown VSiN slug: ${g.awayVsinSlug} @ ${g.homeVsinSlug}`);
     }
@@ -459,17 +484,19 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
   const existingToday = await listGamesByDate(todayStr, "NBA");
   for (const dbGame of existingToday) {
     const key = `${dbGame.awayTeam}@${dbGame.homeTeam}`;
-    const splits = vsinSplitsMap.get(key);
-    if (!splits) continue;
+    const entry = vsinSplitsMap.get(key);
+    if (!entry) continue;
+    const { game: splits, swapped } = entry;
     await updateBookOdds(dbGame.id, {
-      spreadAwayBetsPct: splits.spreadAwayBetsPct,
-      spreadAwayMoneyPct: splits.spreadAwayMoneyPct,
+      spreadAwayBetsPct: swapped ? (splits.spreadAwayBetsPct != null ? 100 - splits.spreadAwayBetsPct : null) : splits.spreadAwayBetsPct,
+      spreadAwayMoneyPct: swapped ? (splits.spreadAwayMoneyPct != null ? 100 - splits.spreadAwayMoneyPct : null) : splits.spreadAwayMoneyPct,
       totalOverBetsPct: splits.totalOverBetsPct,
       totalOverMoneyPct: splits.totalOverMoneyPct,
-      mlAwayBetsPct: splits.mlAwayBetsPct,
-      mlAwayMoneyPct: splits.mlAwayMoneyPct,
+      mlAwayBetsPct: swapped ? (splits.mlAwayBetsPct != null ? 100 - splits.mlAwayBetsPct : null) : splits.mlAwayBetsPct,
+      mlAwayMoneyPct: swapped ? (splits.mlAwayMoneyPct != null ? 100 - splits.mlAwayMoneyPct : null) : splits.mlAwayMoneyPct,
     });
     totalUpdated++;
+    if (swapped) console.log(`[VSiNAutoRefresh][NBA] Swapped splits for ${dbGame.awayTeam}@${dbGame.homeTeam}`);
     console.log(
       `[VSiNAutoRefresh][NBA] Splits updated: ${dbGame.awayTeam} @ ${dbGame.homeTeam} ` +
       `spread=${splits.spreadAwayBetsPct}%/${splits.spreadAwayMoneyPct}% ` +
@@ -567,13 +594,14 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
     console.warn("[VSiNAutoRefresh] VSiN NHL splits scrape failed (non-fatal):", err);
   }
 
-  // Build a map: dbSlug pair → VsinSplitsGame for fast lookup
-  const vsinSplitsMap = new Map<string, VsinSplitsGame>();
+  // Build a map: dbSlug pair → VsinSplitsGame for fast lookup (both orderings)
+  const vsinSplitsMap = new Map<string, { game: VsinSplitsGame; swapped: boolean }>();
   for (const g of vsinSplits) {
     const awayTeam = NHL_BY_VSIN_SLUG.get(g.awayVsinSlug);
     const homeTeam = NHL_BY_VSIN_SLUG.get(g.homeVsinSlug);
     if (awayTeam && homeTeam) {
-      vsinSplitsMap.set(`${awayTeam.dbSlug}@${homeTeam.dbSlug}`, g);
+      vsinSplitsMap.set(`${awayTeam.dbSlug}@${homeTeam.dbSlug}`, { game: g, swapped: false });
+      vsinSplitsMap.set(`${homeTeam.dbSlug}@${awayTeam.dbSlug}`, { game: g, swapped: true });
     } else {
       console.log(`[VSiNAutoRefresh][NHL] Unknown VSiN slug: ${g.awayVsinSlug} @ ${g.homeVsinSlug}`);
     }
@@ -608,17 +636,19 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
   const existingToday = await listGamesByDate(todayStr, "NHL");
   for (const dbGame of existingToday) {
     const key = `${dbGame.awayTeam}@${dbGame.homeTeam}`;
-    const splits = vsinSplitsMap.get(key);
-    if (!splits) continue;
+    const entry = vsinSplitsMap.get(key);
+    if (!entry) continue;
+    const { game: splits, swapped } = entry;
     await updateBookOdds(dbGame.id, {
-      spreadAwayBetsPct: splits.spreadAwayBetsPct,
-      spreadAwayMoneyPct: splits.spreadAwayMoneyPct,
+      spreadAwayBetsPct: swapped ? (splits.spreadAwayBetsPct != null ? 100 - splits.spreadAwayBetsPct : null) : splits.spreadAwayBetsPct,
+      spreadAwayMoneyPct: swapped ? (splits.spreadAwayMoneyPct != null ? 100 - splits.spreadAwayMoneyPct : null) : splits.spreadAwayMoneyPct,
       totalOverBetsPct: splits.totalOverBetsPct,
       totalOverMoneyPct: splits.totalOverMoneyPct,
-      mlAwayBetsPct: splits.mlAwayBetsPct,
-      mlAwayMoneyPct: splits.mlAwayMoneyPct,
+      mlAwayBetsPct: swapped ? (splits.mlAwayBetsPct != null ? 100 - splits.mlAwayBetsPct : null) : splits.mlAwayBetsPct,
+      mlAwayMoneyPct: swapped ? (splits.mlAwayMoneyPct != null ? 100 - splits.mlAwayMoneyPct : null) : splits.mlAwayMoneyPct,
     });
     totalUpdated++;
+    if (swapped) console.log(`[VSiNAutoRefresh][NHL] Swapped splits for ${dbGame.awayTeam}@${dbGame.homeTeam}`);
     console.log(
       `[VSiNAutoRefresh][NHL] Splits updated: ${dbGame.awayTeam} @ ${dbGame.homeTeam} ` +
       `spread=${splits.spreadAwayBetsPct}%/${splits.spreadAwayMoneyPct}% ` +
