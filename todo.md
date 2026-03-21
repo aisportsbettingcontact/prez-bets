@@ -1698,3 +1698,33 @@
 - [x] Fix page scroll conflict — bracket container must capture touch events without blocking page scroll
 - [x] Fix bracket container height on mobile — must fill viewport without overflow
 - [x] Ensure transform-origin is top-left so scaled bracket starts at top-left corner of bracket canvas on all screen sizes (mobile, tablet, desktop)
+
+## Bracket Connector Audit (2026-03-20)
+- [ ] Deep debug connector logic: inject articulate logging for all card positions, midpoints, path coordinates
+- [ ] Fix connector gaps: every R64→R32→S16→E8 transition must be gapless in all 4 regions
+- [ ] Fix RTL connector direction: WEST and MIDWEST regions connect right-to-left correctly
+- [ ] Verify connector scaling: paths are drawn in the wrap coordinate space (unaffected by canvas scale transform)
+- [ ] Verify connector redraw fires after auto-scale changes the canvas transform
+
+## Bracket Connector Full Fix (2026-03-20)
+- [ ] Fix drawConnectors: use cy(tgt) as yMid convergence point (not midpoint of source cards)
+- [ ] Fix R64→R32→S16→E8 connectors in all 4 regions (28 transitions, max 40.1px offset)
+- [ ] Fix E8→Final Four connectors (LTR E8 right edge → FF left; RTL E8 left edge → FF right)
+- [ ] Fix Final Four→Championship connectors (FF top/bottom cards → Champ center)
+- [ ] Verify all transitions ≤1px offset after fix
+
+## Bracket Layout Redesign — Championship Dead Center (2026-03-20)
+- [ ] Championship card must be in the absolute dead center of the bracket canvas
+- [ ] Work backwards: FF cards flank Championship left/right, E8 cards flank FF, S16 flank E8, R32 flank S16, R64 outermost
+- [ ] All connectors radiate inward from R64 → R32 → S16 → E8 → FF → Championship
+- [ ] EAST and SOUTH regions on the LEFT half (LTR), WEST and MIDWEST on the RIGHT half (RTL)
+- [ ] Vertical centering: Championship at vertical midpoint, regions stacked above/below
+
+## Bracket Spacing / Overlap Fix (2026-03-20)
+- [ ] Compute mathematically exact layout: no overlap, no clamping, consistent gaps across all rounds
+- [ ] Championship at exact dead center (y = layoutHeight / 2)
+- [ ] FF cards equidistant above/below Championship, not overlapping E8 cards
+- [ ] R64 gaps computed from card height so no cards overlap within a column
+- [ ] R32/S16/E8 gaps computed as 2x/4x/8x the R64 gap (standard bracket doubling)
+- [ ] ROUND_PAD values computed so card[0] center aligns with its feeder midpoint
+- [ ] All connector paths arrive at exact card center-Y (no offset)

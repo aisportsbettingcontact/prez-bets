@@ -27,21 +27,77 @@ const CARD_H    = STRIP_H * 2 + DIVIDER_H; // 69px
 const COL_W     = 188;         // px — card width
 const COL_GAP   = 44;          // px — horizontal gap between round columns (connector zone)
 
+// ─── Layout constants derived from first principles ─────────────────────────
+// STATUS_H: height of the status label (LIVE / FINAL / time) above each card
+const STATUS_H  = 16;
+// ITEM_H: total height of one matchup item (status label + card)
+const ITEM_H    = STATUS_H + CARD_H;  // 85px
+// GAP_R64: gap between adjacent matchup items in the R64 column
+const GAP_R64   = 12;
+// R64 pitch = vertical distance from one card center to the next in R64
+const R64_PITCH = ITEM_H + GAP_R64;  // 97px
+
+// R32 gap: each R32 card spans 2 R64 pitches minus one ITEM_H
+const GAP_R32 = 2 * R64_PITCH - ITEM_H;  // 109px
+const R32_PITCH = ITEM_H + GAP_R32;       // 194px
+
+// S16 gap: each S16 card spans 2 R32 pitches minus one ITEM_H
+const GAP_S16 = 2 * R32_PITCH - ITEM_H;  // 303px
+const S16_PITCH = ITEM_H + GAP_S16;       // 388px
+
+// E8 gap: 0 (only 1 card per half)
+const GAP_E8 = 0;
+
 // Gap between matchup cards within a round column
 const ROUND_GAP: Record<string, number> = {
-  r64:  10,
-  r32:  89,
-  s16:  239,
-  e8:   0,
+  r64: GAP_R64,
+  r32: GAP_R32,
+  s16: GAP_S16,
+  e8:  GAP_E8,
 };
 
 // Padding-top so card[0] center aligns with its feeder midpoint
+// Formula: paddingTop = feeder_midpoint_cy - STATUS_H - CARD_H/2
+// R64 card[0] cy = STATUS_H + CARD_H/2 = 50.5
+// R64 card[1] cy = 50.5 + R64_PITCH = 147.5 → midpoint = 99
+// R32 paddingTop = 99 - STATUS_H - CARD_H/2 = 48.5
+const PAD_R32 = R64_PITCH / 2 - STATUS_H / 2;  // 48.5px
+// R32 card[0] cy = PAD_R32 + STATUS_H + CARD_H/2 = 99
+// R32 card[1] cy = 99 + R32_PITCH = 293 → midpoint = 196
+// S16 paddingTop = 196 - STATUS_H - CARD_H/2 = 145.5
+const PAD_S16 = PAD_R32 + R64_PITCH + GAP_R32 / 2;  // 145.5px
+// S16 card[0] cy = PAD_S16 + STATUS_H + CARD_H/2 = 196
+// S16 card[1] cy = 196 + S16_PITCH = 584 → midpoint = 390
+// E8 paddingTop = 390 - STATUS_H - CARD_H/2 = 339.5
+const PAD_E8  = PAD_S16 + R32_PITCH + GAP_S16 / 2;  // 339.5px
+
 const ROUND_PAD: Record<string, number> = {
-  r64:  18,
-  r32:  57.5,
-  s16:  132.5,
-  e8:   282.5,
+  r64: 0,
+  r32: PAD_R32,
+  s16: PAD_S16,
+  e8:  PAD_E8,
 };
+
+// Gap between top and bottom halves within a region (EAST top + EAST bot)
+const REGION_GAP = 32;
+// R64 half height = 8 items × ITEM_H + 7 gaps
+const R64_HALF_H = 8 * ITEM_H + 7 * GAP_R64;  // 764px
+// E8 card cy within a half = PAD_E8 + STATUS_H + CARD_H/2 = 390
+const E8_CARD_CY_IN_HALF = PAD_E8 + STATUS_H + CARD_H / 2;  // 390px
+// FF card cy = midpoint of E8 top and E8 bot
+// E8 top cy = E8_CARD_CY_IN_HALF = 390
+// E8 bot cy = R64_HALF_H + REGION_GAP + E8_CARD_CY_IN_HALF = 764 + 32 + 390 = 1186
+// FF cy = (390 + 1186) / 2 = 788
+const FF_CY = (E8_CARD_CY_IN_HALF + R64_HALF_H + REGION_GAP + E8_CARD_CY_IN_HALF) / 2;  // 788px
+// FF_SPACING: vertical distance from Championship center to FF card center
+// FF-TOP at FF_CY - FF_SPACING, FF-BOT at FF_CY + FF_SPACING
+// Must not overlap E8 cards: FF-TOP cy > E8 top cy (390) and FF-BOT cy < E8 bot cy (1186)
+// FF_SPACING = (1186 - 390) / 2 - some_margin = 398 - 60 = 338? No, too large.
+// Actually FF cards sit between E8 and Championship, so:
+// FF-TOP should be between E8[0] (390) and Championship (788): use 788 - 180 = 608
+// FF-BOT should be between Championship (788) and E8[1] (1186): use 788 + 180 = 968
+// Both are safely between E8 cards, no overlap.
+const FF_SPACING = 180;  // px from Championship center to FF card center
 
 // ─── Team registry ────────────────────────────────────────────────────────────
 const TEAM_BY_SLUG = new Map(NCAAM_TEAMS.map(t => [t.dbSlug, t]));
@@ -341,18 +397,23 @@ function drawConnectors(
   svg: SVGSVGElement,
   wrap: HTMLElement,
   cols: (HTMLElement | null)[],
-  dir: 'ltr' | 'rtl'
+  dir: 'ltr' | 'rtl',
+  scale = 1
 ) {
   const debug = typeof window !== 'undefined' && localStorage.getItem('bracketDebug') === '1';
   svg.innerHTML = '';
 
   const wr = wrap.getBoundingClientRect();
+  // SVG is inside bk-canvas which has transform:scale(s).
+  // getBoundingClientRect() returns screen-space coordinates (post-transform).
+  // SVG path coordinates must be in canvas-space (pre-transform), so divide by scale.
+  // wrap.scrollWidth/scrollHeight are layout dimensions (pre-transform), so no division needed.
   svg.setAttribute('width',  `${wrap.scrollWidth}`);
   svg.setAttribute('height', `${wrap.scrollHeight}`);
 
-  const cy = (el: Element) => { const r = el.getBoundingClientRect(); return r.top  - wr.top  + r.height / 2; };
-  const rx = (el: Element) => { const r = el.getBoundingClientRect(); return r.right - wr.left; };
-  const lx = (el: Element) => { const r = el.getBoundingClientRect(); return r.left  - wr.left; };
+  const cy = (el: Element) => { const r = el.getBoundingClientRect(); return (r.top  - wr.top  + r.height / 2) / scale; };
+  const rx = (el: Element) => { const r = el.getBoundingClientRect(); return (r.right - wr.left) / scale; };
+  const lx = (el: Element) => { const r = el.getBoundingClientRect(); return (r.left  - wr.left) / scale; };
 
   function line(d: string) {
     const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -373,7 +434,10 @@ function drawConnectors(
     if (debug) console.log(`  col[${ci}]->${ci+1}: currCards=${currCards.length} nextCards=${nextCards.length}`);
 
     if (dir === 'ltr') {
-      // Each pair of curr cards feeds one next card
+      // Each pair of curr cards feeds one next card.
+      // KEY FIX: use cy(tgt) as the convergence Y, NOT the midpoint of the two source cards.
+      // The target card is positioned with paddingTop that shifts it relative to the source midpoint.
+      // Using cy(tgt) ensures the connector arrives precisely at the target card's center.
       for (let ni = 0; ni < nextCards.length; ni++) {
         const top = currCards[ni * 2];
         const bot = currCards[ni * 2 + 1];
@@ -386,15 +450,16 @@ function drawConnectors(
         const y1   = cy(top);
         const y2   = cy(bot);
         const x2   = lx(tgt);
+        const yMid = cy(tgt);  // ← use target card center, not (y1+y2)/2
         const xMid = x1 + (x2 - x1) / 2;
-        const yMid = (y1 + y2) / 2;
-        if (debug) console.log(`  [LTR] ni=${ni} x1=${x1.toFixed(0)} y1=${y1.toFixed(0)} y2=${y2.toFixed(0)} x2=${x2.toFixed(0)} xMid=${xMid.toFixed(0)} yMid=${yMid.toFixed(0)}`);
+        if (debug) console.log(`  [LTR] ni=${ni} x1=${x1.toFixed(0)} y1=${y1.toFixed(0)} y2=${y2.toFixed(0)} x2=${x2.toFixed(0)} xMid=${xMid.toFixed(0)} yMid(tgt)=${yMid.toFixed(0)} offset=${Math.abs(yMid-(y1+y2)/2).toFixed(1)}px`);
         line(`M ${x1} ${y1} H ${xMid} V ${yMid}`);
         line(`M ${x1} ${y2} H ${xMid} V ${yMid}`);
         line(`M ${xMid} ${yMid} H ${x2}`);
       }
     } else {
-      // RTL: each curr card is fed by a pair of next cards
+      // RTL: each curr card is fed by a pair of next cards.
+      // KEY FIX: use cy(tgt) as the convergence Y.
       for (let ni = 0; ni < currCards.length; ni++) {
         const tgt = currCards[ni];
         const top = nextCards[ni * 2];
@@ -407,9 +472,9 @@ function drawConnectors(
         const y1   = cy(top);
         const y2   = cy(bot);
         const x2   = rx(tgt);
+        const yMid = cy(tgt);  // ← use target card center, not (y1+y2)/2
         const xMid = x2 + (x1 - x2) / 2;
-        const yMid = (y1 + y2) / 2;
-        if (debug) console.log(`  [RTL] ni=${ni} x1=${x1.toFixed(0)} y1=${y1.toFixed(0)} y2=${y2.toFixed(0)} x2=${x2.toFixed(0)} xMid=${xMid.toFixed(0)} yMid=${yMid.toFixed(0)}`);
+        if (debug) console.log(`  [RTL] ni=${ni} x1=${x1.toFixed(0)} y1=${y1.toFixed(0)} y2=${y2.toFixed(0)} x2=${x2.toFixed(0)} xMid=${xMid.toFixed(0)} yMid(tgt)=${yMid.toFixed(0)} offset=${Math.abs(yMid-(y1+y2)/2).toFixed(1)}px`);
         line(`M ${x1} ${y1} H ${xMid} V ${yMid}`);
         line(`M ${x1} ${y2} H ${xMid} V ${yMid}`);
         line(`M ${xMid} ${yMid} H ${x2}`);
@@ -419,11 +484,12 @@ function drawConnectors(
 }
 
 // ─── RegionBracket ────────────────────────────────────────────────────────────
-function RegionBracket({ region, data, dir, baseDelay = 0 }: {
+function RegionBracket({ region, data, dir, baseDelay = 0, scale = 1 }: {
   region: string;
   data: { r64:(Matchup|null)[]; r32:(Matchup|null)[]; s16:(Matchup|null)[]; e8:(Matchup|null)[] };
   dir: 'ltr' | 'rtl';
   baseDelay?: number;
+  scale?: number;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef  = useRef<SVGSVGElement>(null);
@@ -450,9 +516,10 @@ function RegionBracket({ region, data, dir, baseDelay = 0 }: {
       svgRef.current,
       wrapRef.current,
       [c0.current, c1.current, c2.current, c3.current],
-      dir
+      dir,
+      scale
     );
-  }, [dir]);
+  }, [dir, scale]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => requestAnimationFrame(redraw));
@@ -530,7 +597,16 @@ function FirstFourSection({ games }: { games: (Matchup|null)[] }) {
 }
 
 // ─── FinalFourSection ─────────────────────────────────────────────────────────
-function FinalFourSection({ ff, champ }: { ff: (Matchup|null)[]; champ: (Matchup|null)[] }) {
+// champTopPx: Championship card center Y (px from bk-ff top) — computed dynamically from E8 positions
+// ffSpacingPx: vertical distance from Championship card center to each FF card center
+function FinalFourSection({
+  ff, champ, champTopPx, ffSpacingPx,
+}: {
+  ff: (Matchup|null)[];
+  champ: (Matchup|null)[];
+  champTopPx: number;   // Championship card center, px from bk-ff top (0 = use 50%)
+  ffSpacingPx: number;  // Distance from champ center to FF card center
+}) {
   const champGame = champ[0];
   const champSlug = useMemo(() => {
     if (!champGame || champGame.status !== 'final') return null;
@@ -539,31 +615,239 @@ function FinalFourSection({ ff, champ }: { ff: (Matchup|null)[]; champ: (Matchup
   }, [champGame]);
   const champTeam = champSlug ? TEAM_BY_SLUG.get(champSlug) : null;
 
+  // Dynamic positioning:
+  //   champTopPx = E8 midpoint Y (computed after render from actual E8 card positions)
+  //   ffSpacingPx = (E8_bot_cy - E8_top_cy) / 4 — quarter of E8 spread
+  // This ensures: E8[0] → FF-TOP → Championship → FF-BOT → E8[1] with equal spacing.
+  // Fall back to 50% if positions not yet computed (first render).
+  const CARD_HALF = CARD_H / 2;  // 34.5px
+
+  // Championship: position card center at champTopPx
+  // The container has label + trophy above the card, so we offset upward by those heights.
+  // label≈14px + gap6 + trophy≈26px + gap6 = 52px above card top
+  // card center = card_top + CARD_HALF
+  // container top = champTopPx - 52 - CARD_HALF
+  const CHAMP_ABOVE = 14 + 6 + 26 + 6;  // 52px of label + trophy above card
+  const champContainerTop = champTopPx > 0
+    ? champTopPx - CHAMP_ABOVE - CARD_HALF
+    : undefined;
+
+  // FF-TOP card center at champTopPx - ffSpacingPx
+  // FF-BOT card center at champTopPx + ffSpacingPx
+  // Each FF div has a label above the card (12px + gap4 = 16px)
+  const FF_ABOVE = 12 + 4;  // 16px of label above FF card
+  const ffTopContainerTop = champTopPx > 0
+    ? champTopPx - ffSpacingPx - FF_ABOVE - CARD_HALF
+    : undefined;
+  const ffBotContainerTop = champTopPx > 0
+    ? champTopPx + ffSpacingPx - FF_ABOVE - CARD_HALF
+    : undefined;
+
+  // FINAL FOUR label: above FF-TOP container
+  const ffLabelTop = ffTopContainerTop !== undefined ? ffTopContainerTop - 20 : undefined;
+
+  // Fallback CSS when positions not yet computed
+  const champStyle: React.CSSProperties = champContainerTop !== undefined
+    ? { position:'absolute', left:'50%', transform:'translateX(-50%)', top: champContainerTop }
+    : { position:'absolute', left:'50%', top:'50%', transform:'translate(-50%, -50%)' };
+
+  const ffTopStyle: React.CSSProperties = ffTopContainerTop !== undefined
+    ? { position:'absolute', left:'50%', transform:'translateX(-50%)', top: ffTopContainerTop }
+    : { position:'absolute', left:'50%', transform:'translateX(-50%)', top:'calc(30% - 35px)' };
+
+  const ffBotStyle: React.CSSProperties = ffBotContainerTop !== undefined
+    ? { position:'absolute', left:'50%', transform:'translateX(-50%)', top: ffBotContainerTop }
+    : { position:'absolute', left:'50%', transform:'translateX(-50%)', top:'calc(70% - 35px)' };
+
+  const ffLabelStyle: React.CSSProperties = ffLabelTop !== undefined
+    ? { position:'absolute', left:'50%', transform:'translateX(-50%)', top: ffLabelTop }
+    : { position:'absolute', left:'50%', transform:'translateX(-50%)', top:'calc(30% - 55px)' };
+
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:20, flexShrink:0, paddingTop:16 }}>
-      <div style={{ fontSize:9, fontWeight:700, letterSpacing:'0.22em', textTransform:'uppercase', color:'rgba(255,165,50,.7)' }}>
+    // bk-ff: position:relative so children can be absolute-positioned
+    // align-self:stretch ensures it fills the full bracket height
+    <div className="bk-ff" style={{
+      position:'relative', alignSelf:'stretch', flexShrink:0,
+      minWidth: COL_W + 24,
+    }}>
+      {/* FINAL FOUR label — above FF-TOP */}
+      <div style={{ ...ffLabelStyle, fontSize:9, fontWeight:700, letterSpacing:'0.22em', textTransform:'uppercase', color:'rgba(255,165,50,.7)', whiteSpace:'nowrap' }}>
         FINAL FOUR
       </div>
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-        <div style={{ fontSize:8, color:'rgba(255,255,255,.28)', letterSpacing:'0.15em', textTransform:'uppercase' }}>EAST · SOUTH</div>
+
+      {/* FF-TOP: EAST/SOUTH winner — positioned above Championship */}
+      <div className="bk-ff-top" style={{ ...ffTopStyle, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+        <div style={{ fontSize:8, color:'rgba(255,255,255,.28)', letterSpacing:'0.15em', textTransform:'uppercase', marginBottom:2 }}>EAST · SOUTH</div>
         <MatchupCard m={ff[0] ?? null} />
       </div>
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
+
+      {/* Championship — positioned at E8 midpoint */}
+      <div style={{ ...champStyle, display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
         <div style={{ fontSize:9, fontWeight:700, letterSpacing:'0.22em', textTransform:'uppercase', color:'rgba(255,165,50,.7)' }}>CHAMPIONSHIP</div>
         <div className="bk-trophy">🏆</div>
-        <MatchupCard m={champGame ?? null} champ />
+        {/* bk-champ-card: Championship card — both FF cards connect here */}
+        <div className="bk-champ-card">
+          <MatchupCard m={champGame ?? null} champ />
+        </div>
         {champTeam && (
-          <div style={{ marginTop:6, textAlign:'center' }}>
+          <div style={{ marginTop:4, textAlign:'center' }}>
             <div style={{ fontSize:9, color:'rgba(255,165,50,.7)', letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:3 }}>2026 CHAMPION</div>
             <div className="bk-champ-name">{champTeam.ncaaName}</div>
           </div>
         )}
       </div>
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-        <div style={{ fontSize:8, color:'rgba(255,255,255,.28)', letterSpacing:'0.15em', textTransform:'uppercase' }}>WEST · MIDWEST</div>
+
+      {/* FF-BOT: WEST/MIDWEST winner — positioned below Championship */}
+      <div className="bk-ff-bot" style={{ ...ffBotStyle, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+        <div style={{ fontSize:8, color:'rgba(255,255,255,.28)', letterSpacing:'0.15em', textTransform:'uppercase', marginBottom:2 }}>WEST · MIDWEST</div>
         <MatchupCard m={ff[1] ?? null} />
       </div>
     </div>
+  );
+}
+
+// ─── Center connector drawing (E8→FF→Championship) ─────────────────────────────
+// This SVG spans the full bk-layout and draws:
+//   EAST E8  ──────────────────────────────────────► FF top card
+//   SOUTH E8 ──────────────────────────────────────► FF top card
+//   WEST E8  ──────────────────────────────────────► FF bot card
+//   MIDWEST E8 ────────────────────────────────────► FF bot card
+//   FF top card ──────────────────────────────────► Championship
+//   FF bot card ──────────────────────────────────► Championship
+function drawCenterConnectors(
+  svg: SVGSVGElement,
+  layout: HTMLElement,
+  scale: number
+) {
+  const debug = typeof window !== 'undefined' && localStorage.getItem('bracketDebug') === '1';
+  svg.innerHTML = '';
+
+  const lr = layout.getBoundingClientRect();
+  svg.setAttribute('width',  `${layout.scrollWidth}`);
+  svg.setAttribute('height', `${layout.scrollHeight}`);
+
+  // Coordinate helpers: screen-space → canvas-space (divide by scale)
+  const cy = (el: Element) => { const r = el.getBoundingClientRect(); return (r.top  - lr.top  + r.height / 2) / scale; };
+  const rx = (el: Element) => { const r = el.getBoundingClientRect(); return (r.right - lr.left) / scale; };
+  const lx = (el: Element) => { const r = el.getBoundingClientRect(); return (r.left  - lr.left) / scale; };
+
+  function line(d: string, dim = false) {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('class', dim ? 'bk-connector bk-connector-center' : 'bk-connector bk-connector-center');
+    svg.appendChild(p);
+  }
+
+  // Find E8 cards: last column in each RegionBracket
+  // LTR regions (EAST, SOUTH): E8 column is the rightmost column (data-round="e8")
+  // RTL regions (WEST, MIDWEST): E8 column is the leftmost column (data-round="e8")
+  const e8Cols = Array.from(layout.querySelectorAll('[data-round="e8"]')) as HTMLElement[];
+  if (debug) console.log(`[CenterConnector] e8Cols found: ${e8Cols.length}`);
+
+  // Find FF cards
+  const ffTop   = layout.querySelector('.bk-ff-top .bk-card')   as HTMLElement | null;
+  const ffBot   = layout.querySelector('.bk-ff-bot .bk-card')   as HTMLElement | null;
+  const champEl = layout.querySelector('.bk-champ-card .bk-card') as HTMLElement | null;
+
+  if (debug) {
+    console.log(`[CenterConnector] ffTop=${!!ffTop} ffBot=${!!ffBot} champ=${!!champEl}`);
+    if (ffTop) console.log(`  ffTop: cy=${cy(ffTop).toFixed(1)} lx=${lx(ffTop).toFixed(0)} rx=${rx(ffTop).toFixed(0)}`);
+    if (ffBot) console.log(`  ffBot: cy=${cy(ffBot).toFixed(1)} lx=${lx(ffBot).toFixed(0)} rx=${rx(ffBot).toFixed(0)}`);
+    if (champEl) console.log(`  champ: cy=${cy(champEl).toFixed(1)} lx=${lx(champEl).toFixed(0)} rx=${rx(champEl).toFixed(0)}`);
+  }
+
+  // E8 → FF connectors
+  // e8Cols[0] = EAST E8 (LTR, rightmost) → ffTop
+  // e8Cols[1] = SOUTH E8 (LTR, rightmost) → ffTop
+  // e8Cols[2] = WEST E8 (RTL, leftmost) → ffBot
+  // e8Cols[3] = MIDWEST E8 (RTL, leftmost) → ffBot
+  const e8ToFF: Array<[HTMLElement, HTMLElement | null, 'ltr'|'rtl']> = [
+    [e8Cols[0], ffTop,  'ltr'],
+    [e8Cols[1], ffTop,  'ltr'],
+    [e8Cols[2], ffBot,  'rtl'],
+    [e8Cols[3], ffBot,  'rtl'],
+  ];
+
+  for (const [e8Col, ffCard, dir] of e8ToFF) {
+    if (!e8Col || !ffCard) {
+      if (debug) console.warn(`[CenterConnector] SKIP e8→ff: e8Col=${!!e8Col} ffCard=${!!ffCard}`);
+      continue;
+    }
+    const e8Cards = Array.from(e8Col.querySelectorAll('.bk-card')) as Element[];
+    if (e8Cards.length === 0) {
+      if (debug) console.warn(`[CenterConnector] SKIP e8→ff: no .bk-card in e8Col`);
+      continue;
+    }
+    // E8 column has exactly 1 card (the E8 matchup)
+    const e8Card = e8Cards[0];
+    const yFF   = cy(ffCard);
+    const yE8   = cy(e8Card);
+    const xMid  = dir === 'ltr'
+      ? rx(e8Card) + (lx(ffCard) - rx(e8Card)) / 2
+      : lx(e8Card) + (rx(ffCard) - lx(e8Card)) / 2;
+    if (debug) console.log(`[CenterConnector] e8→ff dir=${dir} yE8=${yE8.toFixed(1)} yFF=${yFF.toFixed(1)} xMid=${xMid.toFixed(0)}`);
+    if (dir === 'ltr') {
+      line(`M ${rx(e8Card)} ${yE8} H ${xMid} V ${yFF} H ${lx(ffCard)}`);
+    } else {
+      line(`M ${lx(e8Card)} ${yE8} H ${xMid} V ${yFF} H ${rx(ffCard)}`);
+    }
+  }
+
+  // FF → Championship connectors
+  if (ffTop && champEl) {
+    const yTop   = cy(ffTop);
+    const yChamp = cy(champEl);
+    const xMid   = rx(ffTop) + (lx(champEl) - rx(ffTop)) / 2;
+    if (debug) console.log(`[CenterConnector] ffTop→champ: yTop=${yTop.toFixed(1)} yChamp=${yChamp.toFixed(1)} xMid=${xMid.toFixed(0)}`);
+    line(`M ${rx(ffTop)} ${yTop} H ${xMid} V ${yChamp} H ${lx(champEl)}`);
+  }
+  if (ffBot && champEl) {
+    const yBot   = cy(ffBot);
+    const yChamp = cy(champEl);
+    const xMid   = rx(ffBot) + (lx(champEl) - rx(ffBot)) / 2;
+    if (debug) console.log(`[CenterConnector] ffBot→champ: yBot=${yBot.toFixed(1)} yChamp=${yChamp.toFixed(1)} xMid=${xMid.toFixed(0)}`);
+    line(`M ${rx(ffBot)} ${yBot} H ${xMid} V ${yChamp} H ${lx(champEl)}`);
+  }
+
+  if (debug) console.log(`[CenterConnector] Total paths drawn: ${svg.querySelectorAll('path').length}`);
+}
+
+// ─── CenterConnectors overlay component ──────────────────────────────────────
+function CenterConnectors({ layoutRef, scale, bracket }: {
+  layoutRef: React.RefObject<HTMLDivElement | null>;
+  scale: number;
+  bracket: ReturnType<typeof buildBracket> | null;
+}) {
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  const redraw = useCallback(() => {
+    if (!svgRef.current || !layoutRef.current) return;
+    drawCenterConnectors(svgRef.current, layoutRef.current, scale);
+  }, [layoutRef, scale]);
+
+  useEffect(() => {
+    // Double rAF to ensure all RegionBracket columns have painted
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(redraw)));
+    return () => cancelAnimationFrame(id);
+  }, [redraw, bracket]);
+
+  useEffect(() => {
+    window.addEventListener('resize', redraw);
+    return () => window.removeEventListener('resize', redraw);
+  }, [redraw]);
+
+  return (
+    <svg
+      ref={svgRef}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        pointerEvents: 'none',
+        overflow: 'visible',
+        zIndex: 5,  // below cards (z-index:3 for .bk-card) but above background
+      }}
+    />
   );
 }
 
@@ -745,6 +1029,50 @@ export default function MarchMadnessBracket() {
   const containerRef = useRef<HTMLDivElement>(null);
   const layoutRef    = useRef<HTMLDivElement>(null);
   const transform    = useZoomPan(containerRef, layoutRef, bracket !== null);
+
+  // ─── Dynamic FF/Championship positioning ─────────────────────────────────────
+  // After the bracket renders, read the actual E8 card positions and compute:
+  //   champTopPx = midpoint of E8[0] and E8[1] card centers (relative to bk-layout top)
+  //   ffSpacingPx = (E8[1].cy - E8[0].cy) / 4  (quarter of E8 spread)
+  // This gives equal spacing: E8[0] → FF-TOP → Championship → FF-BOT → E8[1]
+  const [ffLayout, setFfLayout] = useState({ champTopPx: 0, ffSpacingPx: 0 });
+
+  const computeFfLayout = useCallback(() => {
+    const layout = layoutRef.current;
+    if (!layout) return;
+    const e8Cols = Array.from(layout.querySelectorAll('[data-round="e8"]')) as HTMLElement[];
+    if (e8Cols.length < 2) return;
+    const e8Cards0 = e8Cols[0].querySelectorAll('.bk-card');
+    const e8Cards1 = e8Cols[1].querySelectorAll('.bk-card');
+    if (!e8Cards0.length || !e8Cards1.length) return;
+
+    // Use scrollTop-relative positions (layout-space, not screen-space)
+    // getBoundingClientRect gives screen coords; subtract layout top and divide by scale.
+    const s = transform.scale;
+    const lr = layout.getBoundingClientRect();
+    const cardCY = (card: Element) => {
+      const r = card.getBoundingClientRect();
+      return (r.top - lr.top + r.height / 2) / s;
+    };
+
+    const cy0 = cardCY(e8Cards0[0]);
+    const cy1 = cardCY(e8Cards1[0]);
+    const champTopPx  = (cy0 + cy1) / 2;           // midpoint of E8 cards
+    const ffSpacingPx = (cy1 - cy0) / 4;           // quarter of E8 spread
+    console.log(`[FFLayout] E8[0].cy=${cy0.toFixed(1)} E8[1].cy=${cy1.toFixed(1)} champTopPx=${champTopPx.toFixed(1)} ffSpacingPx=${ffSpacingPx.toFixed(1)}`);
+    setFfLayout({ champTopPx, ffSpacingPx });
+  }, [transform.scale]);
+
+  // Recompute after bracket data loads and after scale changes
+  useEffect(() => {
+    const id = requestAnimationFrame(() => requestAnimationFrame(computeFfLayout));
+    return () => cancelAnimationFrame(id);
+  }, [computeFfLayout, bracket]);
+
+  useEffect(() => {
+    window.addEventListener('resize', computeFfLayout);
+    return () => window.removeEventListener('resize', computeFfLayout);
+  }, [computeFfLayout]);
 
   if (isLoading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:300, color:'rgba(255,255,255,.5)', fontSize:14 }}>
@@ -946,10 +1274,10 @@ export default function MarchMadnessBracket() {
 
         /* ── Bracket layout ── */
         .bk-layout {
-          display:flex; align-items:flex-start; gap:20px;
+          display:flex; align-items:stretch; gap:20px;
           min-width:max-content;
         }
-        .bk-half { display:flex; flex-direction:column; gap:36px; }
+        .bk-half { display:flex; flex-direction:column; gap:280px; }
 
         /* ── First Four ── */
         .bk-firstfour {
@@ -1029,21 +1357,29 @@ export default function MarchMadnessBracket() {
           <div className="bk-header-year">2026 Tournament · All Regions</div>
         </div>
 
-        {/* Main bracket */}
-        <div ref={layoutRef} className="bk-layout">
+        {/* Main bracket — position:relative so CenterConnectors SVG can be absolute-positioned */}
+        <div ref={layoutRef} className="bk-layout" style={{ position:'relative' }}>
+          {/* E8→FF→Championship SVG overlay — spans full bk-layout */}
+          <CenterConnectors layoutRef={layoutRef} scale={transform.scale} bracket={bracket} />
+
           {/* LEFT: EAST + SOUTH */}
           <div className="bk-half">
-            <RegionBracket region="EAST"  data={bracket.regions.EAST}  dir="ltr" baseDelay={0.2} />
-            <RegionBracket region="SOUTH" data={bracket.regions.SOUTH} dir="ltr" baseDelay={0.2} />
+            <RegionBracket region="EAST"  data={bracket.regions.EAST}  dir="ltr" baseDelay={0.2} scale={transform.scale} />
+            <RegionBracket region="SOUTH" data={bracket.regions.SOUTH} dir="ltr" baseDelay={0.2} scale={transform.scale} />
           </div>
 
           {/* CENTER: Final Four + Championship */}
-          <FinalFourSection ff={bracket.ff} champ={bracket.champ} />
+          <FinalFourSection
+            ff={bracket.ff}
+            champ={bracket.champ}
+            champTopPx={ffLayout.champTopPx}
+            ffSpacingPx={ffLayout.ffSpacingPx}
+          />
 
           {/* RIGHT: WEST + MIDWEST (RTL) */}
           <div className="bk-half">
-            <RegionBracket region="WEST"    data={bracket.regions.WEST}    dir="rtl" baseDelay={0.2} />
-            <RegionBracket region="MIDWEST" data={bracket.regions.MIDWEST} dir="rtl" baseDelay={0.2} />
+            <RegionBracket region="WEST"    data={bracket.regions.WEST}    dir="rtl" baseDelay={0.2} scale={transform.scale} />
+            <RegionBracket region="MIDWEST" data={bracket.regions.MIDWEST} dir="rtl" baseDelay={0.2} scale={transform.scale} />
           </div>
         </div>
 
