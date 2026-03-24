@@ -1835,3 +1835,16 @@
 - [x] Added interaction ID to all log lines for full traceability
 - [x] Improved outer catch in bot.ts: checks deferred/replied state before choosing editReply vs reply
       logs reply failures separately instead of swallowing them
+
+## /splits Command Performance Optimization (2026-03-24)
+- [x] Profiled: 11.6s breakdown = 8.8s Playwright cold-start (76%) + 1.1s render + 0.45s upload + 0.16s deferReply
+- [x] Identified root bottleneck: Chromium launched fresh on every command (no warm browser)
+- [x] Implemented warmUpRenderer() called on bot login: Chromium + template + 2 pooled pages ready in ~2.6s
+      First /splits after restart now finds warm browser — cold-start eliminated
+- [x] Parallel rendering: all cards rendered concurrently with Promise.all() — N games = ~1x render time
+- [x] Template HTML cached in memory at module load (1.1 MB read once, not on every render)
+- [x] Parallel logo fetch: away+home logos fetched with Promise.all() instead of sequentially
+- [x] Warm page pool: 2 pre-opened pages maintained; refilled async after each render
+- [x] IMAGE_DELAY_MS reduced from 1500ms to 800ms (safe: 1.25 msg/s vs Discord limit of 1 msg/s)
+- [x] Granular timing logs: each phase (logo fetch, page claim, setContent, screenshot) logged with ms
+- [x] Expected result: 1-card warm = ~1.5s, 4-card warm = ~2.5s (parallel render) + 3x800ms gaps = ~5s total

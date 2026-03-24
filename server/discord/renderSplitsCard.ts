@@ -4,11 +4,17 @@
  * Uses Playwright (headless Chromium) to render the splits_card.html template
  * with injected game data and screenshot it to a PNG buffer.
  *
- * Logos are pre-fetched server-side and embedded as base64 data URIs so
- * Playwright never needs to make outbound network requests for images.
+ * Performance architecture:
+ *  - Browser is launched ONCE at startup via warmUpRenderer() and kept alive
+ *    (singleton). Cold-start (~8-9s) is paid once on boot, never on a command.
+ *  - Template HTML is read from disk ONCE at module load and cached in memory.
+ *  - Logos are fetched and cached as base64 data URIs (in-memory, per-process).
+ *  - Away and home logos are fetched in PARALLEL (Promise.all).
+ *  - A pool of pre-warmed blank pages is maintained so setContent() starts
+ *    from a warm page rather than a cold about:blank.
  */
 
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -17,6 +23,19 @@ import http from "http";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = path.join(__dirname, "splits_card.html");
+
+// ─── Template cache: read once at module load ─────────────────────────────────
+// Reading splits_card.html (1.1 MB with embedded fonts) on every render adds
+// unnecessary I/O. Cache it in memory at module load time.
+let _templateHtml: string | null = null;
+
+function getTemplateHtml(): string {
+  if (_templateHtml) return _templateHtml;
+  const t0 = Date.now();
+  _templateHtml = fs.readFileSync(TEMPLATE_PATH, "utf-8");
+  console.log(`[SplitsRenderer] Template loaded from disk: ${(_templateHtml.length / 1024).toFixed(0)} KB in ${Date.now() - t0}ms`);
+  return _templateHtml;
+}
 
 // ─── Logo cache: URL → base64 data URI ───────────────────────────────────────
 const _logoCache = new Map<string, string>();
@@ -58,12 +77,19 @@ async function fetchLogoAsDataUri(url: string): Promise<string | null> {
   });
 }
 
-// ─── Singleton browser instance (reused across all renders) ──────────────────
+// ─── Singleton browser instance ───────────────────────────────────────────────
 let _browser: Browser | null = null;
+let _warmUpPromise: Promise<void> | null = null;
 
+/**
+ * Returns the singleton browser, launching it if necessary.
+ * In normal operation this should never launch (warmUpRenderer() does it at
+ * startup), but it acts as a safety net for the first call.
+ */
 async function getBrowser(): Promise<Browser> {
   if (_browser && _browser.isConnected()) return _browser;
   console.log("[SplitsRenderer] Launching headless Chromium...");
+  const t0 = Date.now();
   _browser = await chromium.launch({
     headless: true,
     args: [
@@ -73,15 +99,86 @@ async function getBrowser(): Promise<Browser> {
       "--force-device-scale-factor=2",
     ],
   });
-  console.log("[SplitsRenderer] Chromium ready");
+  console.log(`[SplitsRenderer] Chromium ready in ${Date.now() - t0}ms`);
   return _browser;
+}
+
+// ─── Warm-page pool ───────────────────────────────────────────────────────────
+// We keep a small pool of pre-opened blank pages. When a render starts, it
+// claims a page from the pool (or opens a new one if the pool is empty).
+// After rendering, the page is closed (not returned to the pool) to avoid
+// stale state. The pool is refilled asynchronously after each render.
+const PAGE_POOL_SIZE = 2;
+const _pagePool: Page[] = [];
+
+async function refillPagePool(): Promise<void> {
+  try {
+    const browser = await getBrowser();
+    while (_pagePool.length < PAGE_POOL_SIZE) {
+      const page = await browser.newPage();
+      await page.setViewportSize({ width: 1160, height: 700 });
+      // Pre-navigate to about:blank so the page is fully initialised
+      await page.goto("about:blank");
+      _pagePool.push(page);
+    }
+  } catch {
+    // Non-fatal — pool will be empty and renderSplitsCard will open a fresh page
+  }
+}
+
+async function claimPage(): Promise<Page> {
+  if (_pagePool.length > 0) {
+    const page = _pagePool.pop()!;
+    // Verify the page is still usable
+    try {
+      await page.evaluate(() => true);
+      return page;
+    } catch {
+      // Page is stale — fall through to open a new one
+    }
+  }
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  await page.setViewportSize({ width: 1160, height: 700 });
+  return page;
+}
+
+/**
+ * Warm up the renderer: launch Chromium, pre-load the template, and fill the
+ * page pool. Call this once at bot startup so the first /splits command is fast.
+ */
+export async function warmUpRenderer(): Promise<void> {
+  if (_warmUpPromise) return _warmUpPromise;
+  _warmUpPromise = (async () => {
+    const t0 = Date.now();
+    console.log("[SplitsRenderer] Warming up — launching Chromium and pre-loading template...");
+    try {
+      // 1. Launch browser
+      await getBrowser();
+      // 2. Cache template HTML from disk
+      getTemplateHtml();
+      // 3. Fill page pool
+      await refillPagePool();
+      console.log(`[SplitsRenderer] ✅ Warm-up complete in ${Date.now() - t0}ms — browser ready, ${_pagePool.length} page(s) pooled`);
+    } catch (err) {
+      console.error("[SplitsRenderer] Warm-up failed:", err);
+      _warmUpPromise = null; // Allow retry
+    }
+  })();
+  return _warmUpPromise;
 }
 
 /** Call this on bot shutdown to cleanly close the browser */
 export async function closeSplitsRenderer(): Promise<void> {
+  // Drain and close pooled pages
+  while (_pagePool.length > 0) {
+    const p = _pagePool.pop()!;
+    await p.close().catch(() => {});
+  }
   if (_browser) {
     await _browser.close();
     _browser = null;
+    _warmUpPromise = null;
     console.log("[SplitsRenderer] Browser closed");
   }
 }
@@ -137,48 +234,49 @@ export interface SplitsCardData {
  */
 export async function renderSplitsCard(data: SplitsCardData): Promise<Buffer> {
   const t0 = Date.now();
-  console.log(`[SplitsRenderer] Rendering: ${data.away.abbr} @ ${data.home.abbr} (${data.league})`);
+  const matchup = `${data.away.abbr} @ ${data.home.abbr}`;
+  console.log(`[SplitsRenderer] Rendering: ${matchup} (${data.league})`);
 
-  // Pre-fetch logos server-side and replace URLs with base64 data URIs
-  // so Playwright never needs to make outbound network requests for images
+  // ── Phase 1: Parallel logo fetch + template read ──────────────────────────
+  // Fetch both logos concurrently and read the template from cache.
+  const tFetch0 = Date.now();
+  const [awayDataUri, homeDataUri, templateHtml] = await Promise.all([
+    data.away.logoUrl ? fetchLogoAsDataUri(data.away.logoUrl) : Promise.resolve(null),
+    data.home.logoUrl ? fetchLogoAsDataUri(data.home.logoUrl) : Promise.resolve(null),
+    Promise.resolve(getTemplateHtml()),
+  ]);
+  console.log(`[SplitsRenderer] ${matchup} — logos+template ready in ${Date.now() - tFetch0}ms`);
+
   const enrichedData = {
     ...data,
     away: { ...data.away },
     home: { ...data.home },
   };
 
-  if (data.away.logoUrl) {
-    const dataUri = await fetchLogoAsDataUri(data.away.logoUrl);
-    if (dataUri) {
-      enrichedData.away.logoUrl = dataUri;
-      console.log(`[SplitsRenderer] Away logo embedded: ${data.away.abbr}`);
-    } else {
-      console.warn(`[SplitsRenderer] Away logo unavailable, using abbr fallback: ${data.away.abbr}`);
-      enrichedData.away.logoUrl = undefined;
-    }
+  if (awayDataUri) {
+    enrichedData.away.logoUrl = awayDataUri;
+    console.log(`[SplitsRenderer] Away logo embedded: ${data.away.abbr}`);
+  } else if (data.away.logoUrl) {
+    console.warn(`[SplitsRenderer] Away logo unavailable, using abbr fallback: ${data.away.abbr}`);
+    enrichedData.away.logoUrl = undefined;
   }
 
-  if (data.home.logoUrl) {
-    const dataUri = await fetchLogoAsDataUri(data.home.logoUrl);
-    if (dataUri) {
-      enrichedData.home.logoUrl = dataUri;
-      console.log(`[SplitsRenderer] Home logo embedded: ${data.home.abbr}`);
-    } else {
-      console.warn(`[SplitsRenderer] Home logo unavailable, using abbr fallback: ${data.home.abbr}`);
-      enrichedData.home.logoUrl = undefined;
-    }
+  if (homeDataUri) {
+    enrichedData.home.logoUrl = homeDataUri;
+    console.log(`[SplitsRenderer] Home logo embedded: ${data.home.abbr}`);
+  } else if (data.home.logoUrl) {
+    console.warn(`[SplitsRenderer] Home logo unavailable, using abbr fallback: ${data.home.abbr}`);
+    enrichedData.home.logoUrl = undefined;
   }
 
-  // 1. Read template HTML
-  const templateHtml = fs.readFileSync(TEMPLATE_PATH, "utf-8");
-
-  // 2. Inject enriched game JSON (with base64 logos) into the placeholder
+  // ── Phase 2: Inject data into template ───────────────────────────────────
   const gameJson = JSON.stringify(enrichedData);
   const html = templateHtml.replace("__GAME_JSON__", gameJson.replace(/</g, "\\u003c"));
 
-  // 3. Open page and set content
-  const browser = await getBrowser();
-  const page = await browser.newPage();
+  // ── Phase 3: Claim a page and render ─────────────────────────────────────
+  const tPage0 = Date.now();
+  const page = await claimPage();
+  console.log(`[SplitsRenderer] ${matchup} — page claimed in ${Date.now() - tPage0}ms`);
 
   // Capture browser console messages for debugging
   page.on("console", (msg) => {
@@ -193,12 +291,10 @@ export async function renderSplitsCard(data: SplitsCardData): Promise<Buffer> {
   });
 
   try {
-    // Set viewport to match card width + padding
-    // 2x device pixel ratio for maximum sharpness
-    await page.setViewportSize({ width: 1160, height: 700 });
-
     // Load HTML — logos are embedded as data URIs, no external requests needed
+    const tContent0 = Date.now();
     await page.setContent(html, { waitUntil: "networkidle" });
+    console.log(`[SplitsRenderer] ${matchup} — setContent in ${Date.now() - tContent0}ms`);
 
     // Wait for fonts to be ready
     await page.evaluate(() => document.fonts.ready);
@@ -219,15 +315,19 @@ export async function renderSplitsCard(data: SplitsCardData): Promise<Buffer> {
 
     console.log(`[SplitsRenderer]   Card bbox: ${JSON.stringify(bbox)}`);
 
+    const tShot0 = Date.now();
     const pngBuffer = await card.screenshot({
       type: "png",
       animations: "disabled",
       scale: "device",
     });
+    console.log(`[SplitsRenderer] ${matchup} — screenshot in ${Date.now() - tShot0}ms`);
 
     console.log(`[SplitsRenderer] ✅ Done in ${Date.now() - t0}ms — ${pngBuffer.length} bytes`);
     return pngBuffer as Buffer;
   } finally {
     await page.close();
+    // Refill the pool asynchronously — don't block the caller
+    refillPagePool().catch(() => {});
   }
 }

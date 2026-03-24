@@ -16,6 +16,7 @@ import {
 } from "discord.js";
 import { ENV } from "../_core/env";
 import { handleSplitsCommand, handleSplitsAutocomplete, closeSplitsRenderer } from "./splitsCommand";
+import { warmUpRenderer } from "./renderSplitsCard";
 import { enrichTeamRegistryFromDb } from "./teamRegistry";
 
 let botClient: Client | null = null;
@@ -54,7 +55,17 @@ export function startDiscordBot(): void {
   client.once(Events.ClientReady, (readyClient) => {
     console.log(`[SplitsBot] ✅ Logged in as ${readyClient.user.tag}`);
     console.log(`[SplitsBot] Guild: ${ENV.discordGuildId}`);
-    // Enrich team registry with abbrevs and colors from DB
+
+    // ── Parallel startup tasks ────────────────────────────────────────────────
+    // Both tasks run concurrently so the bot is fully ready as fast as possible.
+
+    // 1. Warm up Playwright: launch Chromium, cache template, fill page pool.
+    //    This eliminates the ~8-9s cold-start on the first /splits command.
+    warmUpRenderer().catch((err) =>
+      console.error('[SplitsBot] Renderer warm-up failed (non-fatal):', err)
+    );
+
+    // 2. Enrich team registry with abbrevs and colors from DB
     enrichTeamRegistryFromDb().catch((err) =>
       console.error('[SplitsBot] Team registry enrichment failed:', err)
     );

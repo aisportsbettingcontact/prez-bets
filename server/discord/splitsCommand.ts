@@ -27,7 +27,9 @@ import { renderSplitsCard, closeSplitsRenderer, type SplitsCardData, type Splits
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ALLOWED_USER_ID   = "1098485718734602281";
-const IMAGE_DELAY_MS    = 1_500;
+// Discord rate limit for channel sends: 5 messages per 5 seconds per channel.
+// 800ms between posts is safe (1.25 msg/s) and avoids the 429 rate-limit error.
+const IMAGE_DELAY_MS    = 800;
 
 // ─── Structured logger ────────────────────────────────────────────────────────
 type LogLevel = "info" | "warn" | "error" | "debug";
@@ -518,56 +520,81 @@ export async function handleSplitsCommand(
 
   log("post", `Posting ${games.length} game(s) for ${dateLabel} (sport=${sportFilter})`);
 
-  // 6. Render and post one image per game
-  let posted = 0;
+  // 6. Build card data for all games (synchronous, fast)
   const errors: string[] = [];
+  type RenderJob = { game: GameSplits; cardData: SplitsCardData; key: string; index: number };
+  const jobs: RenderJob[] = [];
 
   for (let i = 0; i < games.length; i++) {
     const game = games[i];
     const key  = formatGameKey(game);
     log("render", `[${i + 1}/${games.length}] Building card: ${key}`);
-
-    let cardData: SplitsCardData;
     try {
-      cardData = buildCardData(game);
+      const cardData = buildCardData(game);
+      jobs.push({ game, cardData, key, index: i });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log("render", `[${i + 1}/${games.length}] buildCardData FAILED for ${key}: ${msg}`, "error");
       errors.push(`${key}: buildCardData — ${msg}`);
-      continue;
     }
+  }
 
-    log("render", `[${i + 1}/${games.length}] Rendering PNG: ${key}`);
-    const renderStart = Date.now();
-    let pngBuffer: Buffer;
-    try {
-      pngBuffer = await renderSplitsCard(cardData);
-      const renderMs = Date.now() - renderStart;
-      log("render", `[${i + 1}/${games.length}] Rendered in ${renderMs}ms — ${(pngBuffer.length / 1024).toFixed(1)} KB`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log("render", `[${i + 1}/${games.length}] renderSplitsCard FAILED for ${key}: ${msg}`, "error");
-      errors.push(`${key}: render — ${msg}`);
-      if (i < games.length - 1) await sleep(IMAGE_DELAY_MS);
-      continue;
-    }
+  // 7. Render ALL cards in PARALLEL — Playwright handles concurrent pages
+  //    Each render uses its own browser page; pages are pooled and reused.
+  //    This means 4 NBA games render in ~render_time_1 instead of 4×render_time.
+  log("render", `Starting parallel render of ${jobs.length} card(s)...`);
+  const tRenderAll = Date.now();
 
-    // Post to channel
+  type RenderResult =
+    | { ok: true;  job: RenderJob; buffer: Buffer; renderMs: number }
+    | { ok: false; job: RenderJob; error: string };
+
+  const renderResults: RenderResult[] = await Promise.all(
+    jobs.map(async (job): Promise<RenderResult> => {
+      const t0r = Date.now();
+      log("render", `[${job.index + 1}/${games.length}] Rendering PNG: ${job.key}`);
+      try {
+        const buffer = await renderSplitsCard(job.cardData);
+        const renderMs = Date.now() - t0r;
+        log("render", `[${job.index + 1}/${games.length}] ✅ Rendered in ${renderMs}ms — ${(buffer.length / 1024).toFixed(1)} KB`);
+        return { ok: true, job, buffer, renderMs };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log("render", `[${job.index + 1}/${games.length}] renderSplitsCard FAILED for ${job.key}: ${msg}`, "error");
+        return { ok: false, job, error: msg };
+      }
+    })
+  );
+
+  log("render", `All ${jobs.length} render(s) complete in ${Date.now() - tRenderAll}ms`);
+
+  // Collect render errors
+  for (const r of renderResults) {
+    if (!r.ok) errors.push(`${r.job.key}: render — ${r.error}`);
+  }
+
+  // 8. Post successful renders to channel SEQUENTIALLY with rate-limit delay
+  //    Discord rate limit: 5 messages/5s per channel. 800ms gap = 1.25 msg/s (safe).
+  const successfulRenders = renderResults.filter((r): r is Extract<RenderResult, { ok: true }> => r.ok);
+  let posted = 0;
+
+  for (let i = 0; i < successfulRenders.length; i++) {
+    const { job, buffer } = successfulRenders[i];
+    const tPost0 = Date.now();
     try {
-      const attachment = new AttachmentBuilder(pngBuffer, {
-        name: `splits_${game.away_abbr}_vs_${game.home_abbr}.png`,
+      const attachment = new AttachmentBuilder(buffer, {
+        name: `splits_${job.game.away_abbr}_vs_${job.game.home_abbr}.png`,
       });
       await channel.send({ files: [attachment] });
       posted++;
-      log("post", `[${i + 1}/${games.length}] ✅ Posted: ${key}`);
+      log("post", `[${i + 1}/${successfulRenders.length}] ✅ Posted: ${job.key} (upload ${Date.now() - tPost0}ms)`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      log("post", `[${i + 1}/${games.length}] Discord send FAILED for ${key}: ${msg}`, "error");
-      errors.push(`${key}: send — ${msg}`);
+      log("post", `[${i + 1}/${successfulRenders.length}] Discord send FAILED for ${job.key}: ${msg}`, "error");
+      errors.push(`${job.key}: send — ${msg}`);
     }
-
-    // Rate-limit delay between messages
-    if (i < games.length - 1) {
+    // Rate-limit gap between posts (not after the last one)
+    if (i < successfulRenders.length - 1) {
       await sleep(IMAGE_DELAY_MS);
     }
   }
