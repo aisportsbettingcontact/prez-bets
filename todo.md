@@ -1744,3 +1744,13 @@
 - [x] Update fetchAllDailySplits to accept optional sport parameter
 - [x] Wire autocomplete handler in bot.ts for game picker
 - [x] Re-register Discord slash command with new sport/game/date options
+
+## Discord Splits Card v3 (2026-03-24)
+- [x] Remove Discord header text message ("📊 Daily Betting Splits — ...") from /splits posts
+- [x] Increase card canvas width 820px → 1100px for higher resolution output
+- [x] Increase Playwright viewport 860px → 1160px
+- [x] Make city names significantly bigger: 22px → 30px
+- [x] Make team nicknames bigger: 11px → 15px
+- [x] Make team logos bigger: 54px circle → 80px circle, 38px image → 58px image
+- [x] Increase overall card padding and spacing for premium feel
+- [x] Increase market section fonts: labels 12px → 16px, line values 26px → 36px, bars 26px → 34px

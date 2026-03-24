@@ -195,7 +195,7 @@ export async function renderSplitsCard(data: SplitsCardData): Promise<Buffer> {
   try {
     // Set viewport to match card width + padding
     // 2x device pixel ratio for maximum sharpness
-    await page.setViewportSize({ width: 860, height: 600 });
+    await page.setViewportSize({ width: 1160, height: 700 });
 
     // Load HTML — logos are embedded as data URIs, no external requests needed
     await page.setContent(html, { waitUntil: "networkidle" });

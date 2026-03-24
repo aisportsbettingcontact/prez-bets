@@ -460,21 +460,7 @@ export async function handleSplitsCommand(
       })
     : todayEtLabel();
 
-  const sportTag = sportFilter !== "ALL" ? ` · ${sportFilter}` : "";
-  const gameTag  = gameFilter ? ` · ${gameFilter}` : "";
-  const headerCount = games.length === 1
-    ? "1 game"
-    : `${games.length} games`;
-
-  log("post", `Sending header for ${dateLabel} (${games.length} games, sport=${sportFilter})`);
-  try {
-    await channel.send({
-      content: `## 📊 Daily Betting Splits — ${dateLabel}${sportTag}${gameTag}\n${headerCount}`,
-    });
-    await sleep(IMAGE_DELAY_MS);
-  } catch (err) {
-    log("post", `Header send failed: ${err instanceof Error ? err.message : String(err)}`, "warn");
-  }
+  log("post", `Posting ${games.length} game(s) for ${dateLabel} (sport=${sportFilter})`);
 
   // 6. Render and post one image per game
   let posted = 0;
