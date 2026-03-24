@@ -1754,3 +1754,9 @@
 - [x] Make team logos bigger: 54px circle → 80px circle, 38px image → 58px image
 - [x] Increase overall card padding and spacing for premium feel
 - [x] Increase market section fonts: labels 12px → 16px, line values 26px → 36px, bars 26px → 34px
+
+## Discord Splits Card Logo Fix (2026-03-24)
+- [x] Debug onerror handler: ROOT CAUSE = inline onerror with double-quoted style string broke HTML attribute parsing, leaking fallback text as DOM content
+- [x] Fix logoHTML function: removed inline onerror entirely, use hidden .abbr-fallback span + JS addEventListener after DOM build
+- [x] Verified fix with GSW/DAL logos: images load cleanly (naturalWidth=500), fallback span stays display:none
+- [x] Rebuilt splits_card.html v4 with corrected logo rendering
