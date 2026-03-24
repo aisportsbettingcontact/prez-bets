@@ -15,6 +15,7 @@ export interface TeamEntry {
   logoUrl: string;
   primaryColor: string;
   secondaryColor: string;
+  tertiaryColor: string;
 }
 
 // ── Static registries (NCAAM + NHL abbreviations from shared) ─────────────────
@@ -26,6 +27,7 @@ for (const t of NCAAM_TEAMS) {
     logoUrl: t.logoUrl,
     primaryColor: (t as any).primaryColor ?? "#4A90D9",
     secondaryColor: (t as any).secondaryColor ?? "#FFFFFF",
+    tertiaryColor: (t as any).tertiaryColor ?? "#FFFFFF",
   });
 }
 
@@ -38,6 +40,7 @@ for (const t of NHL_TEAMS) {
     logoUrl: t.logoUrl,
     primaryColor: "#003087",
     secondaryColor: "#FFFFFF",
+    tertiaryColor: "#FFFFFF",
   });
 }
 
@@ -55,6 +58,7 @@ for (const t of NBA_TEAMS) {
     logoUrl: t.logoUrl,
     primaryColor: "#1D428A",
     secondaryColor: "#FFC72C",
+    tertiaryColor: "#FFFFFF",
   });
 }
 
@@ -69,6 +73,7 @@ export async function enrichTeamRegistryFromDb(): Promise<void> {
       abbrev: nbaTeams.abbrev,
       primaryColor: nbaTeams.primaryColor,
       secondaryColor: nbaTeams.secondaryColor,
+      tertiaryColor: nbaTeams.tertiaryColor,
       name: nbaTeams.name,
       logoUrl: nbaTeams.logoUrl,
     }).from(nbaTeams);
@@ -79,6 +84,7 @@ export async function enrichTeamRegistryFromDb(): Promise<void> {
         existing.abbrev = row.abbrev ?? existing.abbrev;
         existing.primaryColor = row.primaryColor ?? existing.primaryColor;
         existing.secondaryColor = row.secondaryColor ?? existing.secondaryColor;
+        existing.tertiaryColor = (row as any).tertiaryColor ?? existing.tertiaryColor;
         if (row.logoUrl) existing.logoUrl = row.logoUrl;
       }
     }
@@ -90,6 +96,7 @@ export async function enrichTeamRegistryFromDb(): Promise<void> {
       abbrev: nhlTeams.abbrev,
       primaryColor: nhlTeams.primaryColor,
       secondaryColor: nhlTeams.secondaryColor,
+      tertiaryColor: nhlTeams.tertiaryColor,
       logoUrl: nhlTeams.logoUrl,
     }).from(nhlTeams);
 
@@ -99,6 +106,7 @@ export async function enrichTeamRegistryFromDb(): Promise<void> {
         existing.abbrev = row.abbrev ?? existing.abbrev;
         existing.primaryColor = row.primaryColor ?? existing.primaryColor;
         existing.secondaryColor = row.secondaryColor ?? existing.secondaryColor;
+        existing.tertiaryColor = (row as any).tertiaryColor ?? existing.tertiaryColor;
         if (row.logoUrl) existing.logoUrl = row.logoUrl;
       }
     }
@@ -119,6 +127,7 @@ function fallback(dbSlug: string): TeamEntry {
     logoUrl: "",
     primaryColor: "#4A90D9",
     secondaryColor: "#FFFFFF",
+    tertiaryColor: "#FFFFFF",
   };
 }
 

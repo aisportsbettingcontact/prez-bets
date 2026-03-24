@@ -42,6 +42,8 @@ export interface GameSplits {
   home_color: string;
   away_color2: string;
   home_color2: string;
+  away_color3: string;
+  home_color3: string;
   away_logo: string;
   home_logo: string;
   spread: SpreadSplits;
@@ -113,6 +115,8 @@ export async function fetchAllDailySplits(dateOverride?: string): Promise<GameSp
       home_color: homeEntry.primaryColor,
       away_color2: awayEntry.secondaryColor,
       home_color2: homeEntry.secondaryColor,
+      away_color3: awayEntry.tertiaryColor,
+      home_color3: homeEntry.tertiaryColor,
       away_logo: awayEntry.logoUrl,
       home_logo: homeEntry.logoUrl,
       spread: {

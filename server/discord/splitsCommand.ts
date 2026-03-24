@@ -76,6 +76,8 @@ function generateSplitsImage(game: GameSplits, outputPath: string): Promise<void
       home_color:  game.home_color,
       away_color2: game.away_color2,
       home_color2: game.home_color2,
+      away_color3: game.away_color3,
+      home_color3: game.home_color3,
       away_logo:   game.away_logo,
       home_logo:   game.home_logo,
       league:      game.league,
