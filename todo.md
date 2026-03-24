@@ -1728,3 +1728,10 @@
 - [ ] R32/S16/E8 gaps computed as 2x/4x/8x the R64 gap (standard bracket doubling)
 - [ ] ROUND_PAD values computed so card[0] center aligns with its feeder midpoint
 - [ ] All connector paths arrive at exact card center-Y (no offset)
+
+## Discord Splits Card Quality Improvements (2026-03-24)
+- [x] Embed Barlow Condensed fonts as base64 data URIs in splits_card.html (no CDN dependency)
+- [x] Fix center header readability: "@" symbol bright white (30px bold), league/time/date fully visible
+- [x] Fix JS syntax error in onerror handler (use global logoErr() function instead of inline code)
+- [x] Enable 2x device pixel ratio rendering (--force-device-scale-factor=2) for maximum sharpness
+- [x] Use scale:"device" in Playwright screenshot for crisp 2x output

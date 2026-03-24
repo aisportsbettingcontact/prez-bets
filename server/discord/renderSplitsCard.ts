@@ -66,7 +66,12 @@ async function getBrowser(): Promise<Browser> {
   console.log("[SplitsRenderer] Launching headless Chromium...");
   _browser = await chromium.launch({
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--force-device-scale-factor=2",
+    ],
   });
   console.log("[SplitsRenderer] Chromium ready");
   return _browser;
@@ -189,6 +194,7 @@ export async function renderSplitsCard(data: SplitsCardData): Promise<Buffer> {
 
   try {
     // Set viewport to match card width + padding
+    // 2x device pixel ratio for maximum sharpness
     await page.setViewportSize({ width: 860, height: 600 });
 
     // Load HTML — logos are embedded as data URIs, no external requests needed
@@ -216,6 +222,7 @@ export async function renderSplitsCard(data: SplitsCardData): Promise<Buffer> {
     const pngBuffer = await card.screenshot({
       type: "png",
       animations: "disabled",
+      scale: "device",
     });
 
     console.log(`[SplitsRenderer] ✅ Done in ${Date.now() - t0}ms — ${pngBuffer.length} bytes`);
