@@ -31,6 +31,15 @@ function formatMilitaryTime(time: string | null | undefined): string {
   if (!time) return "TBD";
   const upper = time.trim().toUpperCase();
   if (upper === "TBD" || upper === "TBA" || upper === "") return "TBD";
+  // Handle already-formatted 12-hour strings like "7:05 PM ET" or "12:15 PM ET"
+  const already12h = /^(\d{1,2}):(\d{2})\s*(AM|PM)/i.exec(time);
+  if (already12h) {
+    const h = parseInt(already12h[1], 10);
+    const m = already12h[2];
+    const ap = already12h[3].toUpperCase();
+    return `${h}:${m} ${ap} ET`;
+  }
+  // Military time format (e.g. "19:05")
   const [hStr, mStr] = time.split(":");
   const h = parseInt(hStr ?? "0", 10);
   const m = parseInt(mStr ?? "0", 10);
@@ -42,6 +51,17 @@ function formatMilitaryTime(time: string | null | undefined): string {
 
 function timeToMinutes(time: string | null | undefined): number {
   if (!time || time.toUpperCase() === "TBD" || time.toUpperCase() === "TBA") return 9999;
+  // Handle already-formatted 12-hour strings like "7:05 PM ET" or "12:15 PM ET"
+  const already12h = /^(\d{1,2}):(\d{2})\s*(AM|PM)/i.exec(time);
+  if (already12h) {
+    let h = parseInt(already12h[1], 10);
+    const m = parseInt(already12h[2], 10);
+    const ap = already12h[3].toUpperCase();
+    if (ap === "PM" && h !== 12) h += 12;
+    if (ap === "AM" && h === 12) h = 0;
+    return h * 60 + m;
+  }
+  // Military time format (e.g. "19:05")
   const [hStr, mStr] = time.split(":");
   const h = parseInt(hStr ?? "0", 10);
   const m = parseInt(mStr ?? "0", 10);
@@ -875,7 +895,7 @@ export default function ModelProjections() {
           {(!activeSports || activeSports.MLB) && (
             <button onClick={() => setSelectedSport("MLB")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
               style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "MLB" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
-              <img src="https://www.mlbstatic.com/team-logos/league-logos/mlb.svg" alt="MLB" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "MLB" ? 1 : 0.5, flexShrink: 0 }} />
+              <img src="https://www.mlbstatic.com/team-logos/league-on-dark/1.svg" alt="MLB" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "MLB" ? 1 : 0.5, flexShrink: 0 }} />
               MLB
             </button>
           )}

@@ -1881,6 +1881,13 @@
 
 ## MLB Feed Integration (2026-03-24)
 - [x] Fix isValidGame() in routers.ts to use MLB_VALID_DB_SLUGS (dbSlug) instead of MLB_BY_ABBREV (abbrev) for MLB team validation
+- [x] Add MLB_VALID_ABBREVS export to mlbTeams.ts (set of all 30 MLB abbreviations)
+- [x] Fix isValidGame() to accept both abbreviations (NYY, SF) and dbSlugs (yankees, giants) for MLB
+- [x] Publish Yankees @ Giants (NYY @ SF) game on March 25 to the feed (publishedToFeed=1)
+- [x] Fix formatMilitaryTime in GameCard.tsx to handle MLB's "H:MM AM/PM ET" format
+- [x] Fix formatMilitaryTime in ModelProjections.tsx to handle MLB's "H:MM AM/PM ET" format
+- [x] Fix timeToMinutes in ModelProjections.tsx to correctly sort MLB games (12-hour AM/PM format)
+- [x] Update MLB tab logo in ModelProjections.tsx to use league-on-dark/1.svg
 - [x] Add MLB pill to ModelProjections.tsx sport selector (NHL | NBA | NCAAM | MLB)
 - [x] Add MLB to selectedSport type in ModelProjections.tsx
 - [x] Update auto-switch logic in ModelProjections.tsx to include MLB in fallback order (MLB → NHL → NBA → NCAAM)

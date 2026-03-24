@@ -397,6 +397,9 @@ export const MLB_BY_BR_ABBREV = new Map<string, MlbTeam>(
 /** Set of all valid MLB DB slugs — used for VSiN scrape filtering. */
 export const MLB_VALID_DB_SLUGS = new Set<string>(MLB_TEAMS.map((t) => t.dbSlug));
 
+/** Set of all valid MLB abbreviations — used for schedule-seeded game filtering (teams stored as abbrev). */
+export const MLB_VALID_ABBREVS = new Set<string>(MLB_TEAMS.map((t) => t.abbrev));
+
 // ─── VSiN slug aliases ────────────────────────────────────────────────────────
 /**
  * VSiN href aliases for MLB teams.

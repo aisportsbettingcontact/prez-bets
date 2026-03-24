@@ -36,7 +36,7 @@ import { MARCH_MADNESS_DB_SLUGS } from "@shared/marchMadnessTeams";
 import { parseAnAllMarketsHtml, type AnSport } from "./anHtmlParser";
 import { NBA_VALID_DB_SLUGS, NBA_TEAMS } from "@shared/nbaTeams";
 import { NHL_VALID_DB_SLUGS, NHL_TEAMS } from "@shared/nhlTeams";
-import { MLB_BY_ABBREV, MLB_VALID_DB_SLUGS } from "@shared/mlbTeams";
+import { MLB_BY_ABBREV, MLB_VALID_DB_SLUGS, MLB_VALID_ABBREVS } from "@shared/mlbTeams";
 
 /** Returns true if both teams are in the appropriate registry for the given sport */
 function isValidGame(awayTeam: string, homeTeam: string, sport?: string | null): boolean {
@@ -47,7 +47,11 @@ function isValidGame(awayTeam: string, homeTeam: string, sport?: string | null):
     return NHL_VALID_DB_SLUGS.has(awayTeam) && NHL_VALID_DB_SLUGS.has(homeTeam);
   }
   if (sport === "MLB") {
-    return MLB_VALID_DB_SLUGS.has(awayTeam) && MLB_VALID_DB_SLUGS.has(homeTeam);
+    // Teams may be stored as abbreviations (e.g. "NYY") from the schedule seeder
+    // or as dbSlugs (e.g. "yankees") from VSiN. Accept both.
+    const awayOk = MLB_VALID_ABBREVS.has(awayTeam) || MLB_VALID_DB_SLUGS.has(awayTeam);
+    const homeOk = MLB_VALID_ABBREVS.has(homeTeam) || MLB_VALID_DB_SLUGS.has(homeTeam);
+    return awayOk && homeOk;
   }
   // NCAAM: only show March Madness bracket teams
   return MARCH_MADNESS_DB_SLUGS.has(awayTeam) && MARCH_MADNESS_DB_SLUGS.has(homeTeam);

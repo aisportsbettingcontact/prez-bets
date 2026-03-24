@@ -43,6 +43,16 @@ type GameRow = RouterOutput["games"]["list"][number];
 function formatMilitaryTime(time: string, sport?: string): string {
   const upper = time?.toUpperCase() ?? "";
   if (!time || upper === "TBD" || upper === "TBA" || !time.includes(":")) return "TBD";
+  // Handle already-formatted 12-hour strings like "7:05 PM ET" or "12:15 PM ET"
+  const already12h = /^(\d{1,2}):(\d{2})\s*(AM|PM)/i.exec(time);
+  if (already12h) {
+    const h = parseInt(already12h[1], 10);
+    const m = already12h[2];
+    const ap = already12h[3].toUpperCase();
+    const tz = sport === "NCAAM" ? "PST" : "ET";
+    return `${h}:${m} ${ap} ${tz}`;
+  }
+  // Military time format (e.g. "19:05")
   const parts = time.split(":");
   let hours = parseInt(parts[0], 10);
   const minutes = parts[1]?.slice(0, 2) ?? "00";
