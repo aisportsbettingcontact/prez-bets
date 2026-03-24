@@ -281,6 +281,20 @@
       "when": 1774382437017,
       "tag": "0039_gorgeous_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1774391787674,
+      "tag": "0040_milky_greymalkin",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1774392167359,
+      "tag": "0041_unusual_toro",
+      "breakpoints": true
     }
   ]
 }

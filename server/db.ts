@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, isNotNull, isNull, lte, lt, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
-import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, appUsers as appUsersTable, oddsHistory, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow } from "../drizzle/schema";
+import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, appUsers as appUsersTable, oddsHistory, mlbLineups, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow, type MlbLineupRow, type InsertMlbLineup } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1292,4 +1292,107 @@ export async function getActiveSports(): Promise<{ NBA: boolean; NHL: boolean; N
     MLB: proActive.has('MLB'),
     NCAAM: ncaamActive,
   };
+}
+
+// ─── MLB Lineups ──────────────────────────────────────────────────────────────
+
+/**
+ * Upsert a Rotowire lineup record for a given game.
+ * Matches on gameId (unique). Updates all fields on duplicate.
+ *
+ * @param data - InsertMlbLineup row (gameId required)
+ */
+export async function upsertMlbLineup(data: InsertMlbLineup): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[upsertMlbLineup] DB not available — skipping");
+    return;
+  }
+
+  const tag = `[upsertMlbLineup][gameId=${data.gameId}]`;
+
+  try {
+    await db
+      .insert(mlbLineups)
+      .values(data)
+      .onDuplicateKeyUpdate({
+        set: {
+          scrapedAt: data.scrapedAt,
+          awayPitcherName: data.awayPitcherName ?? null,
+          awayPitcherHand: data.awayPitcherHand ?? null,
+          awayPitcherEra: data.awayPitcherEra ?? null,
+          awayPitcherRotowireId: data.awayPitcherRotowireId ?? null,
+          awayPitcherMlbamId: data.awayPitcherMlbamId ?? null,
+          awayPitcherConfirmed: data.awayPitcherConfirmed ?? false,
+          homePitcherName: data.homePitcherName ?? null,
+          homePitcherHand: data.homePitcherHand ?? null,
+          homePitcherEra: data.homePitcherEra ?? null,
+          homePitcherRotowireId: data.homePitcherRotowireId ?? null,
+          homePitcherMlbamId: data.homePitcherMlbamId ?? null,
+          homePitcherConfirmed: data.homePitcherConfirmed ?? false,
+          awayLineup: data.awayLineup ?? null,
+          homeLineup: data.homeLineup ?? null,
+          awayLineupConfirmed: data.awayLineupConfirmed ?? false,
+          homeLineupConfirmed: data.homeLineupConfirmed ?? false,
+          weatherIcon: data.weatherIcon ?? null,
+          weatherTemp: data.weatherTemp ?? null,
+          weatherWind: data.weatherWind ?? null,
+          weatherPrecip: data.weatherPrecip ?? null,
+          weatherDome: data.weatherDome ?? false,
+          umpire: data.umpire ?? null,
+          updatedAt: sql`NOW()`,
+        },
+      });
+
+    console.log(
+      `${tag} Upserted | ` +
+      `awayP="${data.awayPitcherName ?? "TBD"}" (${data.awayPitcherHand ?? "?"}) | ` +
+      `homeP="${data.homePitcherName ?? "TBD"}" (${data.homePitcherHand ?? "?"}) | ` +
+      `awayLineup=${data.awayLineup ? JSON.parse(data.awayLineup).length : 0}/9 | ` +
+      `homeLineup=${data.homeLineup ? JSON.parse(data.homeLineup).length : 0}/9 | ` +
+      `weather=${data.weatherIcon ?? "none"} ${data.weatherTemp ?? ""} | ` +
+      `umpire="${data.umpire ?? "none"}"`
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${tag} DB error: ${msg}`);
+    throw err;
+  }
+}
+
+/**
+ * Fetch MLB lineup records for a list of game IDs.
+ * Returns a map of gameId → MlbLineupRow for fast O(1) lookup in the frontend.
+ *
+ * @param gameIds - Array of game IDs to fetch lineups for
+ */
+export async function getMlbLineupsByGameIds(gameIds: number[]): Promise<Map<number, MlbLineupRow>> {
+  const db = await getDb();
+  const result = new Map<number, MlbLineupRow>();
+
+  if (!db || gameIds.length === 0) return result;
+
+  const tag = `[getMlbLineupsByGameIds][count=${gameIds.length}]`;
+
+  try {
+    const rows = await db
+      .select()
+      .from(mlbLineups)
+      .where(
+        gameIds.length === 1
+          ? eq(mlbLineups.gameId, gameIds[0])
+          : sql`${mlbLineups.gameId} IN (${sql.join(gameIds.map((id) => sql`${id}`), sql`, `)})`
+      );
+
+    for (const row of rows) {
+      result.set(row.gameId, row as MlbLineupRow);
+    }
+
+    console.log(`${tag} Fetched ${result.size}/${gameIds.length} lineup records`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${tag} DB error: ${msg}`);
+  }
+
+  return result;
 }

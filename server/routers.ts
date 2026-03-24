@@ -25,7 +25,7 @@ import { storagePut } from "./storage";
 import { parseFileBuffer, detectSportFromFilename, detectDateFromFilename } from "./fileParser";
 import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure, appUserProcedure } from "./routers/appUsers";
-import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById, getFavoriteGameIds, getFavoriteGamesWithDates, toggleFavoriteGame, updateAnOdds, listGamesByDate, listOddsHistory, getBracketGames, auditAndAdvanceAllBracketWinners } from "./db";
+import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById, getFavoriteGameIds, getFavoriteGamesWithDates, toggleFavoriteGame, updateAnOdds, listGamesByDate, listOddsHistory, getBracketGames, auditAndAdvanceAllBracketWinners, getMlbLineupsByGameIds } from "./db";
 import { getLastRefreshResult, runVsinRefresh, runVsinRefreshManual, refreshAllScoresNow } from "./vsinAutoRefresh";
 import { syncNbaModelFromSheet, getLastNbaModelSyncResult } from "./nbaModelSync";
 import { triggerModelWatcherForDate } from "./ncaamModelWatcher";
@@ -641,6 +641,24 @@ export const appRouter = router({
           nhlTotal: 0,
           gameDate: "",
         };
+      }),
+
+    /**
+     * Fetch MLB lineups for a list of game IDs.
+     * Returns a map of gameId → lineup row (pitcher, batting order, weather, umpire).
+     * Public — lineups are visible to all users.
+     */
+    mlbLineups: publicProcedure
+      .input(z.object({ gameIds: z.array(z.number().int().positive()) }))
+      .query(async ({ input }) => {
+        if (input.gameIds.length === 0) return {};
+        const map = await getMlbLineupsByGameIds(input.gameIds);
+        // Convert Map to plain object for JSON serialization
+        const result: Record<number, unknown> = {};
+        for (const [gameId, row] of Array.from(map.entries())) {
+          result[gameId] = row;
+        }
+        return result;
       }),
   }),
 

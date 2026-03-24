@@ -1929,3 +1929,18 @@
 - [x] Add 7-day rolling window filter to listGames() for MLB (prevents 2430-game payload)
 - [x] Update getActiveSports() to use 7-day window for MLB tab visibility
 - [x] Auto-advance selectedDate to first available date when current date has no games (MLB opening day fix)
+
+## MLB Lineups Tab (2026-03-24)
+- [ ] Add mlbLineups table to drizzle/schema.ts (gameId, awayLineup, homeLineup JSON, pitcherIds, weather, umpire, scrapedAt)
+- [ ] Build server/rotowireLineupScraper.ts — scrape rotowire.com/baseball/lineups with deep structured logging
+- [ ] Add getLineups / upsertLineup helpers to server/db.ts
+- [ ] Add games.lineups tRPC procedure to server/routers.ts
+- [ ] Wire Rotowire scraper into 10-minute MLBCycle in vsinAutoRefresh.ts
+- [ ] Build client/src/components/MlbLineupFeed.tsx matching the HTML mockup design
+- [ ] Add LINEUPS sub-tab to ModelProjections.tsx (left of MODEL PROJECTIONS) when MLB is selected
+- [ ] Verify end-to-end: scraper → DB → tRPC → UI
+- [x] Fix Rotowire scraper: use `title` attribute for full player names (was using abbreviated visible text)
+- [x] Fix Rotowire ID extractor for new URL format `/baseball/player/name-ID`
+- [x] Populate mlbamId for pitchers and batters via mlb_players name lookup in upsertLineupsToDB
+- [x] Add generational suffix stripping (Jr./Sr./II/III) to name normalizer for better matching
+- [x] Re-scrape Rotowire lineups: all 9 NYY batters now have full names + mlbamIds

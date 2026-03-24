@@ -1644,6 +1644,27 @@ export function startVsinAutoRefresh() {
       console.warn("[MLBCycle] AN odds refresh failed (non-fatal):", err);
     }
 
+    // Step 4: Rotowire daily lineups (pitchers, batting orders, weather, umpire)
+    // Scrapes both today and tomorrow to catch games seeded a day ahead.
+    try {
+      const { scrapeRotowireLineupsBoth, upsertLineupsToDB } = await import("./rotowireLineupScraper");
+      const lineupResult = await scrapeRotowireLineupsBoth();
+      const totalParsed = lineupResult.today.cardsParsed + lineupResult.tomorrow.cardsParsed;
+      const totalErrors = lineupResult.today.parseErrors + lineupResult.tomorrow.parseErrors;
+      console.log(
+        `[MLBCycle] Rotowire lineups: parsed=${totalParsed} ` +
+        `(today=${lineupResult.today.cardsParsed} tomorrow=${lineupResult.tomorrow.cardsParsed}) ` +
+        `parseErrors=${totalErrors}`
+      );
+      // Upsert all combined games to DB
+      const upsertResult = await upsertLineupsToDB(lineupResult.combined);
+      console.log(
+        `[MLBCycle] Lineup DB upsert: saved=${upsertResult.saved} skipped=${upsertResult.skipped} errors=${upsertResult.errors}`
+      );
+    } catch (err) {
+      console.warn("[MLBCycle] Rotowire lineup scrape failed (non-fatal):", err);
+    }
+
     console.log(`[MLBCycle] ✅ DONE — ${new Date().toISOString()}`);
   };
 

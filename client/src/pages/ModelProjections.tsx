@@ -16,6 +16,7 @@ const CDN_TEST_TUBE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/
 const CDN_MONEY_BAG = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/icon-money-bag_b9c73c5d.png";
 const CDN_NBA = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/icon-nba_3fa4f508.png";
 import { GameCard } from "@/components/GameCard";
+import { MlbLineupCard } from "@/components/MlbLineupCard";
 import { AgeModal } from "@/components/AgeModal";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -307,13 +308,13 @@ export default function ModelProjections() {
   // ── Main page tab: projections | splits ───────────────────────────────────
 
   // ── Feed-wide mobile tab filter ───────────────────────────────────────────
-  // Two tabs: MODEL PROJECTIONS (dual) | BETTING SPLITS (splits)
-  type FeedMobileTab = 'dual' | 'splits';
+  // Two tabs: MODEL PROJECTIONS (dual) | BETTING SPLITS (splits) | LINEUPS (lineups, MLB only)
+  type FeedMobileTab = 'dual' | 'splits' | 'lineups';
   const FEED_TAB_KEY = 'prez_bets_mobile_tab_v2';
   const getPersistedFeedTab = (): FeedMobileTab => {
     try {
       const stored = localStorage.getItem(FEED_TAB_KEY);
-      if (stored === 'dual' || stored === 'splits') return stored;
+      if (stored === 'dual' || stored === 'splits' || stored === 'lineups') return stored as FeedMobileTab;
     } catch { /* ignore */ }
     return 'dual';
   };
@@ -323,11 +324,17 @@ export default function ModelProjections() {
     try { localStorage.setItem(FEED_TAB_KEY, next); } catch { /* ignore */ }
   };
   const feedIsDual = feedMobileTab === 'dual';
-  // Two tabs: MODEL PROJECTIONS | BETTING SPLITS
-  const FEED_TABS: { id: FeedMobileTab; label: string }[] = [
-    { id: 'dual',   label: 'MODEL PROJECTIONS' },
-    { id: 'splits', label: 'BETTING SPLITS' },
-  ];
+  // Tabs: MODEL PROJECTIONS | BETTING SPLITS | LINEUPS (MLB only)
+  const FEED_TABS: { id: FeedMobileTab; label: string }[] = selectedSport === 'MLB'
+    ? [
+        { id: 'dual',    label: 'MODEL PROJECTIONS' },
+        { id: 'splits',  label: 'BETTING SPLITS' },
+        { id: 'lineups', label: 'LINEUPS' },
+      ]
+    : [
+        { id: 'dual',   label: 'MODEL PROJECTIONS' },
+        { id: 'splits', label: 'BETTING SPLITS' },
+      ];
 
   // ── Favorites tab ──────────────────────────────────────────────────────────
   const [showFavoritesTab, setShowFavoritesTab] = useState(false);
@@ -472,6 +479,30 @@ export default function ModelProjections() {
     (allGames ?? []).filter(g => g?.gameStatus === "live").length,
     [allGames]
   );
+
+  // ── MLB Lineups ──────────────────────────────────────────────────────────────
+  // Fetch lineups for all MLB games in the current window when MLB is selected.
+  // Only fires when selectedSport === 'MLB' to avoid unnecessary queries.
+  const mlbGameIds = useMemo(() => {
+    if (selectedSport !== 'MLB' || !allGames) return [];
+    return allGames.filter(g => g?.id).map(g => g!.id);
+  }, [selectedSport, allGames]);
+
+  const { data: mlbLineupsRaw } = trpc.games.mlbLineups.useQuery(
+    { gameIds: mlbGameIds },
+    {
+      enabled: selectedSport === 'MLB' && mlbGameIds.length > 0,
+      refetchOnWindowFocus: false,
+      refetchInterval: 5 * 60 * 1000, // re-fetch every 5 minutes
+      staleTime: 2 * 60 * 1000,
+    }
+  );
+
+  // Map of gameId → lineup row for fast lookup
+  const mlbLineupsMap = useMemo(() => {
+    if (!mlbLineupsRaw) return new Map();
+    return new Map(Object.entries(mlbLineupsRaw).map(([k, v]) => [Number(k), v]));
+  }, [mlbLineupsRaw]);
 
   const toggleStatus = (status: "upcoming" | "live" | "final") => {
     setSelectedStatuses(prev => {
@@ -1007,8 +1038,8 @@ export default function ModelProjections() {
         )}
 
         {/* Row 5: Feed-wide mobile tab filter — MODEL PROJECTIONS | BETTING SPLITS | BRACKET (NCAAM) */}
-        {/* Only shown on mobile (< lg). Hidden on desktop where the full 3-panel layout is used. */}
-        <div className="grid lg:hidden" style={{
+        {/* Tab bar: mobile always shown; desktop shown when MLB is selected (for LINEUPS tab) */}
+        <div className="grid" style={{
             gridTemplateColumns: `repeat(${FEED_TABS.length}, 1fr)`,
             borderBottom: '2px solid hsl(var(--border) / 0.5)',
             background: 'hsl(var(--card))',
@@ -1107,53 +1138,99 @@ export default function ModelProjections() {
                         onToggleFavorite={handleToggleFavorite}
                         onFavoriteNotify={handleFavoriteNotify}
                         isAppAuthed={Boolean(appUser)}
-                        mobileTab={feedMobileTab}
-                        onMobileTabChange={handleFeedTabChange}
+                        mobileTab={feedMobileTab === 'lineups' ? 'dual' : feedMobileTab}
+                        onMobileTabChange={(t) => handleFeedTabChange(t)}
                       />
                     </div>
                   ))}
                 </div>
               )
             ) : (
-              /* NORMAL PROJECTIONS FEED */
-              gamesLoading ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3">
-                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                  <p className="text-sm text-muted-foreground">Loading projections…</p>
-                </div>
-              ) : sortedDates.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-4">
-                  <BarChart3 className="w-10 h-10 text-muted-foreground/40" />
-                  <div>
-                    <p className="text-sm font-semibold text-foreground mb-1">No games found</p>
-                    <p className="text-xs text-muted-foreground">
-                      {selectedStatuses.size > 0 ? `No ${Array.from(selectedStatuses).join(" or ")} ${selectedSport} games right now.` : `No ${selectedSport} games found.`}
-                    </p>
+              /* NORMAL PROJECTIONS FEED — or LINEUPS tab for MLB */
+              feedMobileTab === 'lineups' && selectedSport === 'MLB' ? (
+                /* ── LINEUPS VIEW ── */
+                gamesLoading ? (
+                  <div className="flex flex-col items-center justify-center py-24 gap-3">
+                    <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                    <p className="text-sm text-muted-foreground">Loading lineups…</p>
                   </div>
-                </div>
-              ) : (
-                sortedDates.map((date) => (
-                  <div key={date}>
-                    <div className="bg-card mx-0">
-                      {gamesByDate[date]!.map((game) => (
-                        <div key={game!.id} id={`game-card-${game!.id}`}>
-                          <GameCard
-                            game={game!}
-                            mode="full"
-                            showModel={showModel}
-                            onToggleModel={toggleModel}
-                            favoriteGameIds={favIds}
-                            onToggleFavorite={handleToggleFavorite}
-                            onFavoriteNotify={handleFavoriteNotify}
-                            isAppAuthed={Boolean(appUser)}
-                            mobileTab={feedMobileTab}
-                            onMobileTabChange={handleFeedTabChange}
-                          />
-                        </div>
-                      ))}
+                ) : sortedDates.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-4">
+                    <BarChart3 className="w-10 h-10 text-muted-foreground/40" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground mb-1">No MLB games found</p>
+                      <p className="text-xs text-muted-foreground">Check back closer to Opening Day.</p>
                     </div>
                   </div>
-                ))
+                ) : (
+                  <div style={{ padding: '10px 10px 0' }}>
+                    {sortedDates.map((date) => (
+                      <div key={date}>
+                        {/* Date header */}
+                        <div style={{
+                          padding: '8px 6px 6px',
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: '2px',
+                          textTransform: 'uppercase',
+                          color: 'rgba(255,255,255,0.35)',
+                        }}>
+                          {formatDateHeader(date)}
+                        </div>
+                        {gamesByDate[date]!.map((game) => (
+                          <MlbLineupCard
+                            key={game!.id}
+                            awayTeam={game!.awayTeam}
+                            homeTeam={game!.homeTeam}
+                            startTime={game!.startTimeEst ? formatMilitaryTime(game!.startTimeEst) : 'TBD'}
+                            lineup={mlbLineupsMap.get(game!.id) as Parameters<typeof MlbLineupCard>[0]['lineup']}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                /* ── PROJECTIONS / SPLITS VIEW ── */
+                gamesLoading ? (
+                  <div className="flex flex-col items-center justify-center py-24 gap-3">
+                    <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                    <p className="text-sm text-muted-foreground">Loading projections…</p>
+                  </div>
+                ) : sortedDates.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-4">
+                    <BarChart3 className="w-10 h-10 text-muted-foreground/40" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground mb-1">No games found</p>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedStatuses.size > 0 ? `No ${Array.from(selectedStatuses).join(" or ")} ${selectedSport} games right now.` : `No ${selectedSport} games found.`}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  sortedDates.map((date) => (
+                    <div key={date}>
+                      <div className="bg-card mx-0">
+                        {gamesByDate[date]!.map((game) => (
+                          <div key={game!.id} id={`game-card-${game!.id}`}>
+                            <GameCard
+                              game={game!}
+                              mode="full"
+                              showModel={showModel}
+                              onToggleModel={toggleModel}
+                              favoriteGameIds={favIds}
+                              onToggleFavorite={handleToggleFavorite}
+                              onFavoriteNotify={handleFavoriteNotify}
+                              isAppAuthed={Boolean(appUser)}
+                              mobileTab={feedMobileTab === 'lineups' ? 'dual' : feedMobileTab}
+                              onMobileTabChange={(t) => handleFeedTabChange(t)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )
               )
             )}
           </>

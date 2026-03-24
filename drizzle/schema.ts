@@ -540,6 +540,72 @@ export const oddsHistory = mysqlTable("odds_history", {
 export type OddsHistoryRow = typeof oddsHistory.$inferSelect;
 export type InsertOddsHistory = typeof oddsHistory.$inferInsert;
 
+// ─── MLB Lineups (Rotowire daily lineups + weather) ────────────────────────────
+
+/**
+ * One row per game per scrape cycle.
+ * awayLineup / homeLineup are JSON arrays of LineupPlayer objects:
+ *   [{ battingOrder: 1, position: "CF", name: "Aaron Judge", bats: "R", mlbamId: 592450 }, ...]
+ * Pitcher fields store the confirmed/probable starter for each side.
+ */
+export const mlbLineups = mysqlTable("mlb_lineups", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK → games.id */
+  gameId: int("gameId").notNull().unique(),
+  /** UTC timestamp (ms) when Rotowire was last scraped for this game */
+  scrapedAt: bigint("scrapedAt", { mode: "number" }).notNull(),
+  // ── Away pitcher ──
+  awayPitcherName: varchar("awayPitcherName", { length: 128 }),
+  awayPitcherHand: varchar("awayPitcherHand", { length: 4 }),
+  awayPitcherEra: varchar("awayPitcherEra", { length: 32 }),
+  /** Rotowire internal player ID (from /baseball/player.php?id=NNNNN) */
+  awayPitcherRotowireId: int("awayPitcherRotowireId"),
+  /** MLB Stats API MLBAM person ID (for headshot URLs) */
+  awayPitcherMlbamId: int("awayPitcherMlbamId"),
+  awayPitcherConfirmed: boolean("awayPitcherConfirmed").default(false),
+  // ── Home pitcher ──
+  homePitcherName: varchar("homePitcherName", { length: 128 }),
+  homePitcherHand: varchar("homePitcherHand", { length: 4 }),
+  homePitcherEra: varchar("homePitcherEra", { length: 32 }),
+  /** Rotowire internal player ID (from /baseball/player.php?id=NNNNN) */
+  homePitcherRotowireId: int("homePitcherRotowireId"),
+  /** MLB Stats API MLBAM person ID (for headshot URLs) */
+  homePitcherMlbamId: int("homePitcherMlbamId"),
+  homePitcherConfirmed: boolean("homePitcherConfirmed").default(false),
+  // ── Batting lineups (JSON arrays) ──
+  /** JSON: LineupPlayer[] for away team, batting order 1-9 */
+  awayLineup: text("awayLineup"),
+  /** JSON: LineupPlayer[] for home team, batting order 1-9 */
+  homeLineup: text("homeLineup"),
+  awayLineupConfirmed: boolean("awayLineupConfirmed").default(false),
+  homeLineupConfirmed: boolean("homeLineupConfirmed").default(false),
+  // ── Weather ──
+  weatherIcon: varchar("weatherIcon", { length: 8 }),
+  weatherTemp: varchar("weatherTemp", { length: 16 }),
+  weatherWind: varchar("weatherWind", { length: 64 }),
+  weatherPrecip: int("weatherPrecip"),
+  weatherDome: boolean("weatherDome").default(false),
+  // ── Umpire ──
+  umpire: varchar("umpire", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type MlbLineupRow = typeof mlbLineups.$inferSelect;
+export type InsertMlbLineup = typeof mlbLineups.$inferInsert;
+
+/** Shape of each player entry stored in awayLineup / homeLineup JSON columns */
+export interface LineupPlayer {
+  battingOrder: number;
+  position: string;
+  name: string;
+  bats: string; // 'R' | 'L' | 'S'
+  /** Rotowire internal player ID (from /baseball/player.php?id=NNNNN) */
+  rotowireId: number | null;
+  /** MLB Stats API MLBAM person ID (for headshot URLs) — resolved separately */
+  mlbamId: number | null;
+}
+
 // ─── User Favorite Games ─────────────────────────────────────────────────────
 export const userFavoriteGames = mysqlTable(
   "user_favorite_games",
