@@ -1946,3 +1946,6 @@
 - [x] Re-scrape Rotowire lineups: all 9 NYY batters now have full names + mlbamIds
 - [ ] Fix MlbLineupCard home side row layout: mirror away side (number → photo → position → name → bats, right-aligned)
 - [ ] Zoom out player headshot photos slightly (reduce objectPosition crop)
+- [x] Fix MlbLineupCard: both Away and Home sides use identical left-aligned layout: [number] [photo] [position] [name] [bats]
+- [x] Fix player photo crop: photos are too zoomed in showing chin/neck, need to show full face
+- [x] Fix home side pitcher section: should be left-aligned matching away side

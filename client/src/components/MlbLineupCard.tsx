@@ -2,16 +2,14 @@
  * MlbLineupCard
  *
  * Displays a single MLB game's confirmed starting lineups, pitchers, and weather.
- * Design matches mlb_lineup_feed.html mockup:
- *   - Dark card with team-color top bar
- *   - Pitcher headshots from img.mlbstatic.com
- *   - 9-man batting order with position badges and L/R/S handedness
- *   - Weather strip at bottom
+ * Both Away and Home columns use identical left-aligned layout:
+ *   [number] [photo] [position] [name] [bats]
  */
 
 import { useMemo } from "react";
 import { MLB_BY_ABBREV } from "@shared/mlbTeams";
-// Types matching the DB schema (defined locally to avoid cross-boundary imports)
+
+// Types matching the DB schema
 export interface LineupPlayer {
   battingOrder: number;
   position: string;
@@ -52,9 +50,10 @@ export interface MlbLineupRow {
 }
 
 // ─── MLB headshot CDN ──────────────────────────────────────────────────────────
+// /headshot/67/ is the "head and shoulders" crop from MLB's CDN
 const mlbPhoto = (id: number | null | undefined): string | null => {
   if (!id) return null;
-  return `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${id}/headshot/67/current`;
+  return `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_180,q_auto:best/v1/people/${id}/headshot/67/current`;
 };
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -65,8 +64,10 @@ interface MlbLineupCardProps {
   lineup: MlbLineupRow | null | undefined;
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────────
-
+// ─── PlayerAvatar ──────────────────────────────────────────────────────────────
+// Uses objectFit: cover with objectPosition: top center so the face is always
+// visible. The MLB /headshot/67/ crop is already head+shoulders, so top-aligned
+// shows the face correctly without any overflow tricks.
 function PlayerAvatar({ mlbamId, size }: { mlbamId: number | null | undefined; size: number }) {
   const url = mlbPhoto(mlbamId);
   return (
@@ -79,9 +80,7 @@ function PlayerAvatar({ mlbamId, size }: { mlbamId: number | null | undefined; s
         flexShrink: 0,
         border: "1px solid #1E3048",
         background: "#101820",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        position: "relative",
       }}
     >
       {url ? (
@@ -89,8 +88,19 @@ function PlayerAvatar({ mlbamId, size }: { mlbamId: number | null | undefined; s
           src={url}
           alt=""
           loading="lazy"
-          style={{ width: "130%", height: "130%", objectFit: "cover", objectPosition: "center 20%", marginTop: "-8%", marginLeft: "-15%" }}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            // "top center" keeps the face at the top of the circle
+            objectPosition: "top center",
+          }}
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
         />
       ) : (
         <div style={{ width: "100%", height: "100%", background: "#101820" }} />
@@ -99,22 +109,21 @@ function PlayerAvatar({ mlbamId, size }: { mlbamId: number | null | undefined; s
   );
 }
 
+// ─── PitcherCol ────────────────────────────────────────────────────────────────
+// Always left-aligned regardless of which side (away or home).
 function PitcherCol({
   name,
   hand,
   era,
   mlbamId,
   confirmed,
-  align,
 }: {
   name: string | null | undefined;
   hand: string | null | undefined;
   era: string | null | undefined;
   mlbamId: number | null | undefined;
   confirmed: boolean | null | undefined;
-  align: "left" | "right";
 }) {
-  const isRight = align === "right";
   const displayName = name ?? "TBD";
   const displayEra = era ?? "—";
 
@@ -125,7 +134,7 @@ function PitcherCol({
         display: "flex",
         flexDirection: "column",
         gap: 2,
-        alignItems: isRight ? "flex-end" : "flex-start",
+        alignItems: "flex-start",
       }}
     >
       <div
@@ -145,11 +154,11 @@ function PitcherCol({
           display: "flex",
           alignItems: "center",
           gap: 10,
-          flexDirection: isRight ? "row-reverse" : "row",
+          flexDirection: "row",
         }}
       >
-        <PlayerAvatar mlbamId={mlbamId} size={40} />
-        <div style={{ textAlign: isRight ? "right" : "left" }}>
+        <PlayerAvatar mlbamId={mlbamId} size={44} />
+        <div style={{ textAlign: "left" }}>
           <div
             style={{
               fontFamily: "'Barlow Condensed', sans-serif",
@@ -169,35 +178,10 @@ function PitcherCol({
               display: "flex",
               gap: 6,
               alignItems: "center",
-              justifyContent: isRight ? "flex-end" : "flex-start",
+              justifyContent: "flex-start",
               marginTop: 5,
             }}
           >
-            {isRight && confirmed && (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: 9,
-                  fontWeight: 600,
-                  letterSpacing: "1px",
-                  textTransform: "uppercase",
-                  color: "#39FF14",
-                }}
-              >
-                <span
-                  style={{
-                    width: 5,
-                    height: 5,
-                    borderRadius: "50%",
-                    background: "#39FF14",
-                    display: "inline-block",
-                  }}
-                />
-                Confirmed
-              </span>
-            )}
             {hand && (
               <span
                 style={{
@@ -216,7 +200,7 @@ function PitcherCol({
                 {hand}HP
               </span>
             )}
-            {!isRight && confirmed && (
+            {confirmed && (
               <span
                 style={{
                   display: "inline-flex",
@@ -248,7 +232,11 @@ function PitcherCol({
   );
 }
 
-function LineupRows({ players, align }: { players: LineupPlayer[]; align: "left" | "right" }) {
+// ─── LineupRows ────────────────────────────────────────────────────────────────
+// BOTH away and home use identical left-aligned layout:
+//   [number] [photo] [position] [name] [bats]
+// The `align` prop is kept for future use but does not change the row structure.
+function LineupRows({ players }: { players: LineupPlayer[] }) {
   if (players.length === 0) {
     return (
       <div
@@ -276,8 +264,6 @@ function LineupRows({ players, align }: { players: LineupPlayer[]; align: "left"
     );
   }
 
-  const isRight = align === "right";
-
   return (
     <div style={{ padding: "10px 14px" }}>
       {players.map((p, i) => (
@@ -289,60 +275,46 @@ function LineupRows({ players, align }: { players: LineupPlayer[]; align: "left"
             gap: 7,
             padding: "5px 0",
             borderBottom: i < players.length - 1 ? "1px solid rgba(24,36,51,0.6)" : "none",
-            // Both sides use left-to-right order; home side content is right-aligned via flex
             flexDirection: "row",
-            justifyContent: isRight ? "flex-end" : "flex-start",
+            justifyContent: "flex-start",
           }}
         >
-          {/* Away (left) layout: number | photo | position | name | bats */}
-          {/* Home (right) layout: bats | name | position | photo | number — true mirror */}
+          {/* Batting order number */}
+          <span
+            style={{
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#3A5A7A",
+              width: 14,
+              flexShrink: 0,
+              textAlign: "right",
+            }}
+          >
+            {p.battingOrder}
+          </span>
 
-          {/* Batting order number — left side of away, right side of home */}
-          {!isRight && (
-            <span
-              style={{
-                fontFamily: "'Barlow Condensed', sans-serif",
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#3A5A7A",
-                minWidth: 14,
-                flexShrink: 0,
-                textAlign: "right",
-              }}
-            >
-              {p.battingOrder}
-            </span>
-          )}
-
-          {/* Bats indicator — only on home side, leftmost position */}
-          {isRight && (
-            <span style={{ fontSize: 9, color: "#3A5A7A", fontWeight: 600, flexShrink: 0, minWidth: 10, textAlign: "right" }}>
-              {p.bats}
-            </span>
-          )}
-
-          {/* Photo — left of position/name on away; right of name/position on home */}
-          {!isRight && <PlayerAvatar mlbamId={p.mlbamId} size={32} />}
+          {/* Player headshot */}
+          <PlayerAvatar mlbamId={p.mlbamId} size={32} />
 
           {/* Position badge */}
-          {!isRight && (
-            <span
-              style={{
-                fontFamily: "'Barlow Condensed', sans-serif",
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: "0.5px",
-                textTransform: "uppercase",
-                color: "#3A5A7A",
-                minWidth: 22,
-                flexShrink: 0,
-              }}
-            >
-              {p.position}
-            </span>
-          )}
+          <span
+            style={{
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.5px",
+              textTransform: "uppercase",
+              color: "#3A5A7A",
+              width: 24,
+              flexShrink: 0,
+              textAlign: "left",
+            }}
+          >
+            {p.position}
+          </span>
 
-          {/* Player name — flex-1 to fill space */}
+          {/* Player name */}
           <span
             style={{
               fontFamily: "'Barlow Condensed', sans-serif",
@@ -353,63 +325,32 @@ function LineupRows({ players, align }: { players: LineupPlayer[]; align: "left"
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
-              textAlign: isRight ? "right" : "left",
+              textAlign: "left",
             }}
           >
             {p.name}
           </span>
 
-          {/* Position badge — home side: after name */}
-          {isRight && (
-            <span
-              style={{
-                fontFamily: "'Barlow Condensed', sans-serif",
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: "0.5px",
-                textTransform: "uppercase",
-                color: "#3A5A7A",
-                minWidth: 22,
-                flexShrink: 0,
-                textAlign: "left",
-              }}
-            >
-              {p.position}
-            </span>
-          )}
-
-          {/* Photo — home side: after position */}
-          {isRight && <PlayerAvatar mlbamId={p.mlbamId} size={32} />}
-
-          {/* Batting order number — home side: rightmost */}
-          {isRight && (
-            <span
-              style={{
-                fontFamily: "'Barlow Condensed', sans-serif",
-                fontSize: 11,
-                fontWeight: 700,
-                color: "#3A5A7A",
-                minWidth: 14,
-                flexShrink: 0,
-                textAlign: "left",
-              }}
-            >
-              {p.battingOrder}
-            </span>
-          )}
-
-          {/* Bats indicator — away side: rightmost */}
-          {!isRight && (
-            <span style={{ fontSize: 9, color: "#3A5A7A", fontWeight: 600, flexShrink: 0, minWidth: 10 }}>
-              {p.bats}
-            </span>
-          )}
+          {/* Bats indicator */}
+          <span
+            style={{
+              fontSize: 9,
+              color: "#3A5A7A",
+              fontWeight: 600,
+              flexShrink: 0,
+              width: 10,
+              textAlign: "right",
+            }}
+          >
+            {p.bats}
+          </span>
         </div>
       ))}
     </div>
   );
 }
 
+// ─── WeatherStrip ──────────────────────────────────────────────────────────────
 function WeatherStrip({ lineup }: { lineup: MlbLineupRow }) {
   const { weatherIcon, weatherTemp, weatherWind, weatherPrecip, weatherDome } = lineup;
 
@@ -576,7 +517,7 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
           gap: 10,
         }}
       >
-        {/* Away team */}
+        {/* Away team — left-aligned */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
             style={{
@@ -587,10 +528,6 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
               alignItems: "center",
               justifyContent: "center",
               background: `radial-gradient(circle at 35% 35%, ${awayColor}, ${awayDark})`,
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontSize: 11,
-              fontWeight: 800,
-              color: "#fff",
               flexShrink: 0,
               overflow: "hidden",
             }}
@@ -674,7 +611,7 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
           </div>
         </div>
 
-        {/* Home team */}
+        {/* Home team — right-aligned in header only */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexDirection: "row-reverse" }}>
           <div
             style={{
@@ -685,10 +622,6 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
               alignItems: "center",
               justifyContent: "center",
               background: `radial-gradient(circle at 35% 35%, ${homeColor}, ${homeDark})`,
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontSize: 11,
-              fontWeight: 800,
-              color: "#fff",
               flexShrink: 0,
               overflow: "hidden",
             }}
@@ -747,7 +680,7 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
         </div>
       </div>
 
-      {/* Pitchers */}
+      {/* Pitchers — both left-aligned */}
       <div
         style={{
           display: "grid",
@@ -761,7 +694,6 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
           era={lineup?.awayPitcherEra}
           mlbamId={lineup?.awayPitcherMlbamId}
           confirmed={lineup?.awayPitcherConfirmed}
-          align="left"
         />
         <div style={{ background: "#182433" }} />
         <PitcherCol
@@ -770,11 +702,10 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
           era={lineup?.homePitcherEra}
           mlbamId={lineup?.homePitcherMlbamId}
           confirmed={lineup?.homePitcherConfirmed}
-          align="right"
         />
       </div>
 
-      {/* Batting lineups */}
+      {/* Batting lineups — both left-aligned */}
       <div
         style={{
           display: "grid",
@@ -782,9 +713,9 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
           borderBottom: "1px solid #182433",
         }}
       >
-        <LineupRows players={awayLineup} align="left" />
+        <LineupRows players={awayLineup} />
         <div style={{ background: "#182433" }} />
-        <LineupRows players={homeLineup} align="right" />
+        <LineupRows players={homeLineup} />
       </div>
 
       {/* Weather */}
