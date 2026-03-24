@@ -1814,3 +1814,10 @@
 - [x] Ensure city line never wraps (single line always) — verified in test renders
 - [x] Ensure nickname line never wraps (single line always) — verified in test renders
 - [x] Test render VGK, CBJ, TOR, GSW, OKC cards to verify correct display — all confirmed working
+
+## Production ENOENT Fix (2026-03-24)
+- [x] Fixed ENOENT: splits_card.html not found in production (/usr/src/app/dist/splits_card.html)
+      Root cause: esbuild bundles TS into dist/index.js but never copies static assets.
+      In prod, import.meta.url = dist/index.js so __dirname = dist/, but splits_card.html was only in server/discord/.
+      Fix: updated build script in package.json to cp splits_card.html, model_v10_engine.py, nhl_model_engine.py to dist/ after esbuild.
+      All three files now present in dist/ after build. Verified build output.
