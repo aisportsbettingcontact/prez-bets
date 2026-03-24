@@ -1780,3 +1780,8 @@
 - [x] Debug: ROOT CAUSE = getActiveSports counted unpublished regular season NCAAM games (wichita_st@tulsa, st_josephs@new_mexico) that have odds but publishedToFeed=0 and no bracketGameId
 - [x] Fix: NCAAM now requires bracketGameId IS NOT NULL — only March Madness bracket games trigger the tab
 - [x] Verified: [activeSports] log confirms NCAAM=false when no bracket games exist today/tomorrow
+
+## Discord Splits Card Total Bar Colors (2026-03-24)
+- [x] Over bar: now uses CSS var(--away-primary) — matches away team color
+- [x] Under bar: now uses CSS var(--home-primary) — matches home team color
+- [x] Verified via test render: MIL(green) Over / LAC(blue) Under display correctly
