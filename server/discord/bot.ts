@@ -20,6 +20,27 @@ import { enrichTeamRegistryFromDb } from "./teamRegistry";
 
 let botClient: Client | null = null;
 
+// ─── Interaction deduplication guard ─────────────────────────────────────────
+// Discord's gateway occasionally delivers the same interaction twice (duplicate
+// delivery / retry). We track recently-seen interaction IDs for 10 seconds to
+// detect and drop duplicates before they reach the command handler.
+const seenInteractionIds = new Map<string, number>(); // id → timestamp
+const INTERACTION_DEDUP_TTL_MS = 10_000;
+
+function isDuplicateInteraction(id: string): boolean {
+  const now = Date.now();
+  // Prune stale entries
+  Array.from(seenInteractionIds.entries()).forEach(([k, ts]) => {
+    if (now - ts > INTERACTION_DEDUP_TTL_MS) seenInteractionIds.delete(k);
+  });
+  if (seenInteractionIds.has(id)) {
+    console.warn(`[SplitsBot] ⚠️  Duplicate interaction detected and dropped: ${id}`);
+    return true;
+  }
+  seenInteractionIds.set(id, now);
+  return false;
+}
+
 export function startDiscordBot(): void {
   if (!ENV.discordBotToken) {
     console.warn("[SplitsBot] DISCORD_BOT_TOKEN not set — bot will not start");
@@ -53,8 +74,18 @@ export function startDiscordBot(): void {
     if (!interaction.isChatInputCommand()) return;
 
     const { commandName } = interaction;
+
+    // ─── Deduplication: drop duplicate gateway deliveries ───────────────────────
+    // Discord occasionally retries interaction delivery over the gateway.
+    // Without this guard, the second delivery hits deferReply on an already-
+    // acknowledged interaction and throws, causing "application did not respond".
+    if (isDuplicateInteraction(interaction.id)) {
+      console.warn(`[SplitsBot] Dropped duplicate interaction ${interaction.id} for /${commandName}`);
+      return;
+    }
+
     console.log(
-      `[SplitsBot] /${commandName} from ${interaction.user.id} (${interaction.user.tag})`
+      `[SplitsBot] /${commandName} from ${interaction.user.id} (${interaction.user.tag}) [id=${interaction.id}]`
     );
 
     try {
@@ -66,14 +97,19 @@ export function startDiscordBot(): void {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[SplitsBot] Unhandled error in /${commandName}: ${msg}`);
+      console.error(`[SplitsBot] Unhandled error in /${commandName} [id=${interaction.id}]: ${msg}`);
+      // Attempt to surface the error to the user — but only if we can still respond
       try {
-        if (interaction.deferred) {
+        if (interaction.deferred || interaction.replied) {
           await interaction.editReply(`❌ Unexpected error: ${msg}`);
-        } else if (!interaction.replied) {
+        } else {
+          // Last-resort: try a direct reply (will fail if >3s have passed)
           await interaction.reply({ content: `❌ Unexpected error: ${msg}`, ephemeral: true });
         }
-      } catch { /* swallow reply errors */ }
+      } catch (replyErr) {
+        const replyMsg = replyErr instanceof Error ? replyErr.message : String(replyErr);
+        console.error(`[SplitsBot] Could not send error reply for /${commandName} [id=${interaction.id}]: ${replyMsg}`);
+      }
     }
   });
 

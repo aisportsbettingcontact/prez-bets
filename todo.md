@@ -1821,3 +1821,17 @@
       In prod, import.meta.url = dist/index.js so __dirname = dist/, but splits_card.html was only in server/discord/.
       Fix: updated build script in package.json to cp splits_card.html, model_v10_engine.py, nhl_model_engine.py to dist/ after esbuild.
       All three files now present in dist/ after build. Verified build output.
+
+## Discord Bot "Application Did Not Respond" Fix (2026-03-24)
+- [x] Audit full interaction handling chain: bot.ts, splitsCommand.ts, defer/timeout logic
+- [x] Identified root cause: Discord gateway duplicate delivery — same interaction ID delivered twice;
+      second delivery hits deferReply on already-acknowledged interaction → throws → outer catch
+      tries interaction.reply() but interaction is in broken state → Discord sees no valid response
+- [x] Implemented guaranteed immediate deferReply at very top of handleSplitsCommand (before auth check)
+      wrapped in try/catch: if deferReply fails (duplicate), bail out immediately with no further action
+- [x] Moved access control AFTER deferReply so unauthorized users get editReply (not reply)
+- [x] Added interaction deduplication guard in bot.ts: tracks seen interaction IDs for 10s,
+      drops duplicates before they reach the command handler
+- [x] Added interaction ID to all log lines for full traceability
+- [x] Improved outer catch in bot.ts: checks deferred/replied state before choosing editReply vs reply
+      logs reply failures separately instead of swallowing them

@@ -397,21 +397,43 @@ export async function handleSplitsCommand(
   client: Client
 ): Promise<void> {
   const t0 = Date.now();
+  const interactionId = interaction.id;
 
-  // 1. Access control
-  log("auth", `User ${interaction.user.id} (${interaction.user.tag}) invoked /splits`);
+  log("init", `Interaction ${interactionId} received — user=${interaction.user.id} (${interaction.user.tag}) deferred=${interaction.deferred} replied=${interaction.replied}`);
+
+  // ─── STEP 1: Defer IMMEDIATELY — must happen within 3 seconds ────────────────
+  // This MUST be the very first async operation. Discord will show
+  // "application did not respond" if we don't acknowledge within 3s.
+  // We wrap in try/catch because Discord sometimes delivers duplicate
+  // interaction events (gateway retries), and calling deferReply on an
+  // already-acknowledged interaction throws "Interaction has already been
+  // acknowledged." — we detect this and bail out gracefully.
+  if (!interaction.deferred && !interaction.replied) {
+    try {
+      log("defer", `Interaction ${interactionId} — calling deferReply (ephemeral)`);
+      await interaction.deferReply({ ephemeral: true });
+      log("defer", `Interaction ${interactionId} — deferReply succeeded (${Date.now() - t0}ms elapsed)`);
+    } catch (deferErr) {
+      const deferMsg = deferErr instanceof Error ? deferErr.message : String(deferErr);
+      log("defer", `Interaction ${interactionId} — deferReply FAILED: ${deferMsg}`, "error");
+      // If deferReply fails, Discord has already auto-acknowledged or timed out
+      // this interaction. We cannot respond — bail out immediately.
+      // This is a Discord gateway duplicate delivery — not a bug in our code.
+      log("defer", `Interaction ${interactionId} — bailing out (duplicate delivery or already timed out)`, "warn");
+      return;
+    }
+  } else {
+    log("defer", `Interaction ${interactionId} — already deferred/replied (deferred=${interaction.deferred} replied=${interaction.replied}), skipping deferReply`, "warn");
+  }
+
+  // ─── STEP 2: Access control (AFTER defer — we can now editReply on failure) ──
+  log("auth", `Interaction ${interactionId} — checking user ${interaction.user.id} (${interaction.user.tag})`);
   if (interaction.user.id !== ALLOWED_USER_ID) {
-    log("auth", `REJECTED — expected ${ALLOWED_USER_ID}`, "warn");
-    await interaction.reply({
-      content: "❌ You are not authorised to use this command.",
-      ephemeral: true,
-    });
+    log("auth", `Interaction ${interactionId} — REJECTED (expected ${ALLOWED_USER_ID})`, "warn");
+    await interaction.editReply("❌ You are not authorised to use this command.");
     return;
   }
-  log("auth", "Access granted");
-
-  // 2. Defer reply
-  await interaction.deferReply({ ephemeral: true });
+  log("auth", `Interaction ${interactionId} — access granted`);
 
   const dateOverride = interaction.options.getString("date") ?? undefined;
   const sportFilter  = interaction.options.getString("sport") ?? "ALL";
