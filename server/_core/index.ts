@@ -14,6 +14,7 @@ import { startNbaModelSyncScheduler } from "../nbaModelSync";
 import { startModelWatcher } from "../ncaamModelWatcher";
 import { startNhlModelSyncScheduler } from "../nhlModelSync";
 import { startNhlGoalieWatcher } from "../nhlGoalieWatcher";
+import { startDiscordBot } from "../discord/bot";
 
 // ─── Global crash protection ─────────────────────────────────────────────────
 // Prevent unhandled promise rejections and uncaught exceptions from killing the
@@ -128,6 +129,8 @@ async function startServer() {
     startNhlModelSyncScheduler();
     // NHL goalie watcher — checks RotoWire every 10 min for goalie changes, re-runs model on scratch
     startNhlGoalieWatcher();
+    // Discord bot — listens for /splits slash command
+    startDiscordBot();
   });
 }
 
