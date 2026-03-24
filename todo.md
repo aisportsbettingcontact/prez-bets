@@ -1768,3 +1768,10 @@
 - [x] Remove bracket type from FeedMobileTab, GameCard props, VirtualizedGameList
 - [x] Remove CDN_MARCH_MADNESS constant and March Madness icon from nav pill
 - [x] NCAAM pill now shows plain text label with no icon
+
+## Sport Tab Auto-Hide (2026-03-24)
+- [x] Add tRPC procedure games.activeSports returning which sports have games today or tomorrow (UTC)
+- [x] Add getActiveSports() helper to db.ts using groupBy query on gameDate + sport
+- [x] Update ModelProjections.tsx to query activeSports and hide pills with no upcoming games
+- [x] Auto-switch selected sport if current sport becomes hidden (fallback: NHL → NBA → NCAAM)
+- [x] Pills show during loading (activeSports undefined) to avoid flash of empty nav

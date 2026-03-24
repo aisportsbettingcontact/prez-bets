@@ -19,6 +19,7 @@ import {
   setGameModelPublished,
   bulkApproveModels,
   publishAllStagingGames,
+  getActiveSports,
 } from "./db";
 import { storagePut } from "./storage";
 import { parseFileBuffer, detectSportFromFilename, detectDateFromFilename } from "./fileParser";
@@ -301,6 +302,14 @@ export const appRouter = router({
         const games = await listStagingGamesRange(input.fromDate, input.toDate, input.sport);
         return games.filter(g => isValidGame(g.awayTeam, g.homeTeam, g.sport));
       }),
+
+    /**
+     * Returns which sports have at least one game on today's UTC date or tomorrow's UTC date.
+     * Used by the frontend to hide sport tabs when there are no upcoming games.
+     */
+    activeSports: publicProcedure.query(async () => {
+      return getActiveSports();
+    }),
 
     /** Returns the result of the last auto-refresh run (null if never run). */
     lastRefresh: publicProcedure.query(() => {

@@ -256,6 +256,23 @@ export default function ModelProjections() {
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA" | "NHL">("NCAAM");
+
+  // Query which sports have games today or tomorrow (UTC) — hides pills with no games
+  const { data: activeSports } = trpc.games.activeSports.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000, // re-check every 5 minutes
+    refetchOnWindowFocus: true,
+  });
+  // Auto-switch away from a sport with no games once activeSports loads
+  useEffect(() => {
+    if (!activeSports) return;
+    const sportActive = activeSports[selectedSport as 'NBA' | 'NHL' | 'NCAAM'];
+    if (!sportActive) {
+      // Pick the first active sport in display order: NHL → NBA → NCAAM
+      const fallback = (['NHL', 'NBA', 'NCAAM'] as const).find(s => activeSports[s]);
+      if (fallback) setSelectedSport(fallback);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSports]);
   const [selectedStatuses, setSelectedStatuses] = useState<Set<"upcoming" | "live" | "final">>(new Set());
   const [selectedDate, setSelectedDate] = useState<string>(() => todayUTC());
   const [searchQuery, setSearchQuery] = useState("");
@@ -828,25 +845,31 @@ export default function ModelProjections() {
             isAdmin={isOwner || user?.role === "admin"}
           />
 
-          {/* NHL pill — first, always visible */}
-          <button onClick={() => setSelectedSport("NHL")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
-            style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NHL" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
-            <img src="https://media.d3.nhle.com/image/private/t_q-best/prd/assets/nhl/logos/nhl_shield_wm_on_dark_fqkbph" alt="NHL" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NHL" ? 1 : 0.5, flexShrink: 0 }} />
-            NHL
-          </button>
+          {/* NHL pill — only shown when NHL has games today or tomorrow */}
+          {(!activeSports || activeSports.NHL) && (
+            <button onClick={() => setSelectedSport("NHL")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+              style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NHL" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
+              <img src="https://media.d3.nhle.com/image/private/t_q-best/prd/assets/nhl/logos/nhl_shield_wm_on_dark_fqkbph" alt="NHL" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NHL" ? 1 : 0.5, flexShrink: 0 }} />
+              NHL
+            </button>
+          )}
 
-          {/* NBA pill — second */}
-          <button onClick={() => setSelectedSport("NBA")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
-            style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NBA" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
-            <img src={CDN_NBA} alt="NBA" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NBA" ? 1 : 0.5, flexShrink: 0 }} />
-            NBA
-          </button>
+          {/* NBA pill — only shown when NBA has games today or tomorrow */}
+          {(!activeSports || activeSports.NBA) && (
+            <button onClick={() => setSelectedSport("NBA")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+              style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NBA" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
+              <img src={CDN_NBA} alt="NBA" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NBA" ? 1 : 0.5, flexShrink: 0 }} />
+              NBA
+            </button>
+          )}
 
-          {/* NCAAM pill — third */}
-          <button onClick={() => setSelectedSport("NCAAM")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
-            style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NCAAM" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
-            NCAAM
-          </button>
+          {/* NCAAM pill — only shown when NCAAM has games today or tomorrow */}
+          {(!activeSports || activeSports.NCAAM) && (
+            <button onClick={() => setSelectedSport("NCAAM")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+              style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NCAAM" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
+              NCAAM
+            </button>
+          )}
 
           {/* Search bar — always visible, shrinks when Favorites button is present */}
           {/* Mobile: min-w-[28px] so it always shows at least the icon; flex-1 fills remaining space */}

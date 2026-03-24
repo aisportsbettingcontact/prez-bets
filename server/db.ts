@@ -1217,3 +1217,33 @@ export async function auditAndAdvanceAllBracketWinners(): Promise<number> {
     return 0;
   }
 }
+
+/**
+ * Returns which sports have at least one game with live odds on today's UTC date
+ * or tomorrow's UTC date. Used by the frontend to hide sport tabs with no upcoming games.
+ */
+export async function getActiveSports(): Promise<{ NBA: boolean; NHL: boolean; NCAAM: boolean }> {
+  const db = await getDb();
+  if (!db) return { NBA: false, NHL: false, NCAAM: false };
+  const now = new Date();
+  const todayUTC = now.toISOString().slice(0, 10);
+  const tomorrowDate = new Date(now);
+  tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+  const tomorrowUTC = tomorrowDate.toISOString().slice(0, 10);
+  const rows = await db
+    .select({ sport: games.sport })
+    .from(games)
+    .where(
+      and(
+        or(eq(games.gameDate, todayUTC), eq(games.gameDate, tomorrowUTC))!,
+        or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!
+      )
+    )
+    .groupBy(games.sport);
+  const active = new Set(rows.map((r: { sport: string }) => r.sport));
+  return {
+    NBA: active.has('NBA'),
+    NHL: active.has('NHL'),
+    NCAAM: active.has('NCAAM'),
+  };
+}
