@@ -37,8 +37,12 @@ export interface GameSplits {
   league:      string;
   game_date:   string;
   start_time:  string;
-  away_team:   string;
+  away_team:   string;   // full display name (kept for autocomplete/logging)
   home_team:   string;
+  away_city:   string;   // top line on card, e.g. "Toronto"
+  away_nickname: string; // bottom line on card, e.g. "Maple Leafs"
+  home_city:   string;
+  home_nickname: string;
   away_abbr:   string;
   home_abbr:   string;
   away_color:  string;
@@ -172,8 +176,12 @@ export async function fetchAllDailySplits(dateOverride?: string, sport?: string)
       league:      row.sport,
       game_date:   row.gameDate ?? gameDate,
       start_time:  formatTime(row.startTimeEst),
-      away_team:   awayEntry.displayName,
-      home_team:   homeEntry.displayName,
+      away_team:     awayEntry.displayName,
+      home_team:     homeEntry.displayName,
+      away_city:     awayEntry.city,
+      away_nickname: awayEntry.nickname,
+      home_city:     homeEntry.city,
+      home_nickname: homeEntry.nickname,
       away_abbr:   awayEntry.abbrev,
       home_abbr:   homeEntry.abbrev,
       away_color:  awayEntry.primaryColor,

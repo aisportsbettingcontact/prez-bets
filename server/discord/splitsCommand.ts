@@ -188,11 +188,55 @@ function logoTextColor(hex: string): string {
 }
 
 /**
+ * Hardcoded city/nickname display map for teams whose names don't split cleanly
+ * by taking the last word as the nickname.
+ * Key = full team name as stored in the DB (game.away_team / game.home_team)
+ */
+const TEAM_NAME_OVERRIDES: Record<string, { city: string; name: string }> = {
+  // NHL — multi-word nicknames
+  "Vegas Golden Knights":    { city: "Vegas",      name: "Golden Knights" },
+  "Columbus Blue Jackets":   { city: "Columbus",   name: "Blue Jackets" },
+  "Toronto Maple Leafs":     { city: "Toronto",    name: "Maple Leafs" },
+  "New York Islanders":      { city: "New York",   name: "Islanders" },
+  "New York Rangers":        { city: "New York",   name: "Rangers" },
+  "New Jersey Devils":       { city: "New Jersey", name: "Devils" },
+  "Los Angeles Kings":       { city: "Los Angeles",name: "Kings" },
+  "San Jose Sharks":         { city: "San Jose",   name: "Sharks" },
+  "Tampa Bay Lightning":     { city: "Tampa Bay",  name: "Lightning" },
+  "St. Louis Blues":         { city: "St. Louis",  name: "Blues" },
+  "Carolina Hurricanes":     { city: "Carolina",   name: "Hurricanes" },
+  "Florida Panthers":        { city: "Florida",    name: "Panthers" },
+  "Colorado Avalanche":      { city: "Colorado",   name: "Avalanche" },
+  "Minnesota Wild":          { city: "Minnesota",  name: "Wild" },
+  "Anaheim Ducks":           { city: "Anaheim",    name: "Ducks" },
+  "Arizona Coyotes":         { city: "Arizona",    name: "Coyotes" },
+  "Utah Hockey Club":        { city: "Utah",       name: "Hockey Club" },
+  // NBA — multi-word nicknames or cities
+  "Golden State Warriors":   { city: "Golden State",name: "Warriors" },
+  "Oklahoma City Thunder":   { city: "Oklahoma City",name: "Thunder" },
+  "San Antonio Spurs":       { city: "San Antonio", name: "Spurs" },
+  "New York Knicks":         { city: "New York",    name: "Knicks" },
+  "New Orleans Pelicans":    { city: "New Orleans", name: "Pelicans" },
+  "Los Angeles Lakers":      { city: "Los Angeles", name: "Lakers" },
+  "Los Angeles Clippers":    { city: "Los Angeles", name: "Clippers" },
+  "Portland Trail Blazers":  { city: "Portland",    name: "Trail Blazers" },
+  "Utah Jazz":               { city: "Utah",        name: "Jazz" },
+  "Memphis Grizzlies":       { city: "Memphis",     name: "Grizzlies" },
+  "Minnesota Timberwolves":  { city: "Minnesota",   name: "Timberwolves" },
+  "Indiana Pacers":          { city: "Indiana",     name: "Pacers" },
+  "Orlando Magic":           { city: "Orlando",     name: "Magic" },
+  "Sacramento Kings":        { city: "Sacramento",  name: "Kings" },
+  "San Francisco 49ers":     { city: "San Francisco",name: "49ers" },
+};
+
+/**
  * Splits a full team name into city + nickname.
- * e.g. "Golden State Warriors" → { city: "Golden State", name: "Warriors" }
- * For single-word names (e.g. "Heat"), city = name = the full name.
+ * Uses hardcoded overrides for teams whose names don't split cleanly
+ * by taking the last word as the nickname.
  */
 function splitTeamName(fullName: string): { city: string; name: string } {
+  const override = TEAM_NAME_OVERRIDES[fullName.trim()];
+  if (override) return override;
   const parts = fullName.trim().split(" ");
   if (parts.length === 1) return { city: fullName, name: fullName };
   const name = parts[parts.length - 1] ?? fullName;
@@ -252,13 +296,10 @@ function buildCardData(game: GameSplits): SplitsCardData {
 
   log("card", `${key} — awayColor=${awayColor} homeColor=${homeColor}`);
 
-  // 2. Build team objects
-  const awayNames = splitTeamName(game.away_team);
-  const homeNames = splitTeamName(game.home_team);
-
+  // 2. Build team objects — city/nickname come directly from the team registry
   const awayTeam: SplitsCardTeam = {
-    city:      awayNames.city,
-    name:      awayNames.name,
+    city:      game.away_city,
+    name:      game.away_nickname,
     abbr:      game.away_abbr,
     primary:   awayColor,
     secondary: isUnusable(game.away_color2) ? awayColor : game.away_color2,
@@ -269,8 +310,8 @@ function buildCardData(game: GameSplits): SplitsCardData {
   };
 
   const homeTeam: SplitsCardTeam = {
-    city:      homeNames.city,
-    name:      homeNames.name,
+    city:      game.home_city,
+    name:      game.home_nickname,
     abbr:      game.home_abbr,
     primary:   homeColor,
     secondary: isUnusable(game.home_color2) ? homeColor : game.home_color2,

@@ -11,6 +11,10 @@ import { nbaTeams, nhlTeams } from "../../drizzle/schema";
 
 export interface TeamEntry {
   displayName: string;
+  /** City / school name shown on the top line of the card (e.g. "Toronto", "Golden State") */
+  city: string;
+  /** Nickname shown on the bottom line of the card (e.g. "Maple Leafs", "Warriors") */
+  nickname: string;
   abbrev: string;
   logoUrl: string;
   primaryColor: string;
@@ -23,6 +27,8 @@ const ncaamByDbSlug = new Map<string, TeamEntry>();
 for (const t of NCAAM_TEAMS) {
   ncaamByDbSlug.set(t.dbSlug, {
     displayName: t.ncaaName,
+    city: t.ncaaName,           // For NCAAM, city = full school name (e.g. "Duke")
+    nickname: t.ncaaNickname,   // e.g. "Blue Devils"
     abbrev: t.dbSlug.split("_").map((w) => w[0]?.toUpperCase() ?? "").join("").slice(0, 4),
     logoUrl: t.logoUrl,
     primaryColor: (t as any).primaryColor ?? "#4A90D9",
@@ -36,6 +42,8 @@ const nhlByDbSlug = new Map<string, TeamEntry>();
 for (const t of NHL_TEAMS) {
   nhlByDbSlug.set(t.dbSlug, {
     displayName: t.name,
+    city: t.city,               // e.g. "Toronto", "Vegas", "Columbus"
+    nickname: t.nickname,       // e.g. "Maple Leafs", "Golden Knights", "Blue Jackets"
     abbrev: t.abbrev,
     logoUrl: t.logoUrl,
     primaryColor: "#003087",
@@ -54,6 +62,8 @@ for (const t of NBA_TEAMS) {
     : t.name.slice(0, 3).toUpperCase();
   nbaByDbSlug.set(t.dbSlug, {
     displayName: t.name,
+    city: t.city,               // e.g. "Golden State", "Oklahoma City"
+    nickname: t.nickname,       // e.g. "Warriors", "Thunder"
     abbrev,
     logoUrl: t.logoUrl,
     primaryColor: "#1D428A",
@@ -121,8 +131,13 @@ function fallback(dbSlug: string): TeamEntry {
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+  const parts = displayName.split(" ");
+  const city = parts.length > 1 ? parts.slice(0, -1).join(" ") : displayName;
+  const nickname = parts.length > 1 ? parts[parts.length - 1]! : displayName;
   return {
     displayName,
+    city,
+    nickname,
     abbrev: dbSlug.split("_").map((w) => w[0]?.toUpperCase() ?? "").join("").slice(0, 4),
     logoUrl: "",
     primaryColor: "#4A90D9",

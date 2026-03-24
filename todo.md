@@ -1804,3 +1804,13 @@
 - [x] Added detailed alias-resolution logging to confirm matches in server logs
 - [x] Zero raw NHL_BY_VSIN_SLUG.get() calls remain in the codebase
 - [x] Future aliases: add to VSIN_NHL_HREF_ALIASES in shared/nhlTeams.ts only — no code changes needed elsewhere
+
+## Discord Splits Card Team Name Fix (2026-03-24)
+- [x] Audit how city/nickname are passed to splits card template (buildCardData in splitsCommand.ts)
+- [x] Fixed city/nickname for all NHL/NBA multi-word teams: added city+nickname fields to TeamEntry interface,
+      populated from NHL_TEAMS/NBA_TEAMS shared registries (which already have city/nickname),
+      fetchSplits.ts now passes away_city/away_nickname/home_city/home_nickname,
+      splitsCommand.ts uses these directly instead of splitTeamName() — no more wrapping bugs
+- [x] Ensure city line never wraps (single line always) — verified in test renders
+- [x] Ensure nickname line never wraps (single line always) — verified in test renders
+- [x] Test render VGK, CBJ, TOR, GSW, OKC cards to verify correct display — all confirmed working
