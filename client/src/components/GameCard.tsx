@@ -1925,8 +1925,8 @@ interface GameCardProps {
    * and this value is used instead. The card will call onMobileTabChange when the user
    * interacts with the tab bar (but the tab bar is now rendered at the feed level).
    */
-  mobileTab?: 'dual' | 'splits' | 'bracket';
-  onMobileTabChange?: (tab: 'dual' | 'splits' | 'bracket') => void;
+  mobileTab?: 'dual' | 'splits';
+  onMobileTabChange?: (tab: 'dual' | 'splits') => void;
 }
 
 export function GameCard({ game, mode = "full", showModel: showModelProp, onToggleModel: onToggleModelProp, favoriteGameIds, onToggleFavorite, onFavoriteNotify, isAppAuthed: isAppAuthedProp, mobileTab: mobileTabProp, onMobileTabChange }: GameCardProps) {

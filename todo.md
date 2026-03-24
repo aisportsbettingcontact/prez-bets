@@ -1760,3 +1760,11 @@
 - [x] Fix logoHTML function: removed inline onerror entirely, use hidden .abbr-fallback span + JS addEventListener after DOM build
 - [x] Verified fix with GSW/DAL logos: images load cleanly (naturalWidth=500), fallback span stays display:none
 - [x] Rebuilt splits_card.html v4 with corrected logo rendering
+
+## Remove March Madness Bracket (2026-03-24)
+- [x] Remove Bracket tab from navigation/sidebar (FEED_TABS, bracket pill button)
+- [x] Delete MarchMadnessBracket.tsx page component permanently
+- [x] Remove /bracket route and MarchMadnessBracket import from App.tsx
+- [x] Remove bracket type from FeedMobileTab, GameCard props, VirtualizedGameList
+- [x] Remove CDN_MARCH_MADNESS constant and March Madness icon from nav pill
+- [x] NCAAM pill now shows plain text label with no icon

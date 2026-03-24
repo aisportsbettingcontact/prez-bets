@@ -10,7 +10,6 @@ import UserManagement from "./pages/UserManagement";
 import PublishProjections from "./pages/PublishProjections";
 import IngestAnOdds from "./pages/IngestAnOdds";
 import ModelProjections from "./pages/ModelProjections";
-import MarchMadnessBracket from "./pages/MarchMadnessBracket";
 
 function Router() {
   return (
@@ -28,8 +27,6 @@ function Router() {
       <Route path="/admin/users" component={UserManagement} />
       <Route path="/admin/publish" component={PublishProjections} />
       <Route path="/admin/ingest-an" component={IngestAnOdds} />
-      {/* Standalone bracket preview — no auth required */}
-      <Route path="/bracket">{() => <MarchMadnessBracket />}</Route>
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
