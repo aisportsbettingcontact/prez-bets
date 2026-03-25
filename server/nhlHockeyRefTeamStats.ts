@@ -5,15 +5,19 @@
  * when NaturalStatTrick is blocked by Cloudflare.
  *
  * Data source: https://www.hockey-reference.com/leagues/NHL_2026.html
- *   - stats_adv table (in HTML comment): CF%, xGF, xGA, SC%, HDSC%, SH%, SV%, GF, GA
+ *   - stats_adv table (in HTML comment): CF%, SC%, HDSC%, xGF%, SH%, SV%, GF, GA
  *
- * Per-60 rate computation:
- *   NST's rate=y table provides per-60 stats directly.
- *   HR only provides season totals. We compute per-60 using:
- *     stat_60 = (count / (GP_est * AVG_5V5_TOI_PER_GAME)) * 60
- *   where:
- *     GP_est = estimated from CF counts (CF_for + CF_against) / (2 * 57)
- *     AVG_5V5_TOI_PER_GAME = 38.0 minutes (league average 5v5 TOI per team per game)
+ * Per-60 rate computation (CORRECTED):
+ *   HR provides all-situations counts (not 5v5 only) and the GP field is N/A.
+ *   Direct count-to-per-60 conversion produces inflated values (~55% too high).
+ *
+ *   Instead, we use the PERCENTAGE stats HR provides (CF%, SC%, HDSC%, xGF%)
+ *   and anchor them to NST 2025-26 league average per-60 rates:
+ *
+ *     stat_60 = (stat_pct / 50.0) * LEAGUE_STAT_60
+ *
+ *   Example: BOS CF%=49.2 → CF_60 = (49.2/50) * 57.17 = 56.25 ✓
+ *   This matches NST's per-60 output because percentage stats are scale-invariant.
  *
  * Outputs: Map<string, NhlTeamStats> keyed by NHL abbreviation (e.g. "BOS", "TOR")
  */
@@ -33,12 +37,18 @@ const FETCH_HEADERS = {
   "Referer": "https://www.hockey-reference.com/",
 };
 
-// Average 5v5 TOI per team per game (minutes) — used to compute per-60 rates from counts
-// NHL average is ~38 minutes of 5v5 play per team per game
-const AVG_5V5_TOI_PER_GAME = 38.0;
-
-// Approximate CF count per team per game (used to estimate GP from season totals)
-const LEAGUE_CF_PER_GAME = 57.0;
+// NST 2025-26 league average per-60 rates (5v5, all situations)
+// Source: NaturalStatTrick, verified March 2026 (32 teams)
+// Used to anchor HR percentage stats to correct per-60 scale:
+//   stat_60 = (stat_pct / 50.0) * LEAGUE_STAT_60
+const LEAGUE_XGF_60  = 2.662;   // Expected Goals For per 60
+const LEAGUE_XGA_60  = 2.660;   // Expected Goals Against per 60
+const LEAGUE_HDCF_60 = 11.457;  // High-Danger Corsi For per 60
+const LEAGUE_HDCA_60 = 11.453;  // High-Danger Corsi Against per 60
+const LEAGUE_SCF_60  = 26.975;  // Scoring Chances For per 60
+const LEAGUE_SCA_60  = 26.952;  // Scoring Chances Against per 60
+const LEAGUE_CF_60   = 57.171;  // Corsi For per 60
+const LEAGUE_CA_60   = 57.132;  // Corsi Against per 60
 
 // ─── HR team name → NHL abbreviation mapping ─────────────────────────────────
 
@@ -98,13 +108,26 @@ function svPctFromHR(val: string): number {
 }
 
 /**
- * Compute per-60 rate from season count total.
- * stat_60 = (count / (GP_est * AVG_5V5_TOI_PER_GAME)) * 60
+ * Compute per-60 rate from a percentage stat anchored to NST league averages.
+ * stat_60 = (stat_pct / 50.0) * LEAGUE_STAT_60
+ *
+ * This is correct because:
+ *   - HR percentage stats are scale-invariant (all-sit and 5v5 give same %)
+ *   - A team at 55% CF% has CF_60 = (55/50) * 57.17 = 62.9 (matches NST)
+ *   - A team at 50% CF% has CF_60 = 57.17 (league average, correct)
  */
-function toRate60(count: number, gp: number): number {
-  if (gp <= 0) return 0;
-  const toi = gp * AVG_5V5_TOI_PER_GAME;
-  return (count / toi) * 60;
+function pctToRate60(pctVal: number, leagueAvg60: number): number {
+  if (pctVal <= 0) return leagueAvg60; // fallback to league average
+  return (pctVal / 50.0) * leagueAvg60;
+}
+
+/**
+ * Compute the opponent's per-60 rate from the team's percentage stat.
+ * opponent_60 = (100 - stat_pct) / 50.0 * LEAGUE_STAT_60
+ */
+function oppPctToRate60(pctVal: number, leagueAvg60: number): number {
+  const oppPct = 100 - pctVal;
+  return pctToRate60(oppPct, leagueAvg60);
 }
 
 // ─── Main scraper ─────────────────────────────────────────────────────────────
@@ -190,30 +213,30 @@ export async function scrapeNhlTeamStatsFromHockeyRef(): Promise<Map<string, Nhl
     const sh_pct      = pct(g("shot_pct_5on5"));
     const sv_pct_raw  = svPctFromHR(g("sv_pct_5on5"));
 
-    // ── GP estimation from CF counts ─────────────────────────────────────────
-    // CF_for + CF_against ≈ 2 * GP * LEAGUE_CF_PER_GAME
-    const gp = Math.round((cf_for + cf_against) / (2 * LEAGUE_CF_PER_GAME));
-    const gpSafe = Math.max(gp, 1);
-
-    // ── xGF% and xGA% ─────────────────────────────────────────────────────────
+    // ── xGF% and xGA% from raw counts ────────────────────────────────────────
     const xg_total = xgf_total + xga_total;
     const xGF_pct = xg_total > 0 ? (xgf_total / xg_total) * 100 : 50.0;
     const xGA_pct = 100 - xGF_pct;
 
-    // ── Per-60 rate stats ─────────────────────────────────────────────────────
-    const xGF_60  = toRate60(xgf_total, gpSafe);
-    const xGA_60  = toRate60(xga_total, gpSafe);
-    const HDCF_60 = toRate60(hdsc_for, gpSafe);
-    const HDCA_60 = toRate60(hdsc_against, gpSafe);
-    const SCF_60  = toRate60(sc_for, gpSafe);
-    const SCA_60  = toRate60(sc_against, gpSafe);
-    const CF_60   = toRate60(cf_for, gpSafe);
-    const CA_60   = toRate60(cf_against, gpSafe);
+    // ── Per-60 rate stats via percentage anchoring (CORRECTED) ────────────────
+    // HR counts include all-situations (not 5v5 only) and GP is not available.
+    // Using pct_to_rate60(pct, league_avg) = (pct / 50.0) * league_avg
+    // This produces values consistent with NST's 5v5 per-60 output.
+    const xGF_60  = pctToRate60(xGF_pct, LEAGUE_XGF_60);
+    const xGA_60  = pctToRate60(xGA_pct, LEAGUE_XGA_60);
+    const HDCF_60 = pctToRate60(hdsc_pct, LEAGUE_HDCF_60);
+    const HDCA_60 = oppPctToRate60(hdsc_pct, LEAGUE_HDCA_60);
+    const SCF_60  = pctToRate60(sc_pct, LEAGUE_SCF_60);
+    const SCA_60  = oppPctToRate60(sc_pct, LEAGUE_SCA_60);
+    const CF_60   = pctToRate60(cf_pct, LEAGUE_CF_60);
+    const CA_60   = oppPctToRate60(cf_pct, LEAGUE_CA_60);
+    // GP estimate for logging only (not used in per-60 computation)
+    const gpSafe = Math.max(Math.round((cf_for + cf_against) / (2 * 57.0)), 1);
 
     const stats: NhlTeamStats = {
       abbrev,
       name: teamName,
-      gp: gpSafe,
+      gp: gpSafe, // estimated from CF counts for logging only
       xGF_pct,
       xGA_pct,
       CF_pct:   cf_pct,

@@ -1987,3 +1987,4 @@
 - [x] lineupsCommand.ts: post to channel 1486210563276144700 instead of current channel
 - [x] lineupsCommand.ts: remove text header message (date/game count) before posting cards
 - [x] lineup_card.html: add game date (Month Day, Year) above ET start time in rendered card
+- [ ] Recalibrate NHL model goal projection scoring — projected totals (~13-14 combined) are inflated vs book total (6.5); trace xGF_60/xGA_60 scaling and pace factors in nhlModelEngine.py and nhlHockeyRefTeamStats.ts
