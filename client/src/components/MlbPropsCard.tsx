@@ -159,16 +159,30 @@ function StatusPill({ confirmed }: { confirmed: boolean }) {
   );
 }
 
-/** Circular team logo — matches lineup card logoCircle() */
+/**
+ * Circular team logo — exact match to MlbLineupCard circle rendering.
+ * Background: radial-gradient(circle at 35% 35%, primaryColor, secondaryColor)
+ * Logo: official MLB.com SVG via mlbstatic.com/{mlbId}.svg
+ * No border ring — matches the reference lineup image exactly.
+ */
 function LogoCircle({ abbrev, size = 48 }: { abbrev: string; size?: number }) {
-  const logo = teamLogo(abbrev);
-  const primary = teamPrimary(abbrev);
-  const secondary = teamSecondary(abbrev);
+  const team   = MLB_BY_ABBREV.get(abbrev.toUpperCase());
+  const logo   = team?.logoUrl ?? null;
+  const primary   = team?.primaryColor   ?? "#003087";
+  const secondary = team?.secondaryColor ?? "#1A2A3A";
+
+  // Debug: log logo resolution on first render
+  if (typeof window !== "undefined" && logo) {
+    console.log(`[LogoCircle] ${abbrev} → mlbId=${team ? (team as any).mlbId : 'N/A'} url=${logo}`);
+  } else if (typeof window !== "undefined") {
+    console.warn(`[LogoCircle] ${abbrev} → NO LOGO FOUND in MLB_BY_ABBREV (key lookup: "${abbrev.toUpperCase()}")`);
+  }
+
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%", flexShrink: 0,
-      background: `radial-gradient(circle at 35% 35%, ${primary}33, ${secondary}88)`,
-      border: `1.5px solid ${primary}55`,
+      // Exact same gradient as MlbLineupCard: primaryColor → secondaryColor (solid, no opacity)
+      background: `radial-gradient(circle at 35% 35%, ${primary}, ${secondary})`,
       display: "flex", alignItems: "center", justifyContent: "center",
       overflow: "hidden",
     }}>
@@ -176,8 +190,12 @@ function LogoCircle({ abbrev, size = 48 }: { abbrev: string; size?: number }) {
         <img
           src={logo}
           alt={abbrev}
-          style={{ width: size * 0.72, height: size * 0.72, objectFit: "contain" }}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          // 66% of circle diameter — matches lineup card proportion
+          style={{ width: size * 0.66, height: size * 0.66, objectFit: "contain" }}
+          onError={(e) => {
+            console.error(`[LogoCircle] LOAD FAILED for ${abbrev}: ${logo}`);
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
         />
       ) : (
         <span style={{ fontSize: size * 0.3, fontWeight: 800, color: "#fff", fontFamily: '"Barlow Condensed", sans-serif' }}>

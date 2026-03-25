@@ -672,6 +672,20 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
   const awayInfo = MLB_BY_ABBREV.get(awayTeam);
   const homeInfo = MLB_BY_ABBREV.get(homeTeam);
 
+  // Debug: log team resolution on mount
+  if (typeof window !== "undefined") {
+    if (awayInfo) {
+      console.log(`[MlbLineupCard] AWAY ${awayTeam} → mlbId=${awayInfo.mlbId} logo=${awayInfo.logoUrl} primary=${awayInfo.primaryColor}`);
+    } else {
+      console.warn(`[MlbLineupCard] AWAY ${awayTeam} → NOT FOUND in MLB_BY_ABBREV`);
+    }
+    if (homeInfo) {
+      console.log(`[MlbLineupCard] HOME ${homeTeam} → mlbId=${homeInfo.mlbId} logo=${homeInfo.logoUrl} primary=${homeInfo.primaryColor}`);
+    } else {
+      console.warn(`[MlbLineupCard] HOME ${homeTeam} → NOT FOUND in MLB_BY_ABBREV`);
+    }
+  }
+
   const awayColor = awayInfo?.primaryColor ?? "#444";
   const awayDark = awayInfo?.secondaryColor ?? "#222";
   const homeColor = homeInfo?.primaryColor ?? "#444";

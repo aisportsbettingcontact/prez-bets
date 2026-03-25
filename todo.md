@@ -2015,3 +2015,11 @@
 - [x] Fixed signal breakdown display to show actual model keys (base_k_rate, whiff_mult, etc.)
 - [x] Fixed matchup rows to use spot field and correct kRate/adj display
 - [x] Verified tRPC endpoint returns correct data (Max Fried UNDER 5.5 @ -150, Logan Webb OVER 6.5 @ +105)
+
+## MLB Team Logo Rendering Audit & Fix
+- [ ] Audit Discord lineup image generator — exact logo source, URL pattern, mapping logic
+- [ ] Audit MlbLineupCard web component — current logo rendering approach
+- [ ] Audit MlbPropsCard web component — current logo rendering approach
+- [ ] Apply exact same logo source/mapping to both web card components
+- [ ] Add deep logging for logo load failures (fallback chain)
+- [ ] Verify logos render correctly on both Lineups and K Props tabs
