@@ -33,9 +33,10 @@ function getTemplateHtml(): string {
 let _browser: Browser | null = null;
 
 // ─── Quality constants ────────────────────────────────────────────────────────
-// DPR=4 means every CSS pixel maps to 4×4 physical pixels.
-// At 680px card width → 2720px physical output width → crisp on any display.
-const DEVICE_SCALE = 4;
+// DPR=8 means every CSS pixel maps to 8×8 physical pixels.
+// At 680px card width → 5440px physical output width → ultra-crisp on any display.
+// This is a ~4x increase in linear resolution (16x pixel density) over DPR=4.
+const DEVICE_SCALE = 8;
 const VIEWPORT_WIDTH = 1360; // 2× card width so card never clips
 const VIEWPORT_HEIGHT = 2400; // tall enough for 9-player lineups
 
@@ -49,13 +50,11 @@ async function getBrowser(): Promise<Browser> {
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      `--force-device-scale-factor=${DEVICE_SCALE}`,
-      // Font quality
+      // Font quality — maximum subpixel rendering
       "--disable-lcd-text",
       "--enable-font-antialiasing",
-      "--font-render-hinting=none",
-      // Image quality
-      "--disable-skia-runtime-opts",
+      "--font-render-hinting=full",
+      // Image quality — maximum fidelity
       "--force-color-profile=srgb",
     ],
   });
@@ -137,12 +136,16 @@ export async function renderLineupCard(data: LineupCardData): Promise<Buffer> {
   );
 
   const browser = await getBrowser();
-  const page: Page = await browser.newPage();
+  // Use browser context with deviceScaleFactor — this is the correct Playwright API
+  // for controlling DPR. The --force-device-scale-factor flag is ignored in headless mode.
+  const context = await browser.newContext({
+    viewport: { width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT },
+    deviceScaleFactor: DEVICE_SCALE,
+  });
+  const page: Page = await context.newPage();
 
   try {
-    // Set viewport at 2× card width so the 680px card never clips at 4x DPR
-    await page.setViewportSize({ width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT });
-    console.log(`[LineupRenderer] ${matchup} — viewport ${VIEWPORT_WIDTH}×${VIEWPORT_HEIGHT} DPR=${DEVICE_SCALE}`);
+    console.log(`[LineupRenderer] ${matchup} — viewport ${VIEWPORT_WIDTH}×${VIEWPORT_HEIGHT} DPR=${DEVICE_SCALE} (context-level)`);
 
     // Load the template HTML
     // Set transparent page background BEFORE setContent so the browser
@@ -171,19 +174,22 @@ export async function renderLineupCard(data: LineupCardData): Promise<Buffer> {
       throw new Error("Card element not found in rendered HTML");
     }
 
-    // scale: "device" captures at full DPR (4x) so output is 4× the CSS dimensions
+    // scale: "device" captures at full DPR (8x) so output is 8× the CSS dimensions
     // omitBackground: true makes the Playwright screenshot use a transparent
     // background instead of white, so the rounded card corners are transparent
     // in the PNG rather than filled with white pixels.
     const buffer = await cardEl.screenshot({ type: "png", scale: "device", omitBackground: true });
     const sizeKb = (buffer.length / 1024).toFixed(0);
-    console.log(`[LineupRenderer] ${matchup} — rendered in ${Date.now() - t0}ms | PNG size: ${sizeKb} KB | DPR: ${DEVICE_SCALE}x`);
+    const physW = Math.round(680 * DEVICE_SCALE);
+    const physH = Math.round(buffer.length / (physW * 4)); // rough estimate
+    console.log(`[LineupRenderer] ${matchup} — rendered in ${Date.now() - t0}ms | PNG size: ${sizeKb} KB | DPR: ${DEVICE_SCALE}x | ~${physW}px wide`);
     return buffer as Buffer;
   } finally {
     await page.close();
+    await context.close();
   }
 }
 
-// Template cache version: v4 (4x DPR, w_360 headshots, larger fonts)
+// Template cache version: v5 (8x DPR, w_360 headshots, larger fonts, ultra-crisp output)
 // Re-export warm-up and close from the shared renderer
 export { warmUpRenderer, closeSplitsRenderer as closeLineupRenderer };

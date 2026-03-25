@@ -42,8 +42,8 @@ function pill(text, bg, color, border) {
 
 function mlbPhoto(id) {
   if (!id) return null;
-  // w_360 = 3× more pixels → crisp at 4x DPR (360px source / 4 DPR = 90px display, sharp)
-  return `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_360,q_auto:best,e_background_removal,f_png/v1/people/${id}/headshot/67/current`;
+  // w_720 = 8× more pixels → crisp at 8x DPR (720px source / 8 DPR = 90px display, ultra-sharp)
+  return `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_720,q_auto:best,e_background_removal,f_png/v1/people/${id}/headshot/67/current`;
 }
 
 function playerAvatar(mlbamId, size) {
@@ -150,7 +150,7 @@ function pitcherSection(pitcher) {
     textTransform: 'uppercase', color: '#FFFFFF', marginBottom: '6px',
   }, 'Starting Pitcher');
   const row = el('div', { display: 'flex', alignItems: 'center', gap: '10px' });
-  const avatar = playerAvatar(pitcher.mlbamId, 72); // 72px CSS × 4x DPR = 288px physical
+  const avatar = playerAvatar(pitcher.mlbamId, 72); // 72px CSS × 8x DPR = 576px physical
   const info = el('div', { flex: '1', minWidth: '0' });
   const pName = el('div', {
     fontFamily: '"Barlow Condensed", sans-serif', fontSize: '18px', fontWeight: '800',
@@ -215,31 +215,31 @@ function lineupRows(players, lineupConfirmed) {
       color: '#FFFFFF', width: '16px', flexShrink: '0', textAlign: 'right',
     }, String(p.battingOrder)));
     // Player headshot
-    row.appendChild(playerAvatar(p.mlbamId, 48)); // 48px CSS × 4x DPR = 192px physical
-    // Name + position + handedness grouped together, immediately left-aligned
-    const nameGroup = el('div', {
-      display: 'flex', alignItems: 'center', gap: '5px',
-      flex: '1', minWidth: '0', overflow: 'hidden',
-    });
-    nameGroup.appendChild(el('span', {
+    row.appendChild(playerAvatar(p.mlbamId, 48)); // 48px CSS × 8x DPR = 384px physical
+    // Name + position pill + handedness: all inline, tight, no stretching
+    // The name is NOT flex:1 — it only takes as much space as the text needs
+    // so the pill and hand sit pixel-adjacent to the last letter of the name.
+    row.appendChild(el('span', {
       fontFamily: '"Barlow Condensed", sans-serif', fontSize: '16px', fontWeight: '800',
       color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden',
       textOverflow: 'ellipsis', flexShrink: '1', minWidth: '0',
+      maxWidth: 'calc(100% - 80px)', // never push pill off-screen
     }, p.name));
-    // Position pill — immediately after name
-    nameGroup.appendChild(el('span', {
+    // Position pill — pixel-adjacent after name
+    row.appendChild(el('span', {
       fontFamily: '"Barlow Condensed", sans-serif', fontSize: '12px', fontWeight: '700',
       letterSpacing: '0.5px', textTransform: 'uppercase', color: '#7EB8D4',
       background: 'rgba(30,60,90,0.6)', padding: '2px 5px', borderRadius: '3px',
       border: '1px solid rgba(30,80,120,0.4)', flexShrink: '0',
       textAlign: 'center', minWidth: '28px',
     }, p.position));
-    // Handedness — directly right of position pill
-    nameGroup.appendChild(el('span', {
+    // Handedness — pixel-adjacent right of position pill
+    row.appendChild(el('span', {
       fontFamily: '"Barlow Condensed", sans-serif', fontSize: '14px', fontWeight: '800',
       color: '#FFFFFF', flexShrink: '0', width: '14px', textAlign: 'center',
     }, p.bats));
-    row.appendChild(nameGroup);
+    // Spacer fills remaining row width so the above group stays left-anchored
+    row.appendChild(el('span', { flex: '1' }));
     container.appendChild(row);
   });
   return container;
