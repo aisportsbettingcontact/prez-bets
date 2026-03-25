@@ -1955,3 +1955,5 @@
 - [x] Fix MlbLineupCard photo crop: match the working state shown in reference (face fully visible, not cut off)
 - [ ] MlbLineupCard: side-by-side columns on ALL screen sizes (no stacking), compact scaling so both teams fit on 390px iPhone without truncation
 - [ ] MlbLineupCard: dynamic avatar/font/padding scaling based on viewport width
+- [x] MlbLineupCard: increase player circle size (28→36px) and name font (11→13px) on mobile
+- [x] MlbLineupCard: improve position/handedness readability — styled pill badge + colored handedness indicator

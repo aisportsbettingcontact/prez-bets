@@ -403,8 +403,8 @@ function LineupRows({ players, isMobile }: { players: LineupPlayer[]; isMobile: 
               {p.battingOrder}
             </span>
 
-            {/* Player headshot — 28px on mobile */}
-            <PlayerAvatar mlbamId={p.mlbamId} size={28} />
+            {/* Player headshot — 36px on mobile (pixel-verified fits iPhone SE) */}
+            <PlayerAvatar mlbamId={p.mlbamId} size={36} />
 
             {/* Two-line text column */}
             <div style={{ flex: 1, minWidth: 0, marginLeft: 4 }}>
@@ -412,7 +412,7 @@ function LineupRows({ players, isMobile }: { players: LineupPlayer[]; isMobile: 
               <div
                 style={{
                   fontFamily: "'Barlow Condensed', sans-serif",
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: 800,
                   color: "#FFFFFF",
                   whiteSpace: "nowrap",
@@ -423,32 +423,41 @@ function LineupRows({ players, isMobile }: { players: LineupPlayer[]; isMobile: 
               >
                 {p.name}
               </div>
-              {/* Line 2: Position + Bats */}
+              {/* Line 2: Position pill + Bats indicator */}
               <div
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 4,
-                  marginTop: 1,
+                  gap: 5,
+                  marginTop: 2,
                 }}
               >
+                {/* Position pill */}
                 <span
                   style={{
                     fontFamily: "'Barlow Condensed', sans-serif",
-                    fontSize: 9,
+                    fontSize: 10,
                     fontWeight: 700,
-                    letterSpacing: "0.3px",
+                    letterSpacing: "0.5px",
                     textTransform: "uppercase",
-                    color: "#3A5A7A",
+                    color: "#7EB8D4",
+                    background: "rgba(30,60,90,0.6)",
+                    padding: "1px 4px",
+                    borderRadius: 3,
+                    border: "1px solid rgba(30,80,120,0.4)",
+                    lineHeight: 1.4,
                   }}
                 >
                   {p.position}
                 </span>
+                {/* Handedness indicator */}
                 <span
                   style={{
-                    fontSize: 8,
-                    color: "rgba(58,90,122,0.7)",
-                    fontWeight: 600,
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: p.bats === "L" ? "#F0A500" : p.bats === "S" ? "#39FF14" : "#E0E0E0",
+                    letterSpacing: "0.5px",
                   }}
                 >
                   {p.bats}
@@ -493,18 +502,22 @@ function LineupRows({ players, isMobile }: { players: LineupPlayer[]; isMobile: 
           {/* Player headshot */}
           <PlayerAvatar mlbamId={p.mlbamId} size={36} />
 
-          {/* Position badge */}
+          {/* Position badge — styled pill */}
           <span
             style={{
               fontFamily: "'Barlow Condensed', sans-serif",
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: 700,
               letterSpacing: "0.5px",
               textTransform: "uppercase",
-              color: "#3A5A7A",
-              width: 24,
+              color: "#7EB8D4",
+              background: "rgba(30,60,90,0.6)",
+              padding: "2px 5px",
+              borderRadius: 3,
+              border: "1px solid rgba(30,80,120,0.4)",
               flexShrink: 0,
-              textAlign: "left",
+              textAlign: "center",
+              minWidth: 28,
             }}
           >
             {p.position}
@@ -528,15 +541,17 @@ function LineupRows({ players, isMobile }: { players: LineupPlayer[]; isMobile: 
             {p.name}
           </span>
 
-          {/* Bats indicator */}
+          {/* Bats indicator — colored by handedness */}
           <span
             style={{
-              fontSize: 9,
-              color: "#3A5A7A",
-              fontWeight: 600,
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontSize: 12,
+              fontWeight: 800,
+              color: p.bats === "L" ? "#F0A500" : p.bats === "S" ? "#39FF14" : "#E0E0E0",
               flexShrink: 0,
-              width: 10,
+              width: 12,
               textAlign: "right",
+              letterSpacing: "0.5px",
             }}
           >
             {p.bats}
