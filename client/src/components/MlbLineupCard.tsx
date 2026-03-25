@@ -64,9 +64,12 @@ export interface MlbLineupRow {
 }
 
 // ─── MLB headshot CDN ──────────────────────────────────────────────────────────
+// e_background_removal removes the gray studio background (Cloudinary AI).
+// f_png forces PNG output so the alpha channel is preserved.
+// d_ fallback uses the generic headshot if the player-specific one is missing.
 const mlbPhoto = (id: number | null | undefined): string | null => {
   if (!id) return null;
-  return `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_180,q_auto:best/v1/people/${id}/headshot/67/current`;
+  return `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_180,q_auto:best,e_background_removal,f_png/v1/people/${id}/headshot/67/current`;
 };
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -93,45 +96,40 @@ function useIsMobile(breakpoint = 640): boolean {
 }
 
 // ─── PlayerAvatar ──────────────────────────────────────────────────────────────
-// objectPosition "center 35%" is pixel-verified:
-//   0% = cap only, 35% = full face centered, 50% = chin/neck visible
+// No circle container — display the raw MLB headshot image directly.
+// The MLB /headshot/67/ CDN already provides a natural circular crop with
+// transparent/gray background. Image is square (1:1 aspect ratio).
 function PlayerAvatar({ mlbamId, size }: { mlbamId: number | null | undefined; size: number }) {
   const url = mlbPhoto(mlbamId);
+  if (!url) {
+    // Fallback: empty square placeholder
+    return (
+      <div
+        style={{
+          width: size,
+          height: size,
+          flexShrink: 0,
+          background: "transparent",
+        }}
+      />
+    );
+  }
   return (
-    <div
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
       style={{
         width: size,
         height: size,
-        borderRadius: "50%",
-        overflow: "hidden",
         flexShrink: 0,
-        border: "1.5px solid #1E3048",
-        background: "#101820",
-        position: "relative",
+        display: "block",
+        objectFit: "contain",
       }}
-    >
-      {url ? (
-        <img
-          src={url}
-          alt=""
-          loading="lazy"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            objectPosition: "center 6%",
-          }}
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
-        />
-      ) : (
-        <div style={{ width: "100%", height: "100%", background: "#101820" }} />
-      )}
-    </div>
+      onError={(e) => {
+        (e.target as HTMLImageElement).style.display = "none";
+      }}
+    />
   );
 }
 

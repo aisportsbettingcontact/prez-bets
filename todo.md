@@ -1957,3 +1957,4 @@
 - [ ] MlbLineupCard: dynamic avatar/font/padding scaling based on viewport width
 - [x] MlbLineupCard: increase player circle size (28→36px) and name font (11→13px) on mobile
 - [x] MlbLineupCard: improve position/handedness readability — styled pill badge + colored handedness indicator
+- [ ] MlbLineupCard: remove dark circle border container from PlayerAvatar, display raw MLB headshot image directly (no clip/overflow hidden)
