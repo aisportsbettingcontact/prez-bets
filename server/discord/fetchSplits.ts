@@ -88,16 +88,39 @@ function todayEt(): string {
     .replace(/(\d{2})\/(\d{2})\/(\d{4})/, "$3-$1-$2");
 }
 
-/** Formats a raw "HH:MM" 24-h string into "H:MM AM/PM ET" */
+/**
+ * Formats a time string for display.
+ *
+ * Handles two input formats:
+ *   1. Already-formatted: "7:05 PM ET" — returned as-is (MLB games store times this way)
+ *   2. Raw 24-hour "HH:MM" — converted to "H:MM AM/PM ET" (NBA/NHL/NCAAM format)
+ *
+ * Deep logging: logs the raw input and output for every call when LOG_LEVEL=debug.
+ */
 function formatTime(raw: string | null | undefined): string {
-  if (!raw) return "TBD";
+  if (!raw) {
+    log("time", `formatTime: null/empty input → TBD`, "debug");
+    return "TBD";
+  }
+  // If the string already contains AM or PM, it's already formatted — pass through as-is.
+  // This handles MLB games where startTimeEst is stored as "7:05 PM ET".
+  if (/AM|PM/i.test(raw)) {
+    log("time", `formatTime: already formatted → "${raw}" (pass-through)`, "debug");
+    return raw;
+  }
+  // Raw 24-hour format: "HH:MM" or "H:MM"
   const [hStr, mStr] = raw.split(":");
   const h = parseInt(hStr ?? "0", 10);
   const m = parseInt(mStr ?? "0", 10);
-  if (isNaN(h) || isNaN(m)) return raw;
+  if (isNaN(h) || isNaN(m)) {
+    log("time", `formatTime: unparseable "${raw}" → returned as-is`, "warn");
+    return raw;
+  }
   const period = h >= 12 ? "PM" : "AM";
   const h12    = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${period} ET`;
+  const result = `${h12}:${String(m).padStart(2, "0")} ${period} ET`;
+  log("time", `formatTime: "${raw}" → "${result}"`, "debug");
+  return result;
 }
 
 function complement(pct: number | null): number | null {
@@ -136,17 +159,24 @@ export async function fetchAllDailySplits(dateOverride?: string, sport?: string)
     const key = `[${idx + 1}/${rows.length}] ${row.awayTeam} @ ${row.homeTeam}`;
 
     // Resolve team registry entries
+    // DEEP LOGGING: log raw DB slug, sport, and full resolved entry for MLB
+    log("team", `${key} — resolving: away="${row.awayTeam}" home="${row.homeTeam}" sport="${row.sport}"`);
     const awayEntry = resolveTeam(row.awayTeam, row.sport);
     const homeEntry = resolveTeam(row.homeTeam, row.sport);
-    log("team", `${key} — away resolved: abbr=${awayEntry.abbrev} color=${awayEntry.primaryColor} logo=${awayEntry.logoUrl ? "✓" : "NONE"}`, "debug");
-    log("team", `${key} — home resolved: abbr=${homeEntry.abbrev} color=${homeEntry.primaryColor} logo=${homeEntry.logoUrl ? "✓" : "NONE"}`, "debug");
 
-    // Warn if team resolution fell back to slug
-    if (!awayEntry.abbrev || awayEntry.abbrev === row.awayTeam.slice(0, 3).toUpperCase()) {
-      log("team", `${key} — away team "${row.awayTeam}" may not be in registry (abbrev=${awayEntry.abbrev})`, "warn");
+    // Always log resolved values (not just debug) so MLB issues are immediately visible
+    log("team", `${key} — away resolved: displayName="${awayEntry.displayName}" city="${awayEntry.city}" nickname="${awayEntry.nickname}" abbrev=${awayEntry.abbrev} primaryColor=${awayEntry.primaryColor} logo=${awayEntry.logoUrl ? awayEntry.logoUrl.slice(0, 60) + '...' : 'NONE'}`);
+    log("team", `${key} — home resolved: displayName="${homeEntry.displayName}" city="${homeEntry.city}" nickname="${homeEntry.nickname}" abbrev=${homeEntry.abbrev} primaryColor=${homeEntry.primaryColor} logo=${homeEntry.logoUrl ? homeEntry.logoUrl.slice(0, 60) + '...' : 'NONE'}`);
+
+    // Warn if team resolution fell back (fallback produces city=first-word, nickname=last-word from slug)
+    // For MLB: DB stores abbreviations ("NYY", "SF"), registry now handles both abbrev and slug lookup
+    const awayFallback = awayEntry.logoUrl === '' || awayEntry.primaryColor === '#4A90D9';
+    const homeFallback = homeEntry.logoUrl === '' || homeEntry.primaryColor === '#4A90D9';
+    if (awayFallback) {
+      log("team", `${key} — ⚠️  AWAY FALLBACK DETECTED for "${row.awayTeam}" (sport=${row.sport}) — team not in registry! logoUrl="${awayEntry.logoUrl}" primaryColor="${awayEntry.primaryColor}"`, "warn");
     }
-    if (!homeEntry.abbrev || homeEntry.abbrev === row.homeTeam.slice(0, 3).toUpperCase()) {
-      log("team", `${key} — home team "${row.homeTeam}" may not be in registry (abbrev=${homeEntry.abbrev})`, "warn");
+    if (homeFallback) {
+      log("team", `${key} — ⚠️  HOME FALLBACK DETECTED for "${row.homeTeam}" (sport=${row.sport}) — team not in registry! logoUrl="${homeEntry.logoUrl}" primaryColor="${homeEntry.primaryColor}"`, "warn");
     }
 
     // Extract raw split values

@@ -1961,3 +1961,10 @@
 - [x] Add MLB support to /splits Discord command
 - [x] Build /lineups Discord command (renders MLB lineup cards as images, posts to channel 1400758184188186744)
 - [x] Register /lineups slash command with Discord
+- [ ] Rebuild /splits with dropdown sport selector and MLB population fix
+- [ ] Rebuild /lineups with date/ALL/game dropdowns and deep logging
+- [ ] Re-register both commands with Discord
+- [x] Fix MLB splits card: team logos not rendering (showing letter circles instead of logos)
+- [x] Fix MLB splits card: team names showing abbrev instead of city/nickname (NYY/SF instead of New York/Yankees, San Francisco/Giants)
+- [x] Fix MLB splits card: game time showing wrong value (7:05 AM instead of correct ET time)
+- [x] Add deep diagnostic logging to MLB team registry resolution in fetchSplits.ts

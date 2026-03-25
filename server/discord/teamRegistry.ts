@@ -6,7 +6,7 @@
 import { NCAAM_TEAMS } from "@shared/ncaamTeams";
 import { NBA_TEAMS } from "@shared/nbaTeams";
 import { NHL_TEAMS } from "@shared/nhlTeams";
-import { MLB_TEAMS } from "@shared/mlbTeams";
+import { MLB_TEAMS, MLB_BY_ABBREV } from "@shared/mlbTeams";
 import { getDb } from "../db";
 import { nbaTeams, nhlTeams } from "../../drizzle/schema";
 
@@ -148,9 +148,12 @@ function fallback(dbSlug: string): TeamEntry {
 }
 
 // MLB — all data from shared registry
+// Keyed by BOTH dbSlug (VSiN slug, e.g. "yankees") AND abbrev (e.g. "NYY").
+// The games DB stores team values as abbreviations (e.g. "NYY", "SF"),
+// NOT as VSiN slugs — so we must support both lookup paths.
 const mlbByDbSlug = new Map<string, TeamEntry>();
 for (const t of MLB_TEAMS) {
-  mlbByDbSlug.set(t.dbSlug, {
+  const entry: TeamEntry = {
     displayName: t.name,
     city: t.city,               // e.g. "New York", "Los Angeles"
     nickname: t.nickname,       // e.g. "Yankees", "Dodgers"
@@ -159,7 +162,15 @@ for (const t of MLB_TEAMS) {
     primaryColor: t.primaryColor,
     secondaryColor: t.secondaryColor,
     tertiaryColor: t.tertiaryColor ?? t.secondaryColor,
-  });
+  };
+  // Primary key: VSiN slug (e.g. "yankees", "giants")
+  mlbByDbSlug.set(t.dbSlug, entry);
+  // Secondary key: standard abbreviation (e.g. "NYY", "SF") — this is what the games DB stores
+  mlbByDbSlug.set(t.abbrev, entry);
+  // Also register brAbbrev if different (e.g. "SFG" for SF Giants, "KCR" for KC Royals)
+  if (t.brAbbrev && t.brAbbrev !== t.abbrev) {
+    mlbByDbSlug.set(t.brAbbrev, entry);
+  }
 }
 
 export function resolveTeam(dbSlug: string, sport: string): TeamEntry {
