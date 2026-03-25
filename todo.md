@@ -1972,3 +1972,4 @@
 - [x] Rebuild /lineups with date scope dropdown (TODAY/ALL/YYYY-MM-DD) and game autocomplete
 - [x] Rebuild /splits with dropdown sport selector and game autocomplete (already had this, verified working)
 - [x] Fix MLB splits card team colors: NYY shows orange instead of navy (#003087), SF shows orange instead of black (#27251F) — audit full color pipeline
+- [x] Improve splits card logo circle backgrounds: use contrasting/lighter color so logos are clearly visible against the background

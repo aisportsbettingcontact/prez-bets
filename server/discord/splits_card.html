@@ -23,8 +23,8 @@
   .hdr::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--away-primary) 0%,var(--away-secondary) 20%,transparent 44%,transparent 56%,var(--home-secondary) 80%,var(--home-primary) 100%)}
   .tblk{display:flex;align-items:center;gap:18px}
   .tlogo{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;flex-shrink:0;overflow:hidden;position:relative}
-  .logo-away{background:radial-gradient(circle at 35% 35%,var(--away-primary),var(--away-dark))}
-  .logo-home{background:radial-gradient(circle at 35% 35%,var(--home-primary),var(--home-dark))}
+  .logo-away{background:radial-gradient(circle at 35% 35%,var(--away-logo-bg),var(--away-logo-bg-dark))}
+  .logo-home{background:radial-gradient(circle at 35% 35%,var(--home-logo-bg),var(--home-logo-bg-dark))}
   .tlogo img{width:58px;height:58px;object-fit:contain;display:block}
   .abbr-fallback{font-family:'Barlow Condensed',sans-serif;font-weight:800;display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
   .tinfo{display:flex;flex-direction:column}
@@ -72,10 +72,14 @@
   rs.setProperty("--away-primary",   GAME.away.primary);
   rs.setProperty("--away-secondary", GAME.away.secondary);
   rs.setProperty("--away-dark",      GAME.away.dark);
+  rs.setProperty("--away-logo-bg",   GAME.away.logoBg);
+  rs.setProperty("--away-logo-bg-dark", GAME.away.logoBgDark);
   rs.setProperty("--away-text",      GAME.away.logoText);
   rs.setProperty("--home-primary",   GAME.home.primary);
   rs.setProperty("--home-secondary", GAME.home.secondary);
   rs.setProperty("--home-dark",      GAME.home.dark);
+  rs.setProperty("--home-logo-bg",   GAME.home.logoBg);
+  rs.setProperty("--home-logo-bg-dark", GAME.home.logoBgDark);
   rs.setProperty("--home-text",      GAME.home.logoText);
 
   function bar(lc, lp, rc, rp) {

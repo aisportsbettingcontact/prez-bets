@@ -10,12 +10,14 @@ const gswDal: SplitsCardData = {
   away: {
     city: "Golden State", name: "Warriors", abbr: "GSW",
     primary: "#FFC72C", secondary: "#1D428A", dark: "#0A1A40",
+    logoBg: "#1D428A", logoBgDark: "#0A1A40",
     logoText: "#000000",
     logoUrl: "https://cdn.nba.com/logos/nba/1610612744/global/L/logo.svg",
   },
   home: {
     city: "Dallas", name: "Mavericks", abbr: "DAL",
     primary: "#B8C4CA", secondary: "#00538C", dark: "#001A3A",
+    logoBg: "#00538C", logoBgDark: "#001A3A",
     logoText: "#000000",
     logoUrl: "https://cdn.nba.com/logos/nba/1610612742/global/L/logo.svg",
   },
@@ -42,12 +44,14 @@ const bknPor: SplitsCardData = {
   away: {
     city: "Brooklyn", name: "Nets", abbr: "BKN",
     primary: "#AAAAAA", secondary: "#777777", dark: "#333333",
+    logoBg: "#333333", logoBgDark: "#1a1a1a",
     logoText: "#FFFFFF",
     logoUrl: "https://cdn.nba.com/logos/nba/1610612751/global/L/logo.svg",
   },
   home: {
     city: "Portland", name: "Trail Blazers", abbr: "POR",
     primary: "#E03A3E", secondary: "#000000", dark: "#6A0000",
+    logoBg: "#000000", logoBgDark: "#1a0000",
     logoText: "#FFFFFF",
     logoUrl: "https://cdn.nba.com/logos/nba/1610612757/global/L/logo.svg",
   },
@@ -74,12 +78,14 @@ const ottNyr: SplitsCardData = {
   away: {
     city: "Ottawa", name: "Senators", abbr: "OTT",
     primary: "#E31837", secondary: "#000000", dark: "#6A0000",
+    logoBg: "#000000", logoBgDark: "#1a0000",
     logoText: "#FFFFFF",
     logoUrl: "https://www-league.nhlstatic.com/images/logos/teams-current-primary-dark/9.svg",
   },
   home: {
     city: "New York", name: "Rangers", abbr: "NYR",
     primary: "#0038A8", secondary: "#CE1126", dark: "#001560",
+    logoBg: "#001560", logoBgDark: "#000a30",
     logoText: "#FFFFFF",
     logoUrl: "https://www-league.nhlstatic.com/images/logos/teams-current-primary-dark/3.svg",
   },

@@ -180,6 +180,43 @@ function pickColor(
   return fallback;
 }
 
+/**
+ * Pick the best circle background for a team logo.
+ * Strategy: choose the color from [primary, secondary, tertiary] that has the
+ * HIGHEST contrast ratio against the team's primary color (which is the dominant
+ * color in most SVG logos). This ensures the logo pops against the circle.
+ * Falls back to a dark neutral if all candidates have low contrast.
+ */
+function pickLogoBg(
+  primary: string,
+  secondary: string | null | undefined,
+  tertiary: string | null | undefined,
+  label: string
+): string {
+  const candidates = [primary, secondary, tertiary].filter((c): c is string => !!c && c.length >= 4);
+  let bestColor = primary;
+  let bestContrast = 0;
+  for (const bg of candidates) {
+    const lum_logo = luminance(primary); // logo dominant color ≈ team primary
+    const lum_bg   = luminance(bg);
+    const lighter  = Math.max(lum_logo, lum_bg);
+    const darker   = Math.min(lum_logo, lum_bg);
+    const cr       = (lighter + 0.05) / (darker + 0.05);
+    log("color", `${label} logoBg candidate "${bg}" contrast vs logo=${cr.toFixed(2)}`, "debug");
+    if (cr > bestContrast) {
+      bestContrast = cr;
+      bestColor = bg;
+    }
+  }
+  // If best contrast is still very low (same-color logo+bg), use a dark neutral
+  if (bestContrast < 1.5) {
+    log("color", `${label} logoBg: all candidates low contrast (best=${bestContrast.toFixed(2)}) — using dark neutral`, "warn");
+    return "#1a1a2e";
+  }
+  log("color", `${label} logoBg: chose "${bestColor}" (contrast=${bestContrast.toFixed(2)})`);
+  return bestColor;
+}
+
 /** Derive the darkest shade for the logo gradient background */
 function darkShade(primary: string): string {
   const clean = primary.replace("#", "");
@@ -304,28 +341,40 @@ function buildCardData(game: GameSplits): SplitsCardData {
   log("card", `${key} — awayColor=${awayColor} homeColor=${homeColor}`);
 
   // 2. Build team objects — city/nickname come directly from the team registry
+  // Compute logo circle backgrounds — pick the color that contrasts best against the logo SVG
+  const awayLogoBg     = pickLogoBg(game.away_color, game.away_color2, game.away_color3, `${key} AWAY`);
+  const homeLogoBg     = pickLogoBg(game.home_color, game.home_color2, game.home_color3, `${key} HOME`);
+  const awayLogoBgDark = darkShade(awayLogoBg);
+  const homeLogoBgDark = darkShade(homeLogoBg);
+
+  log("card", `${key} — awayLogoBg=${awayLogoBg} (dark=${awayLogoBgDark}) homeLogoBg=${homeLogoBg} (dark=${homeLogoBgDark})`);
+
   const awayTeam: SplitsCardTeam = {
-    city:      game.away_city,
-    name:      game.away_nickname,
-    abbr:      game.away_abbr,
-    primary:   awayColor,
-    secondary: isUnusable(game.away_color2) ? awayColor : game.away_color2,
-    dark:      darkShade(awayColor),
-    logoText:  logoTextColor(awayColor),
-    logoUrl:   game.away_logo || undefined,
-    logoSize:  "17px",
+    city:        game.away_city,
+    name:        game.away_nickname,
+    abbr:        game.away_abbr,
+    primary:     awayColor,
+    secondary:   isUnusable(game.away_color2) ? awayColor : game.away_color2,
+    dark:        darkShade(awayColor),
+    logoBg:      awayLogoBg,
+    logoBgDark:  awayLogoBgDark,
+    logoText:    logoTextColor(awayLogoBg),
+    logoUrl:     game.away_logo || undefined,
+    logoSize:    "17px",
   };
 
   const homeTeam: SplitsCardTeam = {
-    city:      game.home_city,
-    name:      game.home_nickname,
-    abbr:      game.home_abbr,
-    primary:   homeColor,
-    secondary: isUnusable(game.home_color2) ? homeColor : game.home_color2,
-    dark:      darkShade(homeColor),
-    logoText:  logoTextColor(homeColor),
-    logoUrl:   game.home_logo || undefined,
-    logoSize:  "17px",
+    city:        game.home_city,
+    name:        game.home_nickname,
+    abbr:        game.home_abbr,
+    primary:     homeColor,
+    secondary:   isUnusable(game.home_color2) ? homeColor : game.home_color2,
+    dark:        darkShade(homeColor),
+    logoBg:      homeLogoBg,
+    logoBgDark:  homeLogoBgDark,
+    logoText:    logoTextColor(homeLogoBg),
+    logoUrl:     game.home_logo || undefined,
+    logoSize:    "17px",
   };
 
   // 3. Format date

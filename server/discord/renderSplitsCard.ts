@@ -27,6 +27,7 @@ const TEMPLATE_PATH = path.join(__dirname, "splits_card.html");
 // ─── Template cache: read once at module load ─────────────────────────────────
 // Reading splits_card.html (1.1 MB with embedded fonts) on every render adds
 // unnecessary I/O. Cache it in memory at module load time.
+// Template cache: reset on server restart. HTML updated: logo circle bg fix (2026-03-25)
 let _templateHtml: string | null = null;
 
 function getTemplateHtml(): string {
@@ -192,6 +193,8 @@ export interface SplitsCardTeam {
   primary: string;    // hex
   secondary: string;  // hex
   dark: string;       // hex (darkest shade for logo gradient)
+  logoBg: string;     // hex (circle background — highest contrast against logo SVG)
+  logoBgDark: string; // hex (circle gradient edge — slightly darker than logoBg)
   logoText: string;   // hex (text color inside logo circle)
   logoUrl?: string;   // CDN URL for team logo image (optional)
   logoSize?: string;  // font-size for abbr fallback, e.g. "17px"
