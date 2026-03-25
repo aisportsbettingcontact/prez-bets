@@ -131,7 +131,11 @@ function luminance(hex: string): number {
 function isUnusable(hex: string): boolean {
   if (!hex || hex.length < 4) return true;
   const lum = luminance(hex);
-  return lum < 0.04 || lum > 0.90;
+  // Lower dark threshold: 0.005 allows intentionally dark team colors (navy, black, dark blue)
+  // like #003087 (NYY), #27251F (SF/PIT/CWS), #002D72 (NYM), #13274F (ATL) etc.
+  // Only pure #000000 (lum=0) is still rejected as it's invisible on dark card backgrounds.
+  // Upper threshold: 0.90 rejects near-white colors (#FFFFFF, #F5F5F5) that disappear on white areas.
+  return lum < 0.005 || lum > 0.90;
 }
 
 function colorDistance(a: string, b: string): number {
