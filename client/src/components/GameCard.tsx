@@ -872,27 +872,27 @@ function DesktopMergedPanel({
   const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread)
     ? (isNhlGame && mdlAwayPLOdds
         ? `${spreadSign(mdlAwaySpread)} (${mdlAwayPLOdds})`
-        : isNcaamGame && mdlAwaySpreadOdds
+        : (isNcaamGame || isMlbGame) && mdlAwaySpreadOdds
           ? `${spreadSign(mdlAwaySpread)} (${mdlAwaySpreadOdds})`
           : spreadSign(mdlAwaySpread))
     : '—';
   const mdlHomeSpreadStr = hasModelData && !isNaN(mdlHomeSpread)
     ? (isNhlGame && mdlHomePLOdds
         ? `${spreadSign(mdlHomeSpread)} (${mdlHomePLOdds})`
-        : isNcaamGame && mdlHomeSpreadOdds
+        : (isNcaamGame || isMlbGame) && mdlHomeSpreadOdds
           ? `${spreadSign(mdlHomeSpread)} (${mdlHomeSpreadOdds})`
           : spreadSign(mdlHomeSpread))
     : '—';
   // For NHL: display BOOK's total line with model fair odds at that line
-  // For NCAAM: display model's own total with model fair odds at that line
+  // For NCAAM/MLB: display model's own total with model fair odds at that line
   const mdlDisplayTotal = isNhlGame && !isNaN(bkTotal) ? bkTotal : mdlTotal;
   const mdlOver = hasModelData && !isNaN(mdlDisplayTotal)
-    ? ((isNhlGame || isNcaamGame) && mdlOverOdds
+    ? ((isNhlGame || isNcaamGame || isMlbGame) && mdlOverOdds
         ? `${String(mdlDisplayTotal)} (${mdlOverOdds})`
         : String(mdlDisplayTotal))
     : '—';
   const mdlUnder = hasModelData && !isNaN(mdlDisplayTotal)
-    ? ((isNhlGame || isNcaamGame) && mdlUnderOdds
+    ? ((isNhlGame || isNcaamGame || isMlbGame) && mdlUnderOdds
         ? `${String(mdlDisplayTotal)} (${mdlUnderOdds})`
         : String(mdlDisplayTotal))
     : '—';
@@ -1659,33 +1659,34 @@ function OddsLinesPanel({
   const awayMlDisplay = dkAwayMlProp ?? awayMl;
   const homeMlDisplay = dkHomeMlProp ?? homeMl;
 
-  // Model values — for NHL/NCAAM games, append odds in parentheses
+  // Model values — for NHL/NCAAM/MLB games, append odds in parentheses
   const isNhlGame   = sport === 'NHL';
   const isNcaamGame = sport === 'NCAAM';
+  const isMlbGame   = sport === 'MLB';
   const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread)
     ? (isNhlGame && modelAwayPLOdds
         ? `${spreadSign(mdlAwaySpread)} (${modelAwayPLOdds})`
-        : isNcaamGame && modelAwaySpreadOdds
+        : (isNcaamGame || isMlbGame) && modelAwaySpreadOdds
           ? `${spreadSign(mdlAwaySpread)} (${modelAwaySpreadOdds})`
           : spreadSign(mdlAwaySpread))
     : '—';
   const mdlHomeSpreadStr = hasModelData && !isNaN(mdlHomeSpread)
     ? (isNhlGame && modelHomePLOdds
         ? `${spreadSign(mdlHomeSpread)} (${modelHomePLOdds})`
-        : isNcaamGame && modelHomeSpreadOdds
+        : (isNcaamGame || isMlbGame) && modelHomeSpreadOdds
           ? `${spreadSign(mdlHomeSpread)} (${modelHomeSpreadOdds})`
           : spreadSign(mdlHomeSpread))
     : '—';
   // For NHL: display BOOK's total line with model fair odds at that line
-  // For NCAAM: display model's own total with model fair odds at that line
+  // For NCAAM/MLB: display model's own total with model fair odds at that line
   const mdlDisplayTotal = isNhlGame && !isNaN(bkTotal) ? bkTotal : mdlTotal;
   const mdlOverTotal = hasModelData && !isNaN(mdlDisplayTotal)
-    ? ((isNhlGame || isNcaamGame) && modelOverOdds
+    ? ((isNhlGame || isNcaamGame || isMlbGame) && modelOverOdds
         ? `${String(mdlDisplayTotal)} (${modelOverOdds})`
         : String(mdlDisplayTotal))
     : '—';
   const mdlUnderTotal = hasModelData && !isNaN(mdlDisplayTotal)
-    ? ((isNhlGame || isNcaamGame) && modelUnderOdds
+    ? ((isNhlGame || isNcaamGame || isMlbGame) && modelUnderOdds
         ? `${String(mdlDisplayTotal)} (${modelUnderOdds})`
         : String(mdlDisplayTotal))
     : '—';
