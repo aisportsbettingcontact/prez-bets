@@ -1974,3 +1974,4 @@
 - [x] Fix MLB splits card team colors: NYY shows orange instead of navy (#003087), SF shows orange instead of black (#27251F) — audit full color pipeline
 - [x] Improve splits card logo circle backgrounds: use contrasting/lighter color so logos are clearly visible against the background
 - [x] Fix Playwright Chromium missing binary error in production: copy build 1208 to /root/.cache/ms-playwright/ and add auto-install check in getBrowser()
+- [x] Enhance lineup card image quality 10x: 4x device scale, larger viewport, crisp fonts, higher-res headshots, optimal Discord sizing

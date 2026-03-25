@@ -32,9 +32,16 @@ function getTemplateHtml(): string {
 // warmUpRenderer() from renderSplitsCard.ts already launches it at startup.
 let _browser: Browser | null = null;
 
+// ─── Quality constants ────────────────────────────────────────────────────────
+// DPR=4 means every CSS pixel maps to 4×4 physical pixels.
+// At 680px card width → 2720px physical output width → crisp on any display.
+const DEVICE_SCALE = 4;
+const VIEWPORT_WIDTH = 1360; // 2× card width so card never clips
+const VIEWPORT_HEIGHT = 2400; // tall enough for 9-player lineups
+
 async function getBrowser(): Promise<Browser> {
   if (_browser && _browser.isConnected()) return _browser;
-  console.log("[LineupRenderer] Launching headless Chromium...");
+  console.log(`[LineupRenderer] Launching headless Chromium (DPR=${DEVICE_SCALE})...`);
   const t0 = Date.now();
   _browser = await chromium.launch({
     headless: true,
@@ -42,7 +49,14 @@ async function getBrowser(): Promise<Browser> {
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--force-device-scale-factor=2",
+      `--force-device-scale-factor=${DEVICE_SCALE}`,
+      // Font quality
+      "--disable-lcd-text",
+      "--enable-font-antialiasing",
+      "--font-render-hinting=none",
+      // Image quality
+      "--disable-skia-runtime-opts",
+      "--force-color-profile=srgb",
     ],
   });
   console.log(`[LineupRenderer] Chromium ready in ${Date.now() - t0}ms`);
@@ -120,8 +134,9 @@ export async function renderLineupCard(data: LineupCardData): Promise<Buffer> {
   const page: Page = await browser.newPage();
 
   try {
-    // Set viewport wide enough for the 680px card at 2x DPR
-    await page.setViewportSize({ width: 720, height: 1200 });
+    // Set viewport at 2× card width so the 680px card never clips at 4x DPR
+    await page.setViewportSize({ width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT });
+    console.log(`[LineupRenderer] ${matchup} — viewport ${VIEWPORT_WIDTH}×${VIEWPORT_HEIGHT} DPR=${DEVICE_SCALE}`);
 
     // Load the template HTML
     await page.setContent(injectedHtml, { waitUntil: "networkidle", timeout: 30_000 });
@@ -140,13 +155,16 @@ export async function renderLineupCard(data: LineupCardData): Promise<Buffer> {
       throw new Error("Card element not found in rendered HTML");
     }
 
-    const buffer = await cardEl.screenshot({ type: "png" });
-    console.log(`[LineupRenderer] ${matchup} — rendered in ${Date.now() - t0}ms (${buffer.length} bytes)`);
+    // scale: "device" captures at full DPR (4x) so output is 4× the CSS dimensions
+    const buffer = await cardEl.screenshot({ type: "png", scale: "device" });
+    const sizeKb = (buffer.length / 1024).toFixed(0);
+    console.log(`[LineupRenderer] ${matchup} — rendered in ${Date.now() - t0}ms | PNG size: ${sizeKb} KB | DPR: ${DEVICE_SCALE}x`);
     return buffer as Buffer;
   } finally {
     await page.close();
   }
 }
 
+// Template cache version: v4 (4x DPR, w_360 headshots, larger fonts)
 // Re-export warm-up and close from the shared renderer
 export { warmUpRenderer, closeSplitsRenderer as closeLineupRenderer };

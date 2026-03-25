@@ -42,7 +42,8 @@ function pill(text, bg, color, border) {
 
 function mlbPhoto(id) {
   if (!id) return null;
-  return `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best,e_background_removal,f_png/v1/people/${id}/headshot/67/current`;
+  // w_360 = 3× more pixels → crisp at 4x DPR (360px source / 4 DPR = 90px display, sharp)
+  return `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_360,q_auto:best,e_background_removal,f_png/v1/people/${id}/headshot/67/current`;
 }
 
 function playerAvatar(mlbamId, size) {
@@ -79,17 +80,17 @@ function pitcherSection(pitcher) {
   const era = pitcher.era || '—';
   const section = el('div', { padding: '10px 12px', display: 'flex', flexDirection: 'column' });
   const label = el('div', {
-    fontSize: '8px', fontWeight: '600', letterSpacing: '1.5px',
+    fontSize: '10px', fontWeight: '600', letterSpacing: '1.5px',
     textTransform: 'uppercase', color: '#FFFFFF', marginBottom: '6px',
   }, 'Starting Pitcher');
   const row = el('div', { display: 'flex', alignItems: 'center', gap: '10px' });
-  const avatar = playerAvatar(pitcher.mlbamId, 48);
+  const avatar = playerAvatar(pitcher.mlbamId, 72); // 72px CSS × 4x DPR = 288px physical
   const info = el('div', { flex: '1', minWidth: '0' });
   const pName = el('div', {
-    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '15px', fontWeight: '800',
+    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '18px', fontWeight: '800',
     color: '#FFFFFF', lineHeight: '1.1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   }, name);
-  const eraEl = el('div', { fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }, era);
+  const eraEl = el('div', { fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }, era);
   const badges = el('div', { display: 'flex', gap: '5px', alignItems: 'center', marginTop: '4px' });
   if (pitcher.hand) {
     badges.appendChild(pill(pitcher.hand + 'HP', '#101820', '#FFFFFF', '#182433'));
@@ -135,25 +136,25 @@ function lineupRows(players) {
       borderBottom: i < players.length - 1 ? '1px solid rgba(24,36,51,0.6)' : 'none',
     });
     row.appendChild(el('span', {
-      fontFamily: '"Barlow Condensed", sans-serif', fontSize: '11px', fontWeight: '700',
-      color: '#FFFFFF', width: '14px', flexShrink: '0', textAlign: 'right',
+      fontFamily: '"Barlow Condensed", sans-serif', fontSize: '13px', fontWeight: '700',
+      color: '#FFFFFF', width: '16px', flexShrink: '0', textAlign: 'right',
     }, String(p.battingOrder)));
-    row.appendChild(playerAvatar(p.mlbamId, 36));
+    row.appendChild(playerAvatar(p.mlbamId, 48)); // 48px CSS × 4x DPR = 192px physical
     row.appendChild(el('span', {
-      fontFamily: '"Barlow Condensed", sans-serif', fontSize: '11px', fontWeight: '700',
+      fontFamily: '"Barlow Condensed", sans-serif', fontSize: '13px', fontWeight: '700',
       letterSpacing: '0.5px', textTransform: 'uppercase', color: '#7EB8D4',
-      background: 'rgba(30,60,90,0.6)', padding: '2px 5px', borderRadius: '3px',
+      background: 'rgba(30,60,90,0.6)', padding: '2px 6px', borderRadius: '3px',
       border: '1px solid rgba(30,80,120,0.4)', flexShrink: '0',
-      textAlign: 'center', minWidth: '28px',
+      textAlign: 'center', minWidth: '32px',
     }, p.position));
     row.appendChild(el('span', {
-      fontFamily: '"Barlow Condensed", sans-serif', fontSize: '14px', fontWeight: '800',
+      fontFamily: '"Barlow Condensed", sans-serif', fontSize: '16px', fontWeight: '800',
       color: '#FFFFFF', flex: '1', whiteSpace: 'nowrap', overflow: 'hidden',
       textOverflow: 'ellipsis', textAlign: 'left', minWidth: '0',
     }, p.name));
     row.appendChild(el('span', {
-      fontFamily: '"Barlow Condensed", sans-serif', fontSize: '12px', fontWeight: '800',
-      color: '#FFFFFF', flexShrink: '0', width: '12px', textAlign: 'right',
+      fontFamily: '"Barlow Condensed", sans-serif', fontSize: '14px', fontWeight: '800',
+      color: '#FFFFFF', flexShrink: '0', width: '14px', textAlign: 'right',
     }, p.bats));
     container.appendChild(row);
   });
@@ -227,14 +228,14 @@ function buildCard(data) {
   });
   // Away
   const awayCol = el('div', { display: 'flex', alignItems: 'center', gap: '12px' });
-  awayCol.appendChild(teamLogoCircle(away, 42));
+  awayCol.appendChild(teamLogoCircle(away, 52)); // 52px CSS × 4x DPR = 208px physical
   const awayInfo = el('div');
   awayInfo.appendChild(el('div', {
-    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '13px', fontWeight: '900',
+    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '16px', fontWeight: '900',
     letterSpacing: '0.5px', textTransform: 'uppercase', color: '#FFFFFF', lineHeight: '1.1',
   }, away.city));
   awayInfo.appendChild(el('div', {
-    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '11px', fontWeight: '400',
+    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '13px', fontWeight: '400',
     color: 'rgba(255,255,255,0.5)', letterSpacing: '0.5px', marginTop: '1px',
   }, away.nickname));
   awayInfo.appendChild(pill('Away', away.primaryColor + '22', '#FFFFFF', away.primaryColor + '44'));
@@ -242,23 +243,23 @@ function buildCard(data) {
   // Center
   const center = el('div', { textAlign: 'center' });
   center.appendChild(el('div', {
-    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '12px', fontWeight: '700',
+    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '15px', fontWeight: '700',
     color: '#FFFFFF', letterSpacing: '1px', whiteSpace: 'nowrap',
   }, startTime));
   center.appendChild(el('div', {
-    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '10px',
+    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '13px',
     color: '#FFFFFF', letterSpacing: '3px', marginTop: '3px',
   }, '@'));
   // Home
   const homeCol = el('div', { display: 'flex', alignItems: 'center', gap: '12px', flexDirection: 'row-reverse' });
-  homeCol.appendChild(teamLogoCircle(home, 42));
+  homeCol.appendChild(teamLogoCircle(home, 52)); // 52px CSS × 4x DPR = 208px physical
   const homeInfo = el('div', { textAlign: 'right' });
   homeInfo.appendChild(el('div', {
-    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '13px', fontWeight: '900',
+    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '16px', fontWeight: '900',
     letterSpacing: '0.5px', textTransform: 'uppercase', color: '#FFFFFF', lineHeight: '1.1',
   }, home.city));
   homeInfo.appendChild(el('div', {
-    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '11px', fontWeight: '400',
+    fontFamily: '"Barlow Condensed", sans-serif', fontSize: '13px', fontWeight: '400',
     color: 'rgba(255,255,255,0.5)', letterSpacing: '0.5px', marginTop: '1px',
   }, home.nickname));
   homeInfo.appendChild(pill('Home', home.primaryColor + '22', '#FFFFFF', home.primaryColor + '44'));
