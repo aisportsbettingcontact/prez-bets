@@ -216,14 +216,18 @@ function lineupRows(players, lineupConfirmed) {
     }, String(p.battingOrder)));
     // Player headshot
     row.appendChild(playerAvatar(p.mlbamId, 48)); // 48px CSS × 4x DPR = 192px physical
-    // Player name — flex:1 so it takes remaining space
-    row.appendChild(el('span', {
+    // Name + position + handedness grouped together, immediately left-aligned
+    const nameGroup = el('div', {
+      display: 'flex', alignItems: 'center', gap: '5px',
+      flex: '1', minWidth: '0', overflow: 'hidden',
+    });
+    nameGroup.appendChild(el('span', {
       fontFamily: '"Barlow Condensed", sans-serif', fontSize: '16px', fontWeight: '800',
-      color: '#FFFFFF', flex: '1', whiteSpace: 'nowrap', overflow: 'hidden',
-      textOverflow: 'ellipsis', textAlign: 'left', minWidth: '0',
+      color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden',
+      textOverflow: 'ellipsis', flexShrink: '1', minWidth: '0',
     }, p.name));
-    // Position pill — after name
-    row.appendChild(el('span', {
+    // Position pill — immediately after name
+    nameGroup.appendChild(el('span', {
       fontFamily: '"Barlow Condensed", sans-serif', fontSize: '12px', fontWeight: '700',
       letterSpacing: '0.5px', textTransform: 'uppercase', color: '#7EB8D4',
       background: 'rgba(30,60,90,0.6)', padding: '2px 5px', borderRadius: '3px',
@@ -231,10 +235,11 @@ function lineupRows(players, lineupConfirmed) {
       textAlign: 'center', minWidth: '28px',
     }, p.position));
     // Handedness — directly right of position pill
-    row.appendChild(el('span', {
+    nameGroup.appendChild(el('span', {
       fontFamily: '"Barlow Condensed", sans-serif', fontSize: '14px', fontWeight: '800',
       color: '#FFFFFF', flexShrink: '0', width: '14px', textAlign: 'center',
     }, p.bats));
+    row.appendChild(nameGroup);
     container.appendChild(row);
   });
   return container;

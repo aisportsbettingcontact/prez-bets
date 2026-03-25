@@ -1981,3 +1981,4 @@
 - [x] lineupsCommand.ts + renderLineupCard.ts: pass awayLineupConfirmed/homeLineupConfirmed to template
 - [x] lineup_card.html: white font for precip percentage and label, spell out PRECIPITATION fully
 - [x] lineup_card.html: white font for wind speed and direction text
+- [x] lineup_card.html: move position pill and handedness to immediately after player name (not right-edge)
