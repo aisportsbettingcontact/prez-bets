@@ -13,6 +13,7 @@ import "dotenv/config";
 import { REST, Routes } from "discord.js";
 import { ENV } from "../_core/env";
 import { splitsCommandData } from "./splitsCommand";
+import { lineupsCommandData } from "./lineupsCommand";
 
 async function register(): Promise<void> {
   if (!ENV.discordBotToken) {
@@ -29,7 +30,7 @@ async function register(): Promise<void> {
   }
 
   const rest = new REST({ version: "10" }).setToken(ENV.discordBotToken);
-  const commands = [splitsCommandData.toJSON()];
+  const commands = [splitsCommandData.toJSON(), lineupsCommandData.toJSON()];
 
   console.log(
     `[Register] Registering ${commands.length} command(s) to guild ${ENV.discordGuildId}...`

@@ -16,6 +16,7 @@ import {
 } from "discord.js";
 import { ENV } from "../_core/env";
 import { handleSplitsCommand, handleSplitsAutocomplete, closeSplitsRenderer } from "./splitsCommand";
+import { handleLineupsCommand } from "./lineupsCommand";
 import { warmUpRenderer } from "./renderSplitsCard";
 import { enrichTeamRegistryFromDb } from "./teamRegistry";
 
@@ -102,6 +103,11 @@ export function startDiscordBot(): void {
     try {
       if (commandName === "splits") {
         await handleSplitsCommand(
+          interaction as ChatInputCommandInteraction,
+          client
+        );
+      } else if (commandName === "lineups") {
+        await handleLineupsCommand(
           interaction as ChatInputCommandInteraction,
           client
         );

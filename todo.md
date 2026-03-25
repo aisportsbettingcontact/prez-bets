@@ -1958,3 +1958,6 @@
 - [x] MlbLineupCard: increase player circle size (28→36px) and name font (11→13px) on mobile
 - [x] MlbLineupCard: improve position/handedness readability — styled pill badge + colored handedness indicator
 - [ ] MlbLineupCard: remove dark circle border container from PlayerAvatar, display raw MLB headshot image directly (no clip/overflow hidden)
+- [x] Add MLB support to /splits Discord command
+- [x] Build /lineups Discord command (renders MLB lineup cards as images, posts to channel 1400758184188186744)
+- [x] Register /lineups slash command with Discord
