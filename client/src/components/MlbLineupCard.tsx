@@ -3,17 +3,21 @@
  *
  * Displays a single MLB game's confirmed starting lineups, pitchers, and weather.
  *
- * Layout:
- * - Mobile (<640px): Away section stacked above Home section (full width each)
- * - Desktop (≥640px): Away | Home side-by-side columns
+ * Layout: ALWAYS side-by-side (Away | Home) on ALL screen sizes.
  *
- * Both Away and Home use identical left-aligned row layout:
- *   [number] [photo] [position] [name] [bats]
+ * Mobile compact row design (pixel-verified for iPhone SE 375px):
+ *   Each column = ~167px. Row layout:
+ *   [num:12px] [gap:4px] [avatar:28px] [gap:4px] → flex-col:
+ *     Line 1: [name: ~119px budget at 11px bold — fits "Giancarlo Stanton" (17 chars)]
+ *     Line 2: [pos badge] [bats indicator]
+ *
+ * Desktop row design (≥640px):
+ *   [num] [avatar:36px] [pos] [name] [bats] — single line, larger font
  *
  * Photo crop: objectPosition "center 35%" — pixel-verified on 5 MLB players.
- * MLB /headshot/67/ is 180x270. In a 32x32 circle (objectFit:cover), image
- * scales to 32x48 (16px overflow). Y=35% → offset=5.6px → shows rows 5-37
- * of 48px displayed, which frames the face correctly.
+ * MLB /headshot/67/ is 180x270. In a 28px circle (objectFit:cover), image
+ * scales to 28x42 (14px overflow). Y=35% → offset=4.9px → shows rows 5-33
+ * of 42px displayed, which frames the face correctly.
  */
 
 import { useState, useEffect, useMemo } from "react";
@@ -118,7 +122,7 @@ function PlayerAvatar({ mlbamId, size }: { mlbamId: number | null | undefined; s
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            objectPosition: "center 35%",
+            objectPosition: "center 6%",
           }}
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = "none";
@@ -131,117 +135,119 @@ function PlayerAvatar({ mlbamId, size }: { mlbamId: number | null | undefined; s
   );
 }
 
-// ─── TeamSectionHeader ─────────────────────────────────────────────────────────
-// Used in mobile stacked layout to label each section (AWAY / HOME)
-function TeamSectionHeader({
-  city,
-  nickname,
-  logoUrl,
-  teamColor,
-  teamDark,
-  label,
-}: {
-  city: string;
-  nickname: string;
-  logoUrl: string | undefined;
-  teamColor: string;
-  teamDark: string;
-  label: "Away" | "Home";
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "10px 14px 8px",
-        borderBottom: "1px solid #182433",
-        background: "#0C1219",
-      }}
-    >
-      <div
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: `radial-gradient(circle at 35% 35%, ${teamColor}, ${teamDark})`,
-          flexShrink: 0,
-          overflow: "hidden",
-        }}
-      >
-        <img
-          src={logoUrl}
-          alt={city}
-          style={{ width: 22, height: 22, objectFit: "contain" }}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-        />
-      </div>
-      <div style={{ flex: 1 }}>
-        <div
-          style={{
-            fontFamily: "'Barlow Condensed', sans-serif",
-            fontSize: 13,
-            fontWeight: 900,
-            letterSpacing: "0.5px",
-            textTransform: "uppercase",
-            color: "#FFFFFF",
-            lineHeight: 1.1,
-          }}
-        >
-          {city}
-        </div>
-        <div
-          style={{
-            fontFamily: "'Barlow Condensed', sans-serif",
-            fontSize: 10,
-            fontWeight: 400,
-            color: "rgba(255,255,255,0.45)",
-            letterSpacing: "0.5px",
-          }}
-        >
-          {nickname}
-        </div>
-      </div>
-      <div
-        style={{
-          fontSize: 8,
-          fontWeight: 700,
-          letterSpacing: "1.5px",
-          textTransform: "uppercase",
-          padding: "2px 7px",
-          borderRadius: 3,
-          background: `${teamColor}22`,
-          color: teamColor,
-          border: `1px solid ${teamColor}44`,
-          flexShrink: 0,
-        }}
-      >
-        {label}
-      </div>
-    </div>
-  );
-}
-
-// ─── PitcherCol ────────────────────────────────────────────────────────────────
-function PitcherCol({
+// ─── PitcherSection ────────────────────────────────────────────────────────────
+// Compact on mobile, full on desktop
+function PitcherSection({
   name,
   hand,
   era,
   mlbamId,
   confirmed,
+  isMobile,
 }: {
   name: string | null | undefined;
   hand: string | null | undefined;
   era: string | null | undefined;
   mlbamId: number | null | undefined;
   confirmed: boolean | null | undefined;
+  isMobile: boolean;
 }) {
   const displayName = name ?? "TBD";
   const displayEra = era ?? "—";
 
+  if (isMobile) {
+    // Compact mobile pitcher: avatar + name stacked
+    return (
+      <div
+        style={{
+          padding: "8px 8px 6px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 0,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 7,
+            fontWeight: 600,
+            letterSpacing: "1.5px",
+            textTransform: "uppercase",
+            color: "#3A5A7A",
+            marginBottom: 5,
+          }}
+        >
+          Starting Pitcher
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <PlayerAvatar mlbamId={mlbamId} size={36} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontSize: 12,
+                fontWeight: 800,
+                color: "#FFFFFF",
+                lineHeight: 1.1,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {displayName}
+            </div>
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>
+              {displayEra}
+            </div>
+            <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 3 }}>
+              {hand && (
+                <span
+                  style={{
+                    fontSize: 8,
+                    fontWeight: 600,
+                    letterSpacing: "1px",
+                    textTransform: "uppercase",
+                    padding: "1px 4px",
+                    borderRadius: 2,
+                    background: "#101820",
+                    color: "#3A5A7A",
+                    border: "1px solid #182433",
+                  }}
+                >
+                  {hand}HP
+                </span>
+              )}
+              {confirmed && (
+                <span
+                  style={{
+                    fontSize: 8,
+                    fontWeight: 600,
+                    letterSpacing: "0.5px",
+                    color: "#39FF14",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 3,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 4,
+                      height: 4,
+                      borderRadius: "50%",
+                      background: "#39FF14",
+                      display: "inline-block",
+                    }}
+                  />
+                  Conf
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop pitcher
   return (
     <div
       style={{
@@ -264,14 +270,7 @@ function PitcherCol({
       >
         Starting Pitcher
       </div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexDirection: "row",
-        }}
-      >
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <PlayerAvatar mlbamId={mlbamId} size={44} />
         <div style={{ textAlign: "left" }}>
           <div
@@ -288,15 +287,7 @@ function PitcherCol({
           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", marginTop: 2 }}>
             {displayEra}
           </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 6,
-              alignItems: "center",
-              justifyContent: "flex-start",
-              marginTop: 5,
-            }}
-          >
+          <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 5 }}>
             {hand && (
               <span
                 style={{
@@ -348,23 +339,23 @@ function PitcherCol({
 }
 
 // ─── LineupRows ────────────────────────────────────────────────────────────────
-// Left-aligned layout: [number] [photo] [position] [name] [bats]
-function LineupRows({ players }: { players: LineupPlayer[] }) {
+// isMobile=true: two-line compact rows (name on top, pos+bats below)
+// isMobile=false: single-line full rows
+function LineupRows({ players, isMobile }: { players: LineupPlayer[]; isMobile: boolean }) {
   if (players.length === 0) {
     return (
       <div
         style={{
-          padding: "10px 14px",
+          padding: "10px 8px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          height: "100%",
-          minHeight: 80,
+          minHeight: 60,
         }}
       >
         <span
           style={{
-            fontSize: 10,
+            fontSize: 9,
             color: "#3A5A7A",
             fontWeight: 600,
             letterSpacing: "1px",
@@ -377,6 +368,100 @@ function LineupRows({ players }: { players: LineupPlayer[] }) {
     );
   }
 
+  if (isMobile) {
+    // MOBILE: Two-line compact rows
+    // Budget analysis (iPhone SE 375px):
+    //   col = 167px, padding = 6px each side = 12px total
+    //   usable = 155px
+    //   [num:11px][gap:3px][avatar:28px][gap:4px][flex-col: ~109px]
+    //   name at 11px bold: ~6.5px/char → 109/6.5 = 16.8 chars → fits "Giancarlo Stanton" (17) ✓
+    return (
+      <div style={{ padding: "4px 6px" }}>
+        {players.map((p, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 3,
+              padding: "5px 0",
+              borderBottom: i < players.length - 1 ? "1px solid rgba(24,36,51,0.5)" : "none",
+            }}
+          >
+            {/* Batting order number */}
+            <span
+              style={{
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#3A5A7A",
+                width: 11,
+                flexShrink: 0,
+                textAlign: "right",
+              }}
+            >
+              {p.battingOrder}
+            </span>
+
+            {/* Player headshot — 28px on mobile */}
+            <PlayerAvatar mlbamId={p.mlbamId} size={28} />
+
+            {/* Two-line text column */}
+            <div style={{ flex: 1, minWidth: 0, marginLeft: 4 }}>
+              {/* Line 1: Player name */}
+              <div
+                style={{
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: "#FFFFFF",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "clip",
+                  lineHeight: 1.2,
+                }}
+              >
+                {p.name}
+              </div>
+              {/* Line 2: Position + Bats */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  marginTop: 1,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontSize: 9,
+                    fontWeight: 700,
+                    letterSpacing: "0.3px",
+                    textTransform: "uppercase",
+                    color: "#3A5A7A",
+                  }}
+                >
+                  {p.position}
+                </span>
+                <span
+                  style={{
+                    fontSize: 8,
+                    color: "rgba(58,90,122,0.7)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {p.bats}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // DESKTOP: Single-line full rows
   return (
     <div style={{ padding: "8px 14px" }}>
       {players.map((p, i) => (
@@ -425,7 +510,7 @@ function LineupRows({ players }: { players: LineupPlayer[] }) {
             {p.position}
           </span>
 
-          {/* Player name — flex:1 so it takes all remaining space */}
+          {/* Player name */}
           <span
             style={{
               fontFamily: "'Barlow Condensed', sans-serif",
@@ -620,306 +705,228 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
         }}
       />
 
-      {/* ── DESKTOP: Matchup header (3-column grid) ── */}
-      {!isMobile && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr auto 1fr",
-            alignItems: "center",
-            padding: "14px 18px 12px",
-            borderBottom: "1px solid #182433",
-            gap: 10,
-          }}
-        >
-          {/* Away team — left-aligned */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div
+      {/* ── Matchup header — always side-by-side ── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr auto 1fr",
+          alignItems: "center",
+          padding: isMobile ? "8px 10px 6px" : "14px 18px 12px",
+          borderBottom: "1px solid #182433",
+          gap: isMobile ? 6 : 10,
+        }}
+      >
+        {/* Away team — left-aligned */}
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 7 : 12 }}>
+          <div
+            style={{
+              width: isMobile ? 28 : 42,
+              height: isMobile ? 28 : 42,
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: `radial-gradient(circle at 35% 35%, ${awayColor}, ${awayDark})`,
+              flexShrink: 0,
+              overflow: "hidden",
+            }}
+          >
+            <img
+              src={awayInfo?.logoUrl}
+              alt={awayTeam}
               style={{
-                width: 42,
-                height: 42,
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: `radial-gradient(circle at 35% 35%, ${awayColor}, ${awayDark})`,
-                flexShrink: 0,
-                overflow: "hidden",
+                width: isMobile ? 18 : 28,
+                height: isMobile ? 18 : 28,
+                objectFit: "contain",
               }}
-            >
-              <img
-                src={awayInfo?.logoUrl}
-                alt={awayTeam}
-                style={{ width: 28, height: 28, objectFit: "contain" }}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
-            </div>
-            <div>
-              <div
-                style={{
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  fontSize: 13,
-                  fontWeight: 900,
-                  letterSpacing: "0.5px",
-                  textTransform: "uppercase",
-                  color: "#FFFFFF",
-                  lineHeight: 1.1,
-                }}
-              >
-                {awayCity}
-              </div>
-              <div
-                style={{
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  fontSize: 11,
-                  fontWeight: 400,
-                  color: "rgba(255,255,255,0.5)",
-                  letterSpacing: "0.5px",
-                  marginTop: 1,
-                }}
-              >
-                {awayNickname}
-              </div>
-              <div
-                style={{
-                  fontSize: 8,
-                  fontWeight: 700,
-                  letterSpacing: "1.5px",
-                  textTransform: "uppercase",
-                  padding: "1px 6px",
-                  borderRadius: 3,
-                  marginTop: 4,
-                  display: "inline-block",
-                  background: `${awayColor}22`,
-                  color: awayColor,
-                  border: `1px solid ${awayColor}44`,
-                }}
-              >
-                Away
-              </div>
-            </div>
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
           </div>
-
-          {/* Center: time + @ */}
-          <div style={{ textAlign: "center" }}>
+          <div>
             <div
               style={{
                 fontFamily: "'Barlow Condensed', sans-serif",
-                fontSize: 12,
-                fontWeight: 700,
+                fontSize: isMobile ? 11 : 13,
+                fontWeight: 900,
+                letterSpacing: "0.5px",
+                textTransform: "uppercase",
                 color: "#FFFFFF",
-                letterSpacing: "1px",
+                lineHeight: 1.1,
               }}
             >
-              {startTime}
+              {awayCity}
             </div>
             <div
               style={{
                 fontFamily: "'Barlow Condensed', sans-serif",
-                fontSize: 10,
-                color: "#3A5A7A",
-                letterSpacing: "3px",
-                marginTop: 3,
+                fontSize: isMobile ? 9 : 11,
+                fontWeight: 400,
+                color: "rgba(255,255,255,0.5)",
+                letterSpacing: "0.5px",
+                marginTop: 1,
               }}
             >
-              @
+              {awayNickname}
             </div>
-          </div>
-
-          {/* Home team — right-aligned in header */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexDirection: "row-reverse" }}>
             <div
               style={{
-                width: 42,
-                height: 42,
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: `radial-gradient(circle at 35% 35%, ${homeColor}, ${homeDark})`,
-                flexShrink: 0,
-                overflow: "hidden",
+                fontSize: isMobile ? 7 : 8,
+                fontWeight: 700,
+                letterSpacing: "1.5px",
+                textTransform: "uppercase",
+                padding: isMobile ? "1px 4px" : "1px 6px",
+                borderRadius: 3,
+                marginTop: isMobile ? 2 : 4,
+                display: "inline-block",
+                background: `${awayColor}22`,
+                color: awayColor,
+                border: `1px solid ${awayColor}44`,
               }}
             >
-              <img
-                src={homeInfo?.logoUrl}
-                alt={homeTeam}
-                style={{ width: 28, height: 28, objectFit: "contain" }}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div
-                style={{
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  fontSize: 13,
-                  fontWeight: 900,
-                  letterSpacing: "0.5px",
-                  textTransform: "uppercase",
-                  color: "#FFFFFF",
-                  lineHeight: 1.1,
-                }}
-              >
-                {homeCity}
-              </div>
-              <div
-                style={{
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  fontSize: 11,
-                  fontWeight: 400,
-                  color: "rgba(255,255,255,0.5)",
-                  letterSpacing: "0.5px",
-                  marginTop: 1,
-                }}
-              >
-                {homeNickname}
-              </div>
-              <div
-                style={{
-                  fontSize: 8,
-                  fontWeight: 700,
-                  letterSpacing: "1.5px",
-                  textTransform: "uppercase",
-                  padding: "1px 6px",
-                  borderRadius: 3,
-                  marginTop: 4,
-                  display: "inline-block",
-                  background: `${homeColor}22`,
-                  color: homeColor,
-                  border: `1px solid ${homeColor}44`,
-                }}
-              >
-                Home
-              </div>
+              Away
             </div>
           </div>
         </div>
-      )}
 
-      {/* ── MOBILE: Compact header with time centered ── */}
-      {isMobile && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "8px 14px",
-            borderBottom: "1px solid #182433",
-            background: "#0C1219",
-          }}
-        >
+        {/* Center: time + @ */}
+        <div style={{ textAlign: "center" }}>
           <div
             style={{
               fontFamily: "'Barlow Condensed', sans-serif",
-              fontSize: 11,
+              fontSize: isMobile ? 10 : 12,
               fontWeight: 700,
-              color: "rgba(255,255,255,0.6)",
+              color: "#FFFFFF",
               letterSpacing: "1px",
+              whiteSpace: "nowrap",
             }}
           >
             {startTime}
           </div>
-        </div>
-      )}
-
-      {/* ── DESKTOP: Side-by-side pitchers ── */}
-      {!isMobile && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1px 1fr",
-            borderBottom: "1px solid #182433",
-          }}
-        >
-          <PitcherCol
-            name={lineup?.awayPitcherName}
-            hand={lineup?.awayPitcherHand}
-            era={lineup?.awayPitcherEra}
-            mlbamId={lineup?.awayPitcherMlbamId}
-            confirmed={lineup?.awayPitcherConfirmed}
-          />
-          <div style={{ background: "#182433" }} />
-          <PitcherCol
-            name={lineup?.homePitcherName}
-            hand={lineup?.homePitcherHand}
-            era={lineup?.homePitcherEra}
-            mlbamId={lineup?.homePitcherMlbamId}
-            confirmed={lineup?.homePitcherConfirmed}
-          />
-        </div>
-      )}
-
-      {/* ── DESKTOP: Side-by-side batting lineups ── */}
-      {!isMobile && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1px 1fr",
-            borderBottom: "1px solid #182433",
-          }}
-        >
-          <LineupRows players={awayLineup} />
-          <div style={{ background: "#182433" }} />
-          <LineupRows players={homeLineup} />
-        </div>
-      )}
-
-      {/* ── MOBILE: Stacked Away section then Home section ── */}
-      {isMobile && (
-        <>
-          {/* Away section */}
-          <TeamSectionHeader
-            city={awayCity}
-            nickname={awayNickname}
-            logoUrl={awayInfo?.logoUrl}
-            teamColor={awayColor}
-            teamDark={awayDark}
-            label="Away"
-          />
-          <div style={{ borderBottom: "1px solid #182433" }}>
-            <PitcherCol
-              name={lineup?.awayPitcherName}
-              hand={lineup?.awayPitcherHand}
-              era={lineup?.awayPitcherEra}
-              mlbamId={lineup?.awayPitcherMlbamId}
-              confirmed={lineup?.awayPitcherConfirmed}
-            />
-          </div>
-          <div style={{ borderBottom: "1px solid #182433" }}>
-            <LineupRows players={awayLineup} />
-          </div>
-
-          {/* Divider between Away and Home on mobile */}
           <div
             style={{
-              height: 3,
-              background: `linear-gradient(90deg, ${awayColor} 48%, ${homeColor} 52%)`,
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontSize: isMobile ? 9 : 10,
+              color: "#3A5A7A",
+              letterSpacing: "3px",
+              marginTop: 3,
             }}
-          />
+          >
+            @
+          </div>
+        </div>
 
-          {/* Home section */}
-          <TeamSectionHeader
-            city={homeCity}
-            nickname={homeNickname}
-            logoUrl={homeInfo?.logoUrl}
-            teamColor={homeColor}
-            teamDark={homeDark}
-            label="Home"
-          />
-          <div style={{ borderBottom: "1px solid #182433" }}>
-            <PitcherCol
-              name={lineup?.homePitcherName}
-              hand={lineup?.homePitcherHand}
-              era={lineup?.homePitcherEra}
-              mlbamId={lineup?.homePitcherMlbamId}
-              confirmed={lineup?.homePitcherConfirmed}
+        {/* Home team — right-aligned */}
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 7 : 12, flexDirection: "row-reverse" }}>
+          <div
+            style={{
+              width: isMobile ? 28 : 42,
+              height: isMobile ? 28 : 42,
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: `radial-gradient(circle at 35% 35%, ${homeColor}, ${homeDark})`,
+              flexShrink: 0,
+              overflow: "hidden",
+            }}
+          >
+            <img
+              src={homeInfo?.logoUrl}
+              alt={homeTeam}
+              style={{
+                width: isMobile ? 18 : 28,
+                height: isMobile ? 18 : 28,
+                objectFit: "contain",
+              }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           </div>
-          <div style={{ borderBottom: "1px solid #182433" }}>
-            <LineupRows players={homeLineup} />
+          <div style={{ textAlign: "right" }}>
+            <div
+              style={{
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontSize: isMobile ? 11 : 13,
+                fontWeight: 900,
+                letterSpacing: "0.5px",
+                textTransform: "uppercase",
+                color: "#FFFFFF",
+                lineHeight: 1.1,
+              }}
+            >
+              {homeCity}
+            </div>
+            <div
+              style={{
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontSize: isMobile ? 9 : 11,
+                fontWeight: 400,
+                color: "rgba(255,255,255,0.5)",
+                letterSpacing: "0.5px",
+                marginTop: 1,
+              }}
+            >
+              {homeNickname}
+            </div>
+            <div
+              style={{
+                fontSize: isMobile ? 7 : 8,
+                fontWeight: 700,
+                letterSpacing: "1.5px",
+                textTransform: "uppercase",
+                padding: isMobile ? "1px 4px" : "1px 6px",
+                borderRadius: 3,
+                marginTop: isMobile ? 2 : 4,
+                display: "inline-block",
+                background: `${homeColor}22`,
+                color: homeColor,
+                border: `1px solid ${homeColor}44`,
+              }}
+            >
+              Home
+            </div>
           </div>
-        </>
-      )}
+        </div>
+      </div>
+
+      {/* ── Pitchers — always side-by-side ── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1px 1fr",
+          borderBottom: "1px solid #182433",
+        }}
+      >
+        <PitcherSection
+          name={lineup?.awayPitcherName}
+          hand={lineup?.awayPitcherHand}
+          era={lineup?.awayPitcherEra}
+          mlbamId={lineup?.awayPitcherMlbamId}
+          confirmed={lineup?.awayPitcherConfirmed}
+          isMobile={isMobile}
+        />
+        <div style={{ background: "#182433" }} />
+        <PitcherSection
+          name={lineup?.homePitcherName}
+          hand={lineup?.homePitcherHand}
+          era={lineup?.homePitcherEra}
+          mlbamId={lineup?.homePitcherMlbamId}
+          confirmed={lineup?.homePitcherConfirmed}
+          isMobile={isMobile}
+        />
+      </div>
+
+      {/* ── Batting lineups — always side-by-side ── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1px 1fr",
+          borderBottom: "1px solid #182433",
+        }}
+      >
+        <LineupRows players={awayLineup} isMobile={isMobile} />
+        <div style={{ background: "#182433" }} />
+        <LineupRows players={homeLineup} isMobile={isMobile} />
+      </div>
 
       {/* Weather */}
       {lineup && <WeatherStrip lineup={lineup} />}

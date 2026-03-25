@@ -1953,3 +1953,5 @@
 - [x] Fix MlbLineupCard mobile: stack Away/Home vertically on mobile so names don't get cut off
 - [x] Fix MlbLineupCard photo size: increase avatar to ~56px to match desktop reference screenshot
 - [x] Fix MlbLineupCard photo crop: match the working state shown in reference (face fully visible, not cut off)
+- [ ] MlbLineupCard: side-by-side columns on ALL screen sizes (no stacking), compact scaling so both teams fit on 390px iPhone without truncation
+- [ ] MlbLineupCard: dynamic avatar/font/padding scaling based on viewport width
