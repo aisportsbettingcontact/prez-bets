@@ -494,6 +494,8 @@ export async function handleLineupsCommand(
         homePitcher,
         awayPlayers,
         homePlayers,
+        awayLineupConfirmed: lineup?.awayLineupConfirmed ?? false,
+        homeLineupConfirmed: lineup?.homeLineupConfirmed ?? false,
         weather: lineup ? {
           icon:   lineup.weatherIcon   ?? null,
           temp:   lineup.weatherTemp   ?? null,

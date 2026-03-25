@@ -107,6 +107,10 @@ export interface LineupCardData {
     homePitcher: LineupCardPitcher;
     awayPlayers: LineupCardPlayer[];
     homePlayers: LineupCardPlayer[];
+    /** Whether the away batting lineup is confirmed (true) or expected (false) */
+    awayLineupConfirmed: boolean;
+    /** Whether the home batting lineup is confirmed (true) or expected (false) */
+    homeLineupConfirmed: boolean;
     weather: LineupCardWeather | null;
   };
 }
@@ -139,7 +143,17 @@ export async function renderLineupCard(data: LineupCardData): Promise<Buffer> {
     console.log(`[LineupRenderer] ${matchup} — viewport ${VIEWPORT_WIDTH}×${VIEWPORT_HEIGHT} DPR=${DEVICE_SCALE}`);
 
     // Load the template HTML
+    // Set transparent page background BEFORE setContent so the browser
+    // renders the page with a transparent background, not white.
+    // This eliminates the white corner pixels that appear outside the
+    // card's border-radius when Playwright captures the bounding box.
+    await page.emulateMedia({ colorScheme: 'dark' });
     await page.setContent(injectedHtml, { waitUntil: "networkidle", timeout: 30_000 });
+    // Override any residual white background on the page root
+    await page.evaluate(() => {
+      document.documentElement.style.background = 'transparent';
+      document.body.style.background = 'transparent';
+    });
 
     // Wait for images to load (player headshots)
     await page.waitForFunction(() => {
@@ -156,7 +170,10 @@ export async function renderLineupCard(data: LineupCardData): Promise<Buffer> {
     }
 
     // scale: "device" captures at full DPR (4x) so output is 4× the CSS dimensions
-    const buffer = await cardEl.screenshot({ type: "png", scale: "device" });
+    // omitBackground: true makes the Playwright screenshot use a transparent
+    // background instead of white, so the rounded card corners are transparent
+    // in the PNG rather than filled with white pixels.
+    const buffer = await cardEl.screenshot({ type: "png", scale: "device", omitBackground: true });
     const sizeKb = (buffer.length / 1024).toFixed(0);
     console.log(`[LineupRenderer] ${matchup} — rendered in ${Date.now() - t0}ms | PNG size: ${sizeKb} KB | DPR: ${DEVICE_SCALE}x`);
     return buffer as Buffer;

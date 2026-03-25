@@ -1975,3 +1975,7 @@
 - [x] Improve splits card logo circle backgrounds: use contrasting/lighter color so logos are clearly visible against the background
 - [x] Fix Playwright Chromium missing binary error in production: copy build 1208 to /root/.cache/ms-playwright/ and add auto-install check in getBrowser()
 - [x] Enhance lineup card image quality 10x: 4x device scale, larger viewport, crisp fonts, higher-res headshots, optimal Discord sizing
+- [x] lineup_card.html: remove white corner artifacts on player headshot images
+- [x] lineup_card.html: improve weather section readability (larger text, better contrast, bigger icons)
+- [x] lineup_card.html: add CONFIRMED (#39FF14) / EXPECTED (#FFFF33) badges next to pitcher names and lineup section headers
+- [x] lineupsCommand.ts + renderLineupCard.ts: pass awayLineupConfirmed/homeLineupConfirmed to template
