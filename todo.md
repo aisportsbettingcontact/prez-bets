@@ -2004,3 +2004,14 @@
 - [x] Write vitest tests for strikeout props feature (12 tests passing)
 - [ ] Run StrikeoutModel.py for March 26 games and verify Props tab displays correctly
 - [ ] Add book line inputs to Publish Projections page for K props (optional)
+
+## K Props Restyling + Action Network Consensus Integration
+- [x] Rebuilt MlbPropsCard.tsx to match Lineups rendered-image style (Barlow Condensed, #090E14 bg, team color gradient bar, headshots, two-column pitcher layout)
+- [x] Built ActionNetworkKPropsAPI.py — fast API scraper using book_id=15 for Consensus lines only (no browser needed)
+- [x] Re-ran StrikeoutModel with real consensus lines: Max Fried 5.5 / Logan Webb 6.5
+- [x] Populated mlb_strikeout_props with real data (MLBAM IDs 608331/657277 set for headshots)
+- [x] Added unique index on (gameId, side) to prevent duplicate rows
+- [x] Fixed verdict/bestSide logic in MlbPropsCard (EDGE verdict + bestSide OVER/UNDER)
+- [x] Fixed signal breakdown display to show actual model keys (base_k_rate, whiff_mult, etc.)
+- [x] Fixed matchup rows to use spot field and correct kRate/adj display
+- [x] Verified tRPC endpoint returns correct data (Max Fried UNDER 5.5 @ -150, Logan Webb OVER 6.5 @ +105)

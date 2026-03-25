@@ -685,7 +685,7 @@ export const mlbStrikeoutProps = mysqlTable("mlb_strikeout_props", {
   bestMlStr: varchar("bestMlStr", { length: 16 }),
   /** JSON: { platoon, ha, tto, whiff, zone, arsenal } signal breakdown */
   signalBreakdown: text("signalBreakdown"),
-  /** JSON: array of { order, name, hand, kRate, adj, expK } for opposing lineup */
+  /** JSON: array of { spot, name, bats, kRate, adj, expK } for opposing lineup */
   matchupRows: text("matchupRows"),
   /** JSON: { bins: number[], probs: number[] } distribution */
   distribution: text("distribution"),
@@ -695,6 +695,9 @@ export const mlbStrikeoutProps = mysqlTable("mlb_strikeout_props", {
   modelRunAt: bigint("modelRunAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => ({
+  /** One row per (game, side) — upsert on this key */
+  uqGameSide: uniqueIndex("uq_game_side").on(t.gameId, t.side),
+}));
 export type MlbStrikeoutPropRow = typeof mlbStrikeoutProps.$inferSelect;
 export type InsertMlbStrikeoutProp = typeof mlbStrikeoutProps.$inferInsert;

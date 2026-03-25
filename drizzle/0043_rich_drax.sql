@@ -1,0 +1,1 @@
+ALTER TABLE `mlb_strikeout_props` ADD CONSTRAINT `uq_game_side` UNIQUE(`gameId`,`side`);
