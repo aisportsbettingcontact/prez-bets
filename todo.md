@@ -2023,3 +2023,12 @@
 - [ ] Apply exact same logo source/mapping to both web card components
 - [ ] Add deep logging for logo load failures (fallback chain)
 - [ ] Verify logos render correctly on both Lineups and K Props tabs
+
+## Remove Daily Purge Logic (March 25, 2026+)
+- [x] Audited all purge/delete/cleanup functions across entire codebase (3 locations found)
+- [x] Replaced dailyPurge.ts with no-op stub — startDailyPurgeSchedule() export preserved for compile compatibility
+- [x] Removed deleteOldGames() from db.ts, updated stale purge comments to reflect indefinite retention
+- [x] Removed unused lt import from db.ts (was only used by deleted deleteOldGames)
+- [x] Full data integrity check: 2615 games, 37 users, 12 lineups, 2 K props, 19691 odds history rows — all intact
+- [x] Verified all pre-March-25 rows are bracket games (bracketGameId IS NOT NULL) — 0 non-bracket rows before 2026-03-25
+- [x] Zero TypeScript errors after all changes

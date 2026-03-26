@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, isNull, lte, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, appUsers as appUsersTable, oddsHistory, mlbLineups, mlbStrikeoutProps, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow, type MlbLineupRow, type InsertMlbLineup, type MlbStrikeoutPropRow, type InsertMlbStrikeoutProp } from "../drizzle/schema";
@@ -206,9 +206,8 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }): P
     conditions.push(eq(games.gameDate, opts.gameDate));
   }
   // No date filter when no specific date is requested:
-  // Games remain visible as long as they exist in the DB (i.e. as long as VSiN
-  // still lists them). The 6am EST daily purge removes previous-day rows, so
-  // live and final games from the current slate stay on the feed until that purge.
+  // Games are retained indefinitely (daily purge disabled as of 2026-03-25).
+  // All game rows from March 25, 2026 onward remain in the DB permanently.
 
   if (opts?.sport) conditions.push(eq(games.sport, opts.sport));
 
@@ -266,11 +265,6 @@ export async function deleteGamesByFileId(fileId: number) {
 }
 
 /**
- * Delete all games whose gameDate is strictly before today's date in EST.
- * Called by the 6am EST daily cron job to purge previous-day data.
- * Returns the number of rows deleted.
- */
-/**
  * Hard-delete a single game by its primary key ID.
  * Owner-only operation — enforced at the procedure layer.
  */
@@ -280,29 +274,8 @@ export async function deleteGameById(id: number): Promise<void> {
   await db.delete(games).where(eq(games.id, id));
 }
 
-export async function deleteOldGames(): Promise<number> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  // Compute today in EST as YYYY-MM-DD
-  const estStr = new Date().toLocaleDateString("en-US", {
-    timeZone: "America/New_York",
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
-  });
-  const [mm, dd, yyyy] = estStr.split("/");
-  const todayStr = `${yyyy}-${mm}-${dd}`;
-
-  // IMPORTANT: bracket games (bracketGameId IS NOT NULL) must NEVER be purged —
-  // they are permanent tournament records needed for the bracket display.
-  const result = await db.delete(games).where(
-    and(lt(games.gameDate, todayStr), isNull(games.bracketGameId))
-  );
-  const deleted = (result as unknown as { affectedRows?: number }).affectedRows ?? 0;
-  console.log(`[DailyPurge] Deleted ${deleted} non-bracket game rows older than ${todayStr} (EST)`);
-  return deleted;
-}
+// deleteOldGames() REMOVED — daily purge permanently disabled as of 2026-03-25.
+// All game data from March 25, 2026 onward is retained indefinitely.
 
 // ─── App Users (custom accounts) ─────────────────────────────────────────────────
 
