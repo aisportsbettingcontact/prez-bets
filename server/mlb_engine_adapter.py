@@ -326,10 +326,29 @@ class MonteCarloEngine:
         totals  = home_runs + away_runs
 
         # Run line: rl_spread is from HOME perspective
-        # rl_spread = -1.5 means home is favored (home covers if margin > 1.5)
-        # rl_spread = +1.5 means away is favored (home covers if margin > 1.5 is wrong)
-        p_home_rl = float((margins > abs(rl_spread)).mean()) if rl_spread < 0 \
-                    else float((margins < -abs(rl_spread)).mean())
+        # margins = home_runs - away_runs
+        #
+        # Case A: rl_spread = -1.5 (HOME is RL favorite, e.g. MIL -1.5)
+        #   Home covers -1.5 when: home_runs - away_runs > 1.5  → margin > 1.5
+        #   p_home_rl = P(margin > 1.5)  ✓
+        #   p_away_rl = 1 - p_home_rl = P(away covers +1.5)  ✓
+        #
+        # Case B: rl_spread = +1.5 (AWAY is RL favorite, e.g. PIT -1.5)
+        #   Away covers -1.5 when: away_runs - home_runs > 1.5  → margin < -1.5
+        #   Home covers +1.5 when: away_runs - home_runs <= 1.5 → margin >= -1.5
+        #   p_home_rl = P(margin >= -1.5) = P(home covers +1.5)  ✓
+        #   p_away_rl = 1 - p_home_rl = P(away covers -1.5)  ✓
+        #
+        # CRITICAL FIX: In Case B, p_home_rl must be P(margin >= -1.5), NOT P(margin < -1.5)
+        # The old code had: else float((margins < -abs(rl_spread)).mean())
+        # which computed P(away covers -1.5) and stored it as p_home_rl — INVERTED.
+        if rl_spread < 0:
+            # Home is RL fav (-1.5): home covers when margin > 1.5
+            p_home_rl = float((margins > abs(rl_spread)).mean())
+        else:
+            # Away is RL fav (-1.5): home covers +1.5 when margin >= -1.5
+            # (i.e. away does NOT cover -1.5)
+            p_home_rl = float((margins >= -abs(rl_spread)).mean())
 
         exp_total = float(totals.mean())
         nat_key   = _nearest_key(exp_total)
@@ -700,15 +719,27 @@ def project_game(
 
     # Run line convention: always ±1.5 in MLB
     # rl_spread in simulate() is from HOME perspective
-    # If home is favored: rl_spread = -1.5 (home covers if margin > 1.5)
-    # If away is favored: rl_spread = +1.5 (home covers if margin < -1.5)
-    # Determine from book ML who is favored
-    ml_home = book_lines.get('ml_home', 0)
-    ml_away = book_lines.get('ml_away', 0)
-    if ml_home < 0:
-        rl_spread = -1.5  # home favored
+    # If home is -1.5 on the run line: rl_spread = -1.5 (home covers if margin > 1.5)
+    # If away is -1.5 on the run line: rl_spread = +1.5 (home covers if margin < -1.5)
+    #
+    # CRITICAL: Use the book's ACTUAL run line direction, NOT the ML direction.
+    # In MLB, the run line favorite (-1.5) is NOT always the ML favorite.
+    # A team can be the ML underdog (+ML) but still be -1.5 on the run line.
+    # Example: PIT +109 ML but PIT -1.5 RL (book prices PIT as RL favorite)
+    #
+    # book_lines must include 'rl_home_spread' (e.g. -1.5 or +1.5 for home team)
+    # If not provided, fall back to ML direction as a last resort.
+    rl_home_spread = book_lines.get('rl_home_spread', None)
+    if rl_home_spread is not None:
+        rl_spread = float(rl_home_spread)  # -1.5 if home is RL favorite, +1.5 if away is RL favorite
     else:
-        rl_spread = 1.5   # away favored
+        # Fallback: infer from ML (less accurate — avoid if possible)
+        ml_home = book_lines.get('ml_home', 0)
+        ml_away = book_lines.get('ml_away', 0)
+        if ml_home < 0:
+            rl_spread = -1.5  # home ML favorite → assume home RL favorite
+        else:
+            rl_spread = 1.5   # away ML favorite → assume away RL favorite
 
     ou_line = book_lines.get('ou_line')
 
