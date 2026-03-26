@@ -62,10 +62,13 @@ SIG_WT_ARSENAL    = 0.15   # Velo + pitch mix z-score
 VELO_K_ADJ_PER_MPH    = 0.0035
 VELO_BASELINE_MPH     = 93.0
 PITCH_K_WEIGHTS       = {'fastball': 0.30, 'breaking': 0.45, 'offspeed': 0.25}
-TTO_K_PENALTY         = [0.0, 0.018, 0.038]
-K_VARIANCE_SCALE      = 0.85
-STARTER_IP_MEAN       = 5.2
-PA_PER_INNING         = 3.3   # MLB average: 27 outs / ~8.2 innings = ~3.3 PA/inn for starters
+TTO_K_PENALTY         = [0.0, 0.018, 0.038]  # legacy additive (kept for display)
+TTO_K_MULT            = [1.0, 0.891, 0.832]  # Variant D: multiplicative TTO (2025 calibrated)
+NEGBIN_R              = 22.20               # Variant D: NegBin dispersion (MoM from 2025 data)
+K_VARIANCE_SCALE      = 0.85               # legacy (superseded by NEGBIN_R)
+STARTER_IP_MEAN       = 5.2804             # 2025 calibrated
+STARTER_IP_STD        = 1.2431             # 2025 calibrated
+PA_PER_INNING         = 4.05  # 2025 calibrated: 130,204 PAs / 32,158 starter-inning-slots (inn 1-6)
 
 # Empirical platoon K rates (2025 Retrosheet)
 PLATOON_K_RATES = {
@@ -612,7 +615,7 @@ class StrikeoutProjectionModel:
             inn_scale = min(1.10, max(0.90, pit_inn_k / max(lg_inn, 0.01)))
             tto       = min(2, inn // 3)
             # EK uses flat combined_k with TTO penalty only (no inning scale)
-            r_ek      = max(0.03, combined_k - TTO_K_PENALTY[tto])
+            r_ek      = max(0.03, combined_k * TTO_K_MULT[tto])  # Variant D: multiplicative TTO
             # Display rate uses inning scale for granularity
             r_display = max(0.03, combined_k * inn_scale - TTO_K_PENALTY[tto])
             inning_rates.append(r_display)
@@ -620,15 +623,17 @@ class StrikeoutProjectionModel:
                 expected_k += r_ek * pa_per_inn
 
         if part_frac > 0 and full_inn < 9:
-            r_ek_partial = max(0.03, combined_k - TTO_K_PENALTY[min(2, full_inn // 3)])
+            r_ek_partial = max(0.03, combined_k * TTO_K_MULT[min(2, full_inn // 3)])  # Variant D
             expected_k += r_ek_partial * pa_per_inn * part_frac
 
         k_per_9 = (expected_k / max(ip, 0.1)) * 9.0
 
         # ---- Signal 7+8: Negative Binomial distribution ----
-        k_var = max(expected_k / K_VARIANCE_SCALE, expected_k + 0.1)
-        nb_p  = float(np.clip(expected_k / k_var, 0.01, 0.99))
-        nb_r  = max(0.01, (expected_k * nb_p) / (1.0 - nb_p))
+        # Variant D: fixed NegBin r=22.20 calibrated from 2025 season (MoM estimator)
+        # Replaces derived variance scale which over-dispersed the distribution
+        nb_r  = NEGBIN_R
+        nb_p  = float(np.clip(nb_r / (nb_r + max(expected_k, 0.3)), 0.01, 0.99))
+        k_var = nb_r * (1 - nb_p) / (nb_p ** 2)  # NegBin variance (for display)
 
         # PMF for 0–10+
         dist_pcts = []
