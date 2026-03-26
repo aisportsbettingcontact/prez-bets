@@ -201,6 +201,11 @@ class DataIngestion:
         has_lp      = 'lp' in p.columns
         has_bathand = 'bathand' in p.columns
         has_pithand = 'pithand' in p.columns
+        # Support both 'inn' (legacy format) and 'inning' (2025 fresh plays format)
+        if 'inn' not in p.columns and 'inning' in p.columns:
+            p = p.copy()
+            p['inn'] = p['inning']
+            self.plays = p
         has_inning  = 'inn' in p.columns
 
         # ---- Pitcher platoon splits (vs L / vs R) ----
