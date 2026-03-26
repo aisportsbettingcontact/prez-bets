@@ -2032,3 +2032,8 @@
 - [x] Full data integrity check: 2615 games, 37 users, 12 lineups, 2 K props, 19691 odds history rows — all intact
 - [x] Verified all pre-March-25 rows are bracket games (bracketGameId IS NOT NULL) — 0 non-bracket rows before 2026-03-25
 - [x] Zero TypeScript errors after all changes
+
+## MLB Run Line / Total Odds Display (March 26, 2026)
+- [ ] Audit NHL puck line/total odds display in GameCard for exact layout reference
+- [ ] Fix MLB game card run line and total odds to match NHL display style
+- [ ] Verify all 11 March 26 MLB games display correctly in the feed

@@ -1187,9 +1187,9 @@ function DesktopMergedPanel({
 
   return (
     <div className="flex items-stretch w-full" style={{ minHeight: '100%' }}>
-      {/* SPREAD section */}
+      {/* SPREAD section — sport-specific title: Run Line (MLB), Puck Line (NHL), Spread (others) */}
       <SectionCol
-        title="Spread"
+        title={sport === 'MLB' ? 'Run Line' : sport === 'NHL' ? 'Puck Line' : 'Spread'}
         awayLabel={awaySpreadLabel} homeLabel={homeSpreadLabel}
         awayBook={displayAwaySpread} homeBook={displayHomeSpread}
         awayModel={mdlAwaySpreadStr} homeModel={mdlHomeSpreadStr}
