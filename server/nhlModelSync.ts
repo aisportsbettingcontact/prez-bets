@@ -25,6 +25,7 @@ import { games } from "../drizzle/schema.js";
 import type { Game } from "../drizzle/schema.js";
 import { scrapeNhlTeamStats, scrapeNhlGoalieStats, getDefaultGoalieStats } from "./nhlNaturalStatScraper.js";
 import { scrapeNhlTeamStatsFromHockeyRef } from "./nhlHockeyRefTeamStats.js";
+import { scrapeNhlTeamStatsFromMoneyPuck, scrapeNhlGoalieStatsFromMoneyPuck } from "./nhlMoneyPuckFallback.js";
 import { scrapeNhlStartingGoalies, matchGoalieName } from "./nhlRotoWireScraper.js";
 import { runNhlModelForGame, buildTeamStatsDict, formatNhlML } from "./nhlModelEngine.js";
 import type { NhlModelEngineInput } from "./nhlModelEngine.js";
@@ -196,21 +197,54 @@ export async function syncNhlModelForToday(
     console.warn(`[NhlModelSync]${tag}   ⚠ NST team stats failed (${nstMsg}) — trying Hockey-Reference fallback...`);
     try {
       teamStatsMap = await scrapeNhlTeamStatsFromHockeyRef();
-      console.log(`[NhlModelSync]${tag}   ✅ Team stats (HR fallback): ${teamStatsMap.size} teams`);
+      if (teamStatsMap.size >= 30) {
+        console.log(`[NhlModelSync]${tag}   ✅ Team stats (HR fallback): ${teamStatsMap.size} teams`);
+      } else {
+        throw new Error(`HR returned only ${teamStatsMap.size} teams (need ≥30)`);
+      }
     } catch (hrErr) {
       const hrMsg = hrErr instanceof Error ? hrErr.message : String(hrErr);
-      console.error(`[NhlModelSync]${tag}   ✗ HR fallback also failed: ${hrMsg} — using league-average defaults`);
-      result.errors.push(`Team stats scrape failed (NST: ${nstMsg}; HR: ${hrMsg})`);
+      console.warn(`[NhlModelSync]${tag}   ⚠ HR fallback failed (${hrMsg}) — trying MoneyPuck fallback (tier 3)...`);
+      try {
+        teamStatsMap = await scrapeNhlTeamStatsFromMoneyPuck();
+        if (teamStatsMap.size >= 30) {
+          console.log(`[NhlModelSync]${tag}   ✅ Team stats (MoneyPuck fallback): ${teamStatsMap.size} teams`);
+        } else {
+          throw new Error(`MoneyPuck returned only ${teamStatsMap.size} teams (need ≥30)`);
+        }
+      } catch (mpErr) {
+        const mpMsg = mpErr instanceof Error ? mpErr.message : String(mpErr);
+        console.error(`[NhlModelSync]${tag}   ✗ All 3 team stat sources failed — using league-average defaults`);
+        console.error(`[NhlModelSync]${tag}     NST: ${nstMsg}`);
+        console.error(`[NhlModelSync]${tag}     HR:  ${hrMsg}`);
+        console.error(`[NhlModelSync]${tag}     MP:  ${mpMsg}`);
+        result.errors.push(`Team stats scrape failed (NST: ${nstMsg}; HR: ${hrMsg}; MP: ${mpMsg})`);
+      }
     }
   }
 
-  if (goalieStatsResult.status === "fulfilled") {
+  if (goalieStatsResult.status === "fulfilled" && goalieStatsResult.value.size >= 10) {
     goalieStatsMap = goalieStatsResult.value;
-    console.log(`[NhlModelSync]${tag}   ✅ Goalie stats: ${Math.floor(goalieStatsMap.size / 2)} goalies`);
+    console.log(`[NhlModelSync]${tag}   ✅ Goalie stats (NST): ${Math.floor(goalieStatsMap.size / 2)} goalies`);
   } else {
-    const msg = goalieStatsResult.reason instanceof Error ? goalieStatsResult.reason.message : String(goalieStatsResult.reason);
-    console.error(`[NhlModelSync]${tag}   ⚠ Goalie stats scrape failed: ${msg} — using defaults`);
-    result.errors.push(`Goalie stats scrape failed: ${msg}`);
+    const nstGoalieMsg = goalieStatsResult.status === "rejected"
+      ? (goalieStatsResult.reason instanceof Error ? goalieStatsResult.reason.message : String(goalieStatsResult.reason))
+      : `only ${(goalieStatsResult as PromiseFulfilledResult<any>).value.size} goalies returned`;
+    console.warn(`[NhlModelSync]${tag}   ⚠ NST goalie stats failed (${nstGoalieMsg}) — trying MoneyPuck goalie fallback...`);
+    try {
+      goalieStatsMap = await scrapeNhlGoalieStatsFromMoneyPuck();
+      if (goalieStatsMap.size >= 10) {
+        console.log(`[NhlModelSync]${tag}   ✅ Goalie stats (MoneyPuck fallback): ${goalieStatsMap.size} goalies`);
+      } else {
+        throw new Error(`MoneyPuck returned only ${goalieStatsMap.size} goalies (need ≥10)`);
+      }
+    } catch (mpGoalieErr) {
+      const mpGoalieMsg = mpGoalieErr instanceof Error ? mpGoalieErr.message : String(mpGoalieErr);
+      console.error(`[NhlModelSync]${tag}   ✗ All goalie stat sources failed — using defaults for all goalies`);
+      console.error(`[NhlModelSync]${tag}     NST: ${nstGoalieMsg}`);
+      console.error(`[NhlModelSync]${tag}     MP:  ${mpGoalieMsg}`);
+      result.errors.push(`Goalie stats scrape failed (NST: ${nstGoalieMsg}; MP: ${mpGoalieMsg})`);
+    }
   }
 
   // ── Step 3: Scrape RotoWire starting goalies ──────────────────────────────
