@@ -215,11 +215,26 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }): P
   // (2,430 games) is pre-seeded and we don't want to transfer all of them on every query.
   // Other sports use VSiN-driven insertion so they only have current/upcoming games in DB.
   if (opts?.sport === 'MLB' && !opts?.gameDate) {
-    const todayUtc = new Date().toISOString().slice(0, 10);
-    const plusSeven = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    // Apply the same 11:00 UTC gate used by the frontend todayUTC() function.
+    // Before 11:00 UTC the feed still shows the previous day's slate, so the
+    // window must start from (UTC calendar date - 1 day) to include those games.
+    // This prevents the server from excluding yesterday's games when the UTC
+    // calendar has rolled over but the feed has not yet transitioned.
+    const FEED_CUTOFF_UTC_HOUR = 11;
+    const nowMs = Date.now();
+    const nowUtc = new Date(nowMs);
+    const isBeforeCutoff = nowUtc.getUTCHours() < FEED_CUTOFF_UTC_HOUR;
+    const windowStartMs = isBeforeCutoff ? nowMs - 24 * 60 * 60 * 1000 : nowMs;
+    const windowStartDate = new Date(windowStartMs);
+    const todayUtc = [
+      windowStartDate.getUTCFullYear(),
+      String(windowStartDate.getUTCMonth() + 1).padStart(2, '0'),
+      String(windowStartDate.getUTCDate()).padStart(2, '0'),
+    ].join('-');
+    const plusSeven = new Date(windowStartMs + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     conditions.push(gte(games.gameDate, todayUtc));
     conditions.push(lte(games.gameDate, plusSeven));
-    console.log(`[DB][listGames] MLB 7-day window: ${todayUtc} → ${plusSeven}`);
+    console.log(`[DB][listGames] MLB 7-day window: ${todayUtc} → ${plusSeven} (utcHour=${nowUtc.getUTCHours()}, beforeCutoff=${isBeforeCutoff})`);
   }
 
   // Public feed: show all games that have live VSiN odds (regardless of publishedToFeed)
@@ -1225,16 +1240,29 @@ export async function auditAndAdvanceAllBracketWinners(): Promise<number> {
 export async function getActiveSports(): Promise<{ NBA: boolean; NHL: boolean; NCAAM: boolean; MLB: boolean }> {
   const db = await getDb();
   if (!db) return { NBA: false, NHL: false, NCAAM: false, MLB: false };
-  const now = new Date();
-  const todayUTC = now.toISOString().slice(0, 10);
-  const tomorrowDate = new Date(now);
-  tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
-  const tomorrowUTC = tomorrowDate.toISOString().slice(0, 10);
+   // Apply the same 11:00 UTC gate used by the frontend todayUTC() function.
+  // Before 11:00 UTC the feed still shows the previous day's slate, so
+  // "today" for the purposes of active-sport detection is (UTC date - 1 day).
+  const FEED_CUTOFF_UTC_HOUR = 11;
+  const nowMs = Date.now();
+  const nowUtcObj = new Date(nowMs);
+  const isBeforeCutoff = nowUtcObj.getUTCHours() < FEED_CUTOFF_UTC_HOUR;
+  const effectiveMs = isBeforeCutoff ? nowMs - 24 * 60 * 60 * 1000 : nowMs;
+  const effectiveDate = new Date(effectiveMs);
+  const todayUTC = [
+    effectiveDate.getUTCFullYear(),
+    String(effectiveDate.getUTCMonth() + 1).padStart(2, '0'),
+    String(effectiveDate.getUTCDate()).padStart(2, '0'),
+  ].join('-');
+  const tomorrowDate = new Date(effectiveMs + 24 * 60 * 60 * 1000);
+  const tomorrowUTC = [
+    tomorrowDate.getUTCFullYear(),
+    String(tomorrowDate.getUTCMonth() + 1).padStart(2, '0'),
+    String(tomorrowDate.getUTCDate()).padStart(2, '0'),
+  ].join('-');
   const dateFilter = or(eq(games.gameDate, todayUTC), eq(games.gameDate, tomorrowUTC))!;
-
   // MLB uses a 7-day window since the full season is pre-seeded
-  const plusSevenDate = new Date(now);
-  plusSevenDate.setUTCDate(plusSevenDate.getUTCDate() + 7);
+  const plusSevenDate = new Date(effectiveMs + 7 * 24 * 60 * 60 * 1000);
   const plusSevenUTC = plusSevenDate.toISOString().slice(0, 10);
   const mlbDateFilter = and(gte(games.gameDate, todayUTC), lte(games.gameDate, plusSevenUTC))!;
 
