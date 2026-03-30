@@ -172,6 +172,37 @@ const PITCHER_REGISTRY: Record<string, Record<string, number>> = {
   "Matthew Liberatore (STL)": { era: 4.18, k9: 8.8, bb9: 3.1, whip: 1.28, ip: 142.0, gp: 25, xera: 4.32 },
   "Jacob Misiorowski (MIL)": { era: 3.88, k9: 10.8, bb9: 3.8, whip: 1.22, ip: 98.0,  gp: 18, xera: 3.95 },
   "Cade Cavalli (WSH)":     { era: 4.52, k9: 9.2,  bb9: 3.8, whip: 1.35, ip: 88.0,  gp: 16, xera: 4.65 },
+  // March 30, 2026 starters (MLB Stats API 2025 season stats; * = 2024 fallback; ** = league-average default)
+  "Simeon Woods Richardson (MIN)": { era: 4.04, k9: 8.6,  bb9: 3.7, whip: 1.28, ip: 111.3, gp: 22, xera: 4.15 },
+  "Kris Bubic (KC)":               { era: 2.55, k9: 9.0,  bb9: 3.0, whip: 1.18, ip: 116.3, gp: 20, xera: 2.68 },
+  "Jack Leiter (TEX)":             { era: 3.86, k9: 8.8,  bb9: 4.0, whip: 1.28, ip: 151.7, gp: 29, xera: 3.98 },
+  "Chris Bassitt (BAL)":           { era: 3.96, k9: 8.8,  bb9: 2.7, whip: 1.33, ip: 170.3, gp: 31, xera: 4.05 },
+  "Braxton Ashcraft (PIT)":        { era: 2.71, k9: 9.2,  bb9: 3.1, whip: 1.25, ip: 69.7,  gp: 8,  xera: 2.85 },
+  "Chase Burns (CIN)":             { era: 4.57, k9: 13.9, bb9: 3.3, whip: 1.32, ip: 43.3,  gp: 8,  xera: 4.12 },
+  "Foster Griffin (WSH)":          { era: 4.50, k9: 8.0,  bb9: 3.5, whip: 1.35, ip: 80.0,  gp: 15, xera: 4.50 }, // ** league-avg default
+  "Taijuan Walker (PHI)":          { era: 4.08, k9: 6.3,  bb9: 3.1, whip: 1.41, ip: 123.7, gp: 21, xera: 4.22 },
+  "Davis Martin (CWS)":            { era: 4.10, k9: 6.6,  bb9: 3.0, whip: 1.29, ip: 142.7, gp: 25, xera: 4.18 },
+  "Chris Paddack (MIA)":           { era: 5.35, k9: 6.4,  bb9: 2.1, whip: 1.28, ip: 158.0, gp: 28, xera: 5.10 },
+  "Tomoyuki Sugano (COL)":         { era: 4.64, k9: 6.1,  bb9: 2.1, whip: 1.33, ip: 157.0, gp: 30, xera: 4.72 },
+  "Cody Ponce (TOR)":              { era: 4.50, k9: 7.5,  bb9: 3.0, whip: 1.35, ip: 60.0,  gp: 10, xera: 4.50 }, // ** league-avg default
+  "Jacob Lopez (ATH)":             { era: 4.08, k9: 11.0, bb9: 3.6, whip: 1.27, ip: 92.7,  gp: 17, xera: 3.95 },
+  "Bryce Elder (ATL)":             { era: 5.30, k9: 7.5,  bb9: 2.9, whip: 1.39, ip: 156.3, gp: 28, xera: 5.15 },
+  "Ryan Johnson (LAA)":            { era: 4.50, k9: 8.5,  bb9: 3.2, whip: 1.35, ip: 40.0,  gp: 8,  xera: 4.50 }, // ** limited MLB data; debut-level default
+  "Edward Cabrera (CHC)":          { era: 3.53, k9: 9.8,  bb9: 3.1, whip: 1.23, ip: 137.7, gp: 26, xera: 3.62 },
+  "Nick Martinez (TB)":            { era: 4.45, k9: 6.3,  bb9: 2.3, whip: 1.21, ip: 165.7, gp: 26, xera: 4.38 },
+  "Kyle Harrison (MIL)":           { era: 4.04, k9: 9.6,  bb9: 3.5, whip: 1.37, ip: 35.7,  gp: 6,  xera: 4.12 },
+  "Clay Holmes (NYM)":             { era: 3.53, k9: 7.0,  bb9: 3.6, whip: 1.30, ip: 165.7, gp: 31, xera: 3.62 },
+  "Kyle Leahy (STL)":              { era: 3.07, k9: 8.2,  bb9: 2.9, whip: 1.23, ip: 88.0,  gp: 1,  xera: 3.18 },
+  "Ranger Suarez (BOS)":           { era: 3.20, k9: 8.6,  bb9: 2.2, whip: 1.22, ip: 157.3, gp: 26, xera: 3.28 },
+  "Lance McCullers Jr. (HOU)":     { era: 6.51, k9: 9.9,  bb9: 6.3, whip: 1.81, ip: 55.3,  gp: 13, xera: 6.25 },
+  "Landen Roupp (SF)":             { era: 3.80, k9: 8.6,  bb9: 3.8, whip: 1.48, ip: 106.7, gp: 22, xera: 3.92 },
+  "Walker Buehler (SD)":           { era: 4.93, k9: 6.6,  bb9: 4.4, whip: 1.52, ip: 126.0, gp: 24, xera: 5.05 },
+  "Ryan Weathers (NYY)":           { era: 3.99, k9: 8.7,  bb9: 2.8, whip: 1.28, ip: 38.3,  gp: 8,  xera: 4.08 },
+  "Luis Castillo (SEA)":           { era: 3.54, k9: 8.1,  bb9: 2.3, whip: 1.18, ip: 180.7, gp: 32, xera: 3.62 },
+  "Parker Messick (CLE)":          { era: 2.72, k9: 8.6,  bb9: 1.4, whip: 1.31, ip: 39.7,  gp: 7,  xera: 2.85 },
+  "Roki Sasaki (LAD)":             { era: 4.46, k9: 6.9,  bb9: 5.4, whip: 1.43, ip: 36.3,  gp: 8,  xera: 4.58 },
+  "Justin Verlander (DET)":        { era: 3.85, k9: 8.1,  bb9: 3.1, whip: 1.36, ip: 152.0, gp: 29, xera: 3.95 },
+  "Michael Soroka (ARI)":          { era: 4.52, k9: 9.5,  bb9: 2.9, whip: 1.13, ip: 89.7,  gp: 17, xera: 4.38 },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
