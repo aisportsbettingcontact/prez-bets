@@ -399,10 +399,19 @@ class MarketDerivation:
         total_key = ou_line if ou_line else sim['natural_key']
         p_over    = sim['p_over_at_line'] if ou_line else sim['p_over_natural']
         p_under   = sim['p_under_at_line'] if ou_line else sim['p_under_natural']
-
         combined_std = math.sqrt(sim['home_std'] ** 2 + sim['away_std'] ** 2)
         model_spread = round(-norm.ppf(p_home) * combined_std, 2)
-
+        # ── No-vig fair total odds ────────────────────────────────────────────
+        # Normalize through push-free pool so over + under = 1.0 exactly.
+        # This removes any implicit vig caused by push probability on whole-
+        # number totals and ensures over_odds / under_odds are true fair-value
+        # inverses of each other (no juice on either side).
+        ou_pool = p_over + p_under
+        if ou_pool > 0.0:
+            p_over_fair, p_under_fair = remove_vig(p_over, p_under)
+        else:
+            p_over_fair, p_under_fair = 0.5, 0.5
+        # ─────────────────────────────────────────────────────────────────────
         return {
             'home_team':        home_team,
             'away_team':        away_team,
@@ -417,10 +426,10 @@ class MarketDerivation:
             'p_home_cover_rl':  round(p_hrl, 4),
             'p_away_cover_rl':  round(p_arl, 4),
             'total_key':        total_key,
-            'p_over':           round(p_over, 4),
-            'p_under':          round(p_under, 4),
-            'over_odds':        prob_to_ml(p_over),
-            'under_odds':       prob_to_ml(p_under),
+            'p_over':           round(p_over_fair, 4),
+            'p_under':          round(p_under_fair, 4),
+            'over_odds':        prob_to_ml(p_over_fair),
+            'under_odds':       prob_to_ml(p_under_fair),
             'exp_home_runs':    sim['exp_home_runs'],
             'exp_away_runs':    sim['exp_away_runs'],
             'exp_total':        sim['exp_total'],
