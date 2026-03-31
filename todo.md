@@ -2049,3 +2049,8 @@
 - [x] Validate team colors: 8/8 pass across NBA/NHL/MLB/NCAAM with correct hex codes
 - [x] Validate scheduler: 10-min tick confirmed firing, last refresh 5 min ago, active window correct
 - [x] Validate NCAAM Final Four filter: CLEAN (no non-FF games on today/tomorrow)
+
+## Remove Page-Level Tabs (March 31, 2026)
+- [x] Remove "AI MODEL PROJECTIONS" / "BETTING SPLITS" two-tab row from ModelProjections header
+- [x] Delete BettingSplits.tsx standalone page from codebase
+- [x] Remove /betting-splits route from App.tsx
