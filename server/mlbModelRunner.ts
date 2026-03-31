@@ -23,7 +23,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
-import { games, mlbPitcherStats } from "../drizzle/schema";
+import { games, mlbPitcherStats, mlbPitcherRolling5, mlbTeamBattingSplits } from "../drizzle/schema";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -279,6 +279,8 @@ function computeTeamSpAverage(
     ip: number | null;
     gamesStarted: number | null;
     xera: number | null;
+    fip: number | null;
+    xfip: number | null;
   }>
 ): Record<string, number> {
   const teamRows = allRows.filter(
@@ -294,7 +296,8 @@ function computeTeamSpAverage(
   // IP-weighted average for rate stats
   let totalIP = 0;
   let sumEra = 0, sumK9 = 0, sumBb9 = 0, sumHr9 = 0, sumWhip = 0, sumXera = 0;
-  let countXera = 0;
+  let sumFip = 0, sumXfip = 0;
+  let countXera = 0, countFip = 0, countXfip = 0;
 
   for (const r of teamRows) {
     const ip = r.ip ?? 0;
@@ -304,23 +307,26 @@ function computeTeamSpAverage(
     sumBb9  += (r.bb9  ?? DEFAULT_PITCHER_STATS.bb9)  * ip;
     sumHr9  += (r.hr9  ?? DEFAULT_PITCHER_STATS.hr9)  * ip;
     sumWhip += (r.whip ?? DEFAULT_PITCHER_STATS.whip) * ip;
-    if (r.xera !== null) {
-      sumXera += r.xera * ip;
-      countXera++;
-    }
+    if (r.xera !== null) { sumXera += r.xera * ip; countXera++; }
+    if (r.fip  !== null) { sumFip  += r.fip  * ip; countFip++;  }
+    if (r.xfip !== null) { sumXfip += r.xfip * ip; countXfip++; }
   }
 
   if (totalIP === 0) return { ...DEFAULT_PITCHER_STATS };
 
+  const avgIP = totalIP / teamRows.length;
   return {
     era:  sumEra  / totalIP,
     k9:   sumK9   / totalIP,
     bb9:  sumBb9  / totalIP,
     hr9:  sumHr9  / totalIP,
     whip: sumWhip / totalIP,
-    ip:   totalIP / teamRows.length, // avg IP per pitcher on team
+    ip:   avgIP,
     gp:   teamRows.reduce((s, r) => s + (r.gamesStarted ?? 0), 0) / teamRows.length,
-    xera: countXera > 0 ? sumXera / (countXera * (totalIP / teamRows.length)) : DEFAULT_PITCHER_STATS.xera,
+    xera: countXera > 0 ? sumXera / (countXera * avgIP) : DEFAULT_PITCHER_STATS.xera,
+    fip:  countFip  > 0 ? sumFip  / totalIP : DEFAULT_PITCHER_STATS.era,
+    xfip: countXfip > 0 ? sumXfip / totalIP : DEFAULT_PITCHER_STATS.era,
+    throwsHand: 0, // team avg has no single hand
   };
 }
 
@@ -345,9 +351,10 @@ async function batchFetchPitcherStats(
   const result = new Map<string, Record<string, number>>();
   if (!dbInstance || pitcherNames.length === 0) return result;
 
-  // Single DB round-trip: fetch all pitcher stats (~350 rows)
+  // ── DB round-trip 1: fetch all pitcher season stats + sabermetrics ─────────
   const allRows = await dbInstance
     .select({
+      mlbamId:      mlbPitcherStats.mlbamId,
       fullName:     mlbPitcherStats.fullName,
       teamAbbrev:   mlbPitcherStats.teamAbbrev,
       era:          mlbPitcherStats.era,
@@ -359,27 +366,139 @@ async function batchFetchPitcherStats(
       gamesStarted: mlbPitcherStats.gamesStarted,
       gamesPlayed:  mlbPitcherStats.gamesPlayed,
       xera:         mlbPitcherStats.xera,
+      fip:          mlbPitcherStats.fip,
+      xfip:         mlbPitcherStats.xfip,
+      fipMinus:     mlbPitcherStats.fipMinus,
+      eraMinus:     mlbPitcherStats.eraMinus,
+      war:          mlbPitcherStats.war,
+      throwsHand:   mlbPitcherStats.throwsHand,
     })
     .from(mlbPitcherStats);
 
-  // Build name → stats lookup map
-  const dbMap = new Map<string, Record<string, number>>();
+  // ── DB round-trip 2: fetch all rolling-5 stats ─────────────────────────────
+  const rolling5Rows = await dbInstance
+    .select({
+      mlbamId:        mlbPitcherRolling5.mlbamId,
+      startsIncluded: mlbPitcherRolling5.startsIncluded,
+      ip5:            mlbPitcherRolling5.ip5,
+      era5:           mlbPitcherRolling5.era5,
+      k9_5:           mlbPitcherRolling5.k9_5,
+      bb9_5:          mlbPitcherRolling5.bb9_5,
+      hr9_5:          mlbPitcherRolling5.hr9_5,
+      whip5:          mlbPitcherRolling5.whip5,
+      fip5:           mlbPitcherRolling5.fip5,
+    })
+    .from(mlbPitcherRolling5);
+
+  // Build rolling-5 lookup by mlbamId
+  const rolling5Map = new Map<number, typeof rolling5Rows[0]>();
+  for (const r of rolling5Rows) rolling5Map.set(r.mlbamId, r);
+
+  // ── DB round-trip 3: fetch all team batting splits (vs LHP + vs RHP) ───────
+  const battingSplitRows = await dbInstance
+    .select({
+      teamAbbrev: mlbTeamBattingSplits.teamAbbrev,
+      hand:       mlbTeamBattingSplits.hand,
+      avg:        mlbTeamBattingSplits.avg,
+      obp:        mlbTeamBattingSplits.obp,
+      slg:        mlbTeamBattingSplits.slg,
+      ops:        mlbTeamBattingSplits.ops,
+      woba:       mlbTeamBattingSplits.woba,
+      hr9:        mlbTeamBattingSplits.hr9,
+      bb9:        mlbTeamBattingSplits.bb9,
+      k9:         mlbTeamBattingSplits.k9,
+    })
+    .from(mlbTeamBattingSplits);
+
+  // Build batting splits lookup: teamAbbrev → { L: splits, R: splits }
+  const battingSplitsLookup = new Map<string, { L: Record<string, number>; R: Record<string, number> }>();
+  for (const r of battingSplitRows) {
+    const team = r.teamAbbrev.toUpperCase();
+    if (!battingSplitsLookup.has(team)) battingSplitsLookup.set(team, { L: {}, R: {} });
+    const entry = battingSplitsLookup.get(team)!;
+    const splits = {
+      avg:  r.avg  ?? 0.250,
+      obp:  r.obp  ?? 0.318,
+      slg:  r.slg  ?? 0.410,
+      ops:  r.ops  ?? 0.728,
+      woba: r.woba ?? 0.312,
+      hr9:  r.hr9  ?? 1.0,
+      bb9:  r.bb9  ?? 3.1,
+      k9:   r.k9   ?? 9.0,
+    };
+    if (r.hand === 'L') entry.L = splits;
+    else                entry.R = splits;
+  }
+
+  console.log(`[MLBModelRunner] [BATCH] Loaded: ${allRows.length} pitcher rows, ${rolling5Rows.length} rolling-5 rows, ${battingSplitRows.length} batting split rows`);
+
+  // ── Helper: blend season + rolling-5 stats ─────────────────────────────────
+  // Weights: 70% season, 30% rolling-5 (if ≥3 starts in window)
+  const SEASON_W  = 0.70;
+  const ROLLING_W = 0.30;
+  const MIN_ROLLING_STARTS = 3;
+
+  function blendWithRolling(
+    season: Record<string, number>,
+    r5: typeof rolling5Rows[0] | undefined
+  ): Record<string, number> {
+    if (!r5 || (r5.startsIncluded ?? 0) < MIN_ROLLING_STARTS || !r5.era5) {
+      // Not enough rolling data — use season stats only
+      return season;
+    }
+    const blended = { ...season };
+    // Blend ERA, K/9, BB/9, HR/9, WHIP
+    blended.era  = SEASON_W * season.era  + ROLLING_W * (r5.era5  ?? season.era);
+    blended.k9   = SEASON_W * season.k9   + ROLLING_W * (r5.k9_5  ?? season.k9);
+    blended.bb9  = SEASON_W * season.bb9  + ROLLING_W * (r5.bb9_5 ?? season.bb9);
+    blended.hr9  = SEASON_W * season.hr9  + ROLLING_W * (r5.hr9_5 ?? season.hr9);
+    blended.whip = SEASON_W * season.whip + ROLLING_W * (r5.whip5 ?? season.whip);
+    // Blend FIP if rolling FIP available
+    if (r5.fip5 !== null && season.fip) {
+      blended.fip = SEASON_W * season.fip + ROLLING_W * r5.fip5;
+    }
+    blended.rolling_starts = r5.startsIncluded ?? 0;
+    blended.rolling_era    = r5.era5  ?? season.era;
+    blended.rolling_k9     = r5.k9_5  ?? season.k9;
+    blended.rolling_bb9    = r5.bb9_5 ?? season.bb9;
+    blended.rolling_whip   = r5.whip5 ?? season.whip;
+    blended.rolling_fip    = r5.fip5  ?? season.fip ?? season.era;
+    return blended;
+  }
+
+  // Build name → stats lookup map (includes FIP, xFIP, throwsHand)
+  const dbMap = new Map<string, { stats: Record<string, number>; mlbamId: number }>();
   for (const row of allRows) {
     const normName = row.fullName.toLowerCase().trim();
-    const stats: Record<string, number> = {
-      era:  row.era  ?? DEFAULT_PITCHER_STATS.era,
-      k9:   row.k9   ?? DEFAULT_PITCHER_STATS.k9,
-      bb9:  row.bb9  ?? DEFAULT_PITCHER_STATS.bb9,
-      hr9:  row.hr9  ?? DEFAULT_PITCHER_STATS.hr9,
-      whip: row.whip ?? DEFAULT_PITCHER_STATS.whip,
-      ip:   row.ip   ?? DEFAULT_PITCHER_STATS.ip,
-      gp:   row.gamesStarted ?? DEFAULT_PITCHER_STATS.gp,
-      xera: row.xera ?? DEFAULT_PITCHER_STATS.xera,
+    // Season stats base
+    const seasonStats: Record<string, number> = {
+      era:       row.era       ?? DEFAULT_PITCHER_STATS.era,
+      k9:        row.k9        ?? DEFAULT_PITCHER_STATS.k9,
+      bb9:       row.bb9       ?? DEFAULT_PITCHER_STATS.bb9,
+      hr9:       row.hr9       ?? DEFAULT_PITCHER_STATS.hr9,
+      whip:      row.whip      ?? DEFAULT_PITCHER_STATS.whip,
+      ip:        row.ip        ?? DEFAULT_PITCHER_STATS.ip,
+      gp:        row.gamesStarted ?? DEFAULT_PITCHER_STATS.gp,
+      xera:      row.xera      ?? DEFAULT_PITCHER_STATS.xera,
+      fip:       row.fip       ?? row.era ?? DEFAULT_PITCHER_STATS.era,
+      xfip:      row.xfip      ?? row.era ?? DEFAULT_PITCHER_STATS.era,
+      fipMinus:  row.fipMinus  ?? 100,
+      eraMinus:  row.eraMinus  ?? 100,
+      war:       row.war       ?? 0,
+      // throwsHand encoded as number: 0=R, 1=L, 2=S (Python reads as string via pitch_hand)
+      throwsHand: row.throwsHand === 'L' ? 1 : row.throwsHand === 'S' ? 2 : 0,
+      throwsHandStr: 0, // placeholder, actual string passed separately
     };
+    // Blend with rolling-5 if available
+    const r5 = rolling5Map.get(row.mlbamId);
+    const blended = blendWithRolling(seasonStats, r5);
+    // Store the actual hand string for Python
+    blended.throwsHandStr = 0; // unused numeric placeholder
+    const entry = { stats: blended, mlbamId: row.mlbamId };
     // Primary key: "name (TEAM)"
-    dbMap.set(`${normName} (${row.teamAbbrev.toUpperCase()})`, stats);
+    dbMap.set(`${normName} (${row.teamAbbrev.toUpperCase()})`, entry);
     // Secondary key: name only (team-agnostic, first occurrence wins)
-    if (!dbMap.has(normName)) dbMap.set(normName, stats);
+    if (!dbMap.has(normName)) dbMap.set(normName, entry);
   }
 
   // Pre-compute team SP averages for all teams that appear in the request
@@ -395,16 +514,21 @@ async function batchFetchPitcherStats(
     const teamKey = `${normName} (${teamAbbrev.toUpperCase()})`;
 
     let stats: Record<string, number> | undefined;
+    let resolvedMlbamId: number | undefined;
     let source = '';
 
     // 1. Exact DB match: name + team
     if (dbMap.has(teamKey)) {
-      stats = dbMap.get(teamKey)!;
+      const entry = dbMap.get(teamKey)!;
+      stats = entry.stats;
+      resolvedMlbamId = entry.mlbamId;
       source = 'DB (exact)';
     }
     // 2. DB match: name only (handles team transfers mid-season)
     else if (dbMap.has(normName)) {
-      stats = dbMap.get(normName)!;
+      const entry = dbMap.get(normName)!;
+      stats = entry.stats;
+      resolvedMlbamId = entry.mlbamId;
       source = 'DB (name-only)';
     }
     // 3. Legacy PITCHER_REGISTRY: name + team
@@ -438,11 +562,26 @@ async function batchFetchPitcherStats(
         console.warn(`[MLBModelRunner] ⚠ No team data for "${name}" (${teamAbbrev}) — using league-avg defaults`);
       }
     } else {
-      console.log(`[MLBModelRunner] ✓ ${source}: "${name}" (${teamAbbrev})`);
+      const handStr = stats.throwsHand === 1 ? 'L' : stats.throwsHand === 2 ? 'S' : 'R';
+      const rollingInfo = stats.rolling_starts
+        ? ` | rolling-5: ERA=${stats.rolling_era?.toFixed(2)} K/9=${stats.rolling_k9?.toFixed(2)} (${stats.rolling_starts} starts)`
+        : ' | no rolling-5 blend';
+      console.log(
+        `[MLBModelRunner] ✓ ${source}: "${name}" (${teamAbbrev}) | ` +
+        `ERA=${stats.era?.toFixed(2)} FIP=${stats.fip?.toFixed(2)} xFIP=${stats.xfip?.toFixed(2)} ` +
+        `K/9=${stats.k9?.toFixed(2)} BB/9=${stats.bb9?.toFixed(2)} WHIP=${stats.whip?.toFixed(3)} ` +
+        `hand=${handStr} WAR=${stats.war?.toFixed(2)}${rollingInfo}`
+      );
     }
 
+    // Attach batting splits for the opposing team keyed by this pitcher's hand
+    // These are stored in the stats dict so the Python engine can use them
+    // via team_stats dict (passed separately in engineInputs)
     result.set(`${name}|${teamAbbrev}`, stats);
   }
+
+  // Also expose battingSplitsLookup so Step 3 can attach to team_stats
+  (result as any).__battingSplits = battingSplitsLookup;
 
   return result;
 }
@@ -501,6 +640,7 @@ for inp in inputs:
             home_pitcher_stats=inp['home_pitcher_stats'],
             book_lines=inp['book_lines'],
             game_date=datetime.strptime(inp['game_date'], '%Y-%m-%d'),
+            verbose=True,
         )
         r['db_id'] = inp['db_id']
         r['away_pitcher'] = inp['away_pitcher_name']
@@ -526,14 +666,22 @@ print(json.dumps(results))
     });
 
     let stdout = "";
-    let stderr = "";
+    let stderrBuf = "";
     proc.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
-    proc.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
+    // Stream stderr line-by-line so verbose engine diagnostics appear in real-time
+    proc.stderr.on("data", (d: Buffer) => {
+      stderrBuf += d.toString();
+      const lines = stderrBuf.split("\n");
+      stderrBuf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.trim()) console.log(`[ENGINE] ${line}`);
+      }
+    });
 
     proc.on("close", (code: number) => {
-      if (stderr) {
-        console.warn("[MLBModelRunner] Python stderr:\n" + stderr.trim());
-      }
+      // Flush any remaining stderr buffer
+      if (stderrBuf.trim()) console.log(`[ENGINE] ${stderrBuf.trim()}`);
+      const stderr = stderrBuf;
       if (code !== 0) {
         return reject(new Error(`Python engine exited with code ${code}: ${stderr.slice(0, 500)}`));
       }
@@ -740,7 +888,65 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
       rl_away:       parseFloat(String(g.awayRunLineOdds ?? "130")),
     };
 
-    console.log(`${TAG} [${g.id}] ${awayAbbrev}@${homeAbbrev} | SP: ${awayPitcher} vs ${homePitcher} | RL home: ${rlHomeSpread} | O/U: ${bookLines.ou_line}`);
+    // Retrieve pitcher stats (season + rolling-5 blended, with FIP/xFIP/hand)
+    const awayPitcherStats = pitcherStatsMap.get(`${awayPitcher}|${awayAbbrev}`) ?? { ...DEFAULT_PITCHER_STATS };
+    const homePitcherStats = pitcherStatsMap.get(`${homePitcher}|${homeAbbrev}`) ?? { ...DEFAULT_PITCHER_STATS };
+
+    // Determine pitcher hands for batting split selection
+    // throwsHand: 0=R, 1=L, 2=S (switch)
+    const awayHand: 'L' | 'R' = awayPitcherStats.throwsHand === 1 ? 'L' : 'R';
+    const homeHand: 'L' | 'R' = homePitcherStats.throwsHand === 1 ? 'L' : 'R';
+
+    // Retrieve batting splits lookup from pitcherStatsMap side-channel
+    const battingSplits = (pitcherStatsMap as any).__battingSplits as
+      Map<string, { L: Record<string, number>; R: Record<string, number> }> | undefined;
+
+    // Base team stats (season-level)
+    const awayBaseStats = getTeamStats(awayAbbrev);
+    const homeBaseStats = getTeamStats(homeAbbrev);
+
+    // Augment team stats with hand-specific batting splits vs the opposing pitcher
+    // Away team bats against HOME pitcher (homeHand)
+    // Home team bats against AWAY pitcher (awayHand)
+    const awayBattingSplit = battingSplits?.get(awayAbbrev)?.[homeHand];
+    const homeBattingSplit = battingSplits?.get(homeAbbrev)?.[awayHand];
+
+    const awayTeamStats = awayBattingSplit
+      ? {
+          ...awayBaseStats,
+          avg:  awayBattingSplit.avg,
+          obp:  awayBattingSplit.obp,
+          slg:  awayBattingSplit.slg,
+          woba: awayBattingSplit.woba,
+          // Override K/BB/HR rates from hand-specific splits
+          batting_k9:  awayBattingSplit.k9,
+          batting_bb9: awayBattingSplit.bb9,
+          batting_hr9: awayBattingSplit.hr9,
+          split_hand:  homeHand === 'L' ? 1 : 0,
+        }
+      : awayBaseStats;
+
+    const homeTeamStats = homeBattingSplit
+      ? {
+          ...homeBaseStats,
+          avg:  homeBattingSplit.avg,
+          obp:  homeBattingSplit.obp,
+          slg:  homeBattingSplit.slg,
+          woba: homeBattingSplit.woba,
+          batting_k9:  homeBattingSplit.k9,
+          batting_bb9: homeBattingSplit.bb9,
+          batting_hr9: homeBattingSplit.hr9,
+          split_hand:  awayHand === 'L' ? 1 : 0,
+        }
+      : homeBaseStats;
+
+    console.log(
+      `${TAG} [${g.id}] ${awayAbbrev}@${homeAbbrev} | ` +
+      `SP: ${awayPitcher}(${awayHand}) vs ${homePitcher}(${homeHand}) | ` +
+      `RL home: ${rlHomeSpread} | O/U: ${bookLines.ou_line} | ` +
+      `away split: vs${homeHand}=${awayBattingSplit ? `avg=${awayBattingSplit.avg?.toFixed(3)} wOBA=${awayBattingSplit.woba?.toFixed(3)}` : 'season'} | ` +
+      `home split: vs${awayHand}=${homeBattingSplit ? `avg=${homeBattingSplit.avg?.toFixed(3)} wOBA=${homeBattingSplit.woba?.toFixed(3)}` : 'season'}`
+    );
 
     return {
       db_id:              g.id,
@@ -748,10 +954,10 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
       home_abbrev:        homeAbbrev,
       away_pitcher_name:  awayPitcher,
       home_pitcher_name:  homePitcher,
-      away_team_stats:    getTeamStats(awayAbbrev),
-      home_team_stats:    getTeamStats(homeAbbrev),
-      away_pitcher_stats: pitcherStatsMap.get(`${awayPitcher}|${awayAbbrev}`) ?? { ...DEFAULT_PITCHER_STATS },
-      home_pitcher_stats: pitcherStatsMap.get(`${homePitcher}|${homeAbbrev}`) ?? { ...DEFAULT_PITCHER_STATS },
+      away_team_stats:    awayTeamStats,
+      home_team_stats:    homeTeamStats,
+      away_pitcher_stats: awayPitcherStats,
+      home_pitcher_stats: homePitcherStats,
       book_lines:         bookLines,
       game_date:          dateStr,
     };

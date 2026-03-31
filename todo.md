@@ -2062,3 +2062,29 @@
 - [ ] Implement Step 12: full mandatory logging (distribution shapes, key number mass, cross-market flags)
 - [ ] Test rebuilt engine on today's MLB games and validate output
 - [ ] Integrate into mlbModelRunner.ts and run full pipeline validation
+
+## MLB Pitcher Stats Enhancements (2026-03-31)
+- [x] Schema: add fip, xfip, throwsHand columns to mlb_pitcher_stats
+- [x] Schema: create mlb_team_batting_splits table (vs LHP / vs RHP per team)
+- [x] Schema: create mlb_pitcher_rolling5 table (last 5 GS rolling stats)
+- [x] Seed: fetch FIP, xFIP, handedness from MLB Stats API into pitcher stats
+- [x] Seed: fetch team batting splits vs LHP/RHP from MLB Stats API
+- [x] Seed: compute last-5-starts rolling stats from MLB Stats API game logs
+- [ ] Engine: integrate pitcher handedness + batter-vs-handedness splits into run-scoring model
+- [x] Engine: integrate FIP/xFIP as quality signal alongside ERA
+- [ ] Engine: use rolling-5 stats for hot/cold starter weighting
+- [x] Daily cron: refresh all three new tables alongside existing pitcher stats refresh
+- [ ] Validate: zero unknown-pitcher warnings, correct handedness splits applied
+
+## MLB Pitcher Stats Enhancements (2026-03-31)
+- [x] Schema: add fip, xfip, throwsHand columns to mlb_pitcher_stats
+- [x] Schema: create mlb_team_batting_splits table (vs LHP / vs RHP per team)
+- [x] Schema: create mlb_pitcher_rolling5 table (last 5 GS rolling stats)
+- [x] Seed: fetch FIP, xFIP, handedness from MLB Stats API
+- [x] Seed: fetch team batting splits vs LHP/RHP
+- [x] Seed: compute last-5-starts rolling stats from game logs
+- [x] Engine: integrate handedness + batter-vs-handedness splits
+- [x] Engine: integrate FIP/xFIP as quality signal
+- [x] Engine: rolling-5 hot/cold starter weighting
+- [x] Daily cron: refresh all three new tables
+- [x] Validate: zero unknown-pitcher warnings, correct splits applied

@@ -999,17 +999,41 @@ def team_stats_to_pitcher_features(stats: dict) -> dict:
     }
 
 def team_stats_to_batter_features(stats: dict) -> dict:
+    """
+    Convert team batting stats to per-batter feature dict.
+    If hand-specific splits are present (avg/obp/slg from vs-LHP or vs-RHP),
+    they are used directly. wOBA is used when available for more precise HR/K/BB rates.
+    """
     avg  = float(stats.get('avg', 0.245))
     obp  = float(stats.get('obp', 0.310))
     slg  = float(stats.get('slg', 0.410))
     ops  = obp + slg
-    bb_pct = max(0.04, obp - avg - 0.01)
-    hr_pct = float(np.clip((slg - avg) * 0.25, 0.01, 0.07))
+    iso  = max(0.05, slg - avg)
+
+    # wOBA-based rate overrides (more precise than OPS-derived)
+    woba = float(stats.get('woba', LEAGUE_WOBA))
+    woba_scale = woba / LEAGUE_WOBA  # relative quality vs league avg
+
+    # Hand-specific K/BB/HR rates from batting splits (if available)
+    # batting_k9, batting_bb9, batting_hr9 are set from DB splits in TS
+    pa_per_9 = 38.0
+    if 'batting_k9' in stats:
+        k_pct  = float(stats['batting_k9'])  / pa_per_9
+        bb_pct = float(stats['batting_bb9']) / pa_per_9
+        hr_pct = float(stats['batting_hr9']) / pa_per_9
+    else:
+        # Fallback: derive from avg/obp/slg
+        bb_pct = max(0.04, obp - avg - 0.01)
+        hr_pct = float(np.clip((slg - avg) * 0.25, 0.01, 0.07))
+        k_pct  = float(np.clip(0.35 - ops * 0.15, 0.12, 0.32))
+
+    # Scale HR rate by wOBA quality signal
+    hr_pct = float(np.clip(hr_pct * woba_scale, 0.01, 0.07))
+
     single_pct = avg * 0.63
     double_pct = avg * 0.20
     triple_pct = avg * 0.02
-    k_pct = float(np.clip(0.35 - ops * 0.15, 0.12, 0.32))
-    iso = max(0.05, slg - avg)
+
     return {
         'k_pct':       float(np.clip(k_pct, 0.12, 0.32)),
         'bb_pct':      float(np.clip(bb_pct, 0.04, 0.18)),
@@ -1017,49 +1041,108 @@ def team_stats_to_batter_features(stats: dict) -> dict:
         'single_pct':  float(np.clip(single_pct, 0.08, 0.22)),
         'double_pct':  float(np.clip(double_pct, 0.02, 0.08)),
         'triple_pct':  float(np.clip(triple_pct, 0.001, 0.01)),
-        'xwoba':       LEAGUE_XWOBA,
-        'woba':        LEAGUE_WOBA,
+        'xwoba':       float(np.clip(woba, 0.250, 0.400)),
+        'woba':        float(np.clip(woba, 0.250, 0.400)),
         'iso':         iso,
         'barrel_rate': float(np.clip(0.06 + iso * 0.15, 0.04, 0.14)),
         'hard_hit':    float(np.clip(0.28 + iso * 0.30, 0.25, 0.50)),
         'bat_hand':    'R',
+        'split_hand':  int(stats.get('split_hand', 0)),  # 1=vs LHP, 0=vs RHP
     }
 
 def pitcher_stats_to_features(stats: dict, team_era: float = 4.50) -> dict:
+    """
+    Convert pitcher stats to feature dict for the simulation engine.
+    Enhancements:
+      - Uses real xFIP (not ERA-derived proxy) when available
+      - Uses real pitch_hand (R/L/S) from DB throwsHand field
+      - Blends rolling-5 ERA/K9/BB9/WHIP with season stats (already pre-blended in TS)
+      - Uses FIP as secondary quality signal for HR rate estimation
+      - FIP-minus / ERA-minus used for park-neutral quality adjustment
+    """
+    # Core rate stats (already blended 70/30 season/rolling-5 in TS layer)
     era  = float(stats.get('era', team_era))
     k9   = float(stats.get('k9', 8.5))
     bb9  = float(stats.get('bb9', 3.2))
     whip = float(stats.get('whip', 1.30))
     ip   = float(stats.get('ip', 150.0))
     gp   = max(1, int(stats.get('gp', 28)))
-    ip_per_game = ip / gp
-    pa_per_9 = 38.0
-    k_pct    = k9  / pa_per_9
-    bb_pct   = bb9 / pa_per_9
-    hr_pct   = LEAGUE_HR_PCT * (era / 4.50)
-    h_per_9  = whip * 9.0 - bb9
-    h_pct    = h_per_9 / pa_per_9
+    ip_per_game = max(1.0, ip / gp)
+
+    # Real xFIP from DB (park-neutral, HR-independent quality signal)
+    # Fallback: ERA-derived proxy only if xFIP not available
+    xfip_real = stats.get('xfip', None)
+    if xfip_real is not None and float(xfip_real) > 0:
+        xfip_val = float(np.clip(xfip_real, 2.0, 7.0))
+    else:
+        # Fallback proxy: regress toward 4.0 from ERA
+        xfip_val = float(np.clip(3.5 + (era - 4.50) * 0.5, 2.0, 6.5))
+
+    # Real FIP from DB (HR-dependent quality signal)
+    fip_real = stats.get('fip', None)
+    fip_val  = float(fip_real) if (fip_real is not None and float(fip_real) > 0) else era
+
+    # FIP-minus / ERA-minus (park-adjusted, 100=league avg, <100=better)
+    fip_minus = float(stats.get('fipMinus', 100))
+    era_minus = float(stats.get('eraMinus', 100))
+
+    # Pitcher throwing hand: 0=R, 1=L, 2=S
+    throws_hand_num = int(stats.get('throwsHand', 0))
+    pitch_hand = 'L' if throws_hand_num == 1 else ('S' if throws_hand_num == 2 else 'R')
+
+    # Derive per-PA rates
+    pa_per_9   = 38.0
+    k_pct      = k9  / pa_per_9
+    bb_pct     = bb9 / pa_per_9
+
+    # HR rate: use FIP-based estimate (FIP is HR-sensitive)
+    # FIP formula: FIP = (13*HR + 3*BB - 2*K) / IP + cFIP
+    # Invert to get HR/9: HR/9 ≈ (FIP - 3.2 + 2*K9/9 - 3*BB9/9) / (13/9)
+    # Clamp to realistic range
+    hr9_from_fip = max(0.3, (fip_val - 3.2 + (2.0 * k9 / 9.0) - (3.0 * bb9 / 9.0)) / (13.0 / 9.0))
+    hr_pct_fip   = float(np.clip(hr9_from_fip / pa_per_9, 0.01, 0.07))
+    # Blend with ERA-based estimate (50/50)
+    hr_pct_era   = LEAGUE_HR_PCT * (era / 4.50)
+    hr_pct       = float(np.clip(0.5 * hr_pct_fip + 0.5 * hr_pct_era, 0.01, 0.07))
+
+    h_per_9    = whip * 9.0 - bb9
+    h_pct      = h_per_9 / pa_per_9
     single_pct = h_pct * 0.63
     double_pct = h_pct * 0.20
     triple_pct = h_pct * 0.02
-    xfip_proxy = 3.5 + (era - 4.50) * 0.5
+
+    # Whiff rate: K% is a strong proxy; scale by xFIP quality
+    xfip_quality = max(0.5, (5.0 - xfip_val) / 2.5)  # 0.5-1.5 range
+    whiff_pct = float(np.clip(k_pct * 0.9 * xfip_quality, 0.12, 0.45))
+
+    # Rolling-5 diagnostic fields (already blended into era/k9/bb9/whip above)
+    rolling_starts = int(stats.get('rolling_starts', 0))
+    rolling_era    = float(stats.get('rolling_era', era))
+
     return {
-        'k_pct':       float(np.clip(k_pct, 0.10, 0.45)),
-        'bb_pct':      float(np.clip(bb_pct, 0.03, 0.18)),
-        'hr_pct':      float(np.clip(hr_pct, 0.01, 0.07)),
-        'single_pct':  float(np.clip(single_pct, 0.06, 0.22)),
-        'double_pct':  float(np.clip(double_pct, 0.01, 0.08)),
-        'triple_pct':  float(np.clip(triple_pct, 0.001, 0.01)),
-        'xwoba':       LEAGUE_XWOBA,
-        'barrel_rate': 0.08,
-        'hard_hit':    0.35,
-        'gb_pct':      0.43,
-        'fb_pct':      0.35,
-        'whiff_pct':   float(np.clip(k_pct * 0.9, 0.15, 0.40)),
-        'ff_speed':    92.0,
-        'ip_per_game': ip_per_game,
-        'pitch_hand':  'R',
-        'xfip_proxy':  float(np.clip(xfip_proxy, 2.0, 6.5)),
+        'k_pct':         float(np.clip(k_pct, 0.10, 0.45)),
+        'bb_pct':        float(np.clip(bb_pct, 0.03, 0.18)),
+        'hr_pct':        hr_pct,
+        'single_pct':    float(np.clip(single_pct, 0.06, 0.22)),
+        'double_pct':    float(np.clip(double_pct, 0.01, 0.08)),
+        'triple_pct':    float(np.clip(triple_pct, 0.001, 0.01)),
+        'xwoba':         LEAGUE_XWOBA,
+        'barrel_rate':   0.08,
+        'hard_hit':      0.35,
+        'gb_pct':        0.43,
+        'fb_pct':        0.35,
+        'whiff_pct':     whiff_pct,
+        'ff_speed':      92.0,
+        'ip_per_game':   ip_per_game,
+        'pitch_hand':    pitch_hand,
+        'xfip_proxy':    xfip_val,
+        # Diagnostic fields for logging
+        'fip':           fip_val,
+        'xfip_real':     xfip_val,
+        'fip_minus':     fip_minus,
+        'era_minus':     era_minus,
+        'rolling_starts': rolling_starts,
+        'rolling_era':   rolling_era,
     }
 
 def _default_bullpen() -> dict:
@@ -1109,6 +1192,41 @@ def project_game(
     away_lineup = [away_lineup_feat] * 9
     home_lineup = [home_lineup_feat] * 9
     bullpen = _default_bullpen()
+
+    # Step 1: Deep diagnostic logging for pitcher features
+    logger.step("Step 1b: Pitcher Feature Diagnostics")
+    logger.state(
+        f"Away SP features: hand={away_sp_feat['pitch_hand']} "
+        f"xFIP={away_sp_feat['xfip_proxy']:.2f} FIP={away_sp_feat.get('fip', 'n/a')} "
+        f"k_pct={away_sp_feat['k_pct']:.4f} bb_pct={away_sp_feat['bb_pct']:.4f} "
+        f"hr_pct={away_sp_feat['hr_pct']:.4f} whiff={away_sp_feat['whiff_pct']:.4f} "
+        f"ip/g={away_sp_feat['ip_per_game']:.2f} "
+        f"rolling_starts={away_sp_feat.get('rolling_starts', 0)} "
+        f"rolling_era={away_sp_feat.get('rolling_era', 'n/a')} "
+        f"fip_minus={away_sp_feat.get('fip_minus', 100):.1f} era_minus={away_sp_feat.get('era_minus', 100):.1f}"
+    )
+    logger.state(
+        f"Home SP features: hand={home_sp_feat['pitch_hand']} "
+        f"xFIP={home_sp_feat['xfip_proxy']:.2f} FIP={home_sp_feat.get('fip', 'n/a')} "
+        f"k_pct={home_sp_feat['k_pct']:.4f} bb_pct={home_sp_feat['bb_pct']:.4f} "
+        f"hr_pct={home_sp_feat['hr_pct']:.4f} whiff={home_sp_feat['whiff_pct']:.4f} "
+        f"ip/g={home_sp_feat['ip_per_game']:.2f} "
+        f"rolling_starts={home_sp_feat.get('rolling_starts', 0)} "
+        f"rolling_era={home_sp_feat.get('rolling_era', 'n/a')} "
+        f"fip_minus={home_sp_feat.get('fip_minus', 100):.1f} era_minus={home_sp_feat.get('era_minus', 100):.1f}"
+    )
+    logger.state(
+        f"Away batting (vs {home_sp_feat['pitch_hand']}P): "
+        f"k_pct={away_lineup_feat['k_pct']:.4f} bb_pct={away_lineup_feat['bb_pct']:.4f} "
+        f"hr_pct={away_lineup_feat['hr_pct']:.4f} wOBA={away_lineup_feat.get('woba', LEAGUE_WOBA):.3f} "
+        f"split={'YES' if away_team_stats.get('split_hand') is not None else 'season'}"
+    )
+    logger.state(
+        f"Home batting (vs {away_sp_feat['pitch_hand']}P): "
+        f"k_pct={home_lineup_feat['k_pct']:.4f} bb_pct={home_lineup_feat['bb_pct']:.4f} "
+        f"hr_pct={home_lineup_feat['hr_pct']:.4f} wOBA={home_lineup_feat.get('woba', LEAGUE_WOBA):.3f} "
+        f"split={'YES' if home_team_stats.get('split_hand') is not None else 'season'}"
+    )
 
     # Step 1: Build game states
     gs_builder = GameStateBuilder()

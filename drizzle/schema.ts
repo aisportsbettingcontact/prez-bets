@@ -736,6 +736,18 @@ export const mlbPitcherStats = mysqlTable("mlb_pitcher_stats", {
   gamesPlayed: int("gamesPlayed"),
   /** xERA proxy (if available, else null) */
   xera: double("xera"),
+  /** FIP (Fielding Independent Pitching) from MLB sabermetrics endpoint */
+  fip: double("fip"),
+  /** xFIP (Expected FIP, normalizes HR/FB rate) from MLB sabermetrics endpoint */
+  xfip: double("xfip"),
+  /** FIP- (FIP relative to league average, 100=avg, lower=better) */
+  fipMinus: double("fipMinus"),
+  /** ERA- (ERA relative to league average, 100=avg, lower=better) */
+  eraMinus: double("eraMinus"),
+  /** Pitcher WAR from MLB sabermetrics endpoint */
+  war: double("war"),
+  /** Pitcher throwing hand: 'R' = right, 'L' = left, 'S' = switch */
+  throwsHand: varchar("throwsHand", { length: 1 }),
   /** UTC timestamp (ms) when stats were last fetched */
   lastFetchedAt: bigint("lastFetchedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -748,3 +760,132 @@ export const mlbPitcherStats = mysqlTable("mlb_pitcher_stats", {
 }));
 export type MlbPitcherStatRow = typeof mlbPitcherStats.$inferSelect;
 export type InsertMlbPitcherStat = typeof mlbPitcherStats.$inferInsert;
+
+// ─── MLB Team Batting Splits (vs LHP / vs RHP) ───────────────────────────────
+/**
+ * One row per (teamAbbrev, hand) where hand ∈ {'L','R'}.
+ * Populated from MLB Stats API statSplits endpoint (sitCodes=vl,vr).
+ * Used by mlbModelRunner.ts to adjust expected run scoring based on
+ * the opposing starter's throwing hand.
+ *
+ * Key stats:
+ *   avg / obp / slg / ops — slash line vs that pitcher hand
+ *   hr9  — home runs per 9 innings (derived: HR / AB * 27)
+ *   bb9  — walks per 9 innings
+ *   k9   — strikeouts per 9 innings
+ *   woba — weighted on-base average (derived from component stats)
+ */
+export const mlbTeamBattingSplits = mysqlTable("mlb_team_batting_splits", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Team abbreviation matching TEAM_STATS_2025 keys, e.g. "NYY" */
+  teamAbbrev: varchar("teamAbbrev", { length: 8 }).notNull(),
+  /** MLB Stats API team ID, e.g. 147 for NYY */
+  mlbTeamId: int("mlbTeamId").notNull(),
+  /** Pitcher hand faced: 'L' = vs LHP, 'R' = vs RHP */
+  hand: varchar("hand", { length: 1 }).notNull(),
+  /** Batting average vs this hand */
+  avg: double("avg"),
+  /** On-base percentage vs this hand */
+  obp: double("obp"),
+  /** Slugging percentage vs this hand */
+  slg: double("slg"),
+  /** OPS vs this hand */
+  ops: double("ops"),
+  /** Home runs hit vs this hand (raw count) */
+  homeRuns: int("homeRuns"),
+  /** At-bats vs this hand (raw count) */
+  atBats: int("atBats"),
+  /** Walks vs this hand (raw count) */
+  baseOnBalls: int("baseOnBalls"),
+  /** Strikeouts vs this hand (raw count) */
+  strikeOuts: int("strikeOuts"),
+  /** Hits vs this hand (raw count) */
+  hits: int("hits"),
+  /** Games played vs this hand */
+  gamesPlayed: int("gamesPlayed"),
+  /** Derived: HR per 9 innings = HR / AB * 27 */
+  hr9: double("hr9"),
+  /** Derived: BB per 9 innings = BB / AB * 27 */
+  bb9: double("bb9"),
+  /** Derived: K per 9 innings = K / AB * 27 */
+  k9: double("k9"),
+  /** Derived: wOBA approximation = (0.69*BB + 0.888*1B + 1.271*2B + 1.616*3B + 2.101*HR) / (AB+BB) */
+  woba: double("woba"),
+  /** UTC timestamp (ms) when stats were last fetched */
+  lastFetchedAt: bigint("lastFetchedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  /** Upsert key: one row per team per pitcher hand */
+  uqTeamHand: uniqueIndex("uq_team_batting_hand").on(t.teamAbbrev, t.hand),
+  /** Index for fast team lookup */
+  idxTeamAbbrev: index("idx_batting_splits_team").on(t.teamAbbrev),
+}));
+export type MlbTeamBattingSplitRow = typeof mlbTeamBattingSplits.$inferSelect;
+export type InsertMlbTeamBattingSplit = typeof mlbTeamBattingSplits.$inferInsert;
+
+// ─── MLB Pitcher Rolling Last-5 Starts ───────────────────────────────────────
+/**
+ * One row per pitcher — rolling stats computed from their last 5 game starts.
+ * Populated from MLB Stats API gameLog endpoint, filtered to GS=true.
+ * Used by mlbModelRunner.ts to weight recent form (hot/cold starter signal).
+ *
+ * All per-9-inning rates are computed from the rolling 5-game window:
+ *   era5   — earned run average over last 5 starts
+ *   k9_5   — strikeouts per 9
+ *   bb9_5  — walks per 9
+ *   hr9_5  — home runs per 9
+ *   whip5  — WHIP over last 5 starts
+ *   ip5    — total innings pitched in last 5 starts
+ *   fip5   — FIP computed from last 5 starts (3*BB + 13*HR - 2*K) / IP + constant
+ */
+export const mlbPitcherRolling5 = mysqlTable("mlb_pitcher_rolling5", {
+  id: int("id").autoincrement().primaryKey(),
+  /** MLB Stats API player ID */
+  mlbamId: int("mlbamId").notNull(),
+  /** Full name for debugging */
+  fullName: varchar("fullName", { length: 128 }).notNull(),
+  /** Team abbreviation */
+  teamAbbrev: varchar("teamAbbrev", { length: 8 }).notNull(),
+  /** Number of starts included in this rolling window (≤5, may be <5 early in season) */
+  startsIncluded: int("startsIncluded").notNull(),
+  /** Total innings pitched across the window */
+  ip5: double("ip5"),
+  /** Total earned runs across the window */
+  er5: int("er5"),
+  /** Total hits across the window */
+  h5: int("h5"),
+  /** Total walks across the window */
+  bb5: int("bb5"),
+  /** Total strikeouts across the window */
+  k5: int("k5"),
+  /** Total home runs across the window */
+  hr5: int("hr5"),
+  /** Derived: ERA over last 5 starts = ER5 / IP5 * 9 */
+  era5: double("era5"),
+  /** Derived: K/9 over last 5 starts */
+  k9_5: double("k9_5"),
+  /** Derived: BB/9 over last 5 starts */
+  bb9_5: double("bb9_5"),
+  /** Derived: HR/9 over last 5 starts */
+  hr9_5: double("hr9_5"),
+  /** Derived: WHIP over last 5 starts = (H5 + BB5) / IP5 */
+  whip5: double("whip5"),
+  /** Derived: FIP over last 5 starts = (13*HR + 3*BB - 2*K) / IP + 3.10 */
+  fip5: double("fip5"),
+  /** ISO date of the most recent start included, e.g. "2025-09-28" */
+  lastStartDate: varchar("lastStartDate", { length: 10 }),
+  /** ISO date of the oldest start included in the window */
+  firstStartDate: varchar("firstStartDate", { length: 10 }),
+  /** UTC timestamp (ms) when this row was last computed */
+  lastFetchedAt: bigint("lastFetchedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  /** Upsert key: one row per pitcher */
+  uqPitcherRolling: uniqueIndex("uq_pitcher_rolling5").on(t.mlbamId),
+  /** Name lookup */
+  idxRollingName: index("idx_rolling5_name").on(t.fullName),
+}));
+export type MlbPitcherRolling5Row = typeof mlbPitcherRolling5.$inferSelect;
+export type InsertMlbPitcherRolling5 = typeof mlbPitcherRolling5.$inferInsert;
