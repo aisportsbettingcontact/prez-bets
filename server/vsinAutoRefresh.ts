@@ -1752,9 +1752,33 @@ export function startVsinAutoRefresh() {
     void runMlbCycle();
   }, MLB_INTERVAL_MS);
 
+  // ─── Daily pitcher stats refresh ────────────────────────────────────────────
+  // Refreshes 2025 MLB pitcher stats from MLB Stats API once per day at startup
+  // and then every 24 hours. Ensures new starters and updated season stats are
+  // always available for the MLB model engine (zero default-stat fallbacks).
+  const runPitcherStatsRefresh = async () => {
+    try {
+      const { seedPitcherStats } = await import("./seedPitcherStats");
+      const result = await seedPitcherStats();
+      console.log(
+        `[PitcherStats] Daily refresh: total=${result.total} inserted=${result.inserted} ` +
+        `updated=${result.updated} errors=${result.errors}`
+      );
+    } catch (err) {
+      console.warn("[PitcherStats] Daily refresh failed (non-fatal):", err);
+    }
+  };
+  // Fire once on startup
+  void runPitcherStatsRefresh();
+  // Then refresh every 24 hours
+  setInterval(() => {
+    void runPitcherStatsRefresh();
+  }, 24 * 60 * 60 * 1000);
+
   console.log(
     "[VSiNAutoRefresh] Scheduler started \u2014 " +
     "ALL SPORTS (NCAAM/NBA/NHL/MLB): every 10 min (14:01\u201304:59 UTC / 6:01 AM\u201311:59 PM EST) | " +
-    "Score refresh: every 15 sec (NCAAM/NBA/NHL) | MLB: every 10 min (scores + splits + AN odds)"
+    "Score refresh: every 15 sec (NCAAM/NBA/NHL) | MLB: every 10 min (scores + splits + AN odds) | " +
+    "Pitcher stats: daily refresh"
   );
 }

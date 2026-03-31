@@ -23,7 +23,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "./db";
-import { games } from "../drizzle/schema";
+import { games, mlbPitcherStats } from "../drizzle/schema";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -262,17 +262,189 @@ function fmtMl(val: number): string {
   return rounded >= 0 ? `+${rounded}` : `${rounded}`;
 }
 
-function getPitcherStats(pitcherName: string, teamAbbrev: string): Record<string, number> {
-  const key = `${pitcherName} (${teamAbbrev})`;
-  if (PITCHER_REGISTRY[key]) {
-    return PITCHER_REGISTRY[key];
+/**
+ * Compute per-team SP averages from all rows in the DB for a given team.
+ * Used as fallback when a specific pitcher is not found in the DB.
+ * IP-weighted average for ERA, K/9, BB/9, HR/9, WHIP.
+ */
+function computeTeamSpAverage(
+  teamAbbrev: string,
+  allRows: Array<{
+    teamAbbrev: string;
+    era: number | null;
+    k9: number | null;
+    bb9: number | null;
+    hr9: number | null;
+    whip: number | null;
+    ip: number | null;
+    gamesStarted: number | null;
+    xera: number | null;
+  }>
+): Record<string, number> {
+  const teamRows = allRows.filter(
+    r => r.teamAbbrev.toUpperCase() === teamAbbrev.toUpperCase() &&
+         r.gamesStarted !== null && (r.gamesStarted ?? 0) >= 1
+  );
+
+  if (teamRows.length === 0) {
+    // No team data at all — use league-average defaults
+    return { ...DEFAULT_PITCHER_STATS };
   }
-  // Try without team suffix
-  for (const [k, v] of Object.entries(PITCHER_REGISTRY)) {
-    if (k.startsWith(pitcherName)) return v;
+
+  // IP-weighted average for rate stats
+  let totalIP = 0;
+  let sumEra = 0, sumK9 = 0, sumBb9 = 0, sumHr9 = 0, sumWhip = 0, sumXera = 0;
+  let countXera = 0;
+
+  for (const r of teamRows) {
+    const ip = r.ip ?? 0;
+    totalIP += ip;
+    sumEra  += (r.era  ?? DEFAULT_PITCHER_STATS.era)  * ip;
+    sumK9   += (r.k9   ?? DEFAULT_PITCHER_STATS.k9)   * ip;
+    sumBb9  += (r.bb9  ?? DEFAULT_PITCHER_STATS.bb9)  * ip;
+    sumHr9  += (r.hr9  ?? DEFAULT_PITCHER_STATS.hr9)  * ip;
+    sumWhip += (r.whip ?? DEFAULT_PITCHER_STATS.whip) * ip;
+    if (r.xera !== null) {
+      sumXera += r.xera * ip;
+      countXera++;
+    }
   }
-  console.warn(`[MLBModelRunner] ⚠ Unknown pitcher "${key}" — using default stats`);
-  return { ...DEFAULT_PITCHER_STATS };
+
+  if (totalIP === 0) return { ...DEFAULT_PITCHER_STATS };
+
+  return {
+    era:  sumEra  / totalIP,
+    k9:   sumK9   / totalIP,
+    bb9:  sumBb9  / totalIP,
+    hr9:  sumHr9  / totalIP,
+    whip: sumWhip / totalIP,
+    ip:   totalIP / teamRows.length, // avg IP per pitcher on team
+    gp:   teamRows.reduce((s, r) => s + (r.gamesStarted ?? 0), 0) / teamRows.length,
+    xera: countXera > 0 ? sumXera / (countXera * (totalIP / teamRows.length)) : DEFAULT_PITCHER_STATS.xera,
+  };
+}
+
+/**
+ * Batch-fetch pitcher stats from mlb_pitcher_stats table for all pitchers in a game set.
+ * Returns a Map keyed by "name|teamAbbrev".
+ *
+ * Fallback priority:
+ *   1. Exact DB match: name + team
+ *   2. DB match: name only (handles team transfers)
+ *   3. Legacy PITCHER_REGISTRY: name + team
+ *   4. Legacy PITCHER_REGISTRY: name prefix
+ *   5. Team SP average (computed from all starters for that team in DB)
+ *
+ * @param pitcherNames - Array of { name, teamAbbrev } pairs
+ * @param dbInstance   - Drizzle DB instance (already resolved)
+ */
+async function batchFetchPitcherStats(
+  pitcherNames: Array<{ name: string; teamAbbrev: string }>,
+  dbInstance: Awaited<ReturnType<typeof getDb>>
+): Promise<Map<string, Record<string, number>>> {
+  const result = new Map<string, Record<string, number>>();
+  if (!dbInstance || pitcherNames.length === 0) return result;
+
+  // Single DB round-trip: fetch all pitcher stats (~350 rows)
+  const allRows = await dbInstance
+    .select({
+      fullName:     mlbPitcherStats.fullName,
+      teamAbbrev:   mlbPitcherStats.teamAbbrev,
+      era:          mlbPitcherStats.era,
+      k9:           mlbPitcherStats.k9,
+      bb9:          mlbPitcherStats.bb9,
+      hr9:          mlbPitcherStats.hr9,
+      whip:         mlbPitcherStats.whip,
+      ip:           mlbPitcherStats.ip,
+      gamesStarted: mlbPitcherStats.gamesStarted,
+      gamesPlayed:  mlbPitcherStats.gamesPlayed,
+      xera:         mlbPitcherStats.xera,
+    })
+    .from(mlbPitcherStats);
+
+  // Build name → stats lookup map
+  const dbMap = new Map<string, Record<string, number>>();
+  for (const row of allRows) {
+    const normName = row.fullName.toLowerCase().trim();
+    const stats: Record<string, number> = {
+      era:  row.era  ?? DEFAULT_PITCHER_STATS.era,
+      k9:   row.k9   ?? DEFAULT_PITCHER_STATS.k9,
+      bb9:  row.bb9  ?? DEFAULT_PITCHER_STATS.bb9,
+      hr9:  row.hr9  ?? DEFAULT_PITCHER_STATS.hr9,
+      whip: row.whip ?? DEFAULT_PITCHER_STATS.whip,
+      ip:   row.ip   ?? DEFAULT_PITCHER_STATS.ip,
+      gp:   row.gamesStarted ?? DEFAULT_PITCHER_STATS.gp,
+      xera: row.xera ?? DEFAULT_PITCHER_STATS.xera,
+    };
+    // Primary key: "name (TEAM)"
+    dbMap.set(`${normName} (${row.teamAbbrev.toUpperCase()})`, stats);
+    // Secondary key: name only (team-agnostic, first occurrence wins)
+    if (!dbMap.has(normName)) dbMap.set(normName, stats);
+  }
+
+  // Pre-compute team SP averages for all teams that appear in the request
+  const teamsNeeded = Array.from(new Set(pitcherNames.map(p => p.teamAbbrev.toUpperCase())));
+  const teamAvgCache = new Map<string, Record<string, number>>();
+  for (const team of teamsNeeded) {
+    teamAvgCache.set(team, computeTeamSpAverage(team, allRows));
+  }
+
+  // Resolve each requested pitcher
+  for (const { name, teamAbbrev } of pitcherNames) {
+    const normName = name.toLowerCase().trim();
+    const teamKey = `${normName} (${teamAbbrev.toUpperCase()})`;
+
+    let stats: Record<string, number> | undefined;
+    let source = '';
+
+    // 1. Exact DB match: name + team
+    if (dbMap.has(teamKey)) {
+      stats = dbMap.get(teamKey)!;
+      source = 'DB (exact)';
+    }
+    // 2. DB match: name only (handles team transfers mid-season)
+    else if (dbMap.has(normName)) {
+      stats = dbMap.get(normName)!;
+      source = 'DB (name-only)';
+    }
+    // 3. Legacy PITCHER_REGISTRY: name + team
+    else {
+      const legacyKey = `${name} (${teamAbbrev})`;
+      if (PITCHER_REGISTRY[legacyKey]) {
+        stats = PITCHER_REGISTRY[legacyKey];
+        source = 'Registry (exact)';
+      } else {
+        // 4. Legacy PITCHER_REGISTRY: name prefix
+        for (const [k, v] of Object.entries(PITCHER_REGISTRY)) {
+          if (k.startsWith(name)) {
+            stats = v;
+            source = 'Registry (prefix)';
+            break;
+          }
+        }
+      }
+    }
+
+    // 5. Team SP average fallback — no league-average defaults
+    if (!stats) {
+      const teamAvg = teamAvgCache.get(teamAbbrev.toUpperCase());
+      if (teamAvg) {
+        stats = teamAvg;
+        source = `Team SP avg (${teamAbbrev})`;
+        console.log(`[MLBModelRunner] ↩ Team SP avg fallback: "${name}" (${teamAbbrev})`);
+      } else {
+        stats = { ...DEFAULT_PITCHER_STATS };
+        source = 'league-avg default';
+        console.warn(`[MLBModelRunner] ⚠ No team data for "${name}" (${teamAbbrev}) — using league-avg defaults`);
+      }
+    } else {
+      console.log(`[MLBModelRunner] ✓ ${source}: "${name}" (${teamAbbrev})`);
+    }
+
+    result.set(`${name}|${teamAbbrev}`, stats);
+  }
+
+  return result;
 }
 
 function getTeamStats(abbrev: string): Record<string, number> {
@@ -529,7 +701,15 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
     return { date: dateStr, total: dbGames.length, written: 0, skipped: dbGames.length, errors: 0, validation: { passed: true, issues: [], warnings: [] } };
   }
 
-  // ── Step 3: Build engine inputs ─────────────────────────────────────────────
+  // ── Step 3: Batch-fetch pitcher stats from DB, then build engine inputs ────────
+  // Collect all unique pitcher/team pairs for a single DB round-trip
+  const pitcherPairs: Array<{ name: string; teamAbbrev: string }> = [];
+  for (const g of modelable) {
+    pitcherPairs.push({ name: g.awayStartingPitcher!, teamAbbrev: g.awayTeam! });
+    pitcherPairs.push({ name: g.homeStartingPitcher!, teamAbbrev: g.homeTeam! });
+  }
+  const pitcherStatsMap = await batchFetchPitcherStats(pitcherPairs, db);
+
   const engineInputs: EngineInput[] = modelable.map((g: typeof dbGames[0]) => {
     const awayAbbrev = g.awayTeam!;
     const homeAbbrev = g.homeTeam!;
@@ -570,8 +750,8 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
       home_pitcher_name:  homePitcher,
       away_team_stats:    getTeamStats(awayAbbrev),
       home_team_stats:    getTeamStats(homeAbbrev),
-      away_pitcher_stats: getPitcherStats(awayPitcher, awayAbbrev),
-      home_pitcher_stats: getPitcherStats(homePitcher, homeAbbrev),
+      away_pitcher_stats: pitcherStatsMap.get(`${awayPitcher}|${awayAbbrev}`) ?? { ...DEFAULT_PITCHER_STATS },
+      home_pitcher_stats: pitcherStatsMap.get(`${homePitcher}|${homeAbbrev}`) ?? { ...DEFAULT_PITCHER_STATS },
       book_lines:         bookLines,
       game_date:          dateStr,
     };

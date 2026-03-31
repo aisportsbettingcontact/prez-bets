@@ -2,6 +2,8 @@ import {
   bigint,
   boolean,
   decimal,
+  double,
+  index,
   int,
   mysqlEnum,
   mysqlTable,
@@ -701,3 +703,48 @@ export const mlbStrikeoutProps = mysqlTable("mlb_strikeout_props", {
 }));
 export type MlbStrikeoutPropRow = typeof mlbStrikeoutProps.$inferSelect;
 export type InsertMlbStrikeoutProp = typeof mlbStrikeoutProps.$inferInsert;
+
+// ─── MLB Pitcher Season Stats ─────────────────────────────────────────────────
+/**
+ * One row per pitcher (upserted by mlbamId + teamAbbrev).
+ * Populated from MLB Stats API 2025 season stats.
+ * Used by mlbModelRunner.ts to feed real stats into the engine.
+ */
+export const mlbPitcherStats = mysqlTable("mlb_pitcher_stats", {
+  id: int("id").autoincrement().primaryKey(),
+  /** MLB Stats API player ID */
+  mlbamId: int("mlbamId").notNull(),
+  /** Full name exactly as returned by MLB Stats API, e.g. "Gerrit Cole" */
+  fullName: varchar("fullName", { length: 128 }).notNull(),
+  /** Team abbreviation matching mlbModelRunner TEAM_STATS_2025 keys, e.g. "NYY" */
+  teamAbbrev: varchar("teamAbbrev", { length: 8 }).notNull(),
+  /** ERA (float) */
+  era: double("era"),
+  /** Strikeouts per 9 innings */
+  k9: double("k9"),
+  /** Walks per 9 innings */
+  bb9: double("bb9"),
+  /** Home runs per 9 innings */
+  hr9: double("hr9"),
+  /** WHIP */
+  whip: double("whip"),
+  /** Innings pitched (float, e.g. 162.1) */
+  ip: double("ip"),
+  /** Games started */
+  gamesStarted: int("gamesStarted"),
+  /** Games played */
+  gamesPlayed: int("gamesPlayed"),
+  /** xERA proxy (if available, else null) */
+  xera: double("xera"),
+  /** UTC timestamp (ms) when stats were last fetched */
+  lastFetchedAt: bigint("lastFetchedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  /** Upsert key: one row per pitcher per team */
+  uqPitcherTeam: uniqueIndex("uq_pitcher_team").on(t.mlbamId, t.teamAbbrev),
+  /** Name lookup index */
+  idxFullName: index("idx_pitcher_full_name").on(t.fullName),
+}));
+export type MlbPitcherStatRow = typeof mlbPitcherStats.$inferSelect;
+export type InsertMlbPitcherStat = typeof mlbPitcherStats.$inferInsert;
