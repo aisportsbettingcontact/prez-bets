@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
-import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, appUsers as appUsersTable, oddsHistory, mlbLineups, mlbStrikeoutProps, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow, type MlbLineupRow, type InsertMlbLineup, type MlbStrikeoutPropRow, type InsertMlbStrikeoutProp } from "../drizzle/schema";
+import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, mlbTeams, appUsers as appUsersTable, oddsHistory, mlbLineups, mlbStrikeoutProps, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow, type MlbLineupRow, type InsertMlbLineup, type MlbStrikeoutPropRow, type InsertMlbStrikeoutProp } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -730,6 +730,18 @@ export async function getTeamColors(dbSlug: string, sport: string): Promise<Team
       })
       .from(nhlTeams)
       .where(eq(nhlTeams.dbSlug, dbSlug))
+      .limit(1);
+    return rows[0] ?? null;
+  } else if (sport === "MLB") {
+    const rows = await db
+      .select({
+        primaryColor: mlbTeams.primaryColor,
+        secondaryColor: mlbTeams.secondaryColor,
+        tertiaryColor: mlbTeams.tertiaryColor,
+        abbrev: mlbTeams.abbrev,
+      })
+      .from(mlbTeams)
+      .where(eq(mlbTeams.dbSlug, dbSlug))
       .limit(1);
     return rows[0] ?? null;
   } else {

@@ -320,6 +320,60 @@ export async function scrapeVsinBettingSplits(
 }
 
 /**
+ * Scrapes VSiN betting splits for BOTH today (front) and tomorrow in one call.
+ *
+ * VSiN's "front" view flips to the next calendar day after midnight UTC,
+ * creating a gap window where neither today nor tomorrow is fully covered.
+ * Fetching both views and deduplicating by gameId ensures 100% coverage.
+ *
+ * @param filterSport - Optional: only return games for this sport
+ * @returns Deduplicated array of VsinSplitsGame objects (front takes priority over tomorrow)
+ */
+export async function scrapeVsinBettingSplitsBothDays(
+  filterSport?: VsinSplitsSport
+): Promise<VsinSplitsGame[]> {
+  const logTag = `[VSiNSplits][both${filterSport ? `/${filterSport}` : ""}]`;
+  console.log(`${logTag} Fetching front + tomorrow splits...`);
+  const startTime = Date.now();
+
+  // Fetch both views in parallel for speed
+  const [frontResults, tomorrowResults] = await Promise.allSettled([
+    scrapeVsinBettingSplits("front", filterSport),
+    scrapeVsinBettingSplits("tomorrow", filterSport),
+  ]);
+
+  const front = frontResults.status === "fulfilled" ? frontResults.value : [];
+  const tomorrow = tomorrowResults.status === "fulfilled" ? tomorrowResults.value : [];
+
+  if (frontResults.status === "rejected") {
+    console.warn(`${logTag} front fetch failed:`, frontResults.reason);
+  }
+  if (tomorrowResults.status === "rejected") {
+    console.warn(`${logTag} tomorrow fetch failed:`, tomorrowResults.reason);
+  }
+
+  // Deduplicate: front takes priority; tomorrow fills in games not on front
+  const seen = new Set<string>();
+  const merged: VsinSplitsGame[] = [];
+
+  for (const g of front) {
+    seen.add(g.gameId);
+    merged.push(g);
+  }
+  for (const g of tomorrow) {
+    if (!seen.has(g.gameId)) {
+      seen.add(g.gameId);
+      merged.push(g);
+    }
+  }
+
+  console.log(
+    `${logTag} ✅ DONE — front=${front.length} tomorrow=${tomorrow.length} merged=${merged.length} in ${Date.now() - startTime}ms`
+  );
+  return merged;
+}
+
+/**
  * Scrapes VSiN MLB betting splits specifically.
  *
  * Previously used a dedicated MLB URL (https://data.vsin.com/mlb/betting-splits/)
@@ -335,7 +389,7 @@ export async function scrapeVsinMlbBettingSplits(): Promise<VsinSplitsGame[]> {
 
   // Use the unified page with MLB filter — the old /mlb/betting-splits/ URL
   // redirects to /betting-splits/?source=DK&sport=MLB which is the same page
-  const results = await scrapeVsinBettingSplits("front", "MLB");
+  const results = await scrapeVsinBettingSplitsBothDays("MLB");
 
   console.log(
     `${logTag} ✅ DONE — ${results.length} MLB games parsed in ${Date.now() - startTime}ms`
