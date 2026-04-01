@@ -1,0 +1,1115 @@
+/**
+ * ModelProjections page
+ *
+ * Shows matchup/score + ODDS/LINES for every game.
+ * Betting Splits are intentionally hidden — use the Betting Splits page for those.
+ */
+
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useLocation } from "wouter";
+import { User, LogOut, BarChart3, Loader2, Crown, Send, Search, X, Star } from "lucide-react";
+import { CalendarPicker, todayUTC } from "@/components/CalendarPicker";
+import { AnimatePresence, motion } from "framer-motion";
+
+// CDN icon URLs
+const CDN_TEST_TUBE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/icon-test-tube_0cb720ac.png";
+const CDN_MONEY_BAG = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/icon-money-bag_b9c73c5d.png";
+const CDN_MARCH_MADNESS = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/icon-march-madness_ecd8f481.png";
+const CDN_NBA = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/icon-nba_3fa4f508.png";
+import { VirtualizedGameList } from "@/components/VirtualizedGameList";
+import MarchMadnessBracket from "@/pages/MarchMadnessBracket";
+import { AgeModal } from "@/components/AgeModal";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useAppAuth } from "@/_core/hooks/useAppAuth";
+import { getTeamByDbSlug } from "@shared/ncaamTeams";
+import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
+import { Link } from "wouter";
+import { useMobileDebug } from "@/hooks/useMobileDebug";
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatMilitaryTime(time: string | null | undefined): string {
+  if (!time) return "TBD";
+  const upper = time.trim().toUpperCase();
+  if (upper === "TBD" || upper === "TBA" || upper === "") return "TBD";
+  const [hStr, mStr] = time.split(":");
+  const h = parseInt(hStr ?? "0", 10);
+  const m = parseInt(mStr ?? "0", 10);
+  if (isNaN(h) || isNaN(m)) return "TBD";
+  const suffix = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, "0")} ${suffix} ET`;
+}
+
+function timeToMinutes(time: string | null | undefined): number {
+  if (!time || time.toUpperCase() === "TBD" || time.toUpperCase() === "TBA") return 9999;
+  const [hStr, mStr] = time.split(":");
+  const h = parseInt(hStr ?? "0", 10);
+  const m = parseInt(mStr ?? "0", 10);
+  if (isNaN(h) || isNaN(m)) return 9999;
+  return h * 60 + m;
+}
+
+/** Games starting at midnight (00:00 ET) are stored under their correct calendar
+ * date by the backend. No frontend date adjustment needed. */
+function effectiveGameDate(gameDate: string, _startTimeEst: string | null | undefined): string {
+  return gameDate;
+}
+
+/** Sort key: midnight (00:00) sorts first (beginning of day = 0 minutes) */
+function sortableMinutes(time: string | null | undefined): number {
+  return timeToMinutes(time);
+}
+
+function formatDateHeader(dateStr: string): string {
+  try {
+    const d = new Date(dateStr + "T00:00:00");
+    return d.toLocaleDateString("en-US", {
+      weekday: "long", month: "long", day: "numeric", year: "numeric",
+    });
+  } catch { return dateStr; }
+}
+
+function formatDateShort(dateStr: string): string {
+  try {
+    const d = new Date(dateStr + "T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch { return dateStr; }
+}
+
+/**
+ * Returns true if a favorited game with the given gameDate has NOT yet expired.
+ * A favorited game expires at 11:00 UTC on the calendar day AFTER the game date.
+ * e.g. game on 2026-03-08 → expires at 2026-03-09T11:00:00Z
+ */
+function isFavoriteStillActive(gameDate: string): boolean {
+  if (!gameDate) return false;
+  // Parse game date as YYYY-MM-DD, advance by 1 day, set to 11:00 UTC
+  const [year, month, day] = gameDate.split("-").map(Number);
+  if (!year || !month || !day) return false;
+  const expiryUtc = Date.UTC(year, month - 1, day + 1, 11, 0, 0, 0);
+  return Date.now() < expiryUtc;
+}
+
+// ─── Team Logo Badge ──────────────────────────────────────────────────────────
+function TeamBadge({ slug, size = 22 }: { slug: string; size?: number }) {
+  const ncaa = getTeamByDbSlug(slug);
+  const nba = !ncaa ? getNbaTeamByDbSlug(slug) : null;
+  const logo = ncaa?.logoUrl ?? nba?.logoUrl;
+  const initials = (ncaa?.ncaaName ?? nba?.name ?? slug.replace(/_/g, " ")).slice(0, 2).toUpperCase();
+  return (
+    <div
+      className="rounded overflow-hidden bg-secondary flex items-center justify-center flex-shrink-0"
+      style={{ width: size, height: size }}
+    >
+      {logo ? (
+        <img src={logo} alt={initials} className="w-full h-full object-contain" />
+      ) : (
+        <span style={{ fontSize: 7 }} className="font-bold text-muted-foreground">{initials}</span>
+      )}
+    </div>
+  );
+}
+
+// ─── Search Result Row ────────────────────────────────────────────────────────
+type GameRow = { id: number; awayTeam: string; homeTeam: string; gameDate: string; startTimeEst: string | null; awayBookSpread?: string | null };
+
+function SearchResultRow({ game, onClick }: { game: GameRow; onClick: () => void }) {
+  const awayNcaa = getTeamByDbSlug(game.awayTeam);
+  const homeNcaa = getTeamByDbSlug(game.homeTeam);
+  const awayNba = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
+  const homeNba = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
+  const awaySchool = awayNcaa?.ncaaName ?? awayNba?.city ?? game.awayTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const awayNick = awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? "";
+  const homeSchool = homeNcaa?.ncaaName ?? homeNba?.city ?? game.homeTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const homeNick = homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? "";
+  const time = formatMilitaryTime(game.startTimeEst);
+  const dateShort = formatDateShort(game.gameDate);
+
+  return (
+    <button
+      onClick={onClick}
+      className="w-full hover:bg-white/5 active:bg-white/10 transition-colors text-left border-b border-white/8 last:border-0"
+    >
+      <div className="flex items-center px-3 py-2.5 gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2" style={{ flex: "1 1 0", minWidth: 0, overflow: "hidden" }}>
+          <TeamBadge slug={game.awayTeam} size={22} />
+          <div className="flex flex-col" style={{ minWidth: 0, overflow: "hidden" }}>
+            <span className="font-bold text-white leading-tight sm:text-[12px]" style={{ fontSize: "clamp(9px, 2.6vw, 12px)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{awaySchool}</span>
+            {awayNick && <span className="font-normal text-gray-400 leading-tight sm:text-[10px]" style={{ fontSize: "clamp(8px, 2.2vw, 10px)", whiteSpace: "nowrap", display: "block" }}>{awayNick}</span>}
+          </div>
+        </div>
+        <div className="flex flex-col items-center flex-shrink-0" style={{ minWidth: 66 }}>
+          <span className="text-[11px] text-gray-500 font-medium leading-tight">@</span>
+          <span className="text-[9px] text-gray-500 leading-tight text-center whitespace-nowrap mt-0.5">{dateShort}</span>
+          <span className="text-[9px] text-gray-500 leading-tight text-center whitespace-nowrap">{time}</span>
+        </div>
+        <div className="flex items-center gap-1.5 sm:gap-2 justify-end" style={{ flex: "1 1 0", minWidth: 0, overflow: "hidden" }}>
+          <div className="flex flex-col items-end" style={{ minWidth: 0, overflow: "hidden" }}>
+            <span className="font-bold text-white leading-tight sm:text-[12px]" style={{ fontSize: "clamp(9px, 2.6vw, 12px)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{homeSchool}</span>
+            {homeNick && <span className="font-normal text-gray-400 leading-tight sm:text-[10px]" style={{ fontSize: "clamp(8px, 2.2vw, 10px)", whiteSpace: "nowrap", display: "block" }}>{homeNick}</span>}
+          </div>
+          <TeamBadge slug={game.homeTeam} size={22} />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ─── In-page Favorite Notification ───────────────────────────────────────────
+interface FavNotification {
+  id: number;
+  gameId: number;
+  awayTeam: string;
+  homeTeam: string;
+}
+
+function FavNotificationBanner({ notif, onDismiss }: { notif: FavNotification; onDismiss: (id: number) => void }) {
+  const awayNcaa = getTeamByDbSlug(notif.awayTeam);
+  const homeNcaa = getTeamByDbSlug(notif.homeTeam);
+  const awayNba = !awayNcaa ? getNbaTeamByDbSlug(notif.awayTeam) : null;
+  const homeNba = !homeNcaa ? getNbaTeamByDbSlug(notif.homeTeam) : null;
+  const awayName = awayNcaa?.ncaaName ?? awayNba?.city ?? notif.awayTeam.replace(/_/g, " ");
+  const homeName = homeNcaa?.ncaaName ?? homeNba?.city ?? notif.homeTeam.replace(/_/g, " ");
+
+  useEffect(() => {
+    const t = setTimeout(() => onDismiss(notif.id), 4000);
+    return () => clearTimeout(t);
+  }, [notif.id, onDismiss]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -12, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.96 }}
+      transition={{ duration: 0.2 }}
+      style={{
+        background: "rgba(10,10,10,0.97)",
+        border: "1px solid rgba(255,215,0,0.5)",
+        borderRadius: 8,
+        boxShadow: "0 4px 24px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,215,0,0.15)",
+        padding: "10px 14px",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        minWidth: 220,
+        maxWidth: 320,
+        pointerEvents: "auto",
+      }}
+    >
+      <Star className="flex-shrink-0" style={{ width: 14, height: 14, color: "#FFD700", fill: "#FFD700" }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: "#FFD700", margin: 0, lineHeight: 1.3 }}>Added to Favorites</p>
+        <p style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", margin: "2px 0 0", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {awayName} @ {homeName}
+        </p>
+      </div>
+      <button
+        onClick={() => onDismiss(notif.id)}
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(255,255,255,0.4)", flexShrink: 0 }}
+      >
+        <X style={{ width: 12, height: 12 }} />
+      </button>
+    </motion.div>
+  );
+}
+
+// ─── Stable sort helpers (defined outside component to avoid infinite useMemo loops) ───
+const parseLiveSortKey = (gameClock: string | null): [number, number] => {
+  if (!gameClock) return [-1, 9999];
+  const upper = gameClock.trim().toUpperCase();
+  if (upper === "HALF" || upper === "HALFTIME") return [2, 0];
+  const bareOtMatch = upper.match(/^(\d*)OT$/);
+  if (bareOtMatch) { const otNum = bareOtMatch[1] ? parseInt(bareOtMatch[1]) : 1; return [50 + otNum, 0]; }
+  const clockOtMatch = upper.match(/^(\d{1,2}):(\d{2})\s+(\d*)OT$/);
+  if (clockOtMatch) {
+    const mins = parseInt(clockOtMatch[1]!); const secs = parseInt(clockOtMatch[2]!);
+    const otNum = clockOtMatch[3] ? parseInt(clockOtMatch[3]) : 1;
+    return [50 + otNum, mins * 60 + secs];
+  }
+  const clockMatch = upper.match(/^(\d{1,2}):(\d{2})\s+(\d+)(ST|ND|RD|TH)?$/);
+  if (clockMatch) {
+    const mins = parseInt(clockMatch[1]!); const secs = parseInt(clockMatch[2]!);
+    const period = parseInt(clockMatch[3]!);
+    return [period, mins * 60 + secs];
+  }
+  return [-1, 9999];
+};
+
+type AnyGame = { gameStatus?: string | null; gameClock?: string | null; startTimeEst?: string | null };
+const compareGames = (a: AnyGame, b: AnyGame): number => {
+  const statusOrder = (s: string | null | undefined) => s === "live" ? 0 : s === "upcoming" ? 1 : s === "final" ? 2 : 3;
+  const sSortA = statusOrder(a?.gameStatus); const sSortB = statusOrder(b?.gameStatus);
+  if (sSortA !== sSortB) return sSortA - sSortB;
+  if (a?.gameStatus === "live" && b?.gameStatus === "live") {
+    const [periodA, clockA] = parseLiveSortKey(a?.gameClock ?? null);
+    const [periodB, clockB] = parseLiveSortKey(b?.gameClock ?? null);
+    if (periodA !== periodB) return periodB - periodA;
+    return clockA - clockB;
+  }
+  return sortableMinutes(a?.startTimeEst) - sortableMinutes(b?.startTimeEst);
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function ModelProjections() {
+  const [, setLocation] = useLocation();
+  const [showAgeModal, setShowAgeModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA" | "NHL">("NCAAM");
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<"upcoming" | "live" | "final">>(new Set());
+  const [selectedDate, setSelectedDate] = useState<string>(() => todayUTC());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(88);
+  const [showModel, setShowModel] = useState(true);
+  const toggleModel = () => setShowModel((v) => !v);
+
+  // ── Main page tab: projections | splits ───────────────────────────────────
+
+  // ── Feed-wide mobile tab filter ───────────────────────────────────────────
+  // Three tabs: MODEL PROJECTIONS (dual) | BETTING SPLITS (splits) | BRACKET (bracket, NCAAM only)
+  type FeedMobileTab = 'dual' | 'splits' | 'bracket';
+  const FEED_TAB_KEY = 'prez_bets_mobile_tab_v2';
+  const getPersistedFeedTab = (): FeedMobileTab => {
+    try {
+      const stored = localStorage.getItem(FEED_TAB_KEY);
+      if (stored === 'dual' || stored === 'splits' || stored === 'bracket') return stored;
+    } catch { /* ignore */ }
+    return 'bracket';
+  };
+  const [feedMobileTab, setFeedMobileTab] = useState<FeedMobileTab>(getPersistedFeedTab);
+  const handleFeedTabChange = (next: FeedMobileTab) => {
+    setFeedMobileTab(next);
+    try { localStorage.setItem(FEED_TAB_KEY, next); } catch { /* ignore */ }
+  };
+  const feedIsDual = feedMobileTab === 'dual';
+  // Three tabs: MODEL PROJECTIONS | BETTING SPLITS | BRACKET (NCAAM only)
+  const FEED_TABS: { id: FeedMobileTab; label: string }[] = [
+    ...(selectedSport === 'NCAAM' ? [{ id: 'bracket' as FeedMobileTab, label: 'BRACKET' }] : []),
+    { id: 'dual',   label: 'MODEL PROJECTIONS' },
+    { id: 'splits', label: 'BETTING SPLITS' },
+  ];
+
+  // ── Reset bracket tab when switching away from NCAAM ────────────────────────
+  useEffect(() => {
+    if (selectedSport !== 'NCAAM' && feedMobileTab === 'bracket') {
+      handleFeedTabChange('dual');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSport]);
+
+  // ── Favorites tab ──────────────────────────────────────────────────────────
+  const [showFavoritesTab, setShowFavoritesTab] = useState(false);
+
+  // Auto-dismiss Favorites tab when activeFavCount drops to 0 (user unfavorited all games)
+  // This runs after activeFavCount is computed (defined later via useMemo), so we use useEffect
+  // to react to its changes and return the user to the main feed automatically.
+
+  // ── In-page favorite notifications ────────────────────────────────────────
+  const [favNotifications, setFavNotifications] = useState<FavNotification[]>([]);
+  const notifCounterRef = useRef(0);
+  const dismissNotif = useCallback((id: number) => {
+    setFavNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  useEffect(() => {
+    if (!headerRef.current) return;
+    const obs = new ResizeObserver(() => {
+      setHeaderHeight(Math.ceil(headerRef.current?.getBoundingClientRect().height ?? 88));
+    });
+    obs.observe(headerRef.current);
+    setHeaderHeight(Math.ceil(headerRef.current.getBoundingClientRect().height));
+     return () => obs.disconnect();
+  }, []);
+
+  // ── Mobile debug logging ──────────────────────────────────────────────────────
+  // Logs viewport, scale, safe-area insets, header height, and feed budget
+  // on every mount and resize. No-op in production. Filter by [MobileDebug:ModelProjections]
+  useMobileDebug({
+    label: 'ModelProjections',
+    headerHeight,
+    extra: {
+      selectedSport,
+      showFavoritesTab,
+    },
+  });
+
+  const { user, isAuthenticated } = useAuth();
+  const { appUser, isOwner, loading: appAuthLoading, refetch: refetchAppUser } = useAppAuth();
+
+  useEffect(() => {
+    if (!appAuthLoading && !appUser) setLocation("/");
+  }, [appUser, appAuthLoading]);
+
+  useEffect(() => {
+    if (!appAuthLoading && appUser && !appUser.termsAccepted) setShowAgeModal(true);
+  }, [appAuthLoading, appUser]);
+
+  // ── Discord OAuth callback handler ─────────────────────────────────────────
+  // After Discord OAuth completes, the server redirects to /dashboard?discord_linked=1
+  // (or ?discord_error=<reason>). We detect these URL params, show a toast, force-
+  // refetch appUsers.me (bypassing the 5-min stale cache), and clean the URL.
+  // CHECKPOINT:DISCORD_CALLBACK_HANDLER — fires once on mount if discord_linked/error present
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const linked = params.get("discord_linked");
+    const error  = params.get("discord_error");
+
+    if (linked === "1") {
+      console.log("[CHECKPOINT:DISCORD_CALLBACK_HANDLER] discord_linked=1 detected in URL — forcing appUsers.me refetch to show connected username");
+      // Force-refetch bypasses the 5-min stale cache so the header button updates immediately
+      refetchAppUser();
+      toast.success("Discord account connected!", {
+        description: "Your Discord username will now appear in the header.",
+        duration: 5000,
+      });
+      // Clean the URL so a page refresh doesn't re-trigger the toast
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete("discord_linked");
+      window.history.replaceState({}, "", clean.pathname + (clean.search || ""));
+    } else if (error) {
+      const errorMessages: Record<string, string> = {
+        // User-facing policy errors
+        not_logged_in:       "You must be signed in to connect Discord.",
+        denied:              "Discord authorization was cancelled.",
+        already_linked:      "This Discord account is already linked to another account on this site. Each Discord account can only be connected to one account. Please use a different Discord account.",
+        // OAuth flow errors
+        invalid_request:     "Discord OAuth request was invalid. Please try again.",
+        state_mismatch:      "Discord OAuth state mismatch. Please try again.",
+        state_expired:       "Discord OAuth session expired. Please try again.",
+        token_exchange_failed: "Discord token exchange failed. Please try again.",
+        profile_fetch_failed:  "Could not fetch your Discord profile. Please try again.",
+        // Server/DB errors
+        db_unavailable:      "Database temporarily unavailable. Please try again in a moment.",
+        db_write_failed:     "Failed to save Discord connection. Please try again.",
+        server_error:        "An unexpected server error occurred. Please try again.",
+        unknown:             "An unknown error occurred. Please try again.",
+      };
+      const msg = errorMessages[error] ?? `Discord connection failed: ${error}`;
+      console.warn(`[CHECKPOINT:DISCORD_CALLBACK_HANDLER] discord_error="${error}" detected in URL — ${msg}`);
+      toast.error("Discord connection failed", { description: msg, duration: 7000 });
+      // Clean the URL
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete("discord_error");
+      window.history.replaceState({}, "", clean.pathname + (clean.search || ""));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount only
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchFocused(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const acceptTermsMutation = trpc.appUsers.acceptTerms.useMutation({
+    onSuccess: () => { refetchAppUser(); setShowAgeModal(false); },
+  });
+
+  const appLogoutMutation = trpc.appUsers.logout.useMutation({
+    onSuccess: () => { setLocation("/"); toast.success("Signed out"); },
+  });
+  const appLogout = () => appLogoutMutation.mutate();
+
+  useEffect(() => {
+    setSelectedStatuses(new Set());
+    setSelectedDate(todayUTC());
+  }, [selectedSport]);
+
+  const { data: allGames, isLoading: gamesLoading } = trpc.games.list.useQuery(
+    { sport: selectedSport },
+    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000, refetchIntervalInBackground: false }
+  );
+
+  // Cross-sport game lists for the Favorites tab (needs ALL sports regardless of selectedSport)
+  // NOTE: isAppAuthedForFav is defined below — we use a lazy ref pattern to avoid forward-ref issues.
+  // These queries are enabled after isAppAuthedForFav is computed (see below).
+  const { data: allNcaamGames } = trpc.games.list.useQuery(
+    { sport: "NCAAM" },
+    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000, refetchIntervalInBackground: false }
+  );
+  const { data: allNbaGames } = trpc.games.list.useQuery(
+    { sport: "NBA" },
+    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000, refetchIntervalInBackground: false }
+  );
+
+  const liveCount = useMemo(() =>
+    (allGames ?? []).filter(g => g?.gameStatus === "live").length,
+    [allGames]
+  );
+
+  const toggleStatus = (status: "upcoming" | "live" | "final") => {
+    setSelectedStatuses(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status); else next.add(status);
+      if (next.size === 3) return new Set();
+      return next;
+    });
+  };
+
+  // All unique dates available for the current sport (sorted ascending)
+  const allDates = useMemo(() => {
+    if (!allGames) return [];
+    const dateSet = new Set<string>();
+    for (const g of allGames) if (g) dateSet.add(effectiveGameDate(g.gameDate, g.startTimeEst));
+    return Array.from(dateSet).sort();
+  }, [allGames]);
+
+  const games = useMemo(() => {
+    if (!allGames) return allGames;
+    let working = selectedStatuses.size === 0 ? allGames : allGames.filter(g => selectedStatuses.has(g?.gameStatus as "upcoming" | "live" | "final"));
+    working = working.filter(g => g && effectiveGameDate(g.gameDate, g.startTimeEst) === selectedDate);
+    const byDate: Record<string, NonNullable<typeof allGames>[number][]> = {};
+    for (const g of working) { const d = effectiveGameDate(g!.gameDate, g!.startTimeEst); if (!byDate[d]) byDate[d] = []; byDate[d]!.push(g!); }
+    const result: NonNullable<typeof allGames>[number][] = [];
+    for (const d of Object.keys(byDate).sort()) result.push(...byDate[d]!.sort(compareGames));
+    return result;
+  }, [allGames, selectedStatuses, selectedDate]);
+
+  // ── Favorites ──────────────────────────────────────────────────────────────
+  // NOTE: enabled must use Boolean(appUser) AND !appAuthLoading — NOT isAuthenticated (Manus OAuth).
+  // Wait for appUsers.me to resolve before firing favorites queries to avoid race condition
+  // where the initial batch fires before the app_session cookie state is known.
+  // Custom-auth users always have isAuthenticated=false, so the query would never fire.
+  const isAppAuthedForFav = !appAuthLoading && Boolean(appUser);
+  const { data: favData } = trpc.favorites.getMyFavorites.useQuery(undefined, {
+    enabled: isAppAuthedForFav,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+
+  // Favorites with game dates — for the Favorites tab and 11:00 UTC expiry
+  const { data: favWithDatesData } = trpc.favorites.getMyFavoritesWithDates.useQuery(undefined, {
+    enabled: isAppAuthedForFav,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+
+  const [optimisticFavIds, setOptimisticFavIds] = useState<Set<number>>(new Set());
+  const favIds = useMemo(() => {
+    const base = new Set(favData?.favoriteGameIds ?? []);
+    Array.from(optimisticFavIds).forEach(id => {
+      if (base.has(id)) base.delete(id); else base.add(id);
+    });
+    return base;
+  }, [favData, optimisticFavIds]);
+
+  const utils = trpc.useUtils();
+  const toggleFavMutation = trpc.favorites.toggle.useMutation({
+    onSuccess: () => {
+      utils.favorites.getMyFavorites.invalidate();
+      utils.favorites.getMyFavoritesWithDates.invalidate();
+      setOptimisticFavIds(new Set());
+    },
+    onError: () => { setOptimisticFavIds(new Set()); },
+  });
+
+  const handleToggleFavorite = (gameId: number) => {
+    setOptimisticFavIds(prev => { const next = new Set(prev); if (next.has(gameId)) next.delete(gameId); else next.add(gameId); return next; });
+    toggleFavMutation.mutate({ gameId });
+  };
+
+  // Called by GameCard when user favorites (not unfavorites) a game
+  const handleFavoriteNotify = useCallback((gameId: number) => {
+    const game = allGames?.find(g => g?.id === gameId);
+    if (!game) return;
+    notifCounterRef.current += 1;
+    const notifId = notifCounterRef.current;
+    setFavNotifications(prev => [...prev, {
+      id: notifId,
+      gameId,
+      awayTeam: game.awayTeam,
+      homeTeam: game.homeTeam,
+    }]);
+  }, [allGames]);
+
+  // Active favorites for the Favorites tab: filter by 11:00 UTC expiry
+  const activeFavGameIds = useMemo(() => {
+    if (!favWithDatesData?.favorites) return new Set<number>();
+    const active = new Set<number>();
+    for (const fav of favWithDatesData.favorites) {
+      if (isFavoriteStillActive(fav.gameDate)) {
+        active.add(fav.gameId);
+      }
+    }
+    return active;
+  }, [favWithDatesData]);
+
+  // Merged pool of all games across all sports — used exclusively for the Favorites tab
+  type GameItem = NonNullable<NonNullable<typeof allGames>[number]>;
+  const allGamesPool = useMemo((): GameItem[] => {
+    const pool: GameItem[] = [];
+    if (allNcaamGames) for (const g of allNcaamGames) { if (g) pool.push(g as GameItem); }
+    if (allNbaGames) for (const g of allNbaGames) { if (g) pool.push(g as GameItem); }
+    return pool;
+  }, [allNcaamGames, allNbaGames]);
+
+  // Games to show in the Favorites tab (all sports, all dates, filtered by active favs)
+  const favoritesTabGames = useMemo((): GameItem[] => {
+    if (activeFavGameIds.size === 0) return [];
+    const pool: GameItem[] = allGamesPool.length > 0 ? allGamesPool : (allGames ?? []).filter((g): g is GameItem => !!g);
+    return pool.filter(g => activeFavGameIds.has(g.id)).sort(compareGames);
+  }, [allGamesPool, allGames, activeFavGameIds]);
+
+  // Count of active favorites for the badge
+  const activeFavCount = activeFavGameIds.size;
+
+  // Auto-dismiss Favorites tab when count drops to 0 — return user to main feed immediately
+  useEffect(() => {
+    if (showFavoritesTab && activeFavCount === 0) {
+      setShowFavoritesTab(false);
+    }
+  }, [activeFavCount, showFavoritesTab]);
+
+
+  const q = debouncedSearchQuery.trim().toLowerCase();
+  const dropdownResults = useMemo(() => {
+    if (!games || !q) return [];
+    return [...games.filter(game => {
+      if (!game) return false;
+      const awayNcaa = getTeamByDbSlug(game.awayTeam); const homeNcaa = getTeamByDbSlug(game.homeTeam);
+      const awayNba = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
+      const homeNba = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
+      const terms = [awayNcaa?.ncaaName ?? awayNba?.name ?? "", awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? "", game.awayTeam.replace(/_/g, " "), homeNcaa?.ncaaName ?? homeNba?.name ?? "", homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? "", game.homeTeam.replace(/_/g, " ")].map(s => s.toLowerCase());
+      return terms.some(t => t.includes(q));
+    })].sort((a, b) => {
+      const dateCmp = (a!.gameDate ?? "").localeCompare(b!.gameDate ?? "");
+      if (dateCmp !== 0) return dateCmp;
+      return timeToMinutes(a!.startTimeEst) - timeToMinutes(b!.startTimeEst);
+    });
+  }, [games, q]);
+
+  const showDropdown = searchFocused && q.length > 0;
+
+  const gamesByDate = useMemo(() =>
+    (games ?? []).reduce<Record<string, NonNullable<typeof games>[number][]>>((acc, game) => {
+      const date = effectiveGameDate(game!.gameDate, game!.startTimeEst);
+      if (!acc[date]) acc[date] = [];
+      acc[date]!.push(game!);
+      return acc;
+    }, {}), [games]);
+  const sortedDates = useMemo(() => Object.keys(gamesByDate).sort((a, b) => a.localeCompare(b)), [gamesByDate]);
+
+  const scrollToGame = (gameId: number) => {
+    setSearchFocused(false); setSearchQuery("");
+    setTimeout(() => {
+      const el = document.getElementById(`game-card-${gameId}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.style.transition = "box-shadow 0.15s ease, outline 0.15s ease";
+      el.style.outline = "2px solid #22c55e"; el.style.borderRadius = "12px";
+      el.style.boxShadow = "0 0 0 4px rgba(34,197,94,0.3), 0 0 24px rgba(34,197,94,0.2)";
+      let count = 0;
+      const pulse = setInterval(() => {
+        count++;
+        if (count % 2 === 0) { el.style.boxShadow = "0 0 0 4px rgba(34,197,94,0.3), 0 0 24px rgba(34,197,94,0.2)"; el.style.outline = "2px solid #22c55e"; }
+        else { el.style.boxShadow = "0 0 0 2px rgba(34,197,94,0.15)"; el.style.outline = "2px solid rgba(34,197,94,0.4)"; }
+        if (count >= 5) { clearInterval(pulse); setTimeout(() => { el.style.outline = ""; el.style.boxShadow = ""; el.style.borderRadius = ""; el.style.transition = ""; }, 600); }
+      }, 300);
+    }, 120);
+  };
+
+  return (
+    <div className="bg-background">
+      {showAgeModal && <AgeModal onAccept={() => acceptTermsMutation.mutate()} onClose={appLogout} />}
+
+      {/* ── In-page favorite notifications (top-right corner) ── */}
+      <div
+        style={{
+          position: "fixed",
+          top: 60,
+          right: 12,
+          zIndex: 9999,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          pointerEvents: "none",
+        }}
+      >
+        <AnimatePresence>
+          {favNotifications.map(notif => (
+            <FavNotificationBanner key={notif.id} notif={notif} onDismiss={dismissNotif} />
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* ── Sticky Header ── */}
+      <header ref={headerRef} className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm sticky-header-safe">
+
+        {/* Row 1: brand + user icon
+         * LAYOUT: flex row — brand LEFT, discord + user RIGHT.
+         * MOBILE FIX: removed absolute centering (absolute left-1/2 -translate-x-1/2)
+         * which caused PREZ BETS to physically overlap the Discord button on narrow
+         * screens. Now brand is a normal flex item on the left; Discord button and
+         * user icon are flex-shrink-0 on the right. Gap between them is handled by
+         * flex-1 spacer. This guarantees zero overlap at every viewport width.
+         */}
+        <div className="flex items-center gap-2 px-4 pt-2 pb-1 w-full min-w-0">
+          {/* ── Brand: left-aligned, shrinks gracefully on narrow screens ── */}
+          <div className="flex items-center gap-1.5 flex-shrink-0 min-w-0">
+            <BarChart3 className="flex-shrink-0 text-primary" style={{ width: "clamp(14px, 3.5vw, 20px)", height: "clamp(14px, 3.5vw, 20px)" }} />
+            <span className="font-black text-white whitespace-nowrap" style={{ fontSize: "clamp(12px, 3.5vw, 18px)", letterSpacing: "0.08em" }}>PREZ BETS</span>
+          </div>
+          {/* ── Spacer: pushes Discord + user icon to the right ── */}
+          <div className="flex-1 min-w-0" />
+          {/* ─── Discord Button ─────────────────────────────────────────────────────
+           * DESIGN: Official Discord branding — solid #3238a9 background, white text,
+           *         GG Sans font, Discord logo SVG. No opacity/transparency.
+           *         Color: #3238a9 (deep Discord blue — richer, easier to read than #738ADB)
+           *
+           * STATES:
+           *   Connected    → read-only pill showing Discord logo + @displayName
+           *                  (no click action — users CANNOT disconnect their own Discord)
+           *   Not connected → clickable link to /api/auth/discord/connect
+           *
+           * MOBILE: Text always visible on all screen sizes (no hidden sm:inline).
+           *         Button shrinks gracefully via min-width:0 and text truncation.
+           *
+           * POLICY: One-time-only connection. Once a user links their Discord account,
+           *         it is permanent from their perspective. Only @prez (owner) can
+           *         disconnect accounts via the User Management admin panel.
+           *         Server enforces uniqueness: one Discord ID → one site account, ever.
+           * ─────────────────────────────────────────────────────────────────────── */}
+          {appUser && (
+            <div className="flex-shrink-0 mr-2">
+              {appUser.discordId ? (
+                // ── CONNECTED STATE: read-only, no click, no disconnect ──
+                // Shows Discord logo + @displayName in GG Sans white on #738ADB
+                <div
+                  title={`Discord connected: @${appUser.discordUsername ?? appUser.discordId}`}
+                  className="flex items-center gap-[6px] px-3 py-1.5 rounded-full select-none cursor-default min-w-0"
+                  style={{
+                    background: "#3238a9",
+                    color: "#ffffff",
+                    fontFamily: "'GG Sans', 'Noto Sans', sans-serif",
+                    fontWeight: 600,
+                    fontSize: "13px",
+                    letterSpacing: "0.01em",
+                    lineHeight: 1,
+                    border: "none",
+                    outline: "none",
+                    boxShadow: "none",
+                    opacity: 1,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {/* Official Discord logo SVG — white fill */}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#ffffff" className="flex-shrink-0" aria-hidden="true">
+                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057.1 18.08.11 18.1.132 18.115a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+                  </svg>
+                  {/* Always visible on all screen sizes including mobile */}
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    @{appUser.discordUsername ?? appUser.discordId}
+                  </span>
+                </div>
+              ) : (
+                // ── NOT CONNECTED STATE: clickable link to Discord OAuth ──
+                // Shows Discord logo + "CONNECT DISCORD" in GG Sans white on #738ADB
+                <a
+                  href="/api/auth/discord/connect"
+                  title="Link your Discord account to verify membership"
+                  className="flex items-center gap-[6px] px-3 py-1.5 rounded-full no-underline min-w-0"
+                  style={{
+                    background: "#3238a9",
+                    color: "#ffffff",
+                    fontFamily: "'GG Sans', 'Noto Sans', sans-serif",
+                    fontWeight: 600,
+                    fontSize: "13px",
+                    letterSpacing: "0.01em",
+                    lineHeight: 1,
+                    border: "none",
+                    outline: "none",
+                    boxShadow: "none",
+                    opacity: 1,
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {/* Official Discord logo SVG — white fill */}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#ffffff" className="flex-shrink-0" aria-hidden="true">
+                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057.1 18.08.11 18.1.132 18.115a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+                  </svg>
+                  {/* Always visible on all screen sizes including mobile */}
+                  <span style={{ whiteSpace: "nowrap" }}>CONNECT DISCORD</span>
+                </a>
+              )}
+            </div>
+          )}
+          {/* User menu */}
+          <div className="flex-shrink-0 relative">
+            <button onClick={() => setShowUserMenu(!showUserMenu)} className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center hover:bg-accent transition-colors" title={user ? user.name ?? "Account" : "Sign in"}>
+              <User className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+            {showUserMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+                <div className="absolute right-0 top-9 z-50 w-48 bg-card border border-border rounded-lg shadow-xl overflow-hidden">
+                  {appUser ? (
+                    <>
+                      <div className="px-3 py-2.5 border-b border-border">
+                        <div className="flex items-center gap-1.5">
+                          {appUser.role === "owner" && <Crown className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
+                          <p className="text-xs font-semibold text-foreground truncate">@{appUser.username}</p>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground truncate">{appUser.email}</p>
+                      </div>
+                      {isOwner && (
+                        <>
+                          <button onClick={() => { setShowUserMenu(false); setLocation("/admin/publish"); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                            <Send className="w-3.5 h-3.5 text-green-400" /> Publish Projections
+                          </button>
+                          <button onClick={() => { setShowUserMenu(false); setLocation("/admin/users"); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                            <Crown className="w-3.5 h-3.5 text-yellow-400" /> User Management
+                          </button>
+                        </>
+                      )}
+                      <button onClick={() => { setShowUserMenu(false); appLogout(); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                        <LogOut className="w-3.5 h-3.5" /> Sign out
+                      </button>
+                    </>
+                  ) : user ? (
+                    <>
+                      <div className="px-3 py-2.5 border-b border-border">
+                        <p className="text-xs font-semibold text-foreground truncate">{user.name ?? "User"}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{user.email ?? ""}</p>
+                      </div>
+                      <button onClick={() => { setShowUserMenu(false); appLogout(); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                        <LogOut className="w-3.5 h-3.5" /> Sign out
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => { setShowUserMenu(false); setLocation("/login"); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">Sign in</button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Row 3: Unified filter bar — FAVORITES | DATE | NCAAM | NBA | Search */}
+        {/* Mobile: gap-1 px-2 to keep all pills + search on one row within 375-430px screens */}
+        {/* sm+: gap-2 px-3 (unchanged from original) */}
+        <div ref={searchRef} className="relative px-2 sm:px-3 pt-1 pb-0 flex items-center gap-1 sm:gap-2">
+
+          {/* FAVORITES tab — shown when user is authenticated AND has ≥1 active favorite */}
+          {/* NOTE: must use isAppAuthedForFav (Boolean(appUser)) — NOT isAuthenticated (Manus OAuth always null) */}
+          {isAppAuthedForFav && activeFavCount >= 1 && (
+            <button
+              onClick={() => setShowFavoritesTab(v => !v)}
+              className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wide transition-all flex-shrink-0"
+              style={showFavoritesTab
+                ? { background: "rgba(255,215,0,0.18)", color: "#FFD700", border: "1px solid rgba(255,215,0,0.55)", boxShadow: "0 0 8px rgba(255,215,0,0.15)" }
+                : { background: "hsl(var(--card))", color: "rgba(255,215,0,0.75)", border: "1px solid rgba(255,215,0,0.35)" }
+              }
+              title={`Favorites (${activeFavCount})`}
+            >
+              <Star style={{ width: 11, height: 11, fill: showFavoritesTab ? "#FFD700" : "rgba(255,215,0,0.75)", color: showFavoritesTab ? "#FFD700" : "rgba(255,215,0,0.75)", flexShrink: 0 }} />
+              <span>Favorites</span>
+            </button>
+          )}
+
+          {/* DATE picker — always visible, even in favorites tab */}
+          <CalendarPicker
+            selectedDate={selectedDate}
+            onSelect={setSelectedDate}
+            availableDates={new Set(allDates)}
+            isAdmin={isOwner || user?.role === "admin"}
+          />
+
+          {/* NHL pill — first, always visible */}
+          <button onClick={() => setSelectedSport("NHL")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+            style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NHL" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
+            <img src="https://media.d3.nhle.com/image/private/t_q-best/prd/assets/nhl/logos/nhl_shield_wm_on_dark_fqkbph" alt="NHL" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NHL" ? 1 : 0.5, flexShrink: 0 }} />
+            NHL
+          </button>
+
+          {/* NBA pill — second */}
+          <button onClick={() => setSelectedSport("NBA")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+            style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NBA" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
+            <img src={CDN_NBA} alt="NBA" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NBA" ? 1 : 0.5, flexShrink: 0 }} />
+            NBA
+          </button>
+
+          {/* MARCH MADNESS pill — third */}
+          <button onClick={() => setSelectedSport("NCAAM")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+            style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NCAAM" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
+            <img src={CDN_MARCH_MADNESS} alt="March Madness" width={11} height={8} style={{ objectFit: "contain", filter: selectedSport === "NCAAM" ? "invert(1)" : "invert(0.45)", flexShrink: 0 }} />
+            MARCH MADNESS
+          </button>
+
+          {/* BRACKET pill — only shown on desktop when MARCH MADNESS is selected */}
+          {selectedSport === 'NCAAM' && (
+            <button
+              onClick={() => handleFeedTabChange(feedMobileTab === 'bracket' ? 'dual' : 'bracket')}
+              className="hidden lg:flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+              style={{
+                fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))',
+                ...(feedMobileTab === 'bracket'
+                  ? { background: 'transparent', color: '#39FF14', border: '1px solid #39FF14' }
+                  : { background: 'hsl(var(--card))', color: 'rgba(255,255,255,0.45)', border: '1px solid hsl(var(--border))' }
+                )
+              }}
+            >
+              🏆 BRACKET
+            </button>
+          )}
+
+          {/* Search bar — always visible, shrinks when Favorites button is present */}
+          {/* Mobile: min-w-[28px] so it always shows at least the icon; flex-1 fills remaining space */}
+          <div className="flex-1 min-w-0" style={{ minWidth: 28 }}>
+            <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full border transition-all duration-150"
+              style={{ background: "hsl(var(--secondary))", borderColor: searchFocused ? "rgba(34,197,94,0.5)" : "hsl(var(--border))", boxShadow: searchFocused ? "0 0 0 1px rgba(34,197,94,0.15)" : "none" }}>
+              <Search className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <input ref={inputRef} type="text" placeholder="Search…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setSearchFocused(true)} className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none" />
+              {searchQuery && <button onMouseDown={(e) => e.preventDefault()} onClick={() => { setSearchQuery(""); inputRef.current?.focus(); }} className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"><X className="w-3 h-3" /></button>}
+            </div>
+          </div>
+
+
+
+          {/* Search dropdown */}
+          {showDropdown && (
+            <div className="absolute left-3 right-3 top-full mt-0.5 z-50 rounded-xl border border-white/10 shadow-2xl overflow-hidden" style={{ background: "#0f0f0f", maxHeight: "calc(3 * 68px + 44px)", overflowY: "auto" }}>
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 sticky top-0" style={{ background: "#0f0f0f", zIndex: 10 }}>
+                <span className="text-[10px] text-gray-500 uppercase tracking-widest">{dropdownResults.length === 0 ? "No results" : `${dropdownResults.length} game${dropdownResults.length !== 1 ? "s" : ""}`}</span>
+                {dropdownResults.length > 0 && <span className="text-[10px] text-gray-600">tap to jump</span>}
+              </div>
+              {dropdownResults.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 gap-2">
+                  <Search className="w-5 h-5 text-gray-600" />
+                  <p className="text-xs text-gray-500">No games found for "{searchQuery}"</p>
+                </div>
+              ) : dropdownResults.map((game) => <SearchResultRow key={game!.id} game={game!} onClick={() => scrollToGame(game!.id)} />)}
+            </div>
+          )}
+        </div>
+
+        {/* Row 4: Date header — shown when games are loaded and NOT in favorites tab */}
+        {/* Mobile fix: single non-wrapping line, fully centered, font sizes tuned so the longest
+            string ("THURSDAY, MARCH 12, 2026 · MEN'S COLLEGE BASKETBALL") fits within 375px.
+            At 375px: date ≈ 11px × ~26 chars = ~286px, dot = 5px, league ≈ 9px × ~24 chars = ~216px
+            Total ≈ 507px — too wide at fixed sizes, so we use a single-line flex container that
+            shrinks proportionally via font-size: clamp(9px, 2.4vw, ...) for the league label.
+            sm+ breakpoints are unchanged from the original design. */}
+        {!showFavoritesTab && !gamesLoading && sortedDates.length > 0 && (
+          <div className="w-full flex items-center justify-center px-2 py-1 border-b border-border bg-background/95 sm:px-4" style={{ overflow: 'hidden' }}>
+            {/* Single-line pill: all three spans in one nowrap flex row, centered in full width */}
+            <div
+              className="flex items-center justify-center"
+              style={{
+                gap: 'clamp(3px, 1vw, 8px)',
+                maxWidth: '100%',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span
+                className="font-bold tracking-widest uppercase"
+                style={{
+                  /* Mobile: shrinks from 11px at 375px up to 19px at 640px+ */
+                  fontSize: 'clamp(9px, 2.9vw, 19px)',
+                  color: '#ffffff',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >{formatDateHeader(selectedDate)}</span>
+              <span style={{
+                fontSize: 'clamp(11px, 3vw, 22px)',
+                color: '#ffffff',
+                fontWeight: 800,
+                lineHeight: 1,
+                flexShrink: 0,
+              }}>·</span>
+              <span
+                className="font-semibold"
+                style={{
+                  color: '#a3a3a3',
+                  letterSpacing: '0.04em',
+                  /* Mobile: 8px at 375px keeps "MEN'S COLLEGE BASKETBALL" fully visible */
+                  fontSize: 'clamp(8px, 2.1vw, 12px)',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >{selectedSport === 'NCAAM' ? "MEN'S COLLEGE BASKETBALL" : selectedSport === 'NBA' ? 'NBA BASKETBALL' : 'NHL HOCKEY'}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Row 4 (favorites mode): Favorites header */}
+        {showFavoritesTab && (
+          <div className="flex items-center px-4 py-1 border-b border-border bg-background/95 gap-2">
+            <div className="flex-1" />
+            <span className="font-bold tracking-widest uppercase" style={{ fontSize: "clamp(11px, 2vw, 13px)", color: "#FFD700" }}>
+              FAVORITED GAMES
+            </span>
+            <div className="flex-1" />
+          </div>
+        )}
+
+        {/* Row 5: Feed-wide mobile tab filter — MODEL PROJECTIONS | BETTING SPLITS | BRACKET (NCAAM) */}
+        {/* Only shown on mobile (< lg). Hidden on desktop where the full 3-panel layout is used. */}
+        <div className="grid lg:hidden" style={{
+            gridTemplateColumns: `repeat(${FEED_TABS.length}, 1fr)`,
+            borderBottom: '2px solid hsl(var(--border) / 0.5)',
+            background: 'hsl(var(--card))',
+          }}>
+            {FEED_TABS.map(tab => {
+              const isActive = feedMobileTab === tab.id;
+              const handleClick = () => {
+                handleFeedTabChange(tab.id);
+              };
+              return (
+                <button
+                  key={tab.id}
+                  onClick={handleClick}
+                  style={{
+                    padding: '7px 2px',
+                    fontSize: '13px',
+                    fontWeight: isActive ? 800 : 500,
+                    letterSpacing: '0.06em',
+                    color: isActive ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.45)',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: isActive ? '2px solid #39FF14' : '2px solid transparent',
+                    marginBottom: '-2px',
+                    cursor: 'pointer',
+                    transition: 'color 0.15s, border-color 0.15s',
+                    textTransform: 'uppercase',
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+      </header>
+
+      {/* ── Sticky global column header (mobile only) — MATCHUP | SPREAD/PUCK LINE | TOTAL | ML ── */}
+      {/* Only shown when MODEL PROJECTIONS tab is active. Hidden for BETTING SPLITS tab. */}
+      {feedMobileTab === 'dual' && (
+        <div className="lg:hidden" style={{
+          position: 'sticky', top: 0, zIndex: 10,
+          display: 'grid',
+          gridTemplateColumns: 'clamp(170px, 14vw, 220px) 1fr',
+          background: 'hsl(var(--card))',
+          borderBottom: '1px solid rgba(255,255,255,0.10)',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          {/* Left: MATCHUP label */}
+          <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', borderRight: '1px solid rgba(255,255,255,0.10)' }}>
+            <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>MATCHUP</span>
+          </div>
+          {/* Right: SPREAD/PUCK LINE | TOTAL | ML labels aligned to card columns */}
+          <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <div style={{ display: 'flex', gap: '5px', flex: '1 1 0', minWidth: 0 }}>
+              {[selectedSport === 'NHL' ? 'PUCK LINE' : 'SPREAD', 'TOTAL', 'ML'].map(h => (
+                <div key={h} style={{ flex: '1 1 0', textAlign: 'center' }}>
+                  <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BRACKET TAB (NCAAM only) ── */}
+      {feedMobileTab === 'bracket' && selectedSport === 'NCAAM' && (
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <MarchMadnessBracket />
+        </div>
+      )}
+
+      {/* ── Main Feed ── */}
+      {/* touch-action: pan-y — allows vertical scrolling while blocking horizontal
+           interference from the frozen panel scroll containers inside GameCard.
+           -webkit-overflow-scrolling: touch — enables iOS momentum scrolling. */}
+      <main className="w-full feed-pb-safe" style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch', display: feedMobileTab === 'bracket' ? 'none' : 'block' } as React.CSSProperties}>
+
+        {/* ── UNIFIED FEED (projections + splits always shown) ── */}
+        {true && (
+          <>
+            {/* FAVORITES TAB FEED */}
+            {showFavoritesTab ? (
+              favoritesTabGames.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-4">
+                  <Star className="w-10 h-10" style={{ color: "rgba(255,215,0,0.3)" }} />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground mb-1">No favorited games</p>
+                    <p className="text-xs text-muted-foreground">
+                      Tap the ⭐ star on any game card to add it to your favorites.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <VirtualizedGameList
+                  games={favoritesTabGames as NonNullable<typeof favoritesTabGames[number]>[]}
+                  showModel={showModel}
+                  onToggleModel={toggleModel}
+                  favoriteGameIds={favIds}
+                  onToggleFavorite={handleToggleFavorite}
+                  onFavoriteNotify={handleFavoriteNotify}
+                  isAppAuthed={Boolean(appUser)}
+                  mobileTab={feedMobileTab}
+                  onMobileTabChange={handleFeedTabChange}
+                />
+              )
+            ) : (
+              /* NORMAL PROJECTIONS FEED */
+              gamesLoading ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-3">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  <p className="text-sm text-muted-foreground">Loading projections…</p>
+                </div>
+              ) : sortedDates.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-4">
+                  <BarChart3 className="w-10 h-10 text-muted-foreground/40" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground mb-1">No games found</p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedStatuses.size > 0 ? `No ${Array.from(selectedStatuses).join(" or ")} ${selectedSport} games right now.` : `No ${selectedSport} games found.`}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                sortedDates.map((date) => (
+                  <div key={date}>
+                    <VirtualizedGameList
+                      games={gamesByDate[date]! as NonNullable<typeof gamesByDate[string]>}
+                      showModel={showModel}
+                      onToggleModel={toggleModel}
+                      favoriteGameIds={favIds}
+                      onToggleFavorite={handleToggleFavorite}
+                      onFavoriteNotify={handleFavoriteNotify}
+                      isAppAuthed={Boolean(appUser)}
+                      mobileTab={feedMobileTab}
+                      onMobileTabChange={handleFeedTabChange}
+                    />
+                  </div>
+                ))
+              )
+            )}
+          </>
+        )}
+      </main>
+    </div>
+  );
+}

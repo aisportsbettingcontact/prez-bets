@@ -1,0 +1,39 @@
+/**
+ * League registry — canonical source for league metadata.
+ * All logo URLs point to the project CDN (same lifecycle as the webdev project).
+ */
+
+export type SportKey = "ncaam" | "nba";
+
+export interface League {
+  /** Internal sport key used throughout the codebase */
+  sport: SportKey;
+  /** Display name shown in the UI */
+  name: string;
+  /** Short label for tabs/toggles */
+  shortName: string;
+  /** CDN URL for the league logo SVG */
+  logoUrl: string;
+}
+
+export const LEAGUES: League[] = [
+  {
+    sport: "ncaam",
+    name: "College Basketball",
+    shortName: "NCAAM",
+    logoUrl:
+      "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/logo-ncaa_11f6d70c.svg",
+  },
+  {
+    sport: "nba",
+    name: "NBA",
+    shortName: "NBA",
+    logoUrl:
+      "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/logo-nba_87c4f333.svg",
+  },
+];
+
+/** Lookup by sport key */
+export const LEAGUE_BY_SPORT: Record<SportKey, League> = Object.fromEntries(
+  LEAGUES.map((l) => [l.sport, l])
+) as Record<SportKey, League>;

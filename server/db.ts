@@ -1,0 +1,1254 @@
+import { and, desc, eq, gte, isNotNull, lte, lt, ne, or, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
+import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, appUsers as appUsersTable, oddsHistory, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow } from "../drizzle/schema";
+import { ENV } from './_core/env';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _db: any = null;
+let _pool: mysql.Pool | null = null;
+
+// Lazily create the drizzle instance with a proper connection pool.
+// Pool settings: 10 connections max, 30s acquire timeout, 10s idle timeout.
+export async function getDb() {
+  if (!_db && process.env.DATABASE_URL) {
+    try {
+      _pool = mysql.createPool({
+        uri: process.env.DATABASE_URL,
+        connectionLimit: 10,
+        waitForConnections: true,
+        queueLimit: 0,
+        connectTimeout: 10000,
+        idleTimeout: 10000,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 0,
+      });
+      _db = drizzle(_pool);
+      console.log("[Database] Connection pool created (max=10)");
+    } catch (error) {
+      console.warn("[Database] Failed to create connection pool:", error);
+      _db = null;
+      _pool = null;
+    }
+  }
+  return _db;
+}
+
+export async function upsertUser(user: InsertUser): Promise<void> {
+  if (!user.openId) {
+    throw new Error("User openId is required for upsert");
+  }
+
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot upsert user: database not available");
+    return;
+  }
+
+  try {
+    const values: InsertUser = {
+      openId: user.openId,
+    };
+    const updateSet: Record<string, unknown> = {};
+
+    const textFields = ["name", "email", "loginMethod"] as const;
+    type TextField = (typeof textFields)[number];
+
+    const assignNullable = (field: TextField) => {
+      const value = user[field];
+      if (value === undefined) return;
+      const normalized = value ?? null;
+      values[field] = normalized;
+      updateSet[field] = normalized;
+    };
+
+    textFields.forEach(assignNullable);
+
+    if (user.lastSignedIn !== undefined) {
+      values.lastSignedIn = user.lastSignedIn;
+      updateSet.lastSignedIn = user.lastSignedIn;
+    }
+    if (user.role !== undefined) {
+      values.role = user.role;
+      updateSet.role = user.role;
+    } else if (user.openId === ENV.ownerOpenId) {
+      values.role = 'admin';
+      updateSet.role = 'admin';
+    }
+
+    if (!values.lastSignedIn) {
+      values.lastSignedIn = new Date();
+    }
+
+    if (Object.keys(updateSet).length === 0) {
+      updateSet.lastSignedIn = new Date();
+    }
+
+    await db.insert(users).values(values).onDuplicateKeyUpdate({
+      set: updateSet,
+    });
+  } catch (error) {
+    console.error("[Database] Failed to upsert user:", error);
+    throw error;
+  }
+}
+
+export async function getUserByOpenId(openId: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user: database not available");
+    return undefined;
+  }
+
+  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+// ─── Model Files ─────────────────────────────────────────────────────────────
+
+export async function insertModelFile(file: InsertModelFile) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(modelFiles).values(file);
+  return result;
+}
+
+export async function listModelFiles(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db
+    .select()
+    .from(modelFiles)
+    .where(eq(modelFiles.uploadedBy, userId))
+    .orderBy(desc(modelFiles.createdAt));
+}
+
+export async function getModelFileById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(modelFiles).where(eq(modelFiles.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function updateModelFileStatus(
+  id: number,
+  status: "pending" | "processing" | "done" | "error",
+  rowsImported?: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(modelFiles)
+    .set({ status, ...(rowsImported !== undefined ? { rowsImported } : {}) })
+    .where(eq(modelFiles.id, id));
+}
+
+export async function deleteModelFile(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(games).where(eq(games.fileId, id));
+  await db.delete(modelFiles).where(eq(modelFiles.id, id));
+}
+
+// ─── Games ───────────────────────────────────────────────────────────────────
+
+/**
+ * Sort game rows by start time. NCAAM uses PST, NBA/NHL use EST.
+ * '21:00' PST (New Mexico @ San Diego St) sorts correctly after '19:00' PST (Hawaii).
+ * The old '00:00' special case is no longer needed since NCAAM switched to PST.
+ * This replaces the CASE WHEN ORDER BY SQL expression which is not supported
+ * by the TiDB driver. DB-level sort by sortOrder is done first, then this
+ * stable sort applies start-time ordering on top.
+ */
+function sortGamesByStartTime<T extends { gameDate: string; startTimeEst: string | null; sortOrder: number | null }>(rows: T[]): T[] {
+  return rows.slice().sort((a, b) => {
+    // Primary: gameDate ascending
+    if (a.gameDate < b.gameDate) return -1;
+    if (a.gameDate > b.gameDate) return 1;
+    // Secondary: start time ascending (TBD/null sorts last)
+    const timeA = (!a.startTimeEst || a.startTimeEst === 'TBD') ? '99:00' : a.startTimeEst;
+    const timeB = (!b.startTimeEst || b.startTimeEst === 'TBD') ? '99:00' : b.startTimeEst;
+    if (timeA < timeB) return -1;
+    if (timeA > timeB) return 1;
+    // Tertiary: sortOrder ascending (VSiN page order)
+    return (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999);
+  });
+}
+
+export async function insertGames(rows: InsertGame[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (rows.length === 0) return;
+  // ON DUPLICATE KEY UPDATE: if (gameDate, awayTeam, homeTeam) already exists,
+  // update the book odds and start time instead of throwing a duplicate key error.
+  // This makes all inserts idempotent — safe to call multiple times.
+  await db.insert(games).values(rows).onDuplicateKeyUpdate({
+    set: {
+      startTimeEst: sql`VALUES(startTimeEst)`,
+      awayBookSpread: sql`VALUES(awayBookSpread)`,
+      homeBookSpread: sql`VALUES(homeBookSpread)`,
+      bookTotal: sql`VALUES(bookTotal)`,
+      sortOrder: sql`VALUES(sortOrder)`,
+      ncaaContestId: sql`COALESCE(ncaaContestId, VALUES(ncaaContestId))`,
+    },
+  });
+}
+
+export async function listGames(opts?: { sport?: string; gameDate?: string }): Promise<Game[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const conditions = [];
+
+  if (opts?.gameDate) {
+    // Specific date requested — return only that date
+    conditions.push(eq(games.gameDate, opts.gameDate));
+  }
+  // No date filter when no specific date is requested:
+  // Games remain visible as long as they exist in the DB (i.e. as long as VSiN
+  // still lists them). The 6am EST daily purge removes previous-day rows, so
+  // live and final games from the current slate stay on the feed until that purge.
+
+  if (opts?.sport) conditions.push(eq(games.sport, opts.sport));
+
+  // Public feed: show all games that have live VSiN odds (regardless of publishedToFeed)
+  conditions.push(or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!);
+
+  const rows = await db
+    .select()
+    .from(games)
+    .where(and(...conditions))
+    .orderBy(games.gameDate, games.sortOrder);
+
+  // Gate model projections (NCAAM only): only expose model fields when the owner has approved them.
+  // NBA games bypass this gate — their model data (if any) is always returned as-is.
+  // If publishedModel = false on an NCAAM game, null out all model-related fields.
+  const MODEL_FIELDS = [
+    'awayModelSpread', 'homeModelSpread', 'modelTotal',
+    'modelAwayML', 'modelHomeML', 'modelAwayScore', 'modelHomeScore',
+    'modelOverRate', 'modelUnderRate', 'modelAwayWinPct', 'modelHomeWinPct',
+    'modelSpreadClamped', 'modelTotalClamped', 'modelCoverDirection', 'modelRunAt',
+    'spreadEdge', 'spreadDiff', 'totalEdge', 'totalDiff',
+    'modelAwaySpreadOdds', 'modelHomeSpreadOdds', 'modelOverOdds', 'modelUnderOdds',
+  ] as const;
+  const gated = rows.map((row: Game) => {
+    // Only gate NCAAM games
+    if (row.sport !== 'NCAAM') return row;
+    if (row.publishedModel) return row;
+    const copy = { ...row } as Record<string, unknown>;
+    for (const field of MODEL_FIELDS) copy[field] = null;
+    return copy as typeof row;
+  });
+
+  // Sort by start time in Node.js: treat '00:00' as midnight (sort last within each date)
+  return sortGamesByStartTime(gated);
+}
+
+export async function deleteGamesByFileId(fileId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(games).where(eq(games.fileId, fileId));
+}
+
+/**
+ * Delete all games whose gameDate is strictly before today's date in EST.
+ * Called by the 6am EST daily cron job to purge previous-day data.
+ * Returns the number of rows deleted.
+ */
+/**
+ * Hard-delete a single game by its primary key ID.
+ * Owner-only operation — enforced at the procedure layer.
+ */
+export async function deleteGameById(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(games).where(eq(games.id, id));
+}
+
+export async function deleteOldGames(): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Compute today in EST as YYYY-MM-DD
+  const estStr = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  });
+  const [mm, dd, yyyy] = estStr.split("/");
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+
+  const result = await db.delete(games).where(lt(games.gameDate, todayStr));
+  const deleted = (result as unknown as { affectedRows?: number }).affectedRows ?? 0;
+  console.log(`[DailyPurge] Deleted ${deleted} game rows older than ${todayStr} (EST)`);
+  return deleted;
+}
+
+// ─── App Users (custom accounts) ─────────────────────────────────────────────────
+
+import { appUsers, type InsertAppUser, userFavoriteGames } from "../drizzle/schema";
+export async function createAppUser(data: InsertAppUser) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(appUsers).values(data);
+}
+
+export async function listAppUsers(): Promise<AppUser[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(appUsersTable).orderBy(appUsersTable.createdAt);
+}
+
+export async function getAppUserById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appUsers).where(eq(appUsers.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getAppUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appUsers).where(eq(appUsers.email, email)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getAppUserByUsername(username: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appUsers).where(eq(appUsers.username, username)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateAppUser(id: number, data: Partial<InsertAppUser>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(appUsers).set({ ...data, updatedAt: new Date() }).where(eq(appUsers.id, id));
+}
+
+export async function deleteAppUser(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(appUsers).where(eq(appUsers.id, id));
+}
+
+export async function updateAppUserLastSignedIn(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(appUsers).set({ lastSignedIn: new Date() }).where(eq(appUsers.id, id));
+}
+
+/**
+ * Increment tokenVersion for a single user, immediately invalidating all their existing JWTs.
+ * Returns the new tokenVersion value.
+ */
+export async function incrementTokenVersion(id: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(appUsers)
+    .set({ tokenVersion: sql`${appUsers.tokenVersion} + 1`, updatedAt: new Date() })
+    .where(eq(appUsers.id, id));
+  const rows = await db.select({ tv: appUsers.tokenVersion }).from(appUsers).where(eq(appUsers.id, id)).limit(1);
+  const newTv = rows[0]?.tv ?? 1;
+  console.log(`[DB] incrementTokenVersion: userId=${id} newTokenVersion=${newTv}`);
+  return newTv;
+}
+
+/**
+ * Increment tokenVersion for ALL users EXCEPT the excluded owner.
+ * Used for "force logout all" — the owner stays logged in.
+ * Returns the count of affected users.
+ */
+export async function incrementAllTokenVersions(excludeOwnerId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db
+    .update(appUsers)
+    .set({ tokenVersion: sql`${appUsers.tokenVersion} + 1`, updatedAt: new Date() })
+    .where(ne(appUsers.id, excludeOwnerId));
+  // result[0] is OkPacket with affectedRows
+  const count = (result[0] as any)?.affectedRows ?? 0;
+  console.log(`[DB] incrementAllTokenVersions: excluded ownerId=${excludeOwnerId} — invalidated ${count} user sessions`);
+  return count;
+}
+
+// ─── Publish / Model Projection helpers ──────────────────────────────────────
+
+/** List all games for a given date, optionally filtered by sport */
+export async function listGamesByDate(gameDate: string, sport?: string): Promise<Game[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conditions = [eq(games.gameDate, gameDate)];
+  if (sport) conditions.push(eq(games.sport, sport));
+  const rows = await db
+    .select()
+    .from(games)
+    .where(and(...conditions))
+    .orderBy(games.sortOrder);
+  return sortGamesByStartTime(rows);
+}
+
+/** List all staging games for a given date (fileId = 0, unpublished), optionally filtered by sport */
+export async function listStagingGames(gameDate: string, sport?: string): Promise<Game[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conditions: ReturnType<typeof eq>[] = [eq(games.gameDate, gameDate), eq(games.fileId, 0)];
+  if (sport) conditions.push(eq(games.sport, sport));
+  const rows = await db
+    .select()
+    .from(games)
+    .where(and(...conditions))
+    .orderBy(games.sortOrder);
+  return sortGamesByStartTime(rows);
+}
+/** Update model projections and edge labels for a single game */
+export async function updateGameProjections(
+  id: number,
+  data: {
+    awayModelSpread?: string | null;
+    homeModelSpread?: string | null;
+    modelTotal?: string | null;
+    modelAwayML?: string | null;
+    modelHomeML?: string | null;
+    spreadEdge?: string | null;
+    spreadDiff?: string | null;
+    totalEdge?: string | null;
+    totalDiff?: string | null;
+    // v9 model extended fields
+    modelAwayScore?: string | null;
+    modelHomeScore?: string | null;
+    modelOverRate?: string | null;
+    modelUnderRate?: string | null;
+    modelAwayWinPct?: string | null;
+    modelHomeWinPct?: string | null;
+    modelSpreadClamped?: boolean | null;
+    modelTotalClamped?: boolean | null;
+    modelCoverDirection?: string | null;
+    modelRunAt?: number | null;
+    // NHL-specific odds fields (editable in PublishProjections)
+    awaySpreadOdds?: string | null;
+    homeSpreadOdds?: string | null;
+    overOdds?: string | null;
+    underOdds?: string | null;
+    // NHL model puck line spread and fair-value odds (set by model sync)
+    modelAwayPuckLine?: string | null;
+    modelHomePuckLine?: string | null;
+    modelAwayPLOdds?: string | null;
+    modelHomePLOdds?: string | null;
+    modelOverOdds?: string | null;
+    modelUnderOdds?: string | null;
+    // NCAAM model fair odds at book's spread line
+    modelAwaySpreadOdds?: string | null;
+    modelHomeSpreadOdds?: string | null;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(games).set(data).where(eq(games.id, id));
+}
+
+/** Toggle publishedToFeed for a single game */
+/**
+ * Update book odds (spread + total) for a single game.
+ * Called by the VSiN live-refresh procedure.
+ */
+export async function updateBookOdds(
+  id: number,
+  data: {
+    awayBookSpread?: number | null;
+    homeBookSpread?: number | null;
+    bookTotal?: number | null;
+    sortOrder?: number;
+    startTimeEst?: string;
+    // Betting splits (NCAAM: 4 fields; NBA: 6 fields + ML odds)
+    spreadAwayBetsPct?: number | null;
+    spreadAwayMoneyPct?: number | null;
+    totalOverBetsPct?: number | null;
+    totalOverMoneyPct?: number | null;
+    mlAwayBetsPct?: number | null;
+    mlAwayMoneyPct?: number | null;
+    awayML?: string | null;
+    homeML?: string | null;
+    // MetaBet consensus odds (spread juice + O/U odds)
+    awaySpreadOdds?: string | null;
+    homeSpreadOdds?: string | null;
+    overOdds?: string | null;
+    underOdds?: string | null;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const { eq } = await import("drizzle-orm");
+  const updateData: Record<string, unknown> = {};
+  if (data.awayBookSpread !== undefined) updateData.awayBookSpread = data.awayBookSpread !== null ? String(data.awayBookSpread) : null;
+  if (data.homeBookSpread !== undefined) updateData.homeBookSpread = data.homeBookSpread !== null ? String(data.homeBookSpread) : null;
+  if (data.bookTotal !== undefined) updateData.bookTotal = data.bookTotal !== null ? String(data.bookTotal) : null;
+  if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
+  if (data.startTimeEst !== undefined) updateData.startTimeEst = data.startTimeEst;
+  // Splits — only write non-undefined values (null = explicitly clear, undefined = skip)
+  if (data.spreadAwayBetsPct !== undefined) updateData.spreadAwayBetsPct = data.spreadAwayBetsPct;
+  if (data.spreadAwayMoneyPct !== undefined) updateData.spreadAwayMoneyPct = data.spreadAwayMoneyPct;
+  if (data.totalOverBetsPct !== undefined) updateData.totalOverBetsPct = data.totalOverBetsPct;
+  if (data.totalOverMoneyPct !== undefined) updateData.totalOverMoneyPct = data.totalOverMoneyPct;
+  if (data.mlAwayBetsPct !== undefined) updateData.mlAwayBetsPct = data.mlAwayBetsPct;
+  if (data.mlAwayMoneyPct !== undefined) updateData.mlAwayMoneyPct = data.mlAwayMoneyPct;
+  if (data.awayML !== undefined) updateData.awayML = data.awayML;
+  if (data.homeML !== undefined) updateData.homeML = data.homeML;
+  if (data.awaySpreadOdds !== undefined) updateData.awaySpreadOdds = data.awaySpreadOdds;
+  if (data.homeSpreadOdds !== undefined) updateData.homeSpreadOdds = data.homeSpreadOdds;
+  if (data.overOdds !== undefined) updateData.overOdds = data.overOdds;
+  if (data.underOdds !== undefined) updateData.underOdds = data.underOdds;
+  await db.update(games).set(updateData).where(eq(games.id, id));
+}
+
+/** Toggle publishedModel for a single game — owner approves/retracts model projections */
+export async function setGameModelPublished(id: number, published: boolean): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(games).set({ publishedModel: published }).where(eq(games.id, id));
+}
+
+/**
+ * Bulk-approve all pending model projections for a given date and sport.
+ * Only approves games that have model data (awayModelSpread + modelTotal not null)
+ * and are not yet approved (publishedModel = false).
+ * Returns the number of rows updated.
+ */
+export async function bulkApproveModels(gameDate: string, sport?: string): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conditions = [
+    eq(games.gameDate, gameDate),
+    eq(games.publishedModel, false),
+    isNotNull(games.awayModelSpread),
+    isNotNull(games.modelTotal),
+  ];
+  if (sport) conditions.push(eq(games.sport, sport));
+  const result = await db.update(games)
+    .set({ publishedModel: true })
+    .where(and(...conditions));
+  const affected = (result as unknown as { rowsAffected?: number }[])[0]?.rowsAffected ?? 0;
+  console.log(`[DB] bulkApproveModels: gameDate=${gameDate} sport=${sport ?? "all"} — approved ${affected} games`);
+  return affected;
+}
+
+export async function setGamePublished(id: number, published: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // When publishing, verify the game has live VSiN odds
+  if (published) {
+    const [game] = await db.select().from(games).where(eq(games.id, id)).limit(1);
+    if (!game) throw new Error("Game not found");
+    const hasOdds = game.awayBookSpread !== null || game.bookTotal !== null;
+    if (!hasOdds) {
+      throw new Error("Cannot publish: game has no live VSiN odds yet");
+    }
+  }
+
+  await db.update(games).set({ publishedToFeed: published }).where(eq(games.id, id));
+}
+
+/** List all staging games for a date range (inclusive). Owner-only. */
+export async function listStagingGamesRange(fromDate: string, toDate: string, sport?: string): Promise<Game[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conditions: ReturnType<typeof eq>[] = [
+    eq(games.fileId, 0),
+    gte(games.gameDate, fromDate),
+    lte(games.gameDate, toDate),
+  ];
+  if (sport) conditions.push(eq(games.sport, sport));
+  const rows = await db
+    .select()
+    .from(games)
+    .where(and(...conditions))
+    .orderBy(games.gameDate, games.sortOrder);
+  return sortGamesByStartTime(rows);
+}
+
+/** Look up a game by its NCAA contest ID (for dedup during NCAA-only insert) */
+export async function getGameByNcaaContestId(contestId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(games)
+    .where(eq(games.ncaaContestId, contestId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Update start time, ncaaContestId, and gameStatus for a game (used when NCAA data arrives after VSiN insert) */
+export async function updateNcaaStartTime(
+  id: number,
+  data: {
+    startTimeEst: string;
+    ncaaContestId: string;
+    gameStatus?: 'upcoming' | 'live' | 'final';
+    awayScore?: number | null;
+    homeScore?: number | null;
+    gameClock?: string | null;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(games).set(data).where(eq(games.id, id));
+}
+
+/** Bulk publish all staging games for a date — only publishes games with live VSiN odds */
+export async function publishAllStagingGames(gameDate: string, sport?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conditions = [
+    eq(games.gameDate, gameDate),
+    eq(games.fileId, 0),
+    // Only publish games that have live VSiN odds
+    or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!,
+  ];
+  if (sport) conditions.push(eq(games.sport, sport));
+  await db
+    .update(games)
+    .set({ publishedToFeed: true })
+    .where(and(...conditions));
+}
+
+
+// ─── NBA Teams ────────────────────────────────────────────────────────────────
+
+export async function upsertNbaTeams(teams: InsertNbaTeam[]): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  for (const team of teams) {
+    await db
+      .insert(nbaTeams)
+      .values(team)
+      .onDuplicateKeyUpdate({
+        set: {
+          nbaSlug: team.nbaSlug,
+          vsinSlug: team.vsinSlug,
+          name: team.name,
+          nickname: team.nickname,
+          city: team.city,
+          conference: team.conference,
+          division: team.division,
+          logoUrl: team.logoUrl,
+        },
+      });
+  }
+  return teams.length;
+}
+
+export async function listNbaTeams() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(nbaTeams).orderBy(nbaTeams.name);
+}
+
+export async function getNbaTeamByDbSlug(dbSlug: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(nbaTeams)
+    .where(eq(nbaTeams.dbSlug, dbSlug))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getNbaTeamByNbaSlug(nbaSlug: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(nbaTeams)
+    .where(eq(nbaTeams.nbaSlug, nbaSlug))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+// ─── Team Colors ─────────────────────────────────────────────────────────────
+
+export interface TeamColors {
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  tertiaryColor: string | null;
+  abbrev: string | null;
+}
+
+/**
+ * Fetch team colors from the DB for a given team slug and sport.
+ * For NCAAM, looks up ncaam_teams by dbSlug.
+ * For NBA, looks up nba_teams by dbSlug.
+ * Returns null if team not found or no colors stored.
+ */
+export async function getTeamColors(dbSlug: string, sport: string): Promise<TeamColors | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  if (sport === "NBA") {
+    const rows = await db
+      .select({
+        primaryColor: nbaTeams.primaryColor,
+        secondaryColor: nbaTeams.secondaryColor,
+        tertiaryColor: nbaTeams.tertiaryColor,
+        abbrev: nbaTeams.abbrev,
+      })
+      .from(nbaTeams)
+      .where(eq(nbaTeams.dbSlug, dbSlug))
+      .limit(1);
+    return rows[0] ?? null;
+  } else if (sport === "NHL") {
+    const rows = await db
+      .select({
+        primaryColor: nhlTeams.primaryColor,
+        secondaryColor: nhlTeams.secondaryColor,
+        tertiaryColor: nhlTeams.tertiaryColor,
+        abbrev: nhlTeams.abbrev,
+      })
+      .from(nhlTeams)
+      .where(eq(nhlTeams.dbSlug, dbSlug))
+      .limit(1);
+    return rows[0] ?? null;
+  } else {
+    // NCAAM (default)
+    const rows = await db
+      .select({
+        primaryColor: ncaamTeams.primaryColor,
+        secondaryColor: ncaamTeams.secondaryColor,
+        tertiaryColor: ncaamTeams.tertiaryColor,
+        abbrev: ncaamTeams.abbrev,
+      })
+      .from(ncaamTeams)
+      .where(eq(ncaamTeams.dbSlug, dbSlug))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+}
+
+// ─── Team Color Cache (in-memory, loaded once per process) ───────────────────
+// Team colors are seeded once and never mutated at runtime — safe to cache for
+// the process lifetime. Cache key: "${sport}:${dbSlug}".
+const _colorCache = new Map<string, TeamColors | null>();
+let _colorCacheReady = false;
+let _colorCacheWarm: Promise<void> | null = null;
+
+async function warmColorCache(): Promise<void> {
+  if (_colorCacheReady) return;
+  if (_colorCacheWarm) return _colorCacheWarm;
+  _colorCacheWarm = (async () => {
+    const db = await getDb();
+    if (!db) return;
+    const [nbaRows, ncaamRows, nhlRows] = await Promise.all([
+      db.select({ dbSlug: nbaTeams.dbSlug, primaryColor: nbaTeams.primaryColor, secondaryColor: nbaTeams.secondaryColor, tertiaryColor: nbaTeams.tertiaryColor, abbrev: nbaTeams.abbrev }).from(nbaTeams),
+      db.select({ dbSlug: ncaamTeams.dbSlug, primaryColor: ncaamTeams.primaryColor, secondaryColor: ncaamTeams.secondaryColor, tertiaryColor: ncaamTeams.tertiaryColor, abbrev: ncaamTeams.abbrev }).from(ncaamTeams),
+      db.select({ dbSlug: nhlTeams.dbSlug, primaryColor: nhlTeams.primaryColor, secondaryColor: nhlTeams.secondaryColor, tertiaryColor: nhlTeams.tertiaryColor, abbrev: nhlTeams.abbrev }).from(nhlTeams),
+    ]);
+    for (const r of nbaRows)   _colorCache.set(`NBA:${r.dbSlug}`,   { primaryColor: r.primaryColor ?? null, secondaryColor: r.secondaryColor ?? null, tertiaryColor: r.tertiaryColor ?? null, abbrev: r.abbrev ?? null });
+    for (const r of ncaamRows) _colorCache.set(`NCAAM:${r.dbSlug}`, { primaryColor: r.primaryColor ?? null, secondaryColor: r.secondaryColor ?? null, tertiaryColor: r.tertiaryColor ?? null, abbrev: r.abbrev ?? null });
+    for (const r of nhlRows)   _colorCache.set(`NHL:${r.dbSlug}`,   { primaryColor: r.primaryColor ?? null, secondaryColor: r.secondaryColor ?? null, tertiaryColor: r.tertiaryColor ?? null, abbrev: r.abbrev ?? null });
+    _colorCacheReady = true;
+  })();
+  return _colorCacheWarm;
+}
+
+/** Invalidate the color cache (call after seeding/updating team color data). */
+export function invalidateColorCache(): void {
+  _colorCache.clear();
+  _colorCacheReady = false;
+  _colorCacheWarm = null;
+}
+
+/** Get team colors from the in-memory cache, loading it on first call. */
+export async function getTeamColorsCached(dbSlug: string, sport: string): Promise<TeamColors | null> {
+  await warmColorCache();
+  return _colorCache.get(`${sport}:${dbSlug}`) ?? null;
+}
+
+/**
+ * Fetch colors for both teams in a game in a single call.
+ * Returns { away: TeamColors | null, home: TeamColors | null }
+ */
+export async function getGameTeamColors(
+  awayDbSlug: string,
+  homeDbSlug: string,
+  sport: string
+): Promise<{ away: TeamColors | null; home: TeamColors | null }> {
+  const [away, home] = await Promise.all([
+    getTeamColors(awayDbSlug, sport),
+    getTeamColors(homeDbSlug, sport),
+  ]);
+  return { away, home };
+}
+
+// ─── NHL Team Helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Upsert all 32 NHL teams. Uses dbSlug as the conflict key.
+ * On conflict, updates all mutable fields (slugs, name, colors, logo).
+ * Returns the count of teams processed.
+ */
+export async function upsertNhlTeams(teams: InsertNhlTeam[]): Promise<number> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[upsertNhlTeams] Database not available");
+    return 0;
+  }
+  console.log(`[upsertNhlTeams] Upserting ${teams.length} NHL teams...`);
+  let upserted = 0;
+  for (const team of teams) {
+    console.log(`[upsertNhlTeams]   ${team.abbrev} ${team.name} (dbSlug=${team.dbSlug})`);
+    await db
+      .insert(nhlTeams)
+      .values(team)
+      .onDuplicateKeyUpdate({
+        set: {
+          nhlSlug: team.nhlSlug,
+          vsinSlug: team.vsinSlug,
+          name: team.name,
+          nickname: team.nickname,
+          city: team.city,
+          conference: team.conference,
+          division: team.division,
+          logoUrl: team.logoUrl,
+          abbrev: team.abbrev,
+          primaryColor: team.primaryColor,
+          secondaryColor: team.secondaryColor,
+          tertiaryColor: team.tertiaryColor,
+        },
+      });
+    upserted++;
+  }
+  console.log(`[upsertNhlTeams] Done. Upserted: ${upserted}`);
+  return upserted;
+}
+
+/** Returns all 32 NHL teams ordered by conference, division, then name. */
+export async function getNhlTeams() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(nhlTeams).orderBy(nhlTeams.conference, nhlTeams.division, nhlTeams.name);
+}
+
+/** Lookup a single NHL team by its dbSlug. Returns null if not found. */
+export async function getNhlTeamByDbSlug(dbSlug: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(nhlTeams)
+    .where(eq(nhlTeams.dbSlug, dbSlug))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Lookup a single NHL team by its abbreviation (e.g. "BUF"). Returns null if not found. */
+export async function getNhlTeamByAbbrev(abbrev: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(nhlTeams)
+    .where(eq(nhlTeams.abbrev, abbrev))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+// ─── User Favorite Games ─────────────────────────────────────────────────────
+
+/** Returns favorite game IDs + their game dates (for 11:00 UTC expiry logic on the client). */
+export async function getFavoriteGamesWithDates(appUserId: number): Promise<{ gameId: number; gameDate: string }[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ gameId: userFavoriteGames.gameId, gameDate: games.gameDate })
+    .from(userFavoriteGames)
+    .innerJoin(games, eq(games.id, userFavoriteGames.gameId))
+    .where(eq(userFavoriteGames.appUserId, appUserId));
+   return rows.map((r: { gameId: number; gameDate: string | null }) => ({ gameId: r.gameId, gameDate: r.gameDate ?? '' }));
+}
+export async function getFavoriteGameIds(appUserId: number): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ gameId: userFavoriteGames.gameId })
+    .from(userFavoriteGames)
+    .where(eq(userFavoriteGames.appUserId, appUserId));
+  return rows.map((r: { gameId: number }) => r.gameId);
+}
+
+export async function toggleFavoriteGame(
+  appUserId: number,
+  gameId: number
+): Promise<{ favorited: boolean }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const existing = await db
+    .select({ id: userFavoriteGames.id })
+    .from(userFavoriteGames)
+    .where(and(eq(userFavoriteGames.appUserId, appUserId), eq(userFavoriteGames.gameId, gameId)))
+    .limit(1);
+  if (existing.length > 0) {
+    await db
+      .delete(userFavoriteGames)
+      .where(and(eq(userFavoriteGames.appUserId, appUserId), eq(userFavoriteGames.gameId, gameId)));
+    return { favorited: false };
+  } else {
+    await db.insert(userFavoriteGames).values({ appUserId, gameId });
+    return { favorited: true };
+  }
+}
+
+/**
+ * Update Action Network open lines and DK NJ current lines for a single game.
+ * All fields are optional — only provided fields are written.
+ */
+export async function updateAnOdds(
+  id: number,
+  data: {
+    // Open lines (from AN HTML open column)
+    openAwaySpread?: string | null;
+    openAwaySpreadOdds?: string | null;
+    openHomeSpread?: string | null;
+    openHomeSpreadOdds?: string | null;
+    openTotal?: string | null;
+    openOverOdds?: string | null;
+    openUnderOdds?: string | null;
+    openAwayML?: string | null;
+    openHomeML?: string | null;
+    // DK NJ current lines — stored in primary book columns
+    awayBookSpread?: string | null;
+    awaySpreadOdds?: string | null;
+    homeBookSpread?: string | null;
+    homeSpreadOdds?: string | null;
+    bookTotal?: string | null;
+    overOdds?: string | null;
+    underOdds?: string | null;
+    awayML?: string | null;
+    homeML?: string | null;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const updateData: Record<string, unknown> = {};
+  // Open lines
+  if (data.openAwaySpread !== undefined) updateData.openAwaySpread = data.openAwaySpread;
+  if (data.openAwaySpreadOdds !== undefined) updateData.openAwaySpreadOdds = data.openAwaySpreadOdds;
+  if (data.openHomeSpread !== undefined) updateData.openHomeSpread = data.openHomeSpread;
+  if (data.openHomeSpreadOdds !== undefined) updateData.openHomeSpreadOdds = data.openHomeSpreadOdds;
+  if (data.openTotal !== undefined) updateData.openTotal = data.openTotal;
+  if (data.openOverOdds !== undefined) updateData.openOverOdds = data.openOverOdds;
+  if (data.openUnderOdds !== undefined) updateData.openUnderOdds = data.openUnderOdds;
+  if (data.openAwayML !== undefined) updateData.openAwayML = data.openAwayML;
+  if (data.openHomeML !== undefined) updateData.openHomeML = data.openHomeML;
+  // DK NJ current lines — stored in primary book columns
+  // awayBookSpread/homeBookSpread/bookTotal are decimal columns — parse string to number
+  const parseSpread = (s: string | null | undefined): number | null | undefined => {
+    if (s === undefined) return undefined;
+    if (s === null) return null;
+    const n = parseFloat(s); // parseFloat handles "+6.5" and "-6.5" correctly
+    return isNaN(n) ? null : n;
+  };
+  if (data.awayBookSpread !== undefined) updateData.awayBookSpread = parseSpread(data.awayBookSpread);
+  if (data.awaySpreadOdds !== undefined) updateData.awaySpreadOdds = data.awaySpreadOdds;
+  if (data.homeBookSpread !== undefined) updateData.homeBookSpread = parseSpread(data.homeBookSpread);
+  if (data.homeSpreadOdds !== undefined) updateData.homeSpreadOdds = data.homeSpreadOdds;
+  if (data.bookTotal !== undefined) updateData.bookTotal = parseSpread(data.bookTotal);
+  if (data.overOdds !== undefined) updateData.overOdds = data.overOdds;
+  if (data.underOdds !== undefined) updateData.underOdds = data.underOdds;
+  if (data.awayML !== undefined) updateData.awayML = data.awayML;
+  if (data.homeML !== undefined) updateData.homeML = data.homeML;
+  if (Object.keys(updateData).length === 0) return;
+  await db.update(games).set(updateData).where(eq(games.id, id));
+}
+
+// ─── Odds History helpers ─────────────────────────────────────────────────────
+
+/**
+ * Insert a snapshot of DK NJ current lines for a game into the odds_history table.
+ * Called after every successful AN odds update (auto cron + manual refresh).
+ *
+ * @param gameId  - games.id FK
+ * @param sport   - 'NCAAM' | 'NBA' | 'NHL'
+ * @param source  - 'auto' (hourly cron) | 'manual' (Refresh Now button)
+ * @param snap    - the current DK NJ lines to snapshot
+ */
+export async function insertOddsHistory(
+  gameId: number,
+  sport: string,
+  source: "auto" | "manual",
+  snap: {
+    awaySpread?: string | null;
+    awaySpreadOdds?: string | null;
+    homeSpread?: string | null;
+    homeSpreadOdds?: string | null;
+    total?: string | null;
+    overOdds?: string | null;
+    underOdds?: string | null;
+    awayML?: string | null;
+    homeML?: string | null;
+  }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[OddsHistory] DB not available — skipping snapshot for gameId=%d", gameId);
+    return;
+  }
+  const now = Date.now();
+  try {
+    await db.insert(oddsHistory).values({
+      gameId,
+      sport,
+      scrapedAt: now,
+      source,
+      awaySpread: snap.awaySpread ?? null,
+      awaySpreadOdds: snap.awaySpreadOdds ?? null,
+      homeSpread: snap.homeSpread ?? null,
+      homeSpreadOdds: snap.homeSpreadOdds ?? null,
+      total: snap.total ?? null,
+      overOdds: snap.overOdds ?? null,
+      underOdds: snap.underOdds ?? null,
+      awayML: snap.awayML ?? null,
+      homeML: snap.homeML ?? null,
+    });
+    console.log(
+      "[OddsHistory] Snapshot saved: gameId=%d sport=%s source=%s scrapedAt=%s EST",
+      gameId,
+      sport,
+      source,
+      new Date(now).toLocaleString("en-US", { timeZone: "America/New_York" })
+    );
+  } catch (err) {
+    console.error("[OddsHistory] Failed to insert snapshot for gameId=%d:", gameId, err);
+  }
+}
+
+/**
+ * List all odds history snapshots for a game, newest first.
+ * Returns at most 200 rows to avoid unbounded result sets.
+ */
+export async function listOddsHistory(gameId: number): Promise<OddsHistoryRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  try {
+    return await db
+      .select()
+      .from(oddsHistory)
+      .where(eq(oddsHistory.gameId, gameId))
+      .orderBy(desc(oddsHistory.scrapedAt))
+      .limit(200);
+  } catch (err) {
+    console.error("[OddsHistory] Failed to list history for gameId=%d:", gameId, err);
+    return [];
+  }
+}
+
+// ─── March Madness Bracket ────────────────────────────────────────────────────
+
+export interface BracketGameRow {
+  id: number;
+  awayTeam: string;
+  homeTeam: string;
+  gameDate: string;
+  startTimeEst: string;
+  gameStatus: string;
+  awayScore: number | null;
+  homeScore: number | null;
+  bracketGameId: number;
+  bracketRound: string;
+  bracketRegion: string;
+  bracketSlot: number;
+  nextBracketGameId: number | null;
+  nextBracketSlot: string | null;
+  awayBookSpread: string | null;
+  homeBookSpread: string | null;
+  bookTotal: string | null;
+  awayML: string | null;
+  homeML: string | null;
+  awayModelSpread: string | null;
+  homeModelSpread: string | null;
+  modelTotal: string | null;
+  modelAwayWinPct: string | null;
+  modelHomeWinPct: string | null;
+  publishedToFeed: boolean;
+  publishedModel: boolean;
+}
+
+/**
+ * Fetch all March Madness tournament games that have bracket data assigned.
+ * Returns every game from First Four through Championship (bracketGameId IS NOT NULL).
+ */
+export async function getBracketGames(): Promise<BracketGameRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  try {
+    const rows = await db
+      .select({
+        id: games.id,
+        awayTeam: games.awayTeam,
+        homeTeam: games.homeTeam,
+        gameDate: games.gameDate,
+        startTimeEst: games.startTimeEst,
+        gameStatus: games.gameStatus,
+        awayScore: games.awayScore,
+        homeScore: games.homeScore,
+        bracketGameId: games.bracketGameId,
+        bracketRound: games.bracketRound,
+        bracketRegion: games.bracketRegion,
+        bracketSlot: games.bracketSlot,
+        nextBracketGameId: games.nextBracketGameId,
+        nextBracketSlot: games.nextBracketSlot,
+        awayBookSpread: games.awayBookSpread,
+        homeBookSpread: games.homeBookSpread,
+        bookTotal: games.bookTotal,
+        awayML: games.awayML,
+        homeML: games.homeML,
+        awayModelSpread: games.awayModelSpread,
+        homeModelSpread: games.homeModelSpread,
+        modelTotal: games.modelTotal,
+        modelAwayWinPct: games.modelAwayWinPct,
+        modelHomeWinPct: games.modelHomeWinPct,
+        publishedToFeed: games.publishedToFeed,
+        publishedModel: games.publishedModel,
+      })
+      .from(games)
+      .where(
+        and(
+          eq(games.sport, "NCAAM"),
+          isNotNull(games.bracketGameId)
+        )
+      )
+      .orderBy(games.bracketGameId);
+    return rows as BracketGameRow[];
+  } catch (err) {
+    console.error("[Bracket] Failed to fetch bracket games:", err);
+    return [];
+  }
+}
+
+// ─── Bracket Advancement ─────────────────────────────────────────────────────
+/**
+ * When a bracket game goes FINAL, determine the winner and write them into
+ * the awayTeam or homeTeam of the next-round game based on nextBracketSlot.
+ *
+ * nextBracketSlot="top"    → winner becomes awayTeam  of nextBracketGameId
+ * nextBracketSlot="bottom" → winner becomes homeTeam  of nextBracketGameId
+ *
+ * This is idempotent: calling it multiple times on the same final game is safe.
+ */
+export async function advanceBracketWinner(gameId: number): Promise<string> {
+  const db = await getDb();
+  if (!db) return 'error';
+  try {
+    const rows = await db
+      .select({
+        awayTeam: games.awayTeam,
+        homeTeam: games.homeTeam,
+        awayScore: games.awayScore,
+        homeScore: games.homeScore,
+        gameStatus: games.gameStatus,
+        nextBracketGameId: games.nextBracketGameId,
+        nextBracketSlot: games.nextBracketSlot,
+        bracketGameId: games.bracketGameId,
+        bracketRound: games.bracketRound,
+      })
+      .from(games)
+      .where(eq(games.id, gameId))
+      .limit(1);
+
+    if (!rows.length) {
+      console.log('[BracketAdvance] SKIP: game id=' + String(gameId) + ' not found');
+      return 'error';
+    }
+
+    const g = rows[0];
+    if (g.gameStatus !== 'final') return 'not_final';
+    if (!g.nextBracketGameId || !g.nextBracketSlot) {
+      console.log('[BracketAdvance] NO_NEXT: bracketGame=' + String(g.bracketGameId) + ' round=' + String(g.bracketRound));
+      return 'no_next_game';
+    }
+    if (g.awayScore === null || g.homeScore === null) {
+      console.log('[BracketAdvance] SKIP: game id=' + String(gameId) + ' is final but scores are null');
+      return 'skipped';
+    }
+
+    const winnerSlug = g.awayScore > g.homeScore ? g.awayTeam : g.homeTeam;
+    const loserSlug  = g.awayScore > g.homeScore ? g.homeTeam : g.awayTeam;
+    const winScore   = Math.max(g.awayScore, g.homeScore);
+    const loseScore  = Math.min(g.awayScore, g.homeScore);
+
+    console.log('[BracketAdvance] WINNER: ' + winnerSlug + ' (' + String(winScore) + ') def. ' + loserSlug + ' (' + String(loseScore) + ') -> bracketGame ' + String(g.nextBracketGameId) + ' slot=' + g.nextBracketSlot);
+
+    const nextRows = await db
+      .select({ id: games.id, awayTeam: games.awayTeam, homeTeam: games.homeTeam })
+      .from(games)
+      .where(
+        and(
+          eq(games.bracketGameId, g.nextBracketGameId),
+          eq(games.sport, 'NCAAM')
+        )
+      )
+      .limit(1);
+
+    if (!nextRows.length) {
+      console.warn('[BracketAdvance] MISSING_NEXT_GAME: bracketGameId=' + String(g.nextBracketGameId) + ' not found in DB');
+      return 'no_next_game';
+    }
+
+    const nextGame = nextRows[0];
+    const currentSlotValue = g.nextBracketSlot === 'top' ? nextGame.awayTeam : nextGame.homeTeam;
+    if (currentSlotValue === winnerSlug) {
+      console.log('[BracketAdvance] ALREADY_SET: bracketGame ' + String(g.nextBracketGameId) + ' slot=' + g.nextBracketSlot + ' already=' + winnerSlug);
+      return 'skipped';
+    }
+
+    const updatePayload = g.nextBracketSlot === 'top'
+      ? { awayTeam: winnerSlug }
+      : { homeTeam: winnerSlug };
+
+    await db.update(games).set(updatePayload).where(eq(games.id, nextGame.id));
+
+    console.log('[BracketAdvance] ADVANCED: ' + winnerSlug + ' -> bracketGame ' + String(g.nextBracketGameId) + ' (db id=' + String(nextGame.id) + ') slot=' + g.nextBracketSlot + ' OK');
+    return 'advanced';
+  } catch (err) {
+    console.error('[BracketAdvance] ERROR for game id=' + String(gameId) + ':', err);
+    return 'error';
+  }
+}
+
+/**
+ * Audit all NCAAM bracket games that are FINAL and ensure their winners
+ * have been advanced to the next round. Safe to call repeatedly.
+ */
+export async function auditAndAdvanceAllBracketWinners(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  try {
+    const finalGames = await db
+      .select({ id: games.id, bracketGameId: games.bracketGameId, bracketRound: games.bracketRound })
+      .from(games)
+      .where(
+        and(
+          eq(games.sport, 'NCAAM'),
+          eq(games.gameStatus, 'final'),
+          isNotNull(games.bracketGameId),
+          isNotNull(games.nextBracketGameId)
+        )
+      );
+
+    console.log('[BracketAdvance] AUDIT: found ' + String(finalGames.length) + ' final bracket games to check');
+    let advanced = 0;
+    for (const g of finalGames) {
+      const result = await advanceBracketWinner(g.id);
+      if (result === 'advanced') advanced++;
+    }
+    console.log('[BracketAdvance] AUDIT COMPLETE: advanced ' + String(advanced) + ' winners');
+    return advanced;
+  } catch (err) {
+    console.error('[BracketAdvance] AUDIT ERROR:', err);
+    return 0;
+  }
+}

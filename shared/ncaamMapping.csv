@@ -1,0 +1,366 @@
+CONFERENCE,NCAA NAME,NCAA NICKNAME,VSIN Name,NCAA SLUG,VSiN Slug,NCAA LOGO URL
+ACC,Duke,Blue Devils,Duke,duke,duke,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/duke.svg
+ACC,Virginia,Cavaliers,Virginia,virginia,virginia,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/virginia.svg
+ACC,Miami (FL),Hurricanes,Miami FL,miami-fl,miami-fl,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/miami-fl.svg
+ACC,North Carolina,Tar Heels,North Carolina,north-carolina,north-carolina,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/north-carolina.svg
+ACC,Clemson,Tigers,Clemson,clemson,clemson,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/clemson.svg
+ACC,Louisville,Cardinals,Louisville,louisville,louisville,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/louisville.svg
+ACC,NC State,Wolfpack,NC State,north-carolina-st,nc-state,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/north-carolina-st.svg
+ACC,California,Golden Bears,California,california,california,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/california.svg
+ACC,Florida St.,Seminoles,Florida ST,florida-st,florida-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/florida-st.svg
+ACC,SMU,Mustangs,SMU,smu,smu,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/smu.svg
+ACC,Virginia Tech,Hokies,Virginia Tech,virginia-tech,virginia-tech,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/virginia-tech.svg
+ACC,Stanford,Cardinal,Stanford,stanford,stanford,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/stanford.svg
+ACC,Wake Forest,Demon Deacons,Wake Forest,wake-forest,wake-forest,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/wake-forest.svg
+ACC,Syracuse,Orange,Syracuse,syracuse,syracuse,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/syracuse.svg
+ACC,Notre Dame,Fighting Irish,Notre Dame,notre-dame,notre-dame,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/notre-dame.svg
+ACC,Pittsburgh,Panthers,Pittsburgh,pittsburgh,pittsburgh,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/pittsburgh.svg
+ACC,Boston College,Eagles,Boston College,boston-college,boston-college,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/boston-college.svg
+ACC,Georgia Tech,Yellow Jackets,Georgia Tech,georgia-tech,georgia-tech,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/georgia-tech.svg
+America East,UMBC,Retrievers,UMBC,umbc,umbc,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/umbc.svg
+America East,Vermont,Catamounts,Vermont,vermont,vermont,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/vermont.svg
+America East,NJIT,Highlanders,NJIT,njit,njit,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/njit.svg
+America East,UMass Lowell,River Hawks,UMass Lowell,umass-lowell,umass-lowell,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/umass-lowell.svg
+America East,UAlbany,Great Danes,Albany,albany-ny,albany,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/albany-ny.svg
+America East,Maine,Black Bears,Maine,maine,maine,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/maine.svg
+America East,New Hampshire,Wildcats,New Hampshire,new-hampshire,new-hampshire,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/new-hampshire.svg
+America East,Bryant,Bulldogs,Bryant,bryant,bryant,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/bryant.svg
+America East,Binghamton,Bearcats,Binghamton,binghamton,binghamton,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/binghamton.svg
+American,South Fla.,Bulls,South Florida,south-fla,south-florida,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/south-fla.svg
+American,Wichita St.,Shockers,Wichita ST,wichita-st,wichita-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/wichita-st.svg
+American,Tulsa,Golden Hurricane,Tulsa,tulsa,tulsa,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/tulsa.svg
+American,UAB,Blazers,UAB,uab,uab,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/uab.svg
+American,Fla. Atlantic,Owls,FL Atlantic,fla-atlantic,fl-atlantic,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/fla-atlantic.svg
+American,Charlotte,49ers,Charlotte,charlotte,charlotte,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/charlotte.svg
+American,Tulane,Green Wave,Tulane,tulane,tulane,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/tulane.svg
+American,North Texas,Mean Green,North Texas,north-texas,north-texas,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/north-texas.svg
+American,Temple,Owls,Temple,temple,temple,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/temple.svg
+American,Memphis,Tigers,Memphis,memphis,memphis,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/memphis.svg
+American,East Carolina,Pirates,East Carolina,east-carolina,east-carolina,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/east-carolina.svg
+American,Rice,Owls,Rice,rice,rice,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/rice.svg
+American,UTSA,Roadrunners,Texas-San Antonio,utsa,texas-san-antonio,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/utsa.svg
+ASUN,Austin Peay,Governors,Austin Peay,austin-peay,austin-peay,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/austin-peay.svg
+ASUN,Central Ark.,Bears,C Arkansas,central-ark,c-arkansas,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/central-ark.svg
+ASUN,Queens (NC),Royals,Queens NC,queens-nc,queens-nc,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/queens-nc.svg
+ASUN,Lipscomb,Bisons,Lipscomb,lipscomb,lipscomb,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/lipscomb.svg
+ASUN,West Ga.,Wolves,W Georgia,west-ga,w-georgia,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/west-ga.svg
+ASUN,FGCU,Eagles,FL Gulf Coast,fgcu,fl-gulf-coast,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/fgcu.svg
+ASUN,Bellarmine,Knights,Bellarmine,bellarmine,bellarmine,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/bellarmine.svg
+ASUN,Stetson,Hatters,Stetson,stetson,stetson,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/stetson.svg
+ASUN,Jacksonville,Dolphins,Jacksonville,jacksonville,jacksonville,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/jacksonville.svg
+ASUN,Eastern Ky.,Colonels,E Kentucky,eastern-ky,e-kentucky,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/eastern-ky.svg
+ASUN,North Florida,Ospreys,N Florida,north-florida,n-florida,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/north-florida.svg
+ASUN,North Ala.,Lions,N Alabama,north-ala,n-alabama,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/north-ala.svg
+Atlantic 10,Saint Louis,Billikens,Saint Louis,saint-louis,saint-louis,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/saint-louis.svg
+Atlantic 10,VCU,Rams,VA Commonwealth,vcu,va-commonwealth,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/vcu.svg
+Atlantic 10,Dayton,Flyers,Dayton,dayton,dayton,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/dayton.svg
+Atlantic 10,Saint Joseph's,Hawks,ST Josephs,saint-josephs,st-josephs,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/saint-josephs.svg
+Atlantic 10,George Mason,Patriots,George Mason,george-mason,george-mason,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/george-mason.svg
+Atlantic 10,Davidson,Wildcats,Davidson,davidson,davidson,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/davidson.svg
+Atlantic 10,George Washington,Revolutionaries,George Washington,george-washington,george-washington,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/george-washington.svg
+Atlantic 10,Duquesne,Dukes,Duquesne,duquesne,duquesne,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/duquesne.svg
+Atlantic 10,Rhode Island,Rams,Rhode Island,rhode-island,rhode-island,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/rhode-island.svg
+Atlantic 10,Fordham,Rams,Fordham,fordham,fordham,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/fordham.svg
+Atlantic 10,Richmond,Spiders,Richmond,richmond,richmond,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/richmond.svg
+Atlantic 10,La Salle,Explorers,La Salle,la-salle,la-salle,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/la-salle.svg
+Atlantic 10,St. Bonaventure,Bonnies,ST Bonaventure,st-bonaventure,st-bonaventure,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/st-bonaventure.svg
+Atlantic 10,Loyola Chicago,Ramblers,Loyola-Chicago,loyola-chicago,loyola-chicago,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/loyola-chicago.svg
+Big 12,Arizona,Wildcats,Arizona,arizona,arizona,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/arizona.svg
+Big 12,Houston,Cougars,Houston,houston,houston,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/houston.svg
+Big 12,Texas Tech,Red Raiders,Texas Tech,texas-tech,texas-tech,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/texas-tech.svg
+Big 12,Iowa St.,Cyclones,Iowa ST,iowa-st,iowa-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/iowa-st.svg
+Big 12,Kansas,Jayhawks,Kansas,kansas,kansas,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/kansas.svg
+Big 12,TCU,Horned Frogs,TCU,tcu,tcu,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/tcu.svg
+Big 12,UCF,Knights,C Florida,ucf,c-florida,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ucf.svg
+Big 12,Cincinnati,Bearcats,Cincinnati,cincinnati,cincinnati,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/cincinnati.svg
+Big 12,BYU,Cougars,Brigham Young,byu,brigham-young,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/byu.svg
+Big 12,West Virginia,Mountaineers,West Virginia,west-virginia,west-virginia,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/west-virginia.svg
+Big 12,Colorado,Buffaloes,Colorado,colorado,colorado,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/colorado.svg
+Big 12,Arizona St.,Sun Devils,Arizona ST,arizona-st,arizona-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/arizona-st.svg
+Big 12,Oklahoma St.,Cowboys,Oklahoma ST,oklahoma-st,oklahoma-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/oklahoma-st.svg
+Big 12,Baylor,Bears,Baylor,baylor,baylor,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/baylor.svg
+Big 12,Kansas St.,Wildcats,Kansas ST,kansas-st,kansas-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/kansas-st.svg
+Big 12,Utah,Utes,Utah,utah,utah,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/utah.svg
+Big East,UConn,Huskies,Connecticut,uconn,connecticut,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/uconn.svg
+Big East,St. John's (NY),Red Storm,ST Johns,st-johns-ny,st-johns,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/st-johns-ny.svg
+Big East,Villanova,Wildcats,Villanova,villanova,villanova,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/villanova.svg
+Big East,Seton Hall,Pirates,Seton Hall,seton-hall,seton-hall,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/seton-hall.svg
+Big East,Creighton,Bluejays,Creighton,creighton,creighton,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/creighton.svg
+Big East,DePaul,Blue Demons,Depaul,depaul,depaul,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/depaul.svg
+Big East,Providence,Friars,Providence,providence,providence,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/providence.svg
+Big East,Butler,Bulldogs,Butler,butler,butler,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/butler.svg
+Big East,Xavier,Musketeers,Xavier,xavier,xavier,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/xavier.svg
+Big East,Marquette,Golden Eagles,Marquette,marquette,marquette,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/marquette.svg
+Big East,Georgetown,Hoyas,Georgetown,georgetown,georgetown,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/georgetown.svg
+Big Sky,Portland St.,Vikings,Portland ST,portland-st,portland-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/portland-st.svg
+Big Sky,Montana St.,Bobcats,Montana ST,montana-st,montana-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/montana-st.svg
+Big Sky,Eastern Wash.,Eagles,E Washington,eastern-wash,e-washington,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/eastern-wash.svg
+Big Sky,Northern Colo.,Bears,N Colorado,northern-colo,n-colorado,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/northern-colo.svg
+Big Sky,Weber St.,Wildcats,Weber ST,weber-st,weber-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/weber-st.svg
+Big Sky,Montana,Grizzlies,Montana,montana,montana,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/montana.svg
+Big Sky,Idaho,Vandals,Idaho,idaho,idaho,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/idaho.svg
+Big Sky,Sacramento St.,Hornets,Sacramento ST,sacramento-st,sacramento-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/sacramento-st.svg
+Big Sky,Idaho St.,Bengals,Idaho ST,idaho-st,idaho-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/idaho-st.svg
+Big Sky,Northern Ariz.,Lumberjacks,N Arizona,northern-ariz,n-arizona,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/northern-ariz.svg
+Big South,High Point,Panthers,High Point,high-point,high-point,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/high-point.svg
+Big South,Winthrop,Eagles,Winthrop,winthrop,winthrop,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/winthrop.svg
+Big South,Radford,Highlanders,Radford,radford,radford,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/radford.svg
+Big South,Longwood,Lancers,Longwood,longwood,longwood,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/longwood.svg
+Big South,UNC Asheville,Bulldogs,UNC-Asheville,unc-asheville,unc-asheville,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/unc-asheville.svg
+Big South,Presbyterian,Blue Hose,Presbyterian,presbyterian,presbyterian,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/presbyterian.svg
+Big South,Charleston So.,Buccaneers,Charleston Southern,charleston-so,charleston-southern,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/charleston-so.svg
+Big South,USC Upstate,Spartans,SC-Upstate,usc-upstate,sc-upstate,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/usc-upstate.svg
+Big South,Gardner-Webb,Runnin' Bulldogs,Gardner-Webb,gardner-webb,gardner-webb,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/gardner-webb.svg
+Big Ten,Michigan,Wolverines,Michigan,michigan,michigan,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/michigan.svg
+Big Ten,Michigan St.,Spartans,Michigan ST,michigan-st,michigan-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/michigan-st.svg
+Big Ten,Nebraska,Cornhuskers,Nebraska,nebraska,nebraska,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/nebraska.svg
+Big Ten,Illinois,Fighting Illini,Illinois,illinois,illinois,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/illinois.svg
+Big Ten,Purdue,Boilermakers,Purdue,purdue,purdue,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/purdue.svg
+Big Ten,Wisconsin,Badgers,Wisconsin,wisconsin,wisconsin,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/wisconsin.svg
+Big Ten,UCLA,Bruins,UCLA,ucla,ucla,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ucla.svg
+Big Ten,Ohio St.,Buckeyes,Ohio ST,ohio-st,ohio-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ohio-st.svg
+Big Ten,Iowa,Hawkeyes,Iowa,iowa,iowa,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/iowa.svg
+Big Ten,Indiana,Hoosiers,Indiana,indiana,indiana,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/indiana.svg
+Big Ten,Southern California,Trojans,USC,southern-california,usc,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/southern-california.svg
+Big Ten,Washington,Huskies,Washington,washington,washington,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/washington.svg
+Big Ten,Minnesota,Golden Gophers,Minnesota,minnesota,minnesota,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/minnesota.svg
+Big Ten,Rutgers,Scarlet Knights,Rutgers,rutgers,rutgers,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/rutgers.svg
+Big Ten,Northwestern,Wildcats,Northwestern,northwestern,northwestern,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/northwestern.svg
+Big Ten,Oregon,Ducks,Oregon,oregon,oregon,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/oregon.svg
+Big Ten,Maryland,Terrapins,Maryland,maryland,maryland,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/maryland.svg
+Big Ten,Penn St.,Nittany Lions,Penn ST,penn-st,penn-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/penn-st.svg
+Big West,Hawaii,Rainbow Warriors,Hawaii,hawaii,hawaii,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/hawaii.svg
+Big West,UC Irvine,Anteaters,UC-Irvine,uc-irvine,uc-irvine,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/uc-irvine.svg
+Big West,UC San Diego,Tritons,UC-San Diego,uc-san-diego,uc-san-diego,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/uc-san-diego.svg
+Big West,CSUN,Matadors,CSU-Northridge,cal-st-northridge,csu-northridge,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/cal-st-northridge.svg
+Big West,UC Santa Barbara,Gauchos,UC-Santa Barbara,uc-santa-barbara,uc-santa-barbara,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/uc-santa-barbara.svg
+Big West,UC Davis,Aggies,UC-Davis,uc-davis,uc-davis,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/uc-davis.svg
+Big West,Cal St. Fullerton,Titans,CSU-Fullerton,cal-st-fullerton,csu-fullerton,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/cal-st-fullerton.svg
+Big West,Cal Poly,Mustangs,Cal Poly SLO,cal-poly,cal-poly-slo,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/cal-poly.svg
+Big West,Long Beach St.,Beach,Long Beach ST,long-beach-st,long-beach-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/long-beach-st.svg
+Big West,UC Riverside,Highlanders,UC-Riverside,uc-riverside,uc-riverside,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/uc-riverside.svg
+Big West,CSU Bakersfield,Roadrunners,CSU-Bakersfield,bakersfield,csu-bakersfield,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/bakersfield.svg
+CAA,UNCW,Seahawks,UNC-Wilmington,unc-wilmington,unc-wilmington,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/unc-wilmington.svg
+CAA,Col. of Charleston,Cougars,Charleston,col-of-charleston,charleston,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/col-of-charleston.svg
+CAA,Hofstra,Pride,Hofstra,hofstra,hofstra,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/hofstra.svg
+CAA,Monmouth,Hawks,Monmouth,monmouth,monmouth,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/monmouth.svg
+CAA,William & Mary,Tribe,William & Mary,william-mary,william-and-mary,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/william-mary.svg
+CAA,Drexel,Dragons,Drexel,drexel,drexel,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/drexel.svg
+CAA,Stony Brook,Seawolves,Stony Brook,stony-brook,stony-brook,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/stony-brook.svg
+CAA,Towson,Tigers,Towson,towson,towson,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/towson.svg
+CAA,Campbell,Camels,Campbell,campbell,campbell,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/campbell.svg
+CAA,Hampton,Pirates,Hampton,hampton,hampton,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/hampton.svg
+CAA,Elon,Phoenix,Elon,elon,elon,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/elon.svg
+CAA,N.C. A&T,Aggies,N Carolina A&T,nc-at,n-carolina-a-and-t,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/nc-at.svg
+CAA,Northeastern,Huskies,Northeastern,northeastern,northeastern,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/northeastern.svg
+CUSA,Liberty,Flames,Liberty,liberty,liberty,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/liberty.svg
+CUSA,Sam Houston,Bearkats,Sam Houston ST,sam-houston-st,sam-houston-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/sam-houston-st.svg
+CUSA,Western Ky.,Hilltoppers,W Kentucky,western-ky,w-kentucky,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/western-ky.svg
+CUSA,Kennesaw St.,Owls,Kennesaw ST,kennesaw-st,kennesaw-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/kennesaw-st.svg
+CUSA,Louisiana Tech,Bulldogs,Louisiana Tech,louisiana-tech,louisiana-tech,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/louisiana-tech.svg
+CUSA,Middle Tenn.,Blue Raiders,Middle Tenn ST,middle-tenn,middle-tenn-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/middle-tenn.svg
+CUSA,Jacksonville St.,Gamecocks,Jacksonville ST,jacksonville-st,jacksonville-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/jacksonville-st.svg
+CUSA,FIU,Panthers,Florida INTL,fiu,florida-intl,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/fiu.svg
+CUSA,Missouri St.,Bears,Missouri ST,missouri-st,missouri-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/missouri-st.svg
+CUSA,New Mexico St.,Aggies,New Mexico ST,new-mexico-st,new-mexico-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/new-mexico-st.svg
+CUSA,UTEP,Miners,Texas-El Paso,utep,texas-el-paso,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/utep.svg
+CUSA,Delaware,Blue Hens,Delaware,delaware,delaware,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/delaware.svg
+Horizon,Wright St.,Raiders,Wright ST,wright-st,wright-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/wright-st.svg
+Horizon,Robert Morris,Colonials,Robert Morris,robert-morris,robert-morris,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/robert-morris.svg
+Horizon,Green Bay,Phoenix,UW-Green Bay,green-bay,uw-green-bay,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/green-bay.svg
+Horizon,Detroit Mercy,Titans,Detroit,detroit,detroit,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/detroit.svg
+Horizon,Oakland,Golden Grizzlies,Oakland,oakland,oakland,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/oakland.svg
+Horizon,Purdue Fort Wayne,Mastodons,IPFW,ipfw,ipfw,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ipfw.svg
+Horizon,Northern Ky.,Norse,N Kentucky,northern-ky,n-kentucky,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/northern-ky.svg
+Horizon,Youngstown St.,Penguins,Youngstown ST,youngstown-st,youngstown-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/youngstown-st.svg
+Horizon,Milwaukee,Panthers,UW-Milwaukee,milwaukee,uw-milwaukee,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/milwaukee.svg
+Horizon,Cleveland St.,Vikings,Cleveland ST,cleveland-st,cleveland-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/cleveland-st.svg
+Horizon,IU Indy,Jaguars,IUPUI,iu-indy,iupui,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/iu-indy.svg
+Ivy League,Yale,Bulldogs,Yale,yale,yale,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/yale.svg
+Ivy League,Harvard,Crimson,Harvard,harvard,harvard,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/harvard.svg
+Ivy League,Penn,Quakers,Pennsylvania,penn,pennsylvania,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/penn.svg
+Ivy League,Cornell,Big Red,Cornell,cornell,cornell,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/cornell.svg
+Ivy League,Columbia,Lions,Columbia,columbia,columbia,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/columbia.svg
+Ivy League,Dartmouth,Big Green,Dartmouth,dartmouth,dartmouth,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/dartmouth.svg
+Ivy League,Princeton,Tigers,Princeton,princeton,princeton,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/princeton.svg
+Ivy League,Brown,Bears,Brown,brown,brown,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/brown.svg
+MAAC,Merrimack,Warriors,Merrimack,merrimack,merrimack,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/merrimack.svg
+MAAC,Saint Peter's,Peacocks,ST Peters,st-peters,st-peters,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/st-peters.svg
+MAAC,Siena,Saints,Siena,siena,siena,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/siena.svg
+MAAC,Marist,Red Foxes,Marist,marist,marist,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/marist.svg
+MAAC,Quinnipiac,Bobcats,Quinnipiac,quinnipiac,quinnipiac,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/quinnipiac.svg
+MAAC,Fairfield,Stags,Fairfield,fairfield,fairfield,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/fairfield.svg
+MAAC,Mount St. Mary's,Mountaineers,MT ST Marys,mt-st-marys,mt-st-marys,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/mt-st-marys.svg
+MAAC,Iona,Gaels,Iona,iona,iona,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/iona.svg
+MAAC,Sacred Heart,Pioneers,Sacred Heart,sacred-heart,sacred-heart,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/sacred-heart.svg
+MAAC,Manhattan,Jaspers,Manhattan,manhattan,manhattan,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/manhattan.svg
+MAAC,Canisius,Golden Griffins,Canisius,canisius,canisius,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/canisius.svg
+MAAC,Niagara,Purple Eagles,Niagara,niagara,niagara,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/niagara.svg
+MAAC,Rider,Broncs,Rider,rider,rider,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/rider.svg
+MAC,Miami (OH),RedHawks,Miami OH,miami-oh,miami-oh,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/miami-oh.svg
+MAC,Akron,Zips,Akron,akron,akron,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/akron.svg
+MAC,Kent St.,Golden Flashes,Kent,kent-st,kent,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/kent-st.svg
+MAC,Toledo,Rockets,Toledo,toledo,toledo,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/toledo.svg
+MAC,Ohio,Bobcats,Ohio,ohio,ohio,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ohio.svg
+MAC,Bowling Green,Falcons,Bowling Green,bowling-green,bowling-green,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/bowling-green.svg
+MAC,Buffalo,Bulls,Buffalo,buffalo,buffalo,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/buffalo.svg
+MAC,Massachusetts,Minutemen,Massachusetts,massachusetts,massachusetts,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/massachusetts.svg
+MAC,Ball St.,Cardinals,Ball ST,ball-st,ball-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ball-st.svg
+MAC,Central Mich.,Chippewas,C Michigan,central-mich,c-michigan,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/central-mich.svg
+MAC,Western Mich.,Broncos,W Michigan,western-mich,w-michigan,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/western-mich.svg
+MAC,Eastern Mich.,Eagles,E Michigan,eastern-mich,e-michigan,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/eastern-mich.svg
+MAC,NIU,Huskies,N Illinois,northern-ill,n-illinois,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/northern-ill.svg
+MEAC,Howard,Bison,Howard,howard,howard,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/howard.svg
+MEAC,Morgan St.,Bears,Morgan ST,morgan-st,morgan-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/morgan-st.svg
+MEAC,Norfolk St.,Spartans,Norfolk ST,norfolk-st,norfolk-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/norfolk-st.svg
+MEAC,N.C. Central,Eagles,NC Central,nc-central,nc-central,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/nc-central.svg
+MEAC,South Carolina St.,Bulldogs,S Carolina ST,south-carolina-st,s-carolina-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/south-carolina-st.svg
+MEAC,UMES,Hawks,MD-E Shore,md-east-shore,md-e-shore,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/md-east-shore.svg
+MEAC,Coppin St.,Eagles,Coppin ST,coppin-st,coppin-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/coppin-st.svg
+MEAC,Delaware St.,Hornets,Delaware ST,delaware-st,delaware-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/delaware-st.svg
+Mountain West,Utah St.,Aggies,Utah ST,utah-st,utah-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/utah-st.svg
+Mountain West,New Mexico,Lobos,New Mexico,new-mexico,new-mexico,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/new-mexico.svg
+Mountain West,San Diego St.,Aztecs,San Diego ST,san-diego-st,san-diego-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/san-diego-st.svg
+Mountain West,Grand Canyon,Antelopes,Grand Canyon,grand-canyon,grand-canyon,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/grand-canyon.svg
+Mountain West,Colorado St.,Rams,Colorado ST,colorado-st,colorado-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/colorado-st.svg
+Mountain West,Boise St.,Broncos,Boise ST,boise-st,boise-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/boise-st.svg
+Mountain West,Nevada,Wolf Pack,Nevada,nevada,nevada,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/nevada.svg
+Mountain West,UNLV,Rebels,UNLV,unlv,unlv,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/unlv.svg
+Mountain West,Wyoming,Cowboys,Wyoming,wyoming,wyoming,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/wyoming.svg
+Mountain West,Fresno St.,Bulldogs,Fresno ST,fresno-st,fresno-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/fresno-st.svg
+Mountain West,San Jose St.,Spartans,San Jose ST,san-jose-st,san-jose-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/san-jose-st.svg
+Mountain West,Air Force,Falcons,Air Force,air-force,air-force,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/air-force.svg
+MVC,Belmont,Bruins,Belmont,belmont,belmont,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/belmont.svg
+MVC,Bradley,Braves,Bradley,bradley,bradley,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/bradley.svg
+MVC,Murray St.,Racers,Murray ST,murray-st,murray-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/murray-st.svg
+MVC,Illinois St.,Redbirds,Illinois ST,illinois-st,illinois-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/illinois-st.svg
+MVC,UIC,Flames,Illinois-Chicago,ill-chicago,illinois-chicago,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ill-chicago.svg
+MVC,UNI,Panthers,N Iowa,uni,n-iowa,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/uni.svg
+MVC,Valparaiso,Beacons,Valparaiso,valparaiso,valparaiso,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/valparaiso.svg
+MVC,Southern Ill.,Salukis,S Illinois,southern-ill,s-illinois,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/southern-ill.svg
+MVC,Drake,Bulldogs,Drake,drake,drake,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/drake.svg
+MVC,Indiana St.,Sycamores,Indiana ST,indiana-st,indiana-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/indiana-st.svg
+MVC,Evansville,Purple Aces,Evansville,evansville,evansville,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/evansville.svg
+NEC,LIU,Sharks,LIU-Brooklyn,long-island,liu-brooklyn,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/long-island.svg
+NEC,Central Conn. St.,Blue Devils,C Conn ST,central-conn-st,c-conn-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/central-conn-st.svg
+NEC,Mercyhurst,Lakers,Mercyhurst,mercyhurst,mercyhurst,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/mercyhurst.svg
+NEC,Le Moyne,Dolphins,Lemoyne,le-moyne,lemoyne,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/le-moyne.svg
+NEC,New Haven,Chargers,New Haven,new-haven,new-haven,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/new-haven.svg
+NEC,Wagner,Seahawks,Wagner,wagner,wagner,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/wagner.svg
+NEC,Stonehill,Skyhawks,Stonehill,stonehill,stonehill,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/stonehill.svg
+NEC,FDU,Knights,Fairleigh Dickinson,fdu,fairleigh-dickinson,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/fdu.svg
+NEC,Saint Francis,Red Flash,ST Francis-PA,st-francis-pa,st-francis-pa,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/st-francis-pa.svg
+NEC,Chicago St.,Cougars,Chicago ST,chicago-st,chicago-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/chicago-st.svg
+OVC,Tennessee St.,Tigers,Tennessee ST,tennessee-st,tennessee-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/tennessee-st.svg
+OVC,Morehead St.,Eagles,Morehead ST,morehead-st,morehead-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/morehead-st.svg
+OVC,Southeast Mo. St.,Redhawks,SE Missouri ST,southeast-mo-st,se-missouri-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/southeast-mo-st.svg
+OVC,UT Martin,Skyhawks,Tennessee-Martin,ut-martin,tennessee-martin,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ut-martin.svg
+OVC,SIUE,Cougars,SIU-Edwardsville,siu-edwardsville,siu-edwardsville,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/siu-edwardsville.svg
+OVC,Lindenwood,Lions,Lindenwood,lindenwood-mo,lindenwood,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/lindenwood-mo.svg
+OVC,Little Rock,Trojans,Ark-Little Rock,ualr,ark-little-rock,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ualr.svg
+OVC,Tennessee Tech,Golden Eagles,Tennessee Tech,tennessee-tech,tennessee-tech,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/tennessee-tech.svg
+OVC,Eastern Ill.,Panthers,E Illinois,eastern-ill,e-illinois,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/eastern-ill.svg
+OVC,Southern Ind.,Screaming Eagles,S Indiana,southern-ind,s-indiana,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/southern-ind.svg
+OVC,Western Ill.,Leathernecks,W Illinois,western-ill,w-illinois,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/western-ill.svg
+Patriot,Navy,Midshipmen,Navy,navy,navy,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/navy.svg
+Patriot,Colgate,Raiders,Colgate,colgate,colgate,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/colgate.svg
+Patriot,Lehigh,Mountain Hawks,Lehigh,lehigh,lehigh,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/lehigh.svg
+Patriot,Boston U.,Terriers,Boston U,boston-u,boston-u,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/boston-u.svg
+Patriot,American,Eagles,American,american,american,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/american.svg
+Patriot,Loyola Maryland,Greyhounds,Loyola-Maryland,loyola-maryland,loyola-maryland,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/loyola-maryland.svg
+Patriot,Lafayette,Leopards,Lafayette,lafayette,lafayette,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/lafayette.svg
+Patriot,Bucknell,Bison,Bucknell,bucknell,bucknell,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/bucknell.svg
+Patriot,Army West Point,Black Knights,Army,army,army,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/army.svg
+Patriot,Holy Cross,Crusaders,Holy Cross,holy-cross,holy-cross,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/holy-cross.svg
+SEC,Florida,Gators,Florida,florida,florida,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/florida.svg
+SEC,Alabama,Crimson Tide,Alabama,alabama,alabama,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/alabama.svg
+SEC,Arkansas,Razorbacks,Arkansas,arkansas,arkansas,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/arkansas.svg
+SEC,Tennessee,Volunteers,Tennessee,tennessee,tennessee,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/tennessee.svg
+SEC,Vanderbilt,Commodores,Vanderbilt,vanderbilt,vanderbilt,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/vanderbilt.svg
+SEC,Texas A&M,Aggies,Texas A&M,texas-am,texas-a-and-m,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/texas-am.svg
+SEC,Missouri,Tigers,Missouri,missouri,missouri,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/missouri.svg
+SEC,Kentucky,Wildcats,Kentucky,kentucky,kentucky,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/kentucky.svg
+SEC,Georgia,Bulldogs,Georgia,georgia,georgia,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/georgia.svg
+SEC,Texas,Longhorns,Texas,texas,texas,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/texas.svg
+SEC,Auburn,Tigers,Auburn,auburn,auburn,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/auburn.svg
+SEC,Oklahoma,Sooners,Oklahoma,oklahoma,oklahoma,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/oklahoma.svg
+SEC,Mississippi St.,Bulldogs,Mississippi ST,mississippi-st,mississippi-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/mississippi-st.svg
+SEC,Ole Miss,Rebels,Mississippi,ole-miss,mississippi,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ole-miss.svg
+SEC,LSU,Tigers,LSU,lsu,lsu,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/lsu.svg
+SEC,South Carolina,Gamecocks,South Carolina,south-carolina,south-carolina,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/south-carolina.svg
+SoCon,ETSU,Buccaneers,E Tennessee ST,east-tenn-st,e-tennessee-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/east-tenn-st.svg
+SoCon,Mercer,Bears,Mercer,mercer,mercer,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/mercer.svg
+SoCon,Wofford,Terriers,Wofford,wofford,wofford,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/wofford.svg
+SoCon,Samford,Bulldogs,Samford,samford,samford,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/samford.svg
+SoCon,Furman,Paladins,Furman,furman,furman,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/furman.svg
+SoCon,Western Caro.,Catamounts,W Carolina,western-caro,w-carolina,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/western-caro.svg
+SoCon,UNC Greensboro,Spartans,UNC-Greensboro,unc-greensboro,unc-greensboro,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/unc-greensboro.svg
+SoCon,Chattanooga,Mocs,Chattanooga,chattanooga,chattanooga,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/chattanooga.svg
+SoCon,The Citadel,Bulldogs,The Citadel,citadel,the-citadel,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/citadel.svg
+SoCon,VMI,Keydets,VMI,vmi,vmi,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/vmi.svg
+Southland,SFA,Lumberjacks,Stephen F Austin,stephen-f-austin,stephen-f-austin,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/stephen-f-austin.svg
+Southland,McNeese,Cowboys,McNeese ST,mcneese,mcneese-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/mcneese.svg
+Southland,UTRGV,Vaqueros,UTRGV,utrgv,utrgv,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/utrgv.svg
+Southland,A&M-Corpus Christi,Islanders,Texas A&M CC,am-corpus-chris,texas-a-and-m-cc,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/am-corpus-chris.svg
+Southland,New Orleans,Privateers,New Orleans,new-orleans,new-orleans,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/new-orleans.svg
+Southland,Nicholls,Colonels,Nicholls ST,nicholls-st,nicholls-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/nicholls-st.svg
+Southland,Houston Christian,Huskies,Houston Christian,houston-christian,houston-christian,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/houston-christian.svg
+Southland,Northwestern St.,Demons,Northwestern ST,northwestern-st,northwestern-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/northwestern-st.svg
+Southland,UIW,Cardinals,Incarnate Word,uiw,incarnate-word,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/uiw.svg
+Southland,Lamar University,Cardinals,Lamar,lamar,lamar,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/lamar.svg
+Southland,East Texas A&M,Lions,East Texas A&M,tex-am-commerce,east-texas-a-and-m,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/tex-am-commerce.svg
+Southland,Southeastern La.,Lions,SE Louisiana,southeastern-la,se-louisiana,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/southeastern-la.svg
+Summit League,North Dakota St.,Bison,N Dakota ST,north-dakota-st,n-dakota-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/north-dakota-st.svg
+Summit League,St. Thomas (MN),Tommies,ST Thomas-MN,st-thomas-mn,st-thomas-mn-,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/st-thomas-mn.svg
+Summit League,North Dakota,Fighting Hawks,N Dakota,north-dakota,n-dakota,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/north-dakota.svg
+Summit League,South Dakota,Coyotes,S Dakota,south-dakota,s-dakota,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/south-dakota.svg
+Summit League,Denver,Pioneers,Denver,denver,denver,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/denver.svg
+Summit League,Omaha,Mavericks,Nebraska-Omaha,neb-omaha,nebraska-omaha,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/neb-omaha.svg
+Summit League,South Dakota St.,Jackrabbits,S Dakota ST,south-dakota-st,s-dakota-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/south-dakota-st.svg
+Summit League,Oral Roberts,Golden Eagles,Oral Roberts,oral-roberts,oral-roberts,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/oral-roberts.svg
+Summit League,Kansas City,Roos,UMKC,umkc,umkc,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/umkc.svg
+Sun Belt,Troy,Trojans,Troy,troy,troy,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/troy.svg
+Sun Belt,South Alabama,Jaguars,S Alabama,south-ala,s-alabama,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/south-ala.svg
+Sun Belt,Arkansas St.,Red Wolves,Arkansas ST,arkansas-st,arkansas-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/arkansas-st.svg
+Sun Belt,Marshall,Thundering Herd,Marshall,marshall,marshall,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/marshall.svg
+Sun Belt,Texas St.,Bobcats,Texas ST,texas-st,texas-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/texas-st.svg
+Sun Belt,Coastal Carolina,Chanticleers,Coastal Carolina,coastal-caro,coastal-carolina,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/coastal-caro.svg
+Sun Belt,App State,Mountaineers,Appalachian ST,appalachian-st,appalachian-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/appalachian-st.svg
+Sun Belt,James Madison,Dukes,James Madison,james-madison,james-madison,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/james-madison.svg
+Sun Belt,Southern Miss.,Golden Eagles,Southern Miss,southern-miss,southern-miss,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/southern-miss.svg
+Sun Belt,Ga. Southern,Eagles,Georgia Southern,ga-southern,georgia-southern,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ga-southern.svg
+Sun Belt,Old Dominion,Monarchs,Old Dominion,old-dominion,old-dominion,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/old-dominion.svg
+Sun Belt,Louisiana,Ragin' Cajuns,LA Lafayette,la-lafayette,la-lafayette,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/la-lafayette.svg
+Sun Belt,Georgia St.,Panthers,Georgia ST,georgia-st,georgia-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/georgia-st.svg
+Sun Belt,ULM,Warhawks,LA Monroe,la-monroe,la-monroe,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/la-monroe.svg
+SWAC,Bethune-Cookman,Wildcats,Bethune-Cookman,bethune-cookman,bethune-cookman,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/bethune-cookman.svg
+SWAC,Alabama A&M,Bulldogs,Alabama A&M,alabama-am,alabama-a-and-m,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/alabama-am.svg
+SWAC,Southern U.,Jaguars,Southern U,southern-u,southern-u,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/southern-u.svg
+SWAC,Florida A&M,Rattlers,Florida A&M,florida-am,florida-a-and-m,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/florida-am.svg
+SWAC,Texas Southern,Tigers,Texas Southern,texas-southern,texas-southern,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/texas-southern.svg
+SWAC,Ark.-Pine Bluff,Golden Lions,Ark-Pine Bluff,ark-pine-bluff,ark-pine-bluff,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/ark-pine-bluff.svg
+SWAC,Jackson St.,Tigers,Jackson ST,jackson-st,jackson-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/jackson-st.svg
+SWAC,Prairie View,Panthers,Prairie View A&M,prairie-view,prairie-view-a-and-m,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/prairie-view.svg
+SWAC,Alabama St.,Hornets,Alabama ST,alabama-st,alabama-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/alabama-st.svg
+SWAC,Alcorn,Braves,Alcorn ST,alcorn,alcorn-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/alcorn.svg
+SWAC,Grambling,Tigers,Grambling ST,grambling,grambling-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/grambling.svg
+SWAC,Mississippi Val.,Delta Devils,Miss Valley ST,mississippi-val,miss-valley-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/mississippi-val.svg
+WAC,Utah Valley,Wolverines,Utah Valley,utah-valley,utah-valley,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/utah-valley.svg
+WAC,California Baptist,Lancers,California Baptist,california-baptist,california-baptist,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/california-baptist.svg
+WAC,Utah Tech,Trailblazers,Utah Tech,utah-tech,utah-tech,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/utah-tech.svg
+WAC,UT Arlington,Mavericks,Texas-Arlington,texas-arlington,texas-arlington,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/texas-arlington.svg
+WAC,Southern Utah,Thunderbirds,S Utah,southern-utah,s-utah,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/southern-utah.svg
+WAC,Abilene Christian,Wildcats,Abilene CHR,abilene-christian,abilene-chr,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/abilene-christian.svg
+WAC,Tarleton St.,Texans,Tarleton ST,tarleton-st,tarleton-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/tarleton-st.svg
+WCC,Gonzaga,Bulldogs,Gonzaga,gonzaga,gonzaga,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/gonzaga.svg
+WCC,Saint Mary's (CA),Gaels,ST Marys,st-marys-ca,st-marys,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/st-marys-ca.svg
+WCC,Santa Clara,Broncos,Santa Clara,santa-clara,santa-clara,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/santa-clara.svg
+WCC,Oregon St.,Beavers,Oregon ST,oregon-st,oregon-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/oregon-st.svg
+WCC,Seattle U,Redhawks,Seattle U,seattle,seattle-u,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/seattle.svg
+WCC,Pacific,Tigers,Pacific,pacific,pacific,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/pacific.svg
+WCC,San Francisco,Dons,San Francisco,san-francisco,san-francisco,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/san-francisco.svg
+WCC,Washington St.,Cougars,Washington ST,washington-st,washington-st,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/washington-st.svg
+WCC,LMU (CA),Lions,Loyola-Marymount,loyola-marymount,loyola-marymount,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/loyola-marymount.svg
+WCC,Portland,Pilots,Portland,portland,portland,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/portland.svg
+WCC,San Diego,Toreros,San Diego,san-diego,san-diego,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/san-diego.svg
+WCC,Pepperdine,Waves,Pepperdine,pepperdine,pepperdine,https://www.ncaa.com/sites/default/files/images/logos/schools/bgl/pepperdine.svg
