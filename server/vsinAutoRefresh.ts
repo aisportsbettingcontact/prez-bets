@@ -1696,6 +1696,12 @@ export function startVsinAutoRefresh() {
 
     // Step 4: Rotowire daily lineups (pitchers, batting orders, weather, umpire)
     // Scrapes both today and tomorrow to catch games seeded a day ahead.
+    // After upsert, the LineupWatcher detects changes and triggers the model
+    // only for games where the lineup changed since the last model run.
+    let todayLineupGames: import("./rotowireLineupScraper").RotoLineupGame[] = [];
+    let tomorrowLineupGames: import("./rotowireLineupScraper").RotoLineupGame[] = [];
+    let todayGameIdMap = new Map<string, number>();
+    let tomorrowGameIdMap = new Map<string, number>();
     try {
       const { scrapeRotowireLineupsBoth, upsertLineupsToDB } = await import("./rotowireLineupScraper");
       const lineupResult = await scrapeRotowireLineupsBoth();
@@ -1706,26 +1712,78 @@ export function startVsinAutoRefresh() {
         `(today=${lineupResult.today.cardsParsed} tomorrow=${lineupResult.tomorrow.cardsParsed}) ` +
         `parseErrors=${totalErrors}`
       );
-      // Upsert all combined games to DB
-      const upsertResult = await upsertLineupsToDB(lineupResult.combined);
-      console.log(
-        `[MLBCycle] Lineup DB upsert: saved=${upsertResult.saved} skipped=${upsertResult.skipped} errors=${upsertResult.errors}`
-      );
+      // Upsert today games (separate from tomorrow for watcher scoping)
+      if (lineupResult.today.games.length > 0) {
+        const upsertToday = await upsertLineupsToDB(lineupResult.today.games);
+        todayGameIdMap = upsertToday.gameIdMap;
+        todayLineupGames = lineupResult.today.games;
+        console.log(
+          `[MLBCycle] Lineup DB upsert (today): saved=${upsertToday.saved} skipped=${upsertToday.skipped} errors=${upsertToday.errors}`
+        );
+      }
+      // Upsert tomorrow games
+      if (lineupResult.tomorrow.games.length > 0) {
+        const upsertTomorrow = await upsertLineupsToDB(lineupResult.tomorrow.games);
+        tomorrowGameIdMap = upsertTomorrow.gameIdMap;
+        tomorrowLineupGames = lineupResult.tomorrow.games;
+        console.log(
+          `[MLBCycle] Lineup DB upsert (tomorrow): saved=${upsertTomorrow.saved} skipped=${upsertTomorrow.skipped} errors=${upsertTomorrow.errors}`
+        );
+      }
     } catch (err) {
       console.warn("[MLBCycle] Rotowire lineup scrape failed (non-fatal):", err);
     }
 
-    // Step 5: MLB model — run projections for all modelable games on today + tomorrow
-    // Only runs when starters are confirmed (awayStartingPitcher + homeStartingPitcher populated)
-    // Uses v2 field mapping: modelTotal=book O/U, awayModelSpread=±1.5 book RL, RL odds populated
-    // Post-write validation gate flags any mismatch before publishing
+    // Step 5: MLB Lineups Watcher — detects lineup changes and triggers model
+    // ─── Trigger rules ────────────────────────────────────────────────────────
+    //  CASE A — First lineup seen for a game → model triggered immediately
+    //  CASE B — Lineup changed (hash differs) AND not yet confirmed → re-model
+    //  CASE C — Lineup unchanged (hash matches) → no action
+    //  CASE D — Both lineups confirmed → stop guard, no further re-models
+    try {
+      const { runLineupWatcher } = await import("./mlbLineupsWatcher");
+      // Run watcher for today
+      if (todayLineupGames.length > 0) {
+        const watcherToday = await runLineupWatcher(todayLineupGames, todayGameIdMap, todayStr);
+        console.log(
+          `[MLBCycle] LineupWatcher (today): ` +
+          `total=${watcherToday.total} ` +
+          `firstLineup=${watcherToday.firstLineup} ` +
+          `changed=${watcherToday.changed} ` +
+          `unchanged=${watcherToday.unchanged} ` +
+          `confirmed=${watcherToday.confirmed} ` +
+          `insufficientData=${watcherToday.insufficientData} ` +
+          `modelErrors=${watcherToday.modelErrors}`
+        );
+      }
+      // Run watcher for tomorrow
+      if (tomorrowLineupGames.length > 0) {
+        const watcherTomorrow = await runLineupWatcher(tomorrowLineupGames, tomorrowGameIdMap, mlbTomorrowStr);
+        console.log(
+          `[MLBCycle] LineupWatcher (tomorrow): ` +
+          `total=${watcherTomorrow.total} ` +
+          `firstLineup=${watcherTomorrow.firstLineup} ` +
+          `changed=${watcherTomorrow.changed} ` +
+          `unchanged=${watcherTomorrow.unchanged} ` +
+          `confirmed=${watcherTomorrow.confirmed} ` +
+          `insufficientData=${watcherTomorrow.insufficientData} ` +
+          `modelErrors=${watcherTomorrow.modelErrors}`
+        );
+      }
+    } catch (err) {
+      console.warn('[MLBCycle] LineupWatcher failed (non-fatal):', err);
+    }
+
+    // Step 6: Fallback full model run — catches games that were modelable before
+    // the watcher was deployed (lineupVersion=0 but pitchers+lines present).
+    // Safe to run because mlbModelRunner is idempotent.
     try {
       const { runMlbModelForDate } = await import("./mlbModelRunner");
       // Run model for today
       const todayResult = await runMlbModelForDate(todayStr);
       console.log(
-        `[MLBCycle] Model (today): written=${todayResult.written} skipped=${todayResult.skipped} errors=${todayResult.errors} ` +
-        `validation=${todayResult.validation.passed ? '✅ PASSED' : '❌ FAILED (' + todayResult.validation.issues.length + ' issues)'}`
+        `[MLBCycle] Model fallback (today): written=${todayResult.written} skipped=${todayResult.skipped} errors=${todayResult.errors} ` +
+        `validation=${todayResult.validation.passed ? '\u2705 PASSED' : '\u274c FAILED (' + todayResult.validation.issues.length + ' issues)'}`
       );
       if (!todayResult.validation.passed) {
         console.error('[MLBCycle] Validation issues (today):', todayResult.validation.issues);
@@ -1733,14 +1791,14 @@ export function startVsinAutoRefresh() {
       // Run model for tomorrow (games seeded a day ahead)
       const tomorrowResult = await runMlbModelForDate(mlbTomorrowStr);
       console.log(
-        `[MLBCycle] Model (tomorrow): written=${tomorrowResult.written} skipped=${tomorrowResult.skipped} errors=${tomorrowResult.errors} ` +
-        `validation=${tomorrowResult.validation.passed ? '✅ PASSED' : '❌ FAILED (' + tomorrowResult.validation.issues.length + ' issues)'}`
+        `[MLBCycle] Model fallback (tomorrow): written=${tomorrowResult.written} skipped=${tomorrowResult.skipped} errors=${tomorrowResult.errors} ` +
+        `validation=${tomorrowResult.validation.passed ? '\u2705 PASSED' : '\u274c FAILED (' + tomorrowResult.validation.issues.length + ' issues)'}`
       );
       if (!tomorrowResult.validation.passed) {
         console.error('[MLBCycle] Validation issues (tomorrow):', tomorrowResult.validation.issues);
       }
     } catch (err) {
-      console.warn('[MLBCycle] MLB model run failed (non-fatal):', err);
+      console.warn('[MLBCycle] MLB model fallback run failed (non-fatal):', err);
     }
     console.log(`[MLBCycle] ✅ DONE — ${new Date().toISOString()}`);
   };

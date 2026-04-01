@@ -589,6 +589,33 @@ export const mlbLineups = mysqlTable("mlb_lineups", {
   weatherDome: boolean("weatherDome").default(false),
   // ── Umpire ──
   umpire: varchar("umpire", { length: 128 }),
+  // ── Lineup change-detection & model-trigger tracking ──────────────────────
+  /**
+   * SHA-256 fingerprint of the current lineup state:
+   *   SHA256(awayPitcherName|homePitcherName|awayLineup_JSON|homeLineup_JSON)
+   * Changes whenever any pitcher or batting order slot changes.
+   * Used by the LineupWatcher to detect changes without full row comparison.
+   * Null = no lineup data yet (no pitchers, no batting orders).
+   */
+  lineupHash: varchar("lineupHash", { length: 64 }),
+  /**
+   * Monotonically increasing version counter.
+   * Starts at 1 on first insert with lineup data, increments on every detected hash change.
+   * Provides an audit trail of how many times the lineup changed before game time.
+   */
+  lineupVersion: int("lineupVersion").default(0).notNull(),
+  /**
+   * UTC timestamp (ms) when the model last ran for this lineup via the watcher.
+   * Null = model has never been triggered by the watcher for this game.
+   */
+  lineupModeledAt: bigint("lineupModeledAt", { mode: "number" }),
+  /**
+   * The lineupVersion that was last passed to the model.
+   * When lineupVersion > lineupModeledVersion: watcher triggers a re-model.
+   * When lineupVersion === lineupModeledVersion: no re-model needed.
+   * Starts at 0 (never modeled).
+   */
+  lineupModeledVersion: int("lineupModeledVersion").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

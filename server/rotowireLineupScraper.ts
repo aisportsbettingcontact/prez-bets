@@ -617,12 +617,12 @@ export async function scrapeRotowireLineupsBoth(): Promise<{
  */
 export async function upsertLineupsToDB(
   games: RotoLineupGame[]
-): Promise<{ saved: number; skipped: number; errors: number }> {
+): Promise<{ saved: number; skipped: number; errors: number; gameIdMap: Map<string, number> }> {
   const tag = "[RotoScraper][upsertDB]";
 
   if (games.length === 0) {
     console.log(`${tag} No games to upsert`);
-    return { saved: 0, skipped: 0, errors: 0 };
+    return { saved: 0, skipped: 0, errors: 0, gameIdMap: new Map() };
   }
 
   // Lazy-import DB helpers to avoid circular deps at module load time
@@ -640,7 +640,7 @@ export async function upsertLineupsToDB(
   const db = await getDb();
   if (!db) {
     console.warn(`${tag} DB not available — skipping all ${games.length} games`);
-    return { saved: 0, skipped: games.length, errors: 0 };
+    return { saved: 0, skipped: games.length, errors: 0, gameIdMap: new Map() };
   }
 
   // ── Build name → mlbamId lookup from mlb_players table ──────────────────────
@@ -677,6 +677,8 @@ export async function upsertLineupsToDB(
   let saved = 0;
   let skipped = 0;
   let errors = 0;
+  /** Maps "awayAbbrev@homeAbbrev" → DB gameId — consumed by LineupWatcher after upsert */
+  const gameIdMap = new Map<string, number>();
 
   for (const g of games) {
     const gameTag = `${tag}[${g.awayAbbrev}@${g.homeAbbrev}]`;
@@ -705,6 +707,8 @@ export async function upsertLineupsToDB(
       }
 
       const gameId = rows[0].id;
+      // Register in gameIdMap so the LineupWatcher can resolve gameIds without a second DB query
+      gameIdMap.set(`${g.awayAbbrev}@${g.homeAbbrev}`, gameId);
 
       // Resolve mlbamIds for pitchers
       const awayPitcherMlbamId = resolveMlbamId(g.awayPitcher?.name);
@@ -767,6 +771,6 @@ export async function upsertLineupsToDB(
     }
   }
 
-  console.log(`${tag} Done — saved=${saved} skipped=${skipped} errors=${errors}`);
-  return { saved, skipped, errors };
+  console.log(`${tag} Done — saved=${saved} skipped=${skipped} errors=${errors} gameIdMap=${gameIdMap.size}`);
+  return { saved, skipped, errors, gameIdMap };
 }

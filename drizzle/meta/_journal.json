@@ -337,6 +337,13 @@
       "when": 1774984841993,
       "tag": "0047_true_slapstick",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "5",
+      "when": 1775019419820,
+      "tag": "0048_brave_sasquatch",
+      "breakpoints": true
     }
   ]
 }
