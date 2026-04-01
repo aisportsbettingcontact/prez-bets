@@ -1257,13 +1257,20 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
     try {
       await db.update(games)
         .set({
-          // ── Run line (book ±1.5 labels) ──────────────────────────────────
-          awayModelSpread:      r.away_run_line,   // e.g. "+1.5" or "-1.5"
-          homeModelSpread:      r.home_run_line,   // e.g. "-1.5" or "+1.5"
-          awayRunLine:          r.away_run_line,   // book RL label
-          homeRunLine:          r.home_run_line,   // book RL label
-          awayRunLineOdds:      fmtMl(r.away_rl_odds),
-          homeRunLineOdds:      fmtMl(r.home_rl_odds),
+          // ── Run line ─────────────────────────────────────────────────────
+          // awayModelSpread/homeModelSpread: signed RL label used by GameCard spread section
+          // awayRunLine/homeRunLine: same label stored in the book RL field for reference
+          // awayRunLineOdds/homeRunLineOdds: model-computed RL odds (raw storage)
+          // modelAwaySpreadOdds/modelHomeSpreadOdds: MUST also receive RL odds so GameCard
+          //   renders them in the MLB spread section (GameCard checks isMlbGame && modelAwaySpreadOdds)
+          awayModelSpread:      r.away_run_line,        // e.g. "+1.5" or "-1.5"
+          homeModelSpread:      r.home_run_line,        // e.g. "-1.5" or "+1.5"
+          awayRunLine:          r.away_run_line,        // book RL label (reference copy)
+          homeRunLine:          r.home_run_line,        // book RL label (reference copy)
+          awayRunLineOdds:      fmtMl(r.away_rl_odds), // raw RL odds storage
+          homeRunLineOdds:      fmtMl(r.home_rl_odds), // raw RL odds storage
+          modelAwaySpreadOdds:  fmtMl(r.away_rl_odds), // ← GameCard MLB spread odds display
+          modelHomeSpreadOdds:  fmtMl(r.home_rl_odds), // ← GameCard MLB spread odds display
           // ── Total (anchored to book O/U) ─────────────────────────────────
           modelTotal:           String(r.total_line),
           modelOverOdds:        fmtMl(r.over_odds),
