@@ -407,10 +407,28 @@ function parseLineupHtml(
 
       // ── Umpire ─────────────────────────────────────────────────────────────
       let umpire: string | null = null;
-      const umpireRaw = $bottom.find(".lineup__umpire").text().trim();
-      if (umpireRaw) {
-        // Rotowire format: "HP: John Doe" — strip the "HP: " prefix
-        umpire = umpireRaw.replace(/^HP:\s*/i, "").trim() || null;
+      const $umpireEl = $bottom.find(".lineup__umpire");
+      if ($umpireEl.length) {
+        // Rotowire umpire block structure:
+        //   <div class="lineup__umpire">
+        //     <span>Umpire:</span>
+        //     <a href="...">John Doe</a>   ← umpire name
+        //     <span>9.2 R/G · 17.5 K/G</span>  ← stats (ignore)
+        //   </div>
+        // Prefer the <a> tag for the name; fall back to stripping the label + stats.
+        const $nameLink = $umpireEl.find("a").first();
+        if ($nameLink.length) {
+          umpire = ($nameLink.attr("title") || $nameLink.text()).trim() || null;
+        } else {
+          // Fallback: strip "Umpire:" label and numeric stats (R/G, K/G) from raw text
+          const rawText = $umpireEl.text().trim();
+          umpire = rawText
+            .replace(/^Umpire:\s*/i, "")
+            .replace(/\d+\.\d+\s*R\/G/gi, "")
+            .replace(/\d+\.\d+\s*K\/G/gi, "")
+            .replace(/\s+/g, " ")
+            .trim() || null;
+        }
         if (umpire) console.log(`${cardTag} Umpire: "${umpire}"`);
       }
 
@@ -613,10 +631,15 @@ export async function scrapeRotowireLineupsBoth(): Promise<{
  * Skips games not found in the DB (e.g. Spring Training games not seeded).
  *
  * @param games - Parsed lineup games from scrapeRotowireLineupsBoth()
+ * @param targetDate - YYYY-MM-DD date string to restrict DB lookup to exact date.
+ *   REQUIRED to prevent tomorrow's scrape from overwriting today's lineup records
+ *   when the same team matchup appears on consecutive days (e.g. series games).
+ *   Pass todayStr for today's games, tomorrowStr for tomorrow's games.
  * @returns Summary: { saved, skipped, errors }
  */
 export async function upsertLineupsToDB(
-  games: RotoLineupGame[]
+  games: RotoLineupGame[],
+  targetDate?: string
 ): Promise<{ saved: number; skipped: number; errors: number; gameIdMap: Map<string, number> }> {
   const tag = "[RotoScraper][upsertDB]";
 
@@ -631,11 +654,14 @@ export async function upsertLineupsToDB(
   const { games: gamesTable, mlbPlayers } = await import("../drizzle/schema.js");
   const { eq, and, gte, lte } = await import("drizzle-orm");
 
-  // 7-day window: today through today+6 (ET/PST date)
+  // Date window: use targetDate for exact match (prevents cross-day overwrite),
+  // or fall back to a 7-day window if no targetDate is provided.
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
-  const plusSevenDate = new Date(todayStr + "T12:00:00Z");
-  plusSevenDate.setUTCDate(plusSevenDate.getUTCDate() + 6);
-  const plusSevenStr = plusSevenDate.toISOString().slice(0, 10);
+  const dateFrom = targetDate ?? todayStr;
+  const plusSevenDate = new Date(dateFrom + "T12:00:00Z");
+  plusSevenDate.setUTCDate(plusSevenDate.getUTCDate() + (targetDate ? 0 : 6));
+  const dateTo = targetDate ?? plusSevenDate.toISOString().slice(0, 10);
+  console.log(`${tag} Date window: ${dateFrom} → ${dateTo} (targetDate=${targetDate ?? "none, using 7-day window"})`);
 
   const db = await getDb();
   if (!db) {
@@ -694,8 +720,8 @@ export async function upsertLineupsToDB(
             eq(gamesTable.awayTeam, g.awayAbbrev),
             eq(gamesTable.homeTeam, g.homeAbbrev),
             eq(gamesTable.sport, "MLB"),
-            gte(gamesTable.gameDate, todayStr),
-            lte(gamesTable.gameDate, plusSevenStr)
+            gte(gamesTable.gameDate, dateFrom),
+            lte(gamesTable.gameDate, dateTo)
           )
         )
         .limit(1);

@@ -2105,3 +2105,8 @@
 - [x] Update MlbPropsCard LogoCircle to use teamLogoGradient (matches Discord /lineups output for all 30 teams)
 - [x] Update MlbLineupCard logo circles (away + home) to use teamLogoGradient (matches Discord /lineups output)
 - [x] Logo size corrected to 65% of circle diameter (matching Discord 0.65 ratio)
+- [x] Fix cross-day lineup overwrite bug: add targetDate param to upsertLineupsToDB to restrict DB lookup to exact game date
+- [x] Pass targetDate (todayStr/mlbTomorrowStr) from vsinAutoRefresh.ts to upsertLineupsToDB calls
+- [x] Fix umpire extraction to grab only name (not R/G + K/G stats block)
+- [x] Restore correct April 3, 2026 lineups to DB (overwritten by April 4 scrape)
+- [x] Verify all 14 April 3 games have correct pitchers in DB (Sheehan, McGreevy, Perez, King, etc.)

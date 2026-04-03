@@ -1713,17 +1713,20 @@ export function startVsinAutoRefresh() {
         `parseErrors=${totalErrors}`
       );
       // Upsert today games (separate from tomorrow for watcher scoping)
+      // Pass targetDate=todayStr to restrict DB lookup to today's games only,
+      // preventing tomorrow's scrape from overwriting today's lineup records
+      // when the same team matchup appears on consecutive days (e.g. series games).
       if (lineupResult.today.games.length > 0) {
-        const upsertToday = await upsertLineupsToDB(lineupResult.today.games);
+        const upsertToday = await upsertLineupsToDB(lineupResult.today.games, todayStr);
         todayGameIdMap = upsertToday.gameIdMap;
         todayLineupGames = lineupResult.today.games;
         console.log(
           `[MLBCycle] Lineup DB upsert (today): saved=${upsertToday.saved} skipped=${upsertToday.skipped} errors=${upsertToday.errors}`
         );
       }
-      // Upsert tomorrow games
+      // Upsert tomorrow games — pass targetDate=mlbTomorrowStr to restrict DB lookup
       if (lineupResult.tomorrow.games.length > 0) {
-        const upsertTomorrow = await upsertLineupsToDB(lineupResult.tomorrow.games);
+        const upsertTomorrow = await upsertLineupsToDB(lineupResult.tomorrow.games, mlbTomorrowStr);
         tomorrowGameIdMap = upsertTomorrow.gameIdMap;
         tomorrowLineupGames = lineupResult.tomorrow.games;
         console.log(
