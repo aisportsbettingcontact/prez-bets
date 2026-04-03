@@ -2101,3 +2101,7 @@
 - [ ] Engine: apply umpire K/BB modifier to pitcher features pre-simulation
 - [ ] Daily cron: refresh all 3 new tables
 - [ ] Validate: all 3 signals active in [ENGINE] log per game
+- [x] Port pickLogoBg + darkShade contrast algorithm from Discord lineup_card.html to shared teamLogoCircle.ts utility
+- [x] Update MlbPropsCard LogoCircle to use teamLogoGradient (matches Discord /lineups output for all 30 teams)
+- [x] Update MlbLineupCard logo circles (away + home) to use teamLogoGradient (matches Discord /lineups output)
+- [x] Logo size corrected to 65% of circle diameter (matching Discord 0.65 ratio)

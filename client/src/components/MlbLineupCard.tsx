@@ -21,6 +21,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { MLB_BY_ABBREV } from "@shared/mlbTeams";
 import { trpc } from "@/lib/trpc";
+import { teamLogoGradient } from "@/lib/teamLogoCircle";
 
 // Types matching the DB schema
 export interface LineupPlayer {
@@ -789,6 +790,18 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
     }
   }
 
+  // [STEP] Compute logo circle gradients using exact Discord /lineups algorithm (pickLogoBg + darkShade)
+  const awayLogoGradient = teamLogoGradient(
+    awayInfo?.primaryColor ?? "#444",
+    awayInfo?.secondaryColor,
+    (awayInfo as any)?.tertiaryColor
+  );
+  const homeLogoGradient = teamLogoGradient(
+    homeInfo?.primaryColor ?? "#444",
+    homeInfo?.secondaryColor,
+    (homeInfo as any)?.tertiaryColor
+  );
+  // Keep awayColor/homeColor for gradient top bar and pill accents (unchanged)
   const awayColor = awayInfo?.primaryColor ?? "#444";
   const awayDark = awayInfo?.secondaryColor ?? "#222";
   const homeColor = homeInfo?.primaryColor ?? "#444";
@@ -848,7 +861,7 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: `radial-gradient(circle at 35% 35%, ${awayColor}, ${awayDark})`,
+              background: awayLogoGradient,
               flexShrink: 0,
               overflow: "hidden",
             }}
@@ -857,8 +870,8 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
               src={awayInfo?.logoUrl}
               alt={awayTeam}
               style={{
-                width: isMobile ? 18 : 28,
-                height: isMobile ? 18 : 28,
+                width: isMobile ? Math.round(28 * 0.65) : Math.round(42 * 0.65),
+                height: isMobile ? Math.round(28 * 0.65) : Math.round(42 * 0.65),
                 objectFit: "contain",
               }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
@@ -947,7 +960,7 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: `radial-gradient(circle at 35% 35%, ${homeColor}, ${homeDark})`,
+              background: homeLogoGradient,
               flexShrink: 0,
               overflow: "hidden",
             }}
@@ -956,8 +969,8 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
               src={homeInfo?.logoUrl}
               alt={homeTeam}
               style={{
-                width: isMobile ? 18 : 28,
-                height: isMobile ? 18 : 28,
+                width: isMobile ? Math.round(28 * 0.65) : Math.round(42 * 0.65),
+                height: isMobile ? Math.round(28 * 0.65) : Math.round(42 * 0.65),
                 objectFit: "contain",
               }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}

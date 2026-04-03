@@ -15,6 +15,7 @@
 
 import { useMemo } from "react";
 import { MLB_BY_ABBREV } from "@shared/mlbTeams";
+import { teamLogoGradient } from "@/lib/teamLogoCircle";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -160,29 +161,33 @@ function StatusPill({ confirmed }: { confirmed: boolean }) {
 }
 
 /**
- * Circular team logo — exact match to MlbLineupCard circle rendering.
- * Background: radial-gradient(circle at 35% 35%, primaryColor, secondaryColor)
- * Logo: official MLB.com SVG via mlbstatic.com/{mlbId}.svg
- * No border ring — matches the reference lineup image exactly.
+ * Circular team logo — exact match to Discord /lineups image rendering.
+ * Uses pickLogoBg() + darkShade() contrast algorithm (ported from lineup_card.html)
+ * to select the highest-contrast background color for maximum logo readability.
  */
 function LogoCircle({ abbrev, size = 48 }: { abbrev: string; size?: number }) {
-  const team   = MLB_BY_ABBREV.get(abbrev.toUpperCase());
-  const logo   = team?.logoUrl ?? null;
+  const team      = MLB_BY_ABBREV.get(abbrev.toUpperCase());
+  const logo      = team?.logoUrl ?? null;
   const primary   = team?.primaryColor   ?? "#003087";
-  const secondary = team?.secondaryColor ?? "#1A2A3A";
+  const secondary = team?.secondaryColor ?? null;
+  const tertiary  = (team as any)?.tertiaryColor ?? null;
 
-  // Debug: log logo resolution on first render
-  if (typeof window !== "undefined" && logo) {
-    console.log(`[LogoCircle] ${abbrev} → mlbId=${team ? (team as any).mlbId : 'N/A'} url=${logo}`);
-  } else if (typeof window !== "undefined") {
-    console.warn(`[LogoCircle] ${abbrev} → NO LOGO FOUND in MLB_BY_ABBREV (key lookup: "${abbrev.toUpperCase()}")`);
+  // [VERIFY] Log logo resolution for debugging
+  if (typeof window !== "undefined") {
+    if (logo) {
+      console.log(`[LogoCircle] ${abbrev} → mlbId=${(team as any)?.mlbId ?? 'N/A'} url=${logo} bg=${teamLogoGradient(primary, secondary, tertiary).slice(0,40)}...`);
+    } else {
+      console.warn(`[LogoCircle] ${abbrev} → NO LOGO in MLB_BY_ABBREV (key: "${abbrev.toUpperCase()}")`);
+    }
   }
+
+  // Use exact same gradient algorithm as Discord /lineups bot
+  const gradient = teamLogoGradient(primary, secondary, tertiary);
 
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%", flexShrink: 0,
-      // Exact same gradient as MlbLineupCard: primaryColor → secondaryColor (solid, no opacity)
-      background: `radial-gradient(circle at 35% 35%, ${primary}, ${secondary})`,
+      background: gradient,
       display: "flex", alignItems: "center", justifyContent: "center",
       overflow: "hidden",
     }}>
@@ -190,8 +195,7 @@ function LogoCircle({ abbrev, size = 48 }: { abbrev: string; size?: number }) {
         <img
           src={logo}
           alt={abbrev}
-          // 66% of circle diameter — matches lineup card proportion
-          style={{ width: size * 0.66, height: size * 0.66, objectFit: "contain" }}
+          style={{ width: size * 0.65, height: size * 0.65, objectFit: "contain" }}
           onError={(e) => {
             console.error(`[LogoCircle] LOAD FAILED for ${abbrev}: ${logo}`);
             (e.target as HTMLImageElement).style.display = "none";
