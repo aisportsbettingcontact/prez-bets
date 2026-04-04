@@ -722,6 +722,20 @@ export const mlbStrikeoutProps = mysqlTable("mlb_strikeout_props", {
   inningBreakdown: text("inningBreakdown"),
   /** UTC timestamp (ms) when model was run */
   modelRunAt: bigint("modelRunAt", { mode: "number" }),
+  /** AN no-vig probability for the over (decimal string, e.g. "0.432") */
+  anNoVigOverPct: varchar("anNoVigOverPct", { length: 16 }),
+  /** AN player ID for this pitcher */
+  anPlayerId: int("anPlayerId"),
+  /** Actual strikeouts thrown (populated after game completes) */
+  actualKs: int("actualKs"),
+  /** Backtest result: 'OVER' | 'UNDER' | 'PUSH' | 'PENDING' | 'NO_LINE' */
+  backtestResult: varchar("backtestResult", { length: 16 }),
+  /** Model error vs actual (actualKs - kProj, decimal string) */
+  modelError: varchar("modelError", { length: 16 }),
+  /** Whether model prediction matched result: 1=correct, 0=incorrect, null=pending */
+  modelCorrect: tinyint("modelCorrect"),
+  /** UTC timestamp (ms) when backtest was last run */
+  backtestRunAt: bigint("backtestRunAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({

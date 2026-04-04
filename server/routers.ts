@@ -604,7 +604,7 @@ export const appRouter = router({
 
         // Run VSiN odds/lines refresh first (manual variant tags history rows as source='manual'),
         // then immediately refresh all scores
-        const [result] = await Promise.allSettled([runVsinRefreshManual(sport)]);
+        const [result] = await Promise.allSettled([runVsinRefreshManual(sport as "NCAAM" | "NBA" | "NHL" | "MLB" | undefined)]);
 
         // Always refresh scores regardless of whether VSiN succeeded
         console.log(`[tRPC][triggerRefresh] Refreshing scores (all sports, always)…`);
@@ -837,6 +837,40 @@ export const appRouter = router({
           result[k] = v;
         });
         return { propsByGame: result };
+      }),
+
+    /**
+     * Fetch rolling calibration metrics across all completed K-props.
+     * Returns accuracy, MAE, mean error, calibration factor, and tier breakdown.
+     */
+    getCalibrationMetrics: ownerProcedure
+      .query(async () => {
+        const { getRollingCalibrationMetrics } = await import("./kPropsBacktestService");
+        const metrics = await getRollingCalibrationMetrics();
+        return { metrics };
+      }),
+
+    /**
+     * Fetch daily backtest results for a specific date.
+     * Returns all K-prop rows with actualKs, backtestResult, modelCorrect, modelError.
+     */
+    getDailyBacktest: ownerProcedure
+      .input(z.object({ gameDate: z.string() }))
+      .query(async ({ input }) => {
+        const { getDailyBacktestResults } = await import("./kPropsBacktestService");
+        const results = await getDailyBacktestResults(input.gameDate);
+        return { results };
+      }),
+    /**
+     * Owner-only: fetch rich daily backtest results with team names, headshots, and edge data.
+     * Used exclusively by the Model Results backend page.
+     */
+    getRichDailyBacktest: ownerProcedure
+      .input(z.object({ gameDate: z.string() }))
+      .query(async ({ input }) => {
+        const { getRichDailyBacktestResults } = await import("./kPropsBacktestService");
+        const results = await getRichDailyBacktestResults(input.gameDate);
+        return { results };
       }),
 
     /**

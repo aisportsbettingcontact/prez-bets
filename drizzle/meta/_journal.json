@@ -344,6 +344,13 @@
       "when": 1775019419820,
       "tag": "0048_brave_sasquatch",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "5",
+      "when": 1775266556758,
+      "tag": "0049_powerful_marvel_boy",
+      "breakpoints": true
     }
   ]
 }

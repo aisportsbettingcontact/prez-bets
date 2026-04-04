@@ -2115,3 +2115,24 @@
 - [x] Wire StatusPill to awayPitcherConfirmed/homePitcherConfirmed in MlbLineupCard and MlbPropsCard
 - [x] Re-run K-Props insert with correct April 3 lineups (28 records, all correct pitchers)
 - [x] End-to-end verification of scrape → DB → frontend display (all 14 games verified, 10 CONF / 4 EXP)
+- [ ] Build live AN pitching props scraper (actionnetwork.com/mlb/props/pitching)
+- [ ] Build daily K-Props pipeline: AN scrape → StrikeoutModel → DB with calibration
+- [ ] Build automated backtest engine: actual K fetch → error compute → rolling calibration update
+- [ ] Wire K-Props pipeline into MLBCycle (projections at lineup lock, backtest at game completion)
+- [ ] Add backtest accuracy display to K PROPS feed tab
+- [x] Backfill MLBAM IDs for all 28 April 3 pitchers (100% match via crosswalk CSV)
+- [x] Fix accent/diacritic normalization in matchPitcherName (NFD decomposition)
+- [x] Upgrade getDailyBacktest + getCalibrationMetrics to ownerProcedure (owner-only)
+- [x] Add getRichDailyBacktestResults service function (team names, headshots, edge data)
+- [x] Add getRichDailyBacktest ownerProcedure to strikeoutProps router
+- [x] Build ModelResults.tsx — owner-only backtest results page (styled like Publish Projections)
+- [x] Wire /admin/model-results route in App.tsx
+- [x] Add Model Results link to owner admin menu in Dashboard.tsx (BarChart3 icon)
+- [x] Backfill MLBAM IDs for all 28 April 3 pitchers (100% match via crosswalk CSV)
+- [x] Fix accent/diacritic normalization in matchPitcherName (NFD decomposition)
+- [x] Upgrade getDailyBacktest + getCalibrationMetrics to ownerProcedure (owner-only)
+- [x] Add getRichDailyBacktestResults service function (team names, headshots, edge data)
+- [x] Add getRichDailyBacktest ownerProcedure to strikeoutProps router
+- [x] Build ModelResults.tsx owner-only backtest results page (styled like Publish Projections)
+- [x] Wire /admin/model-results route in App.tsx
+- [x] Add Model Results link to owner admin menu in Dashboard.tsx

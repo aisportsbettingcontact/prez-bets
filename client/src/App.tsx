@@ -10,6 +10,7 @@ import UserManagement from "./pages/UserManagement";
 import PublishProjections from "./pages/PublishProjections";
 import IngestAnOdds from "./pages/IngestAnOdds";
 import ModelProjections from "./pages/ModelProjections";
+import ModelResults from "./pages/ModelResults";
 
 function Router() {
   return (
@@ -28,6 +29,8 @@ function Router() {
       <Route path="/admin/users" component={UserManagement} />
       <Route path="/admin/publish" component={PublishProjections} />
       <Route path="/admin/ingest-an" component={IngestAnOdds} />
+      {/* Owner-only: K-Props model backtest results */}
+      <Route path="/admin/model-results" component={ModelResults} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

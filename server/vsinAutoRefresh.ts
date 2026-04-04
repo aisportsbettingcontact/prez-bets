@@ -1803,6 +1803,34 @@ export function startVsinAutoRefresh() {
     } catch (err) {
       console.warn('[MLBCycle] MLB model fallback run failed (non-fatal):', err);
     }
+    // ── K-Props: fetch live AN lines + run backtest for completed games ────────
+    try {
+      const { fetchANKProps, formatANDate } = await import("./anKPropsService");
+      const { runKPropsBacktest } = await import("./kPropsBacktestService");
+
+      // 1. Fetch today's AN K-prop lines
+      const anDateStr = formatANDate(new Date());
+      const anResult = await fetchANKProps(anDateStr);
+      console.log(
+        `[MLBCycle] AN K-Props: fetched ${anResult.props.length} lines for ${anDateStr}`
+      );
+
+      // 2. Update bookLine, bookOverOdds, bookUnderOdds, anNoVigOverPct, anPlayerId
+      //    in mlb_strikeout_props rows that match by pitcherName + gameDate
+      if (anResult.props.length > 0) {
+        const { updateKPropsFromAN } = await import("./kPropsDbHelpers");
+        const updateResult = await updateKPropsFromAN(anResult, todayStr);
+        console.log(
+          `[MLBCycle] K-Props AN update: updated=${updateResult.updated} notFound=${updateResult.notFound}`
+        );
+      }
+
+      // 3. Run backtest for today's completed games
+      await runKPropsBacktest(todayStr);
+    } catch (err) {
+      console.warn('[MLBCycle] K-Props pipeline failed (non-fatal):', err);
+    }
+
     console.log(`[MLBCycle] ✅ DONE — ${new Date().toISOString()}`);
   };
   // Fire MLB cycle immediately on startup
