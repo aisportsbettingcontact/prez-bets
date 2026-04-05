@@ -1381,20 +1381,25 @@ async function refreshNhlScores(): Promise<void> {
  * MLB score refresh — fetches live scores from MLB Stats API for today.
  * Runs every 10 minutes (same interval as MLB odds/splits refresh).
  */
-async function refreshMlbScoresNow(): Promise<void> {
+async function refreshMlbScoresNow(): Promise<{ newlyFinalGamePks: number[] }> {
   const todayStr = datePst();
   try {
     const { refreshMlbScores } = await import("./mlbScoreRefresh");
     const result = await refreshMlbScores(todayStr);
+    const finalMsg = result.newlyFinalGamePks.length > 0
+      ? ` | 🏁 newlyFinal=${result.newlyFinalGamePks.length} gamePks=[${result.newlyFinalGamePks.join(',')}]`
+      : '';
     console.log(
       `[ScoreRefresh][MLB] ✅ ${todayStr}: updated=${result.updated} unchanged=${result.unchanged} ` +
-      `noMatch=${result.noMatch} errors=${result.errors.length}`
+      `noMatch=${result.noMatch} errors=${result.errors.length}${finalMsg}`
     );
     if (result.errors.length > 0) {
       console.warn(`[ScoreRefresh][MLB] Errors:`, result.errors);
     }
+    return { newlyFinalGamePks: result.newlyFinalGamePks };
   } catch (err) {
     console.warn("[ScoreRefresh][MLB] MLB score refresh failed (non-fatal):", err);
+    return { newlyFinalGamePks: [] };
   }
 }
 
@@ -1648,8 +1653,12 @@ export function startVsinAutoRefresh() {
     console.log(`[MLBCycle] ► START — ${new Date().toISOString()} | date: ${todayStr}`);
 
     // Step 1: Live scores from MLB Stats API
+    // newlyFinalGamePks captures games that transitioned to 'final' this cycle
+    // — used to trigger an immediate K-Props backtest without waiting for the next tick
+    let newlyFinalGamePks: number[] = [];
     try {
-      await refreshMlbScoresNow();
+      const scoreResult = await refreshMlbScoresNow();
+      newlyFinalGamePks = scoreResult.newlyFinalGamePks;
     } catch (err) {
       console.warn("[MLBCycle] Score refresh failed (non-fatal):", err);
     }
@@ -1826,6 +1835,13 @@ export function startVsinAutoRefresh() {
       }
 
       // 3. Run backtest for today's completed games
+      // If games just went final this cycle, log for traceability (backtest runs regardless)
+      if (newlyFinalGamePks.length > 0) {
+        console.log(
+          `[MLBCycle] 🏁 IMMEDIATE BACKTEST TRIGGER: ${newlyFinalGamePks.length} game(s) just went FINAL` +
+          ` | gamePks=[${newlyFinalGamePks.join(',')}] | running backtest now`
+        );
+      }
       await runKPropsBacktest(todayStr);
     } catch (err) {
       console.warn('[MLBCycle] K-Props pipeline failed (non-fatal):', err);

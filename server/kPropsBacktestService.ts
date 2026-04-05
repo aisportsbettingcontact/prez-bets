@@ -723,3 +723,172 @@ export async function getRichDailyBacktestResults(gameDate: string): Promise<{
     props: rows as any,
   };
 }
+
+/**
+ * Fetch aggregate K-Props backtest metrics for the last N days (default 7).
+ *
+ * Returns:
+ *   - Per-day breakdown: date, total, completed, correct, accuracy, overTotal, underTotal, mae
+ *   - Aggregate totals across all days in the window
+ *   - OVER/UNDER bias: % of completed results that were OVER vs UNDER
+ *   - Rolling MAE across the window
+ *
+ * Only includes days that have at least one prop in the window.
+ */
+export async function getLast7DaysBacktest(days = 7): Promise<{
+  windowDays: number;
+  totalProps: number;
+  completedProps: number;
+  correctProps: number;
+  accuracy: number | null;
+  overTotal: number;
+  underTotal: number;
+  pushTotal: number;
+  overCorrect: number;
+  underCorrect: number;
+  overAccuracy: number | null;
+  underAccuracy: number | null;
+  overBiasPct: number | null;
+  underBiasPct: number | null;
+  mae: number | null;
+  meanError: number | null;
+  dailyBreakdown: Array<{
+    date: string;
+    total: number;
+    completed: number;
+    correct: number;
+    accuracy: number | null;
+    overTotal: number;
+    underTotal: number;
+    pushTotal: number;
+    mae: number | null;
+    meanError: number | null;
+  }>;
+}> {
+  const db = await getDb();
+  const { gte, lte } = await import("drizzle-orm");
+
+  // Build date range: today back N days
+  const today = new Date();
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() - (days - 1));
+  const startStr = startDate.toISOString().slice(0, 10);
+  const todayStr = today.toISOString().slice(0, 10);
+
+  console.log(`[KBacktest][Last7Days] Querying ${days}-day window: ${startStr} -> ${todayStr}`);
+
+  const rows = await db
+    .select({
+      gameDate: games.gameDate,
+      backtestResult: mlbStrikeoutProps.backtestResult,
+      modelCorrect: mlbStrikeoutProps.modelCorrect,
+      modelError: mlbStrikeoutProps.modelError,
+    })
+    .from(mlbStrikeoutProps)
+    .innerJoin(games, eq(mlbStrikeoutProps.gameId, games.id))
+    .where(
+      and(
+        gte(games.gameDate, startStr),
+        lte(games.gameDate, todayStr)
+      )
+    )
+    .orderBy(games.gameDate);
+
+  type Row = typeof rows[0];
+
+  // Group by date
+  const byDate = new Map<string, Row[]>();
+  for (const row of rows) {
+    const d = row.gameDate;
+    if (!byDate.has(d)) byDate.set(d, []);
+    byDate.get(d)!.push(row);
+  }
+
+  // Build per-day breakdown
+  const dailyBreakdown = Array.from(byDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, dayRows]) => {
+      const completed = dayRows.filter(
+        (r: Row) => r.backtestResult === "OVER" || r.backtestResult === "UNDER" || r.backtestResult === "PUSH"
+      );
+      const correct = completed.filter((r: Row) => r.modelCorrect === 1);
+      const overRows = completed.filter((r: Row) => r.backtestResult === "OVER");
+      const underRows = completed.filter((r: Row) => r.backtestResult === "UNDER");
+      const pushRows = completed.filter((r: Row) => r.backtestResult === "PUSH");
+      const errors = completed
+        .filter((r: Row) => r.modelError !== null)
+        .map((r: Row) => parseFloat(r.modelError!));
+      const mae = errors.length > 0
+        ? errors.reduce((a: number, b: number) => a + Math.abs(b), 0) / errors.length
+        : null;
+      const meanError = errors.length > 0
+        ? errors.reduce((a: number, b: number) => a + b, 0) / errors.length
+        : null;
+      return {
+        date,
+        total: dayRows.length,
+        completed: completed.length,
+        correct: correct.length,
+        accuracy: completed.length > 0 ? correct.length / completed.length : null,
+        overTotal: overRows.length,
+        underTotal: underRows.length,
+        pushTotal: pushRows.length,
+        mae,
+        meanError,
+      };
+    });
+
+  // Aggregate totals
+  const allCompleted = rows.filter(
+    (r: Row) => r.backtestResult === "OVER" || r.backtestResult === "UNDER" || r.backtestResult === "PUSH"
+  );
+  const allCorrect = allCompleted.filter((r: Row) => r.modelCorrect === 1);
+  const allOvers = allCompleted.filter((r: Row) => r.backtestResult === "OVER");
+  const allUnders = allCompleted.filter((r: Row) => r.backtestResult === "UNDER");
+  const allPushes = allCompleted.filter((r: Row) => r.backtestResult === "PUSH");
+  const overCorrect = allOvers.filter((r: Row) => r.modelCorrect === 1).length;
+  const underCorrect = allUnders.filter((r: Row) => r.modelCorrect === 1).length;
+
+  const allErrors = allCompleted
+    .filter((r: Row) => r.modelError !== null)
+    .map((r: Row) => parseFloat(r.modelError!));
+  const mae = allErrors.length > 0
+    ? allErrors.reduce((a: number, b: number) => a + Math.abs(b), 0) / allErrors.length
+    : null;
+  const meanError = allErrors.length > 0
+    ? allErrors.reduce((a: number, b: number) => a + b, 0) / allErrors.length
+    : null;
+
+  // OVER/UNDER bias: % of non-push completed results that went OVER vs UNDER
+  const nonPushCompleted = allOvers.length + allUnders.length;
+  const overBiasPct = nonPushCompleted > 0 ? allOvers.length / nonPushCompleted : null;
+  const underBiasPct = nonPushCompleted > 0 ? allUnders.length / nonPushCompleted : null;
+
+  console.log(
+    `[KBacktest][Last7Days] DONE: total=${rows.length} completed=${allCompleted.length} ` +
+    `correct=${allCorrect.length} ` +
+    `accuracy=${allCompleted.length > 0 ? (allCorrect.length / allCompleted.length * 100).toFixed(1) + '%' : 'N/A'} ` +
+    `mae=${mae?.toFixed(3) ?? 'N/A'} ` +
+    `bias=${overBiasPct !== null ? (overBiasPct * 100).toFixed(1) + '% OVER' : 'N/A'}`
+  );
+
+  return {
+    windowDays: days,
+    totalProps: rows.length,
+    completedProps: allCompleted.length,
+    correctProps: allCorrect.length,
+    accuracy: allCompleted.length > 0 ? allCorrect.length / allCompleted.length : null,
+    overTotal: allOvers.length,
+    underTotal: allUnders.length,
+    pushTotal: allPushes.length,
+    overCorrect,
+    underCorrect,
+    overAccuracy: allOvers.length > 0 ? overCorrect / allOvers.length : null,
+    underAccuracy: allUnders.length > 0 ? underCorrect / allUnders.length : null,
+    overBiasPct,
+    underBiasPct,
+    mae,
+    meanError,
+    dailyBreakdown,
+  };
+}

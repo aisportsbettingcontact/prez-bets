@@ -463,6 +463,8 @@ export async function refreshMlbScores(dateStr: string): Promise<{
   unchanged: number;
   noMatch: number;
   errors: string[];
+  /** Game PKs that transitioned to 'final' status in this cycle — triggers immediate backtest */
+  newlyFinalGamePks: number[];
 }> {
   const tag = `[MLBScoreRefresh][${dateStr}]`;
   console.log(`${tag} ════════════════════════════════════════════`);
@@ -474,12 +476,12 @@ export async function refreshMlbScores(dateStr: string): Promise<{
   } catch (err) {
     const msg = `${tag} ❌ API fetch failed: ${err instanceof Error ? err.message : String(err)}`;
     console.error(msg);
-    return { updated: 0, unchanged: 0, noMatch: 0, errors: [msg] };
+    return { updated: 0, unchanged: 0, noMatch: 0, errors: [msg], newlyFinalGamePks: [] };
   }
 
   if (apiGames.length === 0) {
     console.log(`${tag} No MLB games from API — nothing to update`);
-    return { updated: 0, unchanged: 0, noMatch: 0, errors: [] };
+    return { updated: 0, unchanged: 0, noMatch: 0, errors: [], newlyFinalGamePks: [] };
   }
 
   // Fetch all MLB games for this date from our DB
@@ -504,6 +506,8 @@ export async function refreshMlbScores(dateStr: string): Promise<{
   let unchanged = 0;
   let noMatch = 0;
   const errors: string[] = [];
+  /** Tracks game PKs that transitioned to 'final' this cycle for immediate backtest trigger */
+  const newlyFinalGamePks: number[] = [];
 
   for (const apiGame of apiGames) {
     try {
@@ -528,6 +532,14 @@ export async function refreshMlbScores(dateStr: string): Promise<{
 
       // Determine what has changed
       const statusChanged = dbGame.gameStatus !== apiGame.gameStatus;
+      // Track games that just transitioned to 'final' for immediate backtest trigger
+      if (statusChanged && apiGame.gameStatus === 'final') {
+        newlyFinalGamePks.push(apiGame.gamePk);
+        console.log(
+          `${tag} 🏁 NEWLY_FINAL: gamePk=${apiGame.gamePk} ${apiGame.awayAbbrev}@${apiGame.homeAbbrev}` +
+          ` — will trigger immediate K-Props backtest`
+        );
+      }
       const scoresChanged =
         dbGame.awayScore !== apiGame.awayRuns ||
         dbGame.homeScore !== apiGame.homeRuns;
@@ -613,5 +625,5 @@ export async function refreshMlbScores(dateStr: string): Promise<{
   );
   console.log(`${tag} ════════════════════════════════════════════`);
 
-  return { updated, unchanged, noMatch, errors };
+  return { updated, unchanged, noMatch, errors, newlyFinalGamePks };
 }

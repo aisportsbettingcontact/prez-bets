@@ -28,6 +28,8 @@ import {
   Clock,
   BarChart3,
   Target,
+  Calendar,
+  CalendarDays,
 } from "lucide-react";
 import { MLB_BY_ABBREV } from "@shared/mlbTeams";
 
@@ -424,6 +426,8 @@ export default function ModelResults() {
   const { appUser, isOwner, loading: authLoading } = useAppAuth();
   const [gameDate, setGameDate] = useState(() => todayPst());
   const [isRunningBacktest, setIsRunningBacktest] = useState(false);
+  // 'daily' | 'last7'
+  const [viewMode, setViewMode] = useState<'daily' | 'last7'>('daily');
 
   // ── Strict owner-only guard ─────────────────────────────────────────────────
   useEffect(() => {
@@ -439,7 +443,7 @@ export default function ModelResults() {
     refetch: refetchDaily,
   } = trpc.strikeoutProps.getRichDailyBacktest.useQuery(
     { gameDate },
-    { enabled: !!appUser && isOwner, refetchOnWindowFocus: false }
+    { enabled: !!appUser && isOwner && viewMode === 'daily', refetchOnWindowFocus: false }
   );
 
   // ── Rolling calibration metrics ─────────────────────────────────────────────
@@ -449,13 +453,27 @@ export default function ModelResults() {
     refetch: refetchCalibration,
   } = trpc.strikeoutProps.getCalibrationMetrics.useQuery(
     undefined,
-    { enabled: !!appUser && isOwner, refetchOnWindowFocus: false }
+    { enabled: !!appUser && isOwner && viewMode === 'daily', refetchOnWindowFocus: false }
+  );
+
+  // ── Last 7 Days aggregate ────────────────────────────────────────────────────
+  const {
+    data: last7Data,
+    isLoading: last7Loading,
+    refetch: refetchLast7,
+  } = trpc.strikeoutProps.getLast7DaysBacktest.useQuery(
+    { days: 7 },
+    { enabled: !!appUser && isOwner && viewMode === 'last7', refetchOnWindowFocus: false }
   );
 
   const handleRefresh = async () => {
     setIsRunningBacktest(true);
     try {
-      await Promise.all([refetchDaily(), refetchCalibration()]);
+      if (viewMode === 'daily') {
+        await Promise.all([refetchDaily(), refetchCalibration()]);
+      } else {
+        await refetchLast7();
+      }
       toast.success("Results refreshed");
     } catch (err) {
       toast.error("Refresh failed");
@@ -507,7 +525,7 @@ export default function ModelResults() {
           <Button
             size="sm"
             onClick={handleRefresh}
-            disabled={isRunningBacktest || dailyLoading}
+            disabled={isRunningBacktest || (viewMode === 'daily' ? dailyLoading : last7Loading)}
             className="gap-1.5 text-xs h-8 font-bold border"
             style={{ background: "rgba(57,255,20,0.10)", color: "#39FF14", borderColor: "rgba(57,255,20,0.35)" }}
           >
@@ -519,186 +537,371 @@ export default function ModelResults() {
           </Button>
         </div>
 
-        {/* Date navigation row */}
+        {/* View mode toggle + date nav */}
         <div className="px-4 pb-1.5 max-w-5xl mx-auto flex items-center gap-2">
           <button
-            onClick={() => setGameDate(d => addDays(d, -1))}
-            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10 flex-shrink-0"
+            onClick={() => setViewMode('daily')}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors"
+            style={{
+              background: viewMode === 'daily' ? 'rgba(57,255,20,0.12)' : 'rgba(255,255,255,0.04)',
+              color: viewMode === 'daily' ? '#39FF14' : 'rgba(255,255,255,0.45)',
+              border: `1px solid ${viewMode === 'daily' ? 'rgba(57,255,20,0.35)' : 'rgba(255,255,255,0.10)'}`,
+              fontFamily: '"Barlow Condensed", sans-serif',
+              letterSpacing: '0.08em',
+            }}
           >
-            <ChevronLeft size={14} style={{ color: "hsl(var(--muted-foreground))" }} />
+            <Calendar size={11} />
+            DAILY
           </button>
-          <div className="flex-1 flex items-center justify-center gap-2">
-            <span className="text-xs font-bold text-foreground tracking-wide">
-              {formatDateNav(gameDate)}
-            </span>
-            {gameDate === todayPst() && (
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: "rgba(57,255,20,0.15)", color: "#39FF14" }}>
-                TODAY
-              </span>
-            )}
-          </div>
           <button
-            onClick={() => setGameDate(d => addDays(d, 1))}
-            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10 flex-shrink-0"
+            onClick={() => setViewMode('last7')}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors"
+            style={{
+              background: viewMode === 'last7' ? 'rgba(0,191,255,0.12)' : 'rgba(255,255,255,0.04)',
+              color: viewMode === 'last7' ? '#00BFFF' : 'rgba(255,255,255,0.45)',
+              border: `1px solid ${viewMode === 'last7' ? 'rgba(0,191,255,0.35)' : 'rgba(255,255,255,0.10)'}`,
+              fontFamily: '"Barlow Condensed", sans-serif',
+              letterSpacing: '0.08em',
+            }}
           >
-            <ChevronRight size={14} style={{ color: "hsl(var(--muted-foreground))" }} />
+            <CalendarDays size={11} />
+            LAST 7 DAYS
           </button>
+          {/* Date nav — only visible in daily mode */}
+          {viewMode === 'daily' && (
+            <>
+              <div style={{ flex: 1 }} />
+              <button
+                onClick={() => setGameDate(d => addDays(d, -1))}
+                className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10 flex-shrink-0"
+              >
+                <ChevronLeft size={14} style={{ color: 'hsl(var(--muted-foreground))' }} />
+              </button>
+              <span className="text-xs font-bold text-foreground tracking-wide whitespace-nowrap">
+                {formatDateNav(gameDate)}
+              </span>
+              {gameDate === todayPst() && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: 'rgba(57,255,20,0.15)', color: '#39FF14' }}>
+                  TODAY
+                </span>
+              )}
+              <button
+                onClick={() => setGameDate(d => addDays(d, 1))}
+                className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10 flex-shrink-0"
+              >
+                <ChevronRight size={14} style={{ color: 'hsl(var(--muted-foreground))' }} />
+              </button>
+            </>
+          )}
         </div>
       </header>
 
       {/* ── Main content ──────────────────────────────────────────────────── */}
       <main className="max-w-5xl mx-auto px-4 py-4 pb-16">
 
-        {/* ── Daily summary stats ─────────────────────────────────────────── */}
-        {dailyLoading ? (
-          <div className="flex items-center justify-center py-12 gap-3">
-            <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#39FF14" }} />
-            <span className="text-sm text-muted-foreground">Loading results…</span>
-          </div>
-        ) : !daily || daily.total === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-            <BarChart3 className="w-10 h-10 text-muted-foreground/30" />
-            <div>
-              <p className="text-sm font-semibold text-foreground mb-1">No K-Props data for {formatDateNav(gameDate)}</p>
-              <p className="text-xs text-muted-foreground">Run the model for MLB games on this date first.</p>
+        {/* ── LAST 7 DAYS VIEW ──────────────────────────────────────────────── */}
+        {viewMode === 'last7' && (
+          last7Loading ? (
+            <div className="flex items-center justify-center py-12 gap-3">
+              <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#00BFFF' }} />
+              <span className="text-sm text-muted-foreground">Loading 7-day window…</span>
             </div>
-          </div>
-        ) : (
-          <>
-            {/* ── Section: Daily Accuracy ──────────────────────────────── */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{
-                fontSize: 9, fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase",
-                color: "rgba(255,255,255,0.35)", fontFamily: '"Barlow Condensed", sans-serif',
-                marginBottom: 10,
-              }}>
-                DAILY ACCURACY — {formatDateNav(gameDate).toUpperCase()}
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <StatCard
-                  label="ACCURACY"
-                  value={daily.completed > 0 ? fmtPct(accuracy) : "—"}
-                  sub={`${daily.correct}/${daily.completed} correct`}
-                  color={accColor}
-                />
-                <StatCard
-                  label="TOTAL PROPS"
-                  value={String(daily.total)}
-                  sub={`${daily.completed} completed · ${daily.total - daily.completed} pending`}
-                />
-                <StatCard
-                  label="OVER ACCURACY"
-                  value={daily.overTotal > 0 ? fmtPct(daily.overCorrect / daily.overTotal) : "—"}
-                  sub={`${daily.overCorrect}/${daily.overTotal} overs correct`}
-                  color={daily.overTotal > 0 ? accuracyColor(daily.overCorrect / daily.overTotal) : undefined}
-                />
-                <StatCard
-                  label="UNDER ACCURACY"
-                  value={daily.underTotal > 0 ? fmtPct(daily.underCorrect / daily.underTotal) : "—"}
-                  sub={`${daily.underCorrect}/${daily.underTotal} unders correct`}
-                  color={daily.underTotal > 0 ? accuracyColor(daily.underCorrect / daily.underTotal) : undefined}
-                />
-                <StatCard
-                  label="MEAN ERROR"
-                  value={daily.meanError !== null ? signedNum(daily.meanError, 2) : "—"}
-                  sub="avg (actual − proj)"
-                  color={daily.meanError !== null
-                    ? Math.abs(daily.meanError) <= 0.3 ? "#39FF14"
-                    : Math.abs(daily.meanError) <= 0.8 ? "#FFD700"
-                    : "#FF2244"
-                    : undefined}
-                />
-                <StatCard
-                  label="MAE"
-                  value={daily.mae !== null ? fmtNum(daily.mae, 2) : "—"}
-                  sub="mean absolute error"
-                  color={daily.mae !== null
-                    ? daily.mae <= 0.8 ? "#39FF14"
-                    : daily.mae <= 1.5 ? "#FFD700"
-                    : "#FF2244"
-                    : undefined}
-                />
+          ) : !last7Data || last7Data.totalProps === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+              <CalendarDays className="w-10 h-10 text-muted-foreground/30" />
+              <div>
+                <p className="text-sm font-semibold text-foreground mb-1">No K-Props data in the last 7 days</p>
+                <p className="text-xs text-muted-foreground">Run the model for MLB games first.</p>
               </div>
             </div>
+          ) : (
+            <>
+              {/* Aggregate summary */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase',
+                  color: 'rgba(255,255,255,0.35)', fontFamily: '"Barlow Condensed", sans-serif',
+                  marginBottom: 10,
+                }}>
+                  7-DAY AGGREGATE — {last7Data.completedProps} COMPLETED PROPS
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <StatCard
+                    label="7-DAY ACCURACY"
+                    value={last7Data.completedProps > 0 ? fmtPct(last7Data.accuracy) : '—'}
+                    sub={`${last7Data.correctProps}/${last7Data.completedProps} correct`}
+                    color={accuracyColor(last7Data.accuracy)}
+                  />
+                  <StatCard
+                    label="TOTAL PROPS"
+                    value={String(last7Data.totalProps)}
+                    sub={`${last7Data.completedProps} completed · ${last7Data.totalProps - last7Data.completedProps} pending`}
+                  />
+                  <StatCard
+                    label="OVER ACCURACY"
+                    value={last7Data.overTotal > 0 ? fmtPct(last7Data.overAccuracy) : '—'}
+                    sub={`${last7Data.overCorrect}/${last7Data.overTotal} overs correct`}
+                    color={accuracyColor(last7Data.overAccuracy)}
+                  />
+                  <StatCard
+                    label="UNDER ACCURACY"
+                    value={last7Data.underTotal > 0 ? fmtPct(last7Data.underAccuracy) : '—'}
+                    sub={`${last7Data.underCorrect}/${last7Data.underTotal} unders correct`}
+                    color={accuracyColor(last7Data.underAccuracy)}
+                  />
+                  <StatCard
+                    label="OVER BIAS"
+                    value={last7Data.overBiasPct !== null ? fmtPct(last7Data.overBiasPct) : '—'}
+                    sub={`${last7Data.overTotal}O / ${last7Data.underTotal}U / ${last7Data.pushTotal}P`}
+                    color={last7Data.overBiasPct !== null
+                      ? Math.abs(last7Data.overBiasPct - 0.5) <= 0.05 ? '#39FF14'
+                      : Math.abs(last7Data.overBiasPct - 0.5) <= 0.15 ? '#FFD700'
+                      : '#FF9500'
+                      : undefined}
+                  />
+                  <StatCard
+                    label="7-DAY MAE"
+                    value={last7Data.mae !== null ? fmtNum(last7Data.mae, 3) : '—'}
+                    sub="mean absolute error"
+                    color={last7Data.mae !== null
+                      ? last7Data.mae <= 0.8 ? '#39FF14'
+                      : last7Data.mae <= 1.5 ? '#FFD700'
+                      : '#FF2244'
+                      : undefined}
+                  />
+                  <StatCard
+                    label="MEAN BIAS"
+                    value={last7Data.meanError !== null ? signedNum(last7Data.meanError, 3) : '—'}
+                    sub="avg (actual − proj)"
+                    color={last7Data.meanError !== null
+                      ? Math.abs(last7Data.meanError) <= 0.2 ? '#39FF14'
+                      : Math.abs(last7Data.meanError) <= 0.5 ? '#FFD700'
+                      : '#FF2244'
+                      : undefined}
+                  />
+                </div>
+              </div>
 
-            {/* ── Section: Rolling Calibration ────────────────────────── */}
-            {!calibrationLoading && calibration && (
+              {/* Per-day breakdown table */}
+              {last7Data.dailyBreakdown.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase',
+                    color: 'rgba(255,255,255,0.35)', fontFamily: '"Barlow Condensed", sans-serif',
+                    marginBottom: 10,
+                  }}>
+                    PER-DAY BREAKDOWN
+                  </div>
+                  <div style={{
+                    background: '#090E14', border: '1px solid #182433', borderRadius: 10, overflow: 'hidden',
+                  }}>
+                    {/* Header row */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 60px 60px 60px 80px 60px 60px 80px',
+                      padding: '8px 14px',
+                      borderBottom: '1px solid #182433',
+                      gap: 8,
+                    }}>
+                      {['DATE', 'PROPS', 'DONE', 'CORRECT', 'ACCURACY', 'OVER', 'UNDER', 'MAE'].map(h => (
+                        <div key={h} style={{
+                          fontSize: 8, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase',
+                          color: 'rgba(255,255,255,0.3)', fontFamily: '"Barlow Condensed", sans-serif',
+                          textAlign: h === 'DATE' ? 'left' : 'center',
+                        }}>{h}</div>
+                      ))}
+                    </div>
+                    {/* Data rows */}
+                    {[...last7Data.dailyBreakdown].reverse().map((day, idx) => {
+                      const accColor7 = accuracyColor(day.accuracy);
+                      return (
+                        <div
+                          key={day.date}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 60px 60px 60px 80px 60px 60px 80px',
+                            padding: '9px 14px',
+                            gap: 8,
+                            borderBottom: idx < last7Data.dailyBreakdown.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                            background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
+                          }}
+                        >
+                          <div style={{ fontFamily: '"Barlow Condensed", sans-serif', fontSize: 13, fontWeight: 700, color: '#FFFFFF' }}>
+                            {formatDateNav(day.date)}
+                          </div>
+                          <div style={{ textAlign: 'center', fontFamily: '"Barlow Condensed", sans-serif', fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{day.total}</div>
+                          <div style={{ textAlign: 'center', fontFamily: '"Barlow Condensed", sans-serif', fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{day.completed}</div>
+                          <div style={{ textAlign: 'center', fontFamily: '"Barlow Condensed", sans-serif', fontSize: 13, color: day.completed > 0 ? accColor7 : 'rgba(255,255,255,0.3)' }}>{day.correct}</div>
+                          <div style={{ textAlign: 'center', fontFamily: '"Barlow Condensed", sans-serif', fontSize: 14, fontWeight: 800, color: accColor7 }}>
+                            {day.completed > 0 ? fmtPct(day.accuracy) : '—'}
+                          </div>
+                          <div style={{ textAlign: 'center', fontFamily: '"Barlow Condensed", sans-serif', fontSize: 13, color: 'rgba(57,255,20,0.7)' }}>{day.overTotal}</div>
+                          <div style={{ textAlign: 'center', fontFamily: '"Barlow Condensed", sans-serif', fontSize: 13, color: 'rgba(0,191,255,0.7)' }}>{day.underTotal}</div>
+                          <div style={{ textAlign: 'center', fontFamily: '"Barlow Condensed", sans-serif', fontSize: 13, color: day.mae !== null ? (day.mae <= 0.8 ? '#39FF14' : day.mae <= 1.5 ? '#FFD700' : '#FF2244') : 'rgba(255,255,255,0.3)' }}>
+                            {day.mae !== null ? fmtNum(day.mae, 2) : '—'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )
+        )}
+
+        {/* ── DAILY VIEW ────────────────────────────────────────────────────── */}
+        {viewMode === 'daily' && (
+          dailyLoading ? (
+            <div className="flex items-center justify-center py-12 gap-3">
+              <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#39FF14" }} />
+              <span className="text-sm text-muted-foreground">Loading results…</span>
+            </div>
+          ) : !daily || daily.total === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+              <BarChart3 className="w-10 h-10 text-muted-foreground/30" />
+              <div>
+                <p className="text-sm font-semibold text-foreground mb-1">No K-Props data for {formatDateNav(gameDate)}</p>
+                <p className="text-xs text-muted-foreground">Run the model for MLB games on this date first.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* ── Section: Daily Accuracy ──────────────────────────────── */}
               <div style={{ marginBottom: 20 }}>
                 <div style={{
                   fontSize: 9, fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase",
                   color: "rgba(255,255,255,0.35)", fontFamily: '"Barlow Condensed", sans-serif',
                   marginBottom: 10,
                 }}>
-                  ROLLING CALIBRATION — ALL TIME ({calibration.completedProps} props)
+                  DAILY ACCURACY — {formatDateNav(gameDate).toUpperCase()}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <StatCard
-                    label="MODEL ACCURACY"
-                    value={fmtPct(calibration.modelAccuracy)}
-                    sub={`${calibration.completedProps} completed props`}
-                    color={accuracyColor(calibration.modelAccuracy)}
+                    label="ACCURACY"
+                    value={daily.completed > 0 ? fmtPct(accuracy) : "—"}
+                    sub={`${daily.correct}/${daily.completed} correct`}
+                    color={accColor}
+                  />
+                  <StatCard
+                    label="TOTAL PROPS"
+                    value={String(daily.total)}
+                    sub={`${daily.completed} completed · ${daily.total - daily.completed} pending`}
                   />
                   <StatCard
                     label="OVER ACCURACY"
-                    value={fmtPct(calibration.modelOverAccuracy)}
-                    sub={`${calibration.overCount} overs`}
-                    color={accuracyColor(calibration.modelOverAccuracy)}
+                    value={daily.overTotal > 0 ? fmtPct(daily.overCorrect / daily.overTotal) : "—"}
+                    sub={`${daily.overCorrect}/${daily.overTotal} overs correct`}
+                    color={daily.overTotal > 0 ? accuracyColor(daily.overCorrect / daily.overTotal) : undefined}
                   />
                   <StatCard
                     label="UNDER ACCURACY"
-                    value={fmtPct(calibration.modelUnderAccuracy)}
-                    sub={`${calibration.underCount} unders`}
-                    color={accuracyColor(calibration.modelUnderAccuracy)}
+                    value={daily.underTotal > 0 ? fmtPct(daily.underCorrect / daily.underTotal) : "—"}
+                    sub={`${daily.underCorrect}/${daily.underTotal} unders correct`}
+                    color={daily.underTotal > 0 ? accuracyColor(daily.underCorrect / daily.underTotal) : undefined}
                   />
                   <StatCard
-                    label="ROLLING MAE"
-                    value={fmtNum(calibration.mae, 3)}
-                    sub="mean absolute error"
-                    color={calibration.mae <= 0.8 ? "#39FF14" : calibration.mae <= 1.5 ? "#FFD700" : "#FF2244"}
-                  />
-                  <StatCard
-                    label="MEAN BIAS"
-                    value={signedNum(calibration.meanBias, 3)}
+                    label="MEAN ERROR"
+                    value={daily.meanError !== null ? signedNum(daily.meanError, 2) : "—"}
                     sub="avg (actual − proj)"
-                    color={Math.abs(calibration.meanBias) <= 0.2 ? "#39FF14" : Math.abs(calibration.meanBias) <= 0.5 ? "#FFD700" : "#FF2244"}
+                    color={daily.meanError !== null
+                      ? Math.abs(daily.meanError) <= 0.3 ? "#39FF14"
+                      : Math.abs(daily.meanError) <= 0.8 ? "#FFD700"
+                      : "#FF2244"
+                      : undefined}
                   />
                   <StatCard
-                    label="CALIBRATION FACTOR"
-                    value={fmtNum(calibration.calibrationFactor, 4)}
-                    sub="multiply proj × factor"
-                    color={Math.abs(calibration.calibrationFactor - 1) <= 0.03 ? "#39FF14" : "#FFD700"}
-                  />
-                  <StatCard
-                    label="RMSE"
-                    value={fmtNum(calibration.rmse, 3)}
-                    sub="root mean squared error"
+                    label="MAE"
+                    value={daily.mae !== null ? fmtNum(daily.mae, 2) : "—"}
+                    sub="mean absolute error"
+                    color={daily.mae !== null
+                      ? daily.mae <= 0.8 ? "#39FF14"
+                      : daily.mae <= 1.5 ? "#FFD700"
+                      : "#FF2244"
+                      : undefined}
                   />
                 </div>
               </div>
-            )}
 
-            {/* ── Section: Per-pitcher results ─────────────────────────── */}
-            <div>
-              <div style={{
-                fontSize: 9, fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase",
-                color: "rgba(255,255,255,0.35)", fontFamily: '"Barlow Condensed", sans-serif',
-                marginBottom: 10, display: "flex", alignItems: "center", gap: 8,
-              }}>
-                <span>PER-PITCHER RESULTS</span>
-                <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
-                <span style={{ color: "rgba(255,255,255,0.25)" }}>{daily.total} pitchers</span>
-                {daily.completed > 0 && (
-                  <>
-                    <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
-                    <span style={{ color: accColor }}>{daily.correct}/{daily.completed} correct</span>
-                  </>
-                )}
+              {/* ── Section: Rolling Calibration ────────────────────────── */}
+              {!calibrationLoading && calibration && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase",
+                    color: "rgba(255,255,255,0.35)", fontFamily: '"Barlow Condensed", sans-serif',
+                    marginBottom: 10,
+                  }}>
+                    ROLLING CALIBRATION — ALL TIME ({calibration.completedProps} props)
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <StatCard
+                      label="MODEL ACCURACY"
+                      value={fmtPct(calibration.modelAccuracy)}
+                      sub={`${calibration.completedProps} completed props`}
+                      color={accuracyColor(calibration.modelAccuracy)}
+                    />
+                    <StatCard
+                      label="OVER ACCURACY"
+                      value={fmtPct(calibration.modelOverAccuracy)}
+                      sub={`${calibration.overCount} overs`}
+                      color={accuracyColor(calibration.modelOverAccuracy)}
+                    />
+                    <StatCard
+                      label="UNDER ACCURACY"
+                      value={fmtPct(calibration.modelUnderAccuracy)}
+                      sub={`${calibration.underCount} unders`}
+                      color={accuracyColor(calibration.modelUnderAccuracy)}
+                    />
+                    <StatCard
+                      label="ROLLING MAE"
+                      value={fmtNum(calibration.mae, 3)}
+                      sub="mean absolute error"
+                      color={calibration.mae <= 0.8 ? "#39FF14" : calibration.mae <= 1.5 ? "#FFD700" : "#FF2244"}
+                    />
+                    <StatCard
+                      label="MEAN BIAS"
+                      value={signedNum(calibration.meanBias, 3)}
+                      sub="avg (actual − proj)"
+                      color={Math.abs(calibration.meanBias) <= 0.2 ? "#39FF14" : Math.abs(calibration.meanBias) <= 0.5 ? "#FFD700" : "#FF2244"}
+                    />
+                    <StatCard
+                      label="CALIBRATION FACTOR"
+                      value={fmtNum(calibration.calibrationFactor, 4)}
+                      sub="multiply proj × factor"
+                      color={Math.abs(calibration.calibrationFactor - 1) <= 0.03 ? "#39FF14" : "#FFD700"}
+                    />
+                    <StatCard
+                      label="RMSE"
+                      value={fmtNum(calibration.rmse, 3)}
+                      sub="root mean squared error"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* ── Section: Per-pitcher results ─────────────────────────── */}
+              <div>
+                <div style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase",
+                  color: "rgba(255,255,255,0.35)", fontFamily: '"Barlow Condensed", sans-serif',
+                  marginBottom: 10, display: "flex", alignItems: "center", gap: 8,
+                }}>
+                  <span>PER-PITCHER RESULTS</span>
+                  <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+                  <span style={{ color: "rgba(255,255,255,0.25)" }}>{daily.total} pitchers</span>
+                  {daily.completed > 0 && (
+                    <>
+                      <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+                      <span style={{ color: accColor }}>{daily.correct}/{daily.completed} correct</span>
+                    </>
+                  )}
+                </div>
+                {daily.props.map((prop) => (
+                  <PitcherResultRow key={prop.id} prop={prop as PropRow} />
+                ))}
               </div>
-              {daily.props.map((prop) => (
-                <PitcherResultRow key={prop.id} prop={prop as PropRow} />
-              ))}
-            </div>
-          </>
+            </>
+          )
         )}
       </main>
     </div>

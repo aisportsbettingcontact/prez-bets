@@ -874,6 +874,17 @@ export const appRouter = router({
       }),
 
     /**
+     * Owner-only: fetch aggregate K-Props backtest metrics for the last 7 days.
+     * Returns per-day breakdown + aggregate accuracy, OVER/UNDER bias, and MAE.
+     */
+    getLast7DaysBacktest: ownerProcedure
+      .input(z.object({ days: z.number().int().min(1).max(30).optional() }))
+      .query(async ({ input }) => {
+        const { getLast7DaysBacktest } = await import("./kPropsBacktestService");
+        const data = await getLast7DaysBacktest(input.days ?? 7);
+        return data;
+      }),
+    /**
      * Owner-only: run the StrikeoutModel.py for a specific game.
      * Requires file paths to Retrosheet plays, Statcast JSON, and crosswalk CSV.
      */
