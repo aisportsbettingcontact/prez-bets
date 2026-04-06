@@ -1,24 +1,22 @@
 /**
  * mlbHrPropsModelService.ts
  *
- * Resolves mlbamId for all HR prop players (via MLB Stats API + mlb_players table)
- * and computes per-player HR probability, model odds, edge, EV, and verdict.
+ * Two responsibilities:
+ *  1. Resolve mlbamId for every mlb_hr_props row that lacks one (MLB Stats API lookup).
+ *  2. Compute per-player HR probability and EV fields:
+ *       modelPHr, modelOverOdds, edgeOver, evOver, verdict
+ *     using team batting splits (vs pitcher hand), pitcher hr9, and park factor.
  *
- * Computation model:
- *   hr_rate_per_pa = team_hr9 / 27.0
- *   woba_scale     = team_woba / LEAGUE_WOBA
- *   pitcher_adj    = sqrt(pitcher_hr9 / LEAGUE_HR9)   [dampened to moderate extremes]
- *   park_adj       = parkFactor3yr                     [already a decimal multiplier]
- *   adj_rate       = hr_rate_per_pa * woba_scale * pitcher_adj * park_adj
- *   lambda         = adj_rate * PLAYER_PA_PER_GAME
- *   p_hr           = 1 - exp(-lambda)                  [Poisson P(≥1 HR)]
+ * Calibration:
+ *   P(≥1 HR) = 1 − exp(−λ)
+ *   λ = (teamHr9 / 27) × woba_scale × sqrt(pitcherHr9 / LEAGUE_HR9) × parkFactor3yr × PLAYER_PA_PER_GAME
  *
- * Book source: Consensus (Action Network book_id=15) — anNoVigOverPct is the
- * consensus no-vig implied probability for the OVER.
+ *   Dampened pitcher adjustment (sqrt) moderates extremes:
+ *     pitcher_hr9=0.5 → raw_adj=0.39, dampened=0.625
+ *     pitcher_hr9=1.28 → adj=1.0 (neutral)
+ *     pitcher_hr9=2.0 → raw_adj=1.56, dampened=1.25
  *
- * Edge  = modelPHr - anNoVigOverPct
- * EV    = (edge / (1 - modelPHr)) * 100  [per-unit EV on $100 bet]
- * Verdict = "OVER" if edge >= EDGE_THRESHOLD, else "PASS"
+ * Book source: Consensus (Action Network book_id=15) — already in anNoVigOverPct.
  */
 
 import * as dotenv from "dotenv";
@@ -31,9 +29,11 @@ import {
   mlbPitcherStats,
   mlbParkFactors,
   mlbLineups,
+  mlbPlayers,
   games,
+  type MlbHrPropRow,
 } from "../drizzle/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, isNull, inArray } from "drizzle-orm";
 
 const TAG = "[HrPropsModel]";
 
@@ -49,58 +49,48 @@ const MAX_P_HR = 0.40;
 export interface HrPropsModelResult {
   date: string;
   resolved: number;      // mlbamId newly resolved
-  alreadyHad: number;    // mlbamId already populated
-  unresolved: number;    // could not resolve
-  modeled: number;       // rows with modelPHr written
+  alreadyHad: number;    // rows that already had mlbamId
+  unresolved: number;    // rows where MLB Stats API returned no match
+  modeled: number;       // rows where modelPHr was computed
   edges: number;         // rows with verdict=OVER
-  errors: number;
+  errors: number;        // rows that errored during computation
 }
 
-// ─── Internal types ───────────────────────────────────────────────────────────
-interface TeamBattingContext {
-  hr9: number;
-  woba: number;
-}
-
-interface PitcherContext {
-  hr9: number;
-}
-
-interface ParkContext {
-  hrFactor: number;
-}
-
-// ─── MLB Stats API name normalization ─────────────────────────────────────────
+// ─── Name normalization ───────────────────────────────────────────────────────
 function normalizeName(name: string): string {
   return name
-    .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")  // strip diacritics
-    .replace(/\s+jr\.?$|\s+sr\.?$|\s+ii$|\s+iii$|\s+iv$/i, "")  // strip suffixes
-    .replace(/[^a-z\s]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")   // strip diacritics
+    .replace(/\s+Jr\.?$|\s+Sr\.?$|\s+II$|\s+III$|\s+IV$/i, "")  // strip suffixes
+    .replace(/\./g, "")
+    .toLowerCase()
     .trim();
 }
 
-// ─── Fetch all active MLB player IDs from MLB Stats API ───────────────────────
-async function fetchMlbamIdMap(): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
-  try {
-    const url = `${MLB_STATS_API}?season=2025&gameType=R`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json() as { people?: Array<{ id: number; fullName: string }> };
-    for (const p of data.people ?? []) {
-      const key = normalizeName(p.fullName);
-      map.set(key, p.id);
-    }
-    console.log(`${TAG} [STATE] MLB Stats API: loaded ${map.size} players`);
-  } catch (err) {
-    console.error(`${TAG} [ERROR] MLB Stats API fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+// ─── American odds helpers ────────────────────────────────────────────────────
+function probToAmericanOdds(p: number): string {
+  if (p <= 0 || p >= 1) return "N/A";
+  if (p >= 0.5) {
+    const odds = Math.round(-100 * p / (1 - p));
+    return String(odds);
+  } else {
+    const odds = Math.round(100 * (1 - p) / p);
+    return `+${odds}`;
   }
-  return map;
 }
 
-// ─── Poisson P(≥1 HR) computation ────────────────────────────────────────────
+function americanOddsToProb(odds: string): number | null {
+  const n = parseFloat(odds.replace("+", ""));
+  if (isNaN(n)) return null;
+  if (n < 0) return -n / (-n + 100);
+  return 100 / (n + 100);
+}
+
+// ─── Core P(HR) computation ───────────────────────────────────────────────────
+interface TeamBattingContext { hr9: number; woba: number; }
+interface PitcherContext { hr9: number; }
+interface ParkContext { hrFactor: number; }
+
 function computePlayerPHr(
   teamBatting: TeamBattingContext,
   pitcher: PitcherContext,
@@ -133,13 +123,6 @@ function computePlayerPHr(
   return Math.max(MIN_P_HR, Math.min(MAX_P_HR, p_hr));
 }
 
-// ─── American odds from probability ──────────────────────────────────────────
-function probToAmericanOdds(p: number): number {
-  if (p <= 0 || p >= 1) return 0;
-  if (p >= 0.5) return Math.round(-(p / (1 - p)) * 100);
-  return Math.round(((1 - p) / p) * 100);
-}
-
 // ─── Main export ──────────────────────────────────────────────────────────────
 export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsModelResult> {
   console.log(`\n${TAG} ============================================================`);
@@ -148,126 +131,143 @@ export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsM
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  let resolved = 0, alreadyHad = 0, unresolved = 0, modeled = 0, edges = 0, errors = 0;
+  const result: HrPropsModelResult = {
+    date: gameDate,
+    resolved: 0,
+    alreadyHad: 0,
+    unresolved: 0,
+    modeled: 0,
+    edges: 0,
+    errors: 0,
+  };
 
-  // ── Step 1: Load all April 5 game IDs ──────────────────────────────────────
-  console.log(`${TAG} [STEP 1] Loading games for ${gameDate}`);
+  // ─── STEP 1: Resolve mlbamId for rows that lack it ────────────────────────
+  console.log(`${TAG} [STEP 1] Resolving mlbamId for unresolved HR prop rows`);
+
+  // Get all HR prop rows for this date (via game join)
   const gameRows = await db
-    .select({ id: games.id, awayTeam: games.awayTeam, homeTeam: games.homeTeam,
-              awayStartingPitcher: games.awayStartingPitcher,
-              homeStartingPitcher: games.homeStartingPitcher })
+    .select({ id: games.id, awayTeam: games.awayTeam, homeTeam: games.homeTeam })
     .from(games)
     .where(and(eq(games.gameDate, gameDate), eq(games.sport, "MLB")));
 
-  const gameIds = (gameRows as Array<{ id: number }>).map(g => g.id);
-  console.log(`${TAG} [STATE] Found ${gameRows.length} MLB games, ids=[${gameIds.join(",")}]`);
-
-  if (gameIds.length === 0) {
-    console.log(`${TAG} [OUTPUT] No games found for ${gameDate}`);
-    return { date: gameDate, resolved, alreadyHad, unresolved, modeled, edges, errors };
+  if (gameRows.length === 0) {
+    console.log(`${TAG} [STATE] No MLB games found for ${gameDate}`);
+    return result;
   }
 
-  // ── Step 2: Load all HR prop rows for these games ──────────────────────────
-  console.log(`${TAG} [STEP 2] Loading HR props for ${gameIds.length} games`);
-  const hrRows = await db
+  const gameIds = (gameRows as Array<{ id: number; awayTeam: string; homeTeam: string }>).map(g => g.id);
+  console.log(`${TAG} [STATE] Found ${gameIds.length} MLB games for ${gameDate}`);
+
+  // Get all HR prop rows for these games
+  const allHrRows = await db
     .select()
     .from(mlbHrProps)
-    .where(
-      gameIds.length === 1
-        ? eq(mlbHrProps.gameId, gameIds[0])
-        : inArray(mlbHrProps.gameId, gameIds)
-    );
+    .where(inArray(mlbHrProps.gameId, gameIds));
 
-  console.log(`${TAG} [STATE] HR prop rows: ${hrRows.length}`);
+  const hrRows = allHrRows as MlbHrPropRow[];
+  console.log(`${TAG} [STATE] Total HR prop rows: ${hrRows.length}`);
+
   if (hrRows.length === 0) {
-    console.log(`${TAG} [OUTPUT] No HR props found for ${gameDate}`);
-    return { date: gameDate, resolved, alreadyHad, unresolved, modeled, edges, errors };
+    console.log(`${TAG} [STATE] No HR prop rows found. Run HR Props scraper first.`);
+    return result;
   }
 
-  // ── Step 3: Resolve mlbamId ─────────────────────────────────────────────────
-  console.log(`${TAG} [STEP 3] Resolving mlbamId`);
-
-  // 3a: Separate already-resolved from unresolved
-  type HrRow = typeof hrRows[0] & { id: number; playerName: string; mlbamId: number | null; gameId: number; side: string; teamAbbrev: string };
-  const needsResolution = (hrRows as HrRow[]).filter(r => r.mlbamId == null);
-  const alreadyResolved = (hrRows as HrRow[]).filter(r => r.mlbamId != null);
-  alreadyHad = alreadyResolved.length;
-  console.log(`${TAG} [STATE] Already resolved: ${alreadyHad}, needs resolution: ${needsResolution.length}`);
+  // Separate already-resolved from unresolved
+  const needsResolution = hrRows.filter(r => r.mlbamId == null);
+  const alreadyResolved = hrRows.filter(r => r.mlbamId != null);
+  result.alreadyHad = alreadyResolved.length;
+  console.log(`${TAG} [STATE] Already have mlbamId: ${alreadyResolved.length} | Need resolution: ${needsResolution.length}`);
 
   if (needsResolution.length > 0) {
-    // 3b: Fetch MLB Stats API player map
-    const apiMap = await fetchMlbamIdMap();
+    // Build name lookup from mlb_players table first (fast, no API call)
+    const allPlayers = await db
+      .select({ mlbamId: mlbPlayers.mlbamId, name: mlbPlayers.name })
+      .from(mlbPlayers)
+      .where(eq(mlbPlayers.isActive, true));
 
-    for (const row of needsResolution) {
-      const key = normalizeName(row.playerName);
-      const mlbamId = apiMap.get(key) ?? null;
-
-      if (mlbamId != null) {
-        try {
-          await db.update(mlbHrProps).set({ mlbamId }).where(eq(mlbHrProps.id, row.id));
-          row.mlbamId = mlbamId;
-          resolved++;
-        } catch (err) {
-          console.error(`${TAG} [ERROR] Failed to update mlbamId for ${row.playerName}: ${err instanceof Error ? err.message : String(err)}`);
-          errors++;
-        }
-      } else {
-        console.warn(`${TAG} [WARN] Could not resolve mlbamId for "${row.playerName}" (key="${key}")`);
-        unresolved++;
+    const playerNameMap = new Map<string, number>();
+    for (const p of allPlayers as Array<{ mlbamId: number | null; name: string }>) {
+      if (p.mlbamId) {
+        playerNameMap.set(normalizeName(p.name), p.mlbamId);
       }
     }
+    console.log(`${TAG} [STATE] mlb_players lookup table: ${playerNameMap.size} entries`);
+
+    // Try MLB Stats API for any remaining unmatched
+    let apiPlayers: Map<string, number> | null = null;
+
+    for (const row of needsResolution) {
+      const normalizedName = normalizeName(row.playerName);
+
+      // Try DB lookup first
+      let mlbamId = playerNameMap.get(normalizedName) ?? null;
+
+      // Try MLB Stats API if not found in DB
+      if (!mlbamId) {
+        if (!apiPlayers) {
+          // Lazy-load MLB Stats API roster
+          try {
+            const resp = await fetch(`${MLB_STATS_API}?season=2025&gameType=R`);
+            if (resp.ok) {
+              const data = await resp.json() as { people?: Array<{ id: number; fullName: string }> };
+              apiPlayers = new Map<string, number>();
+              for (const p of data.people ?? []) {
+                apiPlayers.set(normalizeName(p.fullName), p.id);
+              }
+              console.log(`${TAG} [STATE] MLB Stats API: loaded ${apiPlayers.size} players`);
+            }
+          } catch (e) {
+            console.warn(`${TAG} [WARN] MLB Stats API fetch failed: ${e}`);
+            apiPlayers = new Map();
+          }
+        }
+        mlbamId = apiPlayers?.get(normalizedName) ?? null;
+      }
+
+      if (mlbamId) {
+        await db
+          .update(mlbHrProps)
+          .set({ mlbamId })
+          .where(eq(mlbHrProps.id, row.id));
+        result.resolved++;
+      } else {
+        result.unresolved++;
+        console.warn(`${TAG} [WARN] Could not resolve mlbamId for: "${row.playerName}" (normalized: "${normalizedName}")`);
+      }
+    }
+
+    console.log(`${TAG} [STATE] mlbamId resolution: resolved=${result.resolved} unresolved=${result.unresolved}`);
   }
 
-  console.log(`${TAG} [STATE] mlbamId resolution: resolved=${resolved} alreadyHad=${alreadyHad} unresolved=${unresolved}`);
+  // ─── STEP 2: Load context data for model computation ─────────────────────
+  console.log(`${TAG} [STEP 2] Loading batting splits, pitcher stats, park factors, lineups`);
 
-  // ── Step 4: Load context data ───────────────────────────────────────────────
-  console.log(`${TAG} [STEP 4] Loading batting splits, pitcher stats, park factors, lineups`);
-
-  // 4a: Team batting splits (keyed by teamAbbrev + hand)
+  // Load batting splits (all teams, both hands)
   const battingSplits = await db.select().from(mlbTeamBattingSplits);
-  type SplitRow = { teamAbbrev: string; hand: string; hr9: number | null; woba: number | null };
-  const splitMap = new Map<string, TeamBattingContext>();
-  for (const s of battingSplits as SplitRow[]) {
-    const key = `${s.teamAbbrev}:${s.hand}`;
-    if (s.hr9 != null && s.woba != null) {
-      splitMap.set(key, { hr9: Number(s.hr9), woba: Number(s.woba) });
-    }
+  const splitsMap = new Map<string, { L: TeamBattingContext; R: TeamBattingContext }>();
+  for (const s of battingSplits as Array<{ teamAbbrev: string; hand: string; hr9: number | null; woba: number | null }>) {
+    if (!s.hr9 || !s.woba) continue;
+    const entry = splitsMap.get(s.teamAbbrev) ?? { L: { hr9: 1.0, woba: 0.318 }, R: { hr9: 1.0, woba: 0.318 } };
+    const hand = s.hand as 'L' | 'R';
+    entry[hand] = { hr9: Number(s.hr9), woba: Number(s.woba) };
+    splitsMap.set(s.teamAbbrev, entry);
   }
-  // Also build a combined (vs-all) fallback by averaging L+R
-  const teamAvgMap = new Map<string, TeamBattingContext>();
-  const teamKeys = Array.from(new Set((battingSplits as SplitRow[]).map(s => s.teamAbbrev)));
-  for (const team of teamKeys) {
-    const lSplit = splitMap.get(`${team}:L`);
-    const rSplit = splitMap.get(`${team}:R`);
-    if (lSplit && rSplit) {
-      teamAvgMap.set(team, {
-        hr9: (lSplit.hr9 + rSplit.hr9) / 2,
-        woba: (lSplit.woba + rSplit.woba) / 2,
-      });
-    } else if (lSplit) {
-      teamAvgMap.set(team, lSplit);
-    } else if (rSplit) {
-      teamAvgMap.set(team, rSplit);
-    }
-  }
-  console.log(`${TAG} [STATE] Batting splits loaded: ${splitMap.size} entries, ${teamAvgMap.size} teams`);
+  console.log(`${TAG} [STATE] Batting splits loaded: ${splitsMap.size} teams`);
 
-  // 4b: Pitcher stats (keyed by fullName lowercase)
-  const pitcherStats = await db.select({ fullName: mlbPitcherStats.fullName, hr9: mlbPitcherStats.hr9 }).from(mlbPitcherStats);
-  type PitcherRow = { fullName: string; hr9: number | null };
-  const pitcherMap = new Map<string, PitcherContext>();
-  for (const p of pitcherStats as PitcherRow[]) {
+  // Load pitcher stats (keyed by fullName lowercase)
+  const pitcherStats = await db.select({ fullName: mlbPitcherStats.fullName, hr9: mlbPitcherStats.hr9, throwsHand: mlbPitcherStats.throwsHand }).from(mlbPitcherStats);
+  const pitcherMap = new Map<string, { hr9: number; hand: string }>();
+  for (const p of pitcherStats as Array<{ fullName: string; hr9: number | null; throwsHand: string | null }>) {
     if (p.hr9 != null) {
-      pitcherMap.set(p.fullName.toLowerCase(), { hr9: Number(p.hr9) });
+      pitcherMap.set(p.fullName.toLowerCase(), { hr9: Number(p.hr9), hand: p.throwsHand ?? 'R' });
     }
   }
   console.log(`${TAG} [STATE] Pitcher stats loaded: ${pitcherMap.size} pitchers`);
 
-  // 4c: Park factors (keyed by teamAbbrev)
+  // Load park factors (keyed by teamAbbrev)
   const parkFactors = await db.select({ teamAbbrev: mlbParkFactors.teamAbbrev, parkFactor3yr: mlbParkFactors.parkFactor3yr }).from(mlbParkFactors);
-  type ParkRow = { teamAbbrev: string; parkFactor3yr: number | null };
   const parkMap = new Map<string, ParkContext>();
-  for (const p of parkFactors as ParkRow[]) {
+  for (const p of parkFactors as Array<{ teamAbbrev: string; parkFactor3yr: number | null }>) {
     if (p.parkFactor3yr != null) {
       // parkFactor3yr is already a decimal multiplier (0.93 = pitcher-friendly, 1.07 = hitter-friendly)
       parkMap.set(p.teamAbbrev, { hrFactor: Number(p.parkFactor3yr) });
@@ -275,127 +275,126 @@ export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsM
   }
   console.log(`${TAG} [STATE] Park factors loaded: ${parkMap.size} parks`);
 
-  // 4d: Lineups (keyed by gameId) — for pitcher hand to select correct batting split
-  const lineupRows = await db.select().from(mlbLineups).where(inArray(mlbLineups.gameId, gameIds));
-  type LineupRow = { gameId: number; awayPitcherName: string | null; awayPitcherHand: string | null; homePitcherName: string | null; homePitcherHand: string | null };
-  const lineupMap = new Map<number, LineupRow>();
-  for (const l of lineupRows as LineupRow[]) {
-    lineupMap.set(l.gameId, l);
-  }
-  console.log(`${TAG} [STATE] Lineups loaded: ${lineupMap.size} games`);
+  // Load lineups for all games (to get pitcher hand)
+  const lineupRows = await db
+    .select()
+    .from(mlbLineups)
+    .where(inArray(mlbLineups.gameId, gameIds));
 
-  // Build game context map: gameId → { awayTeam, homeTeam, awayPitcher, homePitcher }
-  type GameCtx = { awayTeam: string; homeTeam: string; awayPitcherName: string | null; homePitcherName: string | null; awayPitcherHand: string | null; homePitcherHand: string | null };
-  const gameCtxMap = new Map<number, GameCtx>();
-  for (const g of gameRows as Array<{ id: number; awayTeam: string; homeTeam: string; awayStartingPitcher: string | null; homeStartingPitcher: string | null }>) {
-    const lineup = lineupMap.get(g.id);
-    gameCtxMap.set(g.id, {
-      awayTeam: g.awayTeam,
-      homeTeam: g.homeTeam,
-      awayPitcherName: lineup?.awayPitcherName ?? g.awayStartingPitcher ?? null,
-      homePitcherName: lineup?.homePitcherName ?? g.homeStartingPitcher ?? null,
-      awayPitcherHand: lineup?.awayPitcherHand ?? null,
-      homePitcherHand: lineup?.homePitcherHand ?? null,
+  const lineupMap = new Map<number, { awayPitcher: string; homePitcher: string; awayHand: string; homeHand: string }>();
+  for (const l of lineupRows as Array<{ gameId: number; awayPitcherName: string | null; homePitcherName: string | null; awayPitcherHand: string | null; homePitcherHand: string | null }>) {
+    lineupMap.set(l.gameId, {
+      awayPitcher: l.awayPitcherName ?? '',
+      homePitcher: l.homePitcherName ?? '',
+      awayHand: l.awayPitcherHand ?? 'R',
+      homeHand: l.homePitcherHand ?? 'R',
     });
   }
 
-  // ── Step 5: Compute model values for each HR prop row ──────────────────────
-  console.log(`${TAG} [STEP 5] Computing modelPHr, modelOverOdds, edgeOver, evOver, verdict`);
+  // Also build game team map for quick lookup
+  const gameTeamMap = new Map<number, { awayTeam: string; homeTeam: string }>();
+  for (const g of gameRows as Array<{ id: number; awayTeam: string; homeTeam: string }>) {
+    gameTeamMap.set(g.id, { awayTeam: g.awayTeam, homeTeam: g.homeTeam });
+  }
 
-  const allRows = await db
+  // ─── STEP 3: Reload all HR prop rows (now with mlbamId) and compute model ─
+  console.log(`${TAG} [STEP 3] Computing model P(HR), modelOverOdds, edgeOver, evOver, verdict`);
+
+  const freshRows = await db
     .select()
     .from(mlbHrProps)
-    .where(
-      gameIds.length === 1
-        ? eq(mlbHrProps.gameId, gameIds[0])
-        : inArray(mlbHrProps.gameId, gameIds)
-    );
+    .where(inArray(mlbHrProps.gameId, gameIds));
 
-  for (const row of allRows as HrRow[]) {
+  for (const row of freshRows as MlbHrPropRow[]) {
     try {
-      const ctx = gameCtxMap.get(row.gameId);
-      if (!ctx) {
-        console.warn(`${TAG} [WARN] No game context for gameId=${row.gameId}`);
-        continue;
-      }
+      const gameTeams = gameTeamMap.get(row.gameId);
+      if (!gameTeams) continue;
 
-      // Determine which side this player is on
-      const isAway = row.side === "away";
-      const battingTeam = isAway ? ctx.awayTeam : ctx.homeTeam;
-      const opposingPitcherName = isAway ? ctx.homePitcherName : ctx.awayPitcherName;
-      const opposingPitcherHand = isAway ? ctx.homePitcherHand : ctx.awayPitcherHand;
-      const homeTeam = ctx.homeTeam;
+      const lineup = lineupMap.get(row.gameId);
+      const isAway = row.side === 'away';
 
-      // Get batting context (prefer hand-specific split if pitcher hand known)
-      let batting: TeamBattingContext | undefined;
-      if (opposingPitcherHand) {
-        batting = splitMap.get(`${battingTeam}:${opposingPitcherHand}`);
-      }
-      if (!batting) {
-        batting = teamAvgMap.get(battingTeam);
-      }
-      if (!batting) {
-        batting = { hr9: 1.0, woba: LEAGUE_WOBA };  // league average fallback
-      }
+      // Batter's team
+      const batterTeam = isAway ? gameTeams.awayTeam : gameTeams.homeTeam;
+      // Opposing pitcher (away batter faces home pitcher, home batter faces away pitcher)
+      const pitcherName = isAway
+        ? (lineup?.homePitcher ?? '')
+        : (lineup?.awayPitcher ?? '');
+      const pitcherHand = isAway
+        ? (lineup?.homeHand ?? 'R')
+        : (lineup?.awayHand ?? 'R');
 
-      // Get pitcher context
-      let pitcher: PitcherContext = { hr9: LEAGUE_HR9 };  // league average fallback
-      if (opposingPitcherName) {
-        const pitcherKey = opposingPitcherName.toLowerCase();
-        pitcher = pitcherMap.get(pitcherKey) ?? { hr9: LEAGUE_HR9 };
-      }
+      // Home team is where the game is played
+      const homeTeam = gameTeams.homeTeam;
 
-      // Get park context
+      // Get batting splits for batter's team vs pitcher hand
+      const teamSplits = splitsMap.get(batterTeam);
+      const teamBatting: TeamBattingContext = teamSplits
+        ? (teamSplits[pitcherHand as 'L' | 'R'] ?? teamSplits['R'])
+        : { hr9: 1.0, woba: LEAGUE_WOBA };
+
+      // Get pitcher stats
+      const pitcherData = pitcherMap.get(pitcherName.toLowerCase());
+      const pitcher: PitcherContext = pitcherData
+        ? { hr9: pitcherData.hr9 }
+        : { hr9: LEAGUE_HR9 };
+
+      // Get park factor for home team
       const park: ParkContext = parkMap.get(homeTeam) ?? { hrFactor: 1.0 };
 
       // Compute P(HR)
-      const modelPHr = computePlayerPHr(batting, pitcher, park);
-      const modelOverOdds = probToAmericanOdds(modelPHr);
+      const pHr = computePlayerPHr(teamBatting, pitcher, park);
+      const modelOverOdds = probToAmericanOdds(pHr);
 
-      // Compute edge and EV
-      const anNoVig = row.anNoVigOverPct != null ? Number(row.anNoVigOverPct) : null;
-      let edgeOver: number | null = null;
-      let evOver: number | null = null;
-      let verdict = "PASS";
+      // Compute edge and EV vs consensus no-vig
+      const anNoVig = row.anNoVigOverPct ? parseFloat(row.anNoVigOverPct) : null;
+      let edgeOver: string | null = null;
+      let evOver: string | null = null;
+      let verdict = 'PASS';
 
-      if (anNoVig != null && anNoVig > 0) {
-        edgeOver = parseFloat((modelPHr - anNoVig).toFixed(4));
-        // EV = (edge / (1 - modelPHr)) * 100 — represents per-unit return on $100
-        evOver = parseFloat(((edgeOver / (1 - modelPHr)) * 100).toFixed(2));
-        if (edgeOver >= EDGE_THRESHOLD) {
-          verdict = "OVER";
-          edges++;
+      if (anNoVig != null && !isNaN(anNoVig)) {
+        const edge = pHr - anNoVig;
+        edgeOver = (edge >= 0 ? '+' : '') + edge.toFixed(4);
+
+        // EV = edge × (1/bookP - 1) × 100 (per $100 bet)
+        const bookP = anNoVig;
+        if (bookP > 0 && bookP < 1) {
+          const ev = edge * ((1 / bookP) - 1) * 100;
+          evOver = (ev >= 0 ? '+' : '') + ev.toFixed(2);
+        }
+
+        if (edge >= EDGE_THRESHOLD) {
+          verdict = 'OVER';
+          result.edges++;
         }
       }
 
       // Write to DB
-      await db.update(mlbHrProps)
+      await db
+        .update(mlbHrProps)
         .set({
-          modelPHr: parseFloat(modelPHr.toFixed(4)),
+          modelPHr: pHr.toFixed(4),
           modelOverOdds,
           edgeOver,
           evOver,
           verdict,
+          modelRunAt: Date.now(),
         })
         .where(eq(mlbHrProps.id, row.id));
 
-      modeled++;
+      result.modeled++;
+      console.log(`${TAG} [STATE] ${row.playerName} (${batterTeam}): pHr=${pHr.toFixed(4)} modelOdds=${modelOverOdds} anNoVig=${anNoVig?.toFixed(4) ?? 'N/A'} edge=${edgeOver ?? 'N/A'} ev=${evOver ?? 'N/A'} verdict=${verdict}`);
 
-      const edgeStr = edgeOver != null ? (edgeOver >= 0 ? `+${edgeOver.toFixed(4)}` : edgeOver.toFixed(4)) : "N/A";
-      const evStr = evOver != null ? (evOver >= 0 ? `+${evOver.toFixed(2)}` : evOver.toFixed(2)) : "N/A";
-      const noVigStr = anNoVig != null ? anNoVig.toFixed(4) : "N/A";
-      console.log(`${TAG} [STATE] ${row.playerName} (${battingTeam}): pHr=${modelPHr.toFixed(4)} modelOdds=${modelOverOdds > 0 ? "+" : ""}${modelOverOdds} anNoVig=${noVigStr} edge=${edgeStr} ev=${evStr} verdict=${verdict}`);
-
-    } catch (err) {
-      errors++;
-      console.error(`${TAG} [ERROR] Failed to model ${(row as HrRow).playerName}: ${err instanceof Error ? err.message : String(err)}`);
+    } catch (err: unknown) {
+      result.errors++;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`${TAG} [ERROR] Failed to model ${row.playerName}: ${msg}`);
     }
   }
 
   console.log(`\n${TAG} [OUTPUT] Modeling complete:`);
-  console.log(`${TAG}   resolved=${resolved} alreadyHad=${alreadyHad} unresolved=${unresolved}`);
-  console.log(`${TAG}   modeled=${modeled} edges=${edges} errors=${errors}`);
-  console.log(`${TAG} [VERIFY] ${errors === 0 ? "PASS" : "FAIL"} — ${errors} total errors`);
+  console.log(`${TAG}   resolved=${result.resolved} alreadyHad=${result.alreadyHad} unresolved=${result.unresolved}`);
+  console.log(`${TAG}   modeled=${result.modeled} edges=${result.edges} errors=${result.errors}`);
+  console.log(`${TAG} [VERIFY] ${result.errors === 0 ? 'PASS' : 'FAIL'} — ${result.errors} total errors`);
 
-  return { date: gameDate, resolved, alreadyHad, unresolved, modeled, edges, errors };
+  return result;
 }
