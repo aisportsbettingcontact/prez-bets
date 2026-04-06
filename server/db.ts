@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
-import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, mlbTeams, appUsers as appUsersTable, oddsHistory, mlbLineups, mlbStrikeoutProps, mlbParkFactors, mlbBullpenStats, mlbUmpireModifiers, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow, type MlbLineupRow, type InsertMlbLineup, type MlbStrikeoutPropRow, type InsertMlbStrikeoutProp, type MlbParkFactorRow, type MlbBullpenStatsRow, type MlbUmpireModifierRow } from "../drizzle/schema";
+import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, mlbTeams, appUsers as appUsersTable, oddsHistory, mlbLineups, mlbStrikeoutProps, mlbParkFactors, mlbBullpenStats, mlbUmpireModifiers, mlbHrProps, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow, type MlbLineupRow, type InsertMlbLineup, type MlbStrikeoutPropRow, type InsertMlbStrikeoutProp, type MlbParkFactorRow, type MlbBullpenStatsRow, type MlbUmpireModifierRow, type MlbHrPropRow } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1628,4 +1628,62 @@ export async function getMlbGameEnvSignals(params: {
     params.umpireName ? getMlbUmpireModifier(params.umpireName) : Promise.resolve(null),
   ]);
   return { parkFactor, awayBullpen, homeBullpen, umpire };
+}
+
+// ─── MLB HR Props ─────────────────────────────────────────────────────────────
+
+/**
+ * Fetch HR prop rows for a single game.
+ * Returns all player rows ordered by side (away first), then playerName.
+ */
+export async function getHrPropsByGame(gameId: number): Promise<MlbHrPropRow[]> {
+  const tag = "[DB][getHrPropsByGame]";
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    const rows = await db
+      .select()
+      .from(mlbHrProps)
+      .where(eq(mlbHrProps.gameId, gameId))
+      .orderBy(mlbHrProps.side, mlbHrProps.playerName);
+    console.log(`${tag} gameId=${gameId} → ${rows.length} rows`);
+    return rows as MlbHrPropRow[];
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${tag} DB error: ${msg}`);
+    return [];
+  }
+}
+
+/**
+ * Fetch HR props for multiple games at once.
+ * Returns a Map<gameId, MlbHrPropRow[]>.
+ */
+export async function getHrPropsByGames(gameIds: number[]): Promise<Map<number, MlbHrPropRow[]>> {
+  const tag = "[DB][getHrPropsByGames]";
+  const result = new Map<number, MlbHrPropRow[]>();
+  if (gameIds.length === 0) return result;
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    const rows = await db
+      .select()
+      .from(mlbHrProps)
+      .where(
+        gameIds.length === 1
+          ? eq(mlbHrProps.gameId, gameIds[0])
+          : sql`${mlbHrProps.gameId} IN (${sql.join(gameIds.map((id) => sql`${id}`), sql`, `)})`
+      )
+      .orderBy(mlbHrProps.side, mlbHrProps.playerName);
+    for (const row of rows as MlbHrPropRow[]) {
+      const arr = result.get(row.gameId) ?? [];
+      arr.push(row);
+      result.set(row.gameId, arr);
+    }
+    console.log(`${tag} Fetched HR props for ${result.size}/${gameIds.length} games`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${tag} DB error: ${msg}`);
+  }
+  return result;
 }

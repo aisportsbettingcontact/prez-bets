@@ -25,7 +25,7 @@ import { storagePut } from "./storage";
 import { parseFileBuffer, detectSportFromFilename, detectDateFromFilename } from "./fileParser";
 import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure, appUserProcedure } from "./routers/appUsers";
-import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById, getFavoriteGameIds, getFavoriteGamesWithDates, toggleFavoriteGame, updateAnOdds, listGamesByDate, listOddsHistory, getBracketGames, auditAndAdvanceAllBracketWinners, getMlbLineupsByGameIds, getStrikeoutPropsByGame, getStrikeoutPropsByGames, getMlbGameEnvSignals } from "./db";
+import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById, getFavoriteGameIds, getFavoriteGamesWithDates, toggleFavoriteGame, updateAnOdds, listGamesByDate, listOddsHistory, getBracketGames, auditAndAdvanceAllBracketWinners, getMlbLineupsByGameIds, getStrikeoutPropsByGame, getStrikeoutPropsByGames, getMlbGameEnvSignals, getHrPropsByGame, getHrPropsByGames } from "./db";
 import { runStrikeoutModel, type StrikeoutRunnerInput } from "./strikeoutModelRunner";
 import { getLastRefreshResult, runVsinRefresh, runVsinRefreshManual, refreshAllScoresNow } from "./vsinAutoRefresh";
 import { syncNbaModelFromSheet, getLastNbaModelSyncResult } from "./nbaModelSync";
@@ -914,7 +914,35 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── MLB Multi-Market Backtest ───────────────────────────────────────────────────────────────────────────────────────
+  // ─── MLB HR Props ─────────────────────────────────────────────────────────────────────────────────────────────────
+  hrProps: router({
+    /**
+     * Fetch HR prop projections for a single game.
+     * Returns all player rows ordered by side (away first), then playerName.
+     * Source: Consensus (Action Network book_id=15)
+     */
+    getByGame: publicProcedure
+      .input(z.object({ gameId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const rows = await getHrPropsByGame(input.gameId);
+        return { props: rows };
+      }),
+
+    /**
+     * Fetch HR props for multiple games at once.
+     * Returns a record of gameId → rows[].
+     */
+    getByGames: publicProcedure
+      .input(z.object({ gameIds: z.array(z.number().int().positive()) }))
+      .query(async ({ input }) => {
+        const map = await getHrPropsByGames(input.gameIds);
+        const result: Record<number, Awaited<ReturnType<typeof getHrPropsByGame>>> = {};
+        Array.from(map.entries()).forEach(([k, v]) => { result[k] = v; });
+        return { propsByGame: result };
+      }),
+  }),
+
+  // ─── MLB Multi-Market Backtest ─────────────────────────────────────────────────────────────────────────────────────────────────
   mlbBacktest: router({
     /**
      * Owner-only: run multi-market backtest for a specific game by DB id.
