@@ -616,6 +616,43 @@ class MonteCarloEngine:
                          f"P(both HR)={p_both_hr:.4f} | "
                          f"exp_home_hr={exp_home_hr:.3f} exp_away_hr={exp_away_hr:.3f}")
 
+        # ── SPEC: F5 Simulation — First Five Innings ────────────────────────────
+        # F5 run share: innings 1-5 account for ~55% of total runs
+        # Starter ERA is dominant in F5; bullpen effect minimal
+        # F5 mu = full-game mu * F5_RUN_SHARE (scaled by inning count)
+        F5_RUN_SHARE = 0.555  # empirical: F5 run share of full game
+        home_mu_f5 = home_state['mu'] * F5_RUN_SHARE
+        away_mu_f5 = away_state['mu'] * F5_RUN_SHARE
+        home_var_f5 = max(home_state['variance'] * F5_RUN_SHARE, home_mu_f5 + 0.05)
+        away_var_f5 = max(away_state['variance'] * F5_RUN_SHARE, away_mu_f5 + 0.05)
+        home_f5 = self.dist.sample(home_mu_f5, home_var_f5, self.n_sims, self.rng)
+        away_f5 = self.dist.sample(away_mu_f5, away_var_f5, self.n_sims, self.rng)
+        f5_totals  = home_f5 + away_f5
+        f5_margins = home_f5 - away_f5  # positive = home leads after 5
+        exp_f5_home   = float(home_f5.mean())
+        exp_f5_away   = float(away_f5.mean())
+        exp_f5_total  = float(f5_totals.mean())
+        # F5 ML probabilities (ties count as push, split 50/50)
+        f5_home_win   = home_f5 > away_f5
+        f5_away_win   = away_f5 > home_f5
+        f5_tie        = home_f5 == away_f5
+        p_f5_home_win = float(f5_home_win.mean()) + float(f5_tie.mean()) * 0.5
+        p_f5_away_win = float(f5_away_win.mean()) + float(f5_tie.mean()) * 0.5
+        # F5 run line cover (default -0.5 for favorite)
+        # Positive rl_spread = home is dog, negative = home is fav
+        f5_rl = rl_spread * F5_RUN_SHARE  # scale RL to F5 context
+        # For F5, standard RL is -0.5 / +0.5
+        F5_RL = -0.5
+        p_f5_home_rl  = float((f5_margins > abs(F5_RL)).mean())  # home covers -0.5
+        p_f5_away_rl  = float((f5_margins < -abs(F5_RL)).mean())  # away covers -0.5
+        if logger:
+            logger.state(
+                f"F5: home_mu={home_mu_f5:.4f} away_mu={away_mu_f5:.4f} | "
+                f"exp_home={exp_f5_home:.3f} exp_away={exp_f5_away:.3f} exp_total={exp_f5_total:.3f} | "
+                f"P(home win)={p_f5_home_win:.4f} P(away win)={p_f5_away_win:.4f} | "
+                f"P(home RL -0.5)={p_f5_home_rl:.4f} P(away RL -0.5)={p_f5_away_rl:.4f}"
+            )
+
         # Final win determination
         home_win = home_runs > away_runs  # no ties possible after extra innings
 
@@ -712,11 +749,21 @@ class MonteCarloEngine:
             'exp_away_hr':          round(exp_away_hr, 3),
             'home_hr_lambda':       round(home_hr_lambda, 4),
             'away_hr_lambda':       round(away_hr_lambda, 4),
+            # SPEC: F5 (First Five Innings) simulation output
+            'p_f5_home_win':        round(p_f5_home_win, 6),
+            'p_f5_away_win':        round(p_f5_away_win, 6),
+            'exp_f5_home_runs':     round(exp_f5_home, 3),
+            'exp_f5_away_runs':     round(exp_f5_away, 3),
+            'exp_f5_total':         round(exp_f5_total, 3),
+            'p_f5_home_rl':         round(p_f5_home_rl, 6),  # P(home covers -0.5 F5 RL)
+            'p_f5_away_rl':         round(p_f5_away_rl, 6),  # P(away covers -0.5 F5 RL)
             # Raw arrays for downstream steps (not serialized)
             '_totals':          totals,
             '_margins':         margins,
             '_home_runs':       home_runs,
             '_away_runs':       away_runs,
+            '_f5_totals':       f5_totals,
+            '_f5_margins':      f5_margins,
         }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -912,17 +959,61 @@ class MarketDerivation:
         combined_std = math.sqrt(sim['home_std'] ** 2 + sim['away_std'] ** 2)
         model_spread = round(-norm.ppf(p_home) * combined_std, 2)
 
+        # ── F5 Market Pricing (no-vig) ────────────────────────────────────────
+        p_f5h = sim['p_f5_home_win']
+        p_f5a = sim['p_f5_away_win']
+        p_f5h_nv, p_f5a_nv = remove_vig(p_f5h, p_f5a)
+        f5_ml_home = prob_to_ml(p_f5h_nv)
+        f5_ml_away = prob_to_ml(p_f5a_nv)
+        # F5 Total pricing
+        f5_totals = sim['_f5_totals']
+        f5_ou_line = ou_line * 0.555 if ou_line else sim['exp_f5_total']
+        f5_ou_snapped = _nearest_half(f5_ou_line)
+        p_f5_over  = float((f5_totals > f5_ou_snapped).mean())
+        p_f5_under = float((f5_totals < f5_ou_snapped).mean())
+        p_f5_push  = float((f5_totals == f5_ou_snapped).mean())
+        p_f5_over_adj  = p_f5_over  + p_f5_push * 0.5
+        p_f5_under_adj = p_f5_under + p_f5_push * 0.5
+        p_f5_over_nv, p_f5_under_nv = remove_vig(p_f5_over_adj, p_f5_under_adj)
+        f5_over_odds  = prob_to_ml(p_f5_over_nv)
+        f5_under_odds = prob_to_ml(p_f5_under_nv)
+        # F5 Run Line pricing (-0.5 / +0.5)
+        p_f5_hrl = sim['p_f5_home_rl']
+        p_f5_arl = sim['p_f5_away_rl']
+        p_f5_hrl_nv, p_f5_arl_nv = remove_vig(p_f5_hrl, p_f5_arl)
+        f5_rl_home_odds = prob_to_ml(p_f5_hrl_nv)
+        f5_rl_away_odds = prob_to_ml(p_f5_arl_nv)
+        if logger:
+            logger.output(
+                f"F5 Markets: ML Home={f5_ml_home} ({p_f5h_nv:.4f}) Away={f5_ml_away} ({p_f5a_nv:.4f}) | "
+                f"Total={f5_ou_snapped} Over={f5_over_odds} ({p_f5_over_nv:.4f}) Under={f5_under_odds} ({p_f5_under_nv:.4f}) | "
+                f"RL Home-0.5={f5_rl_home_odds} ({p_f5_hrl_nv:.4f}) Away+0.5={f5_rl_away_odds} ({p_f5_arl_nv:.4f})"
+            )
+
+        # ── NRFI Market Pricing (no-vig) ────────────────────────────────────────
+        p_nrfi = sim['p_nrfi']
+        p_yrfi = sim['p_yrfi']
+        p_nrfi_nv, p_yrfi_nv = remove_vig(p_nrfi, p_yrfi)
+        nrfi_odds = prob_to_ml(p_nrfi_nv)   # NRFI = under 0.5 1st inning
+        yrfi_odds = prob_to_ml(p_yrfi_nv)   # YRFI = over 0.5 1st inning
+        if logger:
+            logger.output(
+                f"NRFI/YRFI: P(NRFI)={p_nrfi_nv:.4f} ({nrfi_odds}) | "
+                f"P(YRFI)={p_yrfi_nv:.4f} ({yrfi_odds}) | "
+                f"exp_1st_inn_total={sim['exp_first_inn_total']:.3f}"
+            )
+
         return {
             'home_team':         home_team,
             'away_team':         away_team,
-            # Probabilities
+            # Full Game Probabilities
             'p_home_win':        round(p_home, 4),
             'p_away_win':        round(p_away, 4),
             'p_home_cover_rl':   round(p_hrl, 4),
             'p_away_cover_rl':   round(p_arl, 4),
             'p_over':            round(p_over_nv, 4),
             'p_under':           round(p_under_nv, 4),
-            # Markets (no-vig, continuous, no snap to -110)
+            # Full Game Markets (no-vig)
             'ml_home':           ml_home,
             'ml_away':           ml_away,
             'rl_home_spread':    sim['rl_spread'],
@@ -937,6 +1028,35 @@ class MarketDerivation:
             'exp_away_runs':     sim['exp_away_runs'],
             'exp_total':         sim['exp_total'],
             'model_spread':      model_spread,
+            # F5 (First Five Innings) Markets
+            'p_f5_home_win':     round(p_f5h_nv, 4),
+            'p_f5_away_win':     round(p_f5a_nv, 4),
+            'f5_ml_home':        f5_ml_home,
+            'f5_ml_away':        f5_ml_away,
+            'p_f5_home_rl':      round(p_f5_hrl_nv, 4),
+            'p_f5_away_rl':      round(p_f5_arl_nv, 4),
+            'f5_rl_home_odds':   f5_rl_home_odds,
+            'f5_rl_away_odds':   f5_rl_away_odds,
+            'f5_total_key':      f5_ou_snapped,
+            'f5_over_odds':      f5_over_odds,
+            'f5_under_odds':     f5_under_odds,
+            'p_f5_over':         round(p_f5_over_nv, 4),
+            'p_f5_under':        round(p_f5_under_nv, 4),
+            'exp_f5_home_runs':  sim['exp_f5_home_runs'],
+            'exp_f5_away_runs':  sim['exp_f5_away_runs'],
+            'exp_f5_total':      sim['exp_f5_total'],
+            # NRFI / YRFI Markets
+            'p_nrfi':            round(p_nrfi_nv, 4),
+            'p_yrfi':            round(p_yrfi_nv, 4),
+            'nrfi_odds':         nrfi_odds,
+            'yrfi_odds':         yrfi_odds,
+            'exp_first_inn_total': sim['exp_first_inn_total'],
+            # HR Props
+            'p_home_hr_any':     sim['p_home_hr_any'],
+            'p_away_hr_any':     sim['p_away_hr_any'],
+            'p_both_hr':         sim['p_both_hr'],
+            'exp_home_hr':       sim['exp_home_hr'],
+            'exp_away_hr':       sim['exp_away_hr'],
             # Diagnostics
             'cross_market_flags': cross_flags,
             'monotone':          monotone,
@@ -1565,11 +1685,28 @@ def project_game(
         'cross_market_flags': market.get('cross_market_flags', []),
         'monotone':        market.get('monotone', True),
         'no_arb':          market.get('no_arb', True),
-        # SPEC: NRFI market
-        'p_nrfi':              round(sim['p_nrfi'] * 100, 2),      # P(NRFI) as percentage
-        'p_yrfi':              round(sim['p_yrfi'] * 100, 2),      # P(YRFI) as percentage
-        'nrfi_odds':           prob_to_ml(sim['p_nrfi']),          # NRFI fair-value ML
-        'yrfi_odds':           prob_to_ml(sim['p_yrfi']),          # YRFI fair-value ML
+        # SPEC: F5 (First Five Innings) Markets — pulled from market dict (derive_markets output)
+        'p_f5_home_win':   market['p_f5_home_win'],
+        'p_f5_away_win':   market['p_f5_away_win'],
+        'f5_ml_home':      market['f5_ml_home'],
+        'f5_ml_away':      market['f5_ml_away'],
+        'p_f5_home_rl':    market['p_f5_home_rl'],
+        'p_f5_away_rl':    market['p_f5_away_rl'],
+        'f5_rl_home_odds': market['f5_rl_home_odds'],
+        'f5_rl_away_odds': market['f5_rl_away_odds'],
+        'f5_total_key':    market['f5_total_key'],
+        'f5_over_odds':    market['f5_over_odds'],
+        'f5_under_odds':   market['f5_under_odds'],
+        'p_f5_over':       market['p_f5_over'],
+        'p_f5_under':      market['p_f5_under'],
+        'exp_f5_home_runs': market['exp_f5_home_runs'],
+        'exp_f5_away_runs': market['exp_f5_away_runs'],
+        'exp_f5_total':    market['exp_f5_total'],
+        # SPEC: NRFI market — use no-vig values from market dict (not raw sim values)
+        'p_nrfi':              market['p_nrfi'],                   # no-vig P(NRFI) 0-1 range
+        'p_yrfi':              market['p_yrfi'],                   # no-vig P(YRFI) 0-1 range
+        'nrfi_odds':           market['nrfi_odds'],                # NRFI fair-value ML (no-vig)
+        'yrfi_odds':           market['yrfi_odds'],                # YRFI fair-value ML (no-vig)
         'exp_first_inn_total': sim['exp_first_inn_total'],         # expected 1st inning total
         # SPEC: HR Props per team
         'p_home_hr_any':       round(sim['p_home_hr_any'] * 100, 2),  # P(home team HR>=1) %

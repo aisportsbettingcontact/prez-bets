@@ -242,6 +242,35 @@ interface MlbModelResult {
   under_pct: number;
   // Model spread
   model_spread: number;
+  // F5 (First Five Innings)
+  p_f5_home_win: number;
+  p_f5_away_win: number;
+  f5_ml_home: number;
+  f5_ml_away: number;
+  p_f5_home_rl: number;
+  p_f5_away_rl: number;
+  f5_rl_home_odds: number;
+  f5_rl_away_odds: number;
+  f5_total_key: number;
+  f5_over_odds: number;
+  f5_under_odds: number;
+  p_f5_over: number;
+  p_f5_under: number;
+  exp_f5_home_runs: number;
+  exp_f5_away_runs: number;
+  exp_f5_total: number;
+  // NRFI / YRFI
+  p_nrfi: number;
+  p_yrfi: number;
+  nrfi_odds: number;
+  yrfi_odds: number;
+  exp_first_inn_total: number;
+  // HR Props (team-level)
+  p_home_hr_any: number;
+  p_away_hr_any: number;
+  p_both_hr: number;
+  exp_home_hr: number;
+  exp_away_hr: number;
   // Meta
   simulations: number;
   elapsed_sec: number;
@@ -1286,7 +1315,32 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
           modelHomeScore:       String(r.proj_home_runs.toFixed(2)),
           modelAwayWinPct:      String(r.away_win_pct.toFixed(2)),
           modelHomeWinPct:      String(r.home_win_pct.toFixed(2)),
-          // ── Meta ─────────────────────────────────────────────────────────
+          // ── F5 (First Five Innings) model output ───────────────────────────────
+          modelF5AwayML:        fmtMl(r.f5_ml_away),
+          modelF5HomeML:        fmtMl(r.f5_ml_home),
+          modelF5AwayScore:     String(r.exp_f5_away_runs.toFixed(3)),
+          modelF5HomeScore:     String(r.exp_f5_home_runs.toFixed(3)),
+          modelF5Total:         String(r.f5_total_key),
+          modelF5OverOdds:      fmtMl(r.f5_over_odds),
+          modelF5UnderOdds:     fmtMl(r.f5_under_odds),
+          modelF5OverRate:      String(r.p_f5_over.toFixed(4)),
+          modelF5UnderRate:     String(r.p_f5_under.toFixed(4)),
+          modelF5AwayRunLine:   '-0.5',
+          modelF5HomeRunLine:   '+0.5',
+          modelF5AwayRlOdds:    fmtMl(r.f5_rl_away_odds),
+          modelF5HomeRlOdds:    fmtMl(r.f5_rl_home_odds),
+          // ── NRFI / YRFI model output ─────────────────────────────────────
+          modelPNrfi:           String(r.p_nrfi.toFixed(4)),
+          modelNrfiOdds:        fmtMl(r.nrfi_odds),
+          modelPYrfi:           String(r.p_yrfi.toFixed(4)),
+          modelYrfiOdds:        fmtMl(r.yrfi_odds),
+          // ── HR Props (team-level) model output ─────────────────────────────
+          modelPHomeHrAny:      String(r.p_home_hr_any.toFixed(4)),
+          modelPAwayHrAny:      String(r.p_away_hr_any.toFixed(4)),
+          modelPBothHr:         String(r.p_both_hr.toFixed(4)),
+          modelExpHomeHr:       String(r.exp_home_hr.toFixed(3)),
+          modelExpAwayHr:       String(r.exp_away_hr.toFixed(3)),
+          // ── Meta ──────────────────────────────────────────────────────────────────────────
           modelSpreadClamped:   false,
           modelTotalClamped:    false,
           modelRunAt:           BigInt(Date.now()),

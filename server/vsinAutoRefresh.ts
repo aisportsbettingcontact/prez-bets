@@ -1842,9 +1842,56 @@ export function startVsinAutoRefresh() {
           ` | gamePks=[${newlyFinalGamePks.join(',')}] | running backtest now`
         );
       }
-      await runKPropsBacktest(todayStr);
+       await runKPropsBacktest(todayStr);
     } catch (err) {
       console.warn('[MLBCycle] K-Props pipeline failed (non-fatal):', err);
+    }
+
+    // ── Multi-Market Backtest: fires on FINAL transition for all markets ──────
+    // Markets: FG ML/RL/Total, F5 ML/RL/Total, NRFI/YRFI, HR Props
+    // Only runs when at least one game just transitioned to FINAL this cycle.
+    if (newlyFinalGamePks.length > 0) {
+      try {
+        const { runMultiMarketBacktest } = await import('./mlbMultiMarketBacktest');
+        const { getDb }                  = await import('./db');
+        const { games }                  = await import('../drizzle/schema');
+        const { inArray }                = await import('drizzle-orm');
+        const db = await getDb();
+        const finalGameRows = await db
+          .select({ id: games.id, awayTeam: games.awayTeam, homeTeam: games.homeTeam, mlbGamePk: games.mlbGamePk })
+          .from(games)
+          .where(inArray(games.mlbGamePk as any, newlyFinalGamePks.map(String)));
+        console.log(
+          `[MLBCycle] 🏁 MULTI-MARKET BACKTEST: ${newlyFinalGamePks.length} game(s) FINAL` +
+          ` | resolved ${finalGameRows.length} DB rows | markets: FG+F5+NRFI+HR`
+        );
+        for (const g of finalGameRows) {
+          try {
+            console.log(`[MLBCycle]   ↳ Running backtest: ${g.awayTeam}@${g.homeTeam} (id=${g.id})`);
+            const summary = await runMultiMarketBacktest(g.id, false);
+            const wins    = summary.markets.filter(m => m.result === 'WIN').length;
+            const losses  = summary.markets.filter(m => m.result === 'LOSS').length;
+            const acc     = wins + losses > 0 ? ((wins / (wins + losses)) * 100).toFixed(1) : 'N/A';
+            console.log(
+              `[MLBCycle]   ✅ ${g.awayTeam}@${g.homeTeam}: ${summary.markets.length} markets | ` +
+              `WIN=${wins} LOSS=${losses} ACC=${acc}% | driftFlags=${summary.driftFlags.length}`
+            );
+            if (summary.driftFlags.length > 0) {
+              for (const flag of summary.driftFlags) {
+                console.warn(
+                  `[MLBCycle]   ⚠️  DRIFT DETECTED: market=${flag.market} ` +
+                  `acc7d=${(flag.rolling7Acc * 100).toFixed(1)}% acc30d=${(flag.rolling30Acc * 100).toFixed(1)}% ` +
+                  `z=${flag.zScore.toFixed(2)} | ${flag.message}`
+                );
+              }
+            }
+          } catch (gameErr) {
+            console.error(`[MLBCycle]   ❌ Multi-market backtest failed for game ${g.id}: ${gameErr}`);
+          }
+        }
+      } catch (err) {
+        console.warn('[MLBCycle] Multi-market backtest pipeline failed (non-fatal):', err);
+      }
     }
 
     console.log(`[MLBCycle] ✅ DONE — ${new Date().toISOString()}`);

@@ -314,6 +314,123 @@ export const games = mysqlTable("games", {
   modelOverOdds: varchar("modelOverOdds", { length: 16 }),
   /** Model fair value odds for the Under, e.g. "-131" or "+108" */
   modelUnderOdds: varchar("modelUnderOdds", { length: 16 }),
+
+  // ─── Full Game Backtest Results ──────────────────────────────────────────────
+  /** Actual away team final score (populated after game FINAL) */
+  actualAwayScore: int("actualAwayScore"),
+  /** Actual home team final score (populated after game FINAL) */
+  actualHomeScore: int("actualHomeScore"),
+  /** FG ML backtest result: 'WIN' | 'LOSS' | 'PUSH' | 'PENDING' */
+  fgMlResult: varchar("fgMlResult", { length: 16 }),
+  /** FG Run Line backtest result: 'WIN' | 'LOSS' | 'PUSH' | 'PENDING' */
+  fgRlResult: varchar("fgRlResult", { length: 16 }),
+  /** FG Total backtest result: 'OVER' | 'UNDER' | 'PUSH' | 'PENDING' */
+  fgTotalResult: varchar("fgTotalResult", { length: 16 }),
+  /** Model ML prediction correct: 1=yes 0=no null=pending */
+  fgMlCorrect: tinyint("fgMlCorrect"),
+  /** Model RL prediction correct: 1=yes 0=no null=pending */
+  fgRlCorrect: tinyint("fgRlCorrect"),
+  /** Model Total prediction correct: 1=yes 0=no null=pending */
+  fgTotalCorrect: tinyint("fgTotalCorrect"),
+  /** UTC ms when FG backtest was last run */
+  fgBacktestRunAt: bigint("fgBacktestRunAt", { mode: "number" }),
+
+  // ─── First Five Innings (F5) — FanDuel NJ source ────────────────────────────
+  /** F5 away run line from FanDuel NJ, e.g. "-0.5" */
+  f5AwayRunLine: varchar("f5AwayRunLine", { length: 8 }),
+  /** F5 home run line from FanDuel NJ, e.g. "+0.5" */
+  f5HomeRunLine: varchar("f5HomeRunLine", { length: 8 }),
+  /** F5 away run line odds from FanDuel NJ, e.g. "+106" */
+  f5AwayRunLineOdds: varchar("f5AwayRunLineOdds", { length: 16 }),
+  /** F5 home run line odds from FanDuel NJ, e.g. "-138" */
+  f5HomeRunLineOdds: varchar("f5HomeRunLineOdds", { length: 16 }),
+  /** F5 total line from FanDuel NJ, e.g. "4.5" */
+  f5Total: varchar("f5Total", { length: 8 }),
+  /** F5 over odds from FanDuel NJ, e.g. "-115" */
+  f5OverOdds: varchar("f5OverOdds", { length: 16 }),
+  /** F5 under odds from FanDuel NJ, e.g. "-105" */
+  f5UnderOdds: varchar("f5UnderOdds", { length: 16 }),
+  /** F5 away ML from FanDuel NJ, e.g. "-130" */
+  f5AwayML: varchar("f5AwayML", { length: 16 }),
+  /** F5 home ML from FanDuel NJ, e.g. "+110" */
+  f5HomeML: varchar("f5HomeML", { length: 16 }),
+  /** Model projected away team score through 5 innings */
+  modelF5AwayScore: decimal("modelF5AwayScore", { precision: 5, scale: 2 }),
+  /** Model projected home team score through 5 innings */
+  modelF5HomeScore: decimal("modelF5HomeScore", { precision: 5, scale: 2 }),
+  /** Model projected F5 total (combined runs through 5 innings) */
+  modelF5Total: decimal("modelF5Total", { precision: 5, scale: 1 }),
+  /** Model F5 over probability (0-100) */
+  modelF5OverRate: decimal("modelF5OverRate", { precision: 5, scale: 2 }),
+  /** Model F5 under probability (0-100) */
+  modelF5UnderRate: decimal("modelF5UnderRate", { precision: 5, scale: 2 }),
+  /** Model F5 away win probability (0-100) */
+  modelF5AwayWinPct: decimal("modelF5AwayWinPct", { precision: 5, scale: 2 }),
+  /** Model F5 home win probability (0-100) */
+  modelF5HomeWinPct: decimal("modelF5HomeWinPct", { precision: 5, scale: 2 }),
+  /** Model F5 away ML fair value odds, e.g. "-133" */
+  modelF5AwayML: varchar("modelF5AwayML", { length: 16 }),
+  /** Model F5 home ML fair value odds, e.g. "+113" */
+  modelF5HomeML: varchar("modelF5HomeML", { length: 16 }),
+  /** Model F5 away run line cover probability (0-100) */
+  modelF5AwayRLCoverPct: decimal("modelF5AwayRLCoverPct", { precision: 5, scale: 2 }),
+  /** Model F5 home run line cover probability (0-100) */
+  modelF5HomeRLCoverPct: decimal("modelF5HomeRLCoverPct", { precision: 5, scale: 2 }),
+  /** Model F5 over fair value odds, e.g. "-108" */
+  modelF5OverOdds: varchar("modelF5OverOdds", { length: 16 }),
+  /** Model F5 under fair value odds, e.g. "+108" */
+  modelF5UnderOdds: varchar("modelF5UnderOdds", { length: 16 }),
+  /** Actual away team score through 5 innings (populated after game) */
+  actualF5AwayScore: int("actualF5AwayScore"),
+  /** Actual home team score through 5 innings (populated after game) */
+  actualF5HomeScore: int("actualF5HomeScore"),
+  /** F5 ML backtest result: 'WIN' | 'LOSS' | 'PUSH' | 'PENDING' */
+  f5MlResult: varchar("f5MlResult", { length: 16 }),
+  /** F5 Run Line backtest result: 'WIN' | 'LOSS' | 'PUSH' | 'PENDING' */
+  f5RlResult: varchar("f5RlResult", { length: 16 }),
+  /** F5 Total backtest result: 'OVER' | 'UNDER' | 'PUSH' | 'PENDING' */
+  f5TotalResult: varchar("f5TotalResult", { length: 16 }),
+  /** Model F5 ML prediction correct: 1=yes 0=no null=pending */
+  f5MlCorrect: tinyint("f5MlCorrect"),
+  /** Model F5 RL prediction correct: 1=yes 0=no null=pending */
+  f5RlCorrect: tinyint("f5RlCorrect"),
+  /** Model F5 Total prediction correct: 1=yes 0=no null=pending */
+  f5TotalCorrect: tinyint("f5TotalCorrect"),
+  /** UTC ms when F5 backtest was last run */
+  f5BacktestRunAt: bigint("f5BacktestRunAt", { mode: "number" }),
+
+  // ─── NRFI / YRFI — FanDuel NJ source ────────────────────────────────────────
+  /** NRFI over (no run) odds from FanDuel NJ, e.g. "-130" */
+  nrfiOverOdds: varchar("nrfiOverOdds", { length: 16 }),
+  /** YRFI under (yes run) odds from FanDuel NJ, e.g. "+110" */
+  yrfiUnderOdds: varchar("yrfiUnderOdds", { length: 16 }),
+  /** Model P(NRFI) — probability no run scores in inning 1 (0-100) */
+  modelPNrfi: decimal("modelPNrfi", { precision: 5, scale: 2 }),
+  /** Model fair value odds for NRFI, e.g. "-143" */
+  modelNrfiOdds: varchar("modelNrfiOdds", { length: 16 }),
+  /** Model fair value odds for YRFI, e.g. "+121" */
+  modelYrfiOdds: varchar("modelYrfiOdds", { length: 16 }),
+  /** Actual result: 'NRFI' | 'YRFI' | 'PENDING' */
+  nrfiActualResult: varchar("nrfiActualResult", { length: 16 }),
+  /** NRFI backtest result: 'WIN' | 'LOSS' | 'PENDING' (from model perspective) */
+  nrfiBacktestResult: varchar("nrfiBacktestResult", { length: 16 }),
+  /** Model NRFI prediction correct: 1=yes 0=no null=pending */
+  nrfiCorrect: tinyint("nrfiCorrect"),
+  /** UTC ms when NRFI backtest was last run */
+  nrfiBacktestRunAt: bigint("nrfiBacktestRunAt", { mode: "number" }),
+
+  // ─── HR Props (team-level from MLBAIModel.py) ────────────────────────────────
+  /** Model P(away team hits ≥1 HR) (0-100) */
+  modelAwayHrPct: decimal("modelAwayHrPct", { precision: 5, scale: 2 }),
+  /** Model P(home team hits ≥1 HR) (0-100) */
+  modelHomeHrPct: decimal("modelHomeHrPct", { precision: 5, scale: 2 }),
+  /** Model P(both teams hit ≥1 HR) (0-100) */
+  modelBothHrPct: decimal("modelBothHrPct", { precision: 5, scale: 2 }),
+  /** Model expected HR count for away team */
+  modelAwayExpHr: decimal("modelAwayExpHr", { precision: 4, scale: 2 }),
+  /** Model expected HR count for home team */
+  modelHomeExpHr: decimal("modelHomeExpHr", { precision: 4, scale: 2 }),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (t) => ({
   /** Prevent duplicate rows for the same matchup on the same date */
@@ -1051,3 +1168,157 @@ export const mlbUmpireModifiers = mysqlTable("mlb_umpire_modifiers", {
 }));
 export type MlbUmpireModifierRow = typeof mlbUmpireModifiers.$inferSelect;
 export type InsertMlbUmpireModifier = typeof mlbUmpireModifiers.$inferInsert;
+
+// ─── MLB HR Props (per-batter, from Action Network) ─────────────────────────
+/**
+ * One row per (game, player) for HR props.
+ * Populated from Action Network HR props page (FanDuel NJ as primary book).
+ * Backtested after game FINAL.
+ */
+export const mlbHrProps = mysqlTable("mlb_hr_props", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK → games.id */
+  gameId: int("gameId").notNull(),
+  /** 'away' | 'home' */
+  side: varchar("side", { length: 8 }).notNull(),
+  /** Player full name, e.g. "Aaron Judge" */
+  playerName: varchar("playerName", { length: 128 }).notNull(),
+  /** MLBAM player ID */
+  mlbamId: int("mlbamId"),
+  /** Action Network player ID */
+  anPlayerId: int("anPlayerId"),
+  /** Team abbreviation, e.g. "NYY" */
+  teamAbbrev: varchar("teamAbbrev", { length: 8 }),
+  /** Book HR prop line (always 0.5 for To Hit A HR) */
+  bookLine: decimal("bookLine", { precision: 4, scale: 1 }).default("0.5"),
+  /** FanDuel NJ over (hit HR) odds, e.g. "+280" */
+  fdOverOdds: varchar("fdOverOdds", { length: 16 }),
+  /** FanDuel NJ under (no HR) odds, e.g. "-380" */
+  fdUnderOdds: varchar("fdUnderOdds", { length: 16 }),
+  /** Consensus over odds across books, e.g. "+270" */
+  consensusOverOdds: varchar("consensusOverOdds", { length: 16 }),
+  /** Consensus under odds across books, e.g. "-350" */
+  consensusUnderOdds: varchar("consensusUnderOdds", { length: 16 }),
+  /** Action Network no-vig over probability (decimal, e.g. "0.265") */
+  anNoVigOverPct: varchar("anNoVigOverPct", { length: 16 }),
+  /** Model P(player hits ≥1 HR) from MLBAIModel.py (decimal, e.g. "0.241") */
+  modelPHr: varchar("modelPHr", { length: 16 }),
+  /** Model fair value odds for over (hit HR), e.g. "+315" */
+  modelOverOdds: varchar("modelOverOdds", { length: 16 }),
+  /** Edge on over (model - book no-vig), decimal string, e.g. "+0.023" */
+  edgeOver: varchar("edgeOver", { length: 16 }),
+  /** EV on over at FD odds: edge * (1/book_p - 1) * 100 */
+  evOver: varchar("evOver", { length: 16 }),
+  /** Best verdict: 'OVER' | 'UNDER' | 'PASS' */
+  verdict: varchar("verdict", { length: 16 }),
+  /** Actual result: 1 = hit HR, 0 = no HR, null = pending */
+  actualHr: tinyint("actualHr"),
+  /** Backtest result: 'WIN' | 'LOSS' | 'PUSH' | 'PENDING' | 'NO_LINE' */
+  backtestResult: varchar("backtestResult", { length: 16 }),
+  /** Model prediction correct: 1=yes 0=no null=pending */
+  modelCorrect: tinyint("modelCorrect"),
+  /** UTC ms when model was run */
+  modelRunAt: bigint("modelRunAt", { mode: "number" }),
+  /** UTC ms when backtest was last run */
+  backtestRunAt: bigint("backtestRunAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  /** One row per (game, player) */
+  uqGamePlayer: uniqueIndex("uq_hr_game_player").on(t.gameId, t.playerName),
+  idxGame: index("idx_hr_game").on(t.gameId),
+  idxMlbam: index("idx_hr_mlbam").on(t.mlbamId),
+}));
+export type MlbHrPropRow = typeof mlbHrProps.$inferSelect;
+export type InsertMlbHrProp = typeof mlbHrProps.$inferInsert;
+
+// ─── MLB Game Backtest Log (per-game, per-market performance tracking) ───────
+/**
+ * One row per (game, market) — the authoritative backtest performance log.
+ * Used by the automated learning layer for drift detection and recalibration.
+ * Markets: 'FG_ML' | 'FG_RL' | 'FG_TOTAL' | 'F5_ML' | 'F5_RL' | 'F5_TOTAL' |
+ *           'NRFI' | 'K_PROPS' | 'HR_PROPS'
+ */
+export const mlbGameBacktest = mysqlTable("mlb_game_backtest", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK → games.id */
+  gameId: int("gameId").notNull(),
+  /** Game date string YYYY-MM-DD */
+  gameDate: varchar("gameDate", { length: 10 }).notNull(),
+  /** Market identifier */
+  market: varchar("market", { length: 16 }).notNull(),
+  /** Model prediction side: 'AWAY' | 'HOME' | 'OVER' | 'UNDER' | 'NRFI' | 'YRFI' */
+  modelSide: varchar("modelSide", { length: 8 }),
+  /** Model probability for the predicted side (0-100) */
+  modelProb: decimal("modelProb", { precision: 5, scale: 2 }),
+  /** Book line used for evaluation, e.g. "1.5" or "8.5" */
+  bookLine: varchar("bookLine", { length: 16 }),
+  /** Book odds for the model side (American), e.g. "-138" */
+  bookOdds: varchar("bookOdds", { length: 16 }),
+  /** Book no-vig probability for model side (decimal, e.g. "0.572") */
+  bookNoVigProb: decimal("bookNoVigProb", { precision: 5, scale: 4 }),
+  /** Edge: model_prob - book_no_vig_prob (decimal, e.g. "0.043") */
+  edge: decimal("edge", { precision: 5, scale: 4 }),
+  /** Expected value: edge * (1/book_p - 1) * 100 */
+  ev: decimal("ev", { precision: 6, scale: 2 }),
+  /** Confidence gate passed: 1=yes 0=no */
+  confidencePassed: tinyint("confidencePassed"),
+  /** Actual outcome: 'WIN' | 'LOSS' | 'PUSH' | 'PENDING' */
+  result: varchar("result", { length: 16 }),
+  /** Model correct: 1=yes 0=no null=pending */
+  correct: tinyint("correct"),
+  /** Away team final score (for context) */
+  actualAwayScore: int("actualAwayScore"),
+  /** Home team final score (for context) */
+  actualHomeScore: int("actualHomeScore"),
+  /** Away pitcher (for context) */
+  awayPitcher: varchar("awayPitcher", { length: 128 }),
+  /** Home pitcher (for context) */
+  homePitcher: varchar("homePitcher", { length: 128 }),
+  /** UTC ms when backtest was run */
+  backtestRunAt: bigint("backtestRunAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  /** One row per (game, market) */
+  uqGameMarket: uniqueIndex("uq_backtest_game_market").on(t.gameId, t.market),
+  idxDate: index("idx_backtest_date").on(t.gameDate),
+  idxMarket: index("idx_backtest_market").on(t.market),
+  idxResult: index("idx_backtest_result").on(t.result),
+}));
+export type MlbGameBacktestRow = typeof mlbGameBacktest.$inferSelect;
+export type InsertMlbGameBacktest = typeof mlbGameBacktest.$inferInsert;
+
+// ─── MLB Model Learning Log (automated recalibration history) ────────────────
+/**
+ * One row per recalibration event.
+ * Tracks which parameters were adjusted, why, and what the rolling accuracy was.
+ */
+export const mlbModelLearningLog = mysqlTable("mlb_model_learning_log", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Market that triggered recalibration */
+  market: varchar("market", { length: 16 }).notNull(),
+  /** Rolling window size used (e.g. 14 = last 14 days) */
+  windowDays: int("windowDays").notNull(),
+  /** Rolling accuracy before recalibration (0-1) */
+  accuracyBefore: decimal("accuracyBefore", { precision: 5, scale: 4 }),
+  /** Rolling accuracy after recalibration (0-1) */
+  accuracyAfter: decimal("accuracyAfter", { precision: 5, scale: 4 }),
+  /** Mean absolute error before recalibration */
+  maeBefore: decimal("maeBefore", { precision: 6, scale: 4 }),
+  /** Mean absolute error after recalibration */
+  maeAfter: decimal("maeAfter", { precision: 6, scale: 4 }),
+  /** JSON: { param: string, oldValue: number, newValue: number }[] */
+  paramChanges: text("paramChanges"),
+  /** Trigger reason: 'DRIFT_DETECTED' | 'SCHEDULED' | 'MANUAL' */
+  triggerReason: varchar("triggerReason", { length: 32 }),
+  /** Number of games in the rolling window */
+  sampleSize: int("sampleSize"),
+  /** UTC ms when recalibration ran */
+  runAt: bigint("runAt", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxMarket: index("idx_learning_market").on(t.market),
+  idxRunAt: index("idx_learning_run_at").on(t.runAt),
+}));
+export type MlbModelLearningLogRow = typeof mlbModelLearningLog.$inferSelect;
+export type InsertMlbModelLearningLog = typeof mlbModelLearningLog.$inferInsert;

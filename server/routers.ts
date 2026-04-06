@@ -914,9 +914,66 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── March Madness Bracket ─────────────────────────────────────────────────────────────────────
-  bracket: router({
+  // ─── MLB Multi-Market Backtest ───────────────────────────────────────────────────────────────────────────────────────
+  mlbBacktest: router({
     /**
+     * Owner-only: run multi-market backtest for a specific game by DB id.
+     * Markets: FG ML/RL/Total, F5 ML/RL/Total, NRFI/YRFI, HR Props.
+     */
+    runForGame: ownerProcedure
+      .input(z.object({
+        gameId:        z.number().int().positive(),
+        includeKProps: z.boolean().default(false),
+      }))
+      .mutation(async ({ input }) => {
+        const { runMultiMarketBacktest } = await import('./mlbMultiMarketBacktest');
+        return runMultiMarketBacktest(input.gameId, input.includeKProps);
+      }),
+
+    /**
+     * Owner-only: run multi-market backtest for all completed games on a date.
+     */
+    runForDate: ownerProcedure
+      .input(z.object({ gameDate: z.string() }))
+      .mutation(async ({ input }) => {
+        const { runMultiMarketBacktestForDate } = await import('./mlbMultiMarketBacktest');
+        return runMultiMarketBacktestForDate(input.gameDate);
+      }),
+
+    /**
+     * Get rolling backtest accuracy per market for the last N days.
+     */
+    getRollingAccuracy: protectedProcedure
+      .input(z.object({ days: z.number().int().min(1).max(90).default(30) }))
+      .query(async ({ input }) => {
+        const { getMultiMarketRollingAccuracy } = await import('./mlbMultiMarketBacktest');
+        return getMultiMarketRollingAccuracy(input.days);
+      }),
+
+    /**
+     * Get drift log entries (model learning events) for the last N days.
+     */
+    getDriftLog: protectedProcedure
+      .input(z.object({ days: z.number().int().min(1).max(90).default(30) }))
+      .query(async ({ input }) => {
+        const { getDb }              = await import('./db');
+        const { mlbModelLearningLog } = await import('../drizzle/schema');
+        const { desc }               = await import('drizzle-orm');
+        const { sql }                = await import('drizzle-orm');
+        const db = await getDb();
+        const cutoff = Date.now() - input.days * 24 * 60 * 60 * 1000;
+        const rows = await db
+          .select()
+          .from(mlbModelLearningLog)
+          .where(sql`${mlbModelLearningLog.runAt} >= ${cutoff}`)
+          .orderBy(desc(mlbModelLearningLog.runAt))
+          .limit(200);
+        return rows;
+      }),
+  }),
+
+  // ─── March Madness Bracket ───────────────────────────────────────────────────────────────────────────────────────
+  bracket: router({ /**
      * Fetch all tournament games with bracket metadata.
      * Returns every game from First Four through Championship.
      * Accessible to all authenticated app users.
