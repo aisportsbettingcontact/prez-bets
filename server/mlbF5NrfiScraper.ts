@@ -22,7 +22,12 @@ import { getDb } from "./db";
 import { games } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 
-const PYTHON_BIN = "python3.11";
+const PYTHON_BIN = "/usr/bin/python3.11";
+const PYTHON_ENV = {
+  ...process.env,
+  PYTHONHOME: undefined as unknown as string,
+  PYTHONPATH: "/usr/local/lib/python3.11/dist-packages:/usr/lib/python3/dist-packages",
+};
 const _dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT_PATH = path.join(_dirname, "ActionNetworkF5NrfiAPI.py");
 
@@ -69,7 +74,7 @@ function oddsToString(odds: number | null): string | null {
 function runPythonScraper(dateStr: string): Promise<AnF5NrfiRecord[]> {
   return new Promise((resolve, reject) => {
     console.log(`[STEP] Spawning ${PYTHON_BIN} ${SCRIPT_PATH} ${dateStr}`);
-    const proc = spawn(PYTHON_BIN, [SCRIPT_PATH, dateStr]);
+    const proc = spawn(PYTHON_BIN, [SCRIPT_PATH, dateStr], { env: PYTHON_ENV });
 
     let stdout = "";
     let stderr = "";

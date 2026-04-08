@@ -2169,3 +2169,4 @@
 - [x] Run full backtest pipeline March 25–April 5 with deep logging and calibration metrics
 - [x] Generate per-game + aggregate backtest report with accuracy, ROI, edge distribution
 - [x] Save checkpoint and deliver full backtest report
+- [x] Model and publish all 15 MLB games and all 3 NHL games for April 8, 2026 (AN odds + Monte Carlo + K-Props + NHL Poisson)
