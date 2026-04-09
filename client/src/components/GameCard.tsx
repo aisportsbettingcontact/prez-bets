@@ -754,7 +754,7 @@ function DesktopMergedPanel({
   game,
 }: DesktopMergedPanelProps) {
   // ── Team colors for split bars ────────────────────────────────────────────
-  const sport = game.sport ?? 'NBA';
+  const sport = (game.sport ?? 'NBA') as 'MLB' | 'NBA' | 'NHL';
   const { data: colors } = trpc.teamColors.getForGame.useQuery(
     { awayTeam: game.awayTeam, homeTeam: game.homeTeam, sport },
     { staleTime: 1000 * 60 * 60 }

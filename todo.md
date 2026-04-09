@@ -2183,3 +2183,18 @@
 - [ ] Make MLB the primary/default sport tab across Dashboard, ModelProjections, PublishProjections, BettingSplits
 - [ ] Purge all NCAAM games from the database (DELETE WHERE sport = 'NCAAM')
 - [ ] Add MLB to VSiN auto-refresh cron scheduler in vsinAutoRefresh.ts
+
+## Security Hardening (2026-04-09)
+- [ ] Install express-rate-limit, rate-limiter-flexible, helmet, express-validator
+- [ ] Add global rate limiter (100 req/min per IP) to all Express routes
+- [ ] Add strict auth rate limiter (5 attempts per 15 min) to /api/oauth/* and login routes
+- [ ] Add strict auth rate limiter to tRPC auth.* and appUsers.login procedures
+- [ ] Scan and remove all hardcoded API keys/tokens/passwords from codebase
+- [ ] Move any hardcoded secrets to environment variables
+- [ ] Verify no VITE_ prefixed secrets expose sensitive server-side keys to frontend bundle
+- [ ] Add express body-parser size limits (10kb JSON, 1mb multipart)
+- [ ] Add Zod schema validation/sanitization to all tRPC procedures with user input
+- [ ] Add HTTP security headers (helmet.js)
+- [ ] Sanitize all string inputs (strip HTML/script injection)
+- [ ] Reject malformed/oversized payloads at middleware level
+- [ ] Run full security audit and produce vulnerability report

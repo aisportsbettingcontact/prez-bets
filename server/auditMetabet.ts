@@ -14,7 +14,10 @@
  * Outputs a full per-game table plus summary statistics per league.
  */
 
-const METABET_API_KEY = "219f64094f67ed781035f5f7a08840fc";
+import { ENV } from "./_core/env";
+
+// API key sourced from METABET_API_KEY environment variable (never hardcoded)
+const METABET_API_KEY = ENV.metabetApiKey;
 const BASE = "https://metabet.static.api.areyouwatchingthis.com/api/odds.json";
 const PROVIDER = "DRAFTKINGS";
 

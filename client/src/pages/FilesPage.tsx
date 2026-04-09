@@ -45,7 +45,7 @@ export default function FilesPage() {
   const { isAuthenticated, loading } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedSport, setSelectedSport] = useState("MLB");
+  const [selectedSport, setSelectedSport] = useState<"MLB" | "NBA" | "NHL">("MLB");
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
@@ -189,7 +189,7 @@ export default function FilesPage() {
               <span className="text-xs text-muted-foreground">Sport:</span>
               <select
                 value={selectedSport}
-                onChange={(e) => setSelectedSport(e.target.value)}
+                onChange={(e) => setSelectedSport(e.target.value as "MLB" | "NBA" | "NHL")}
                 className="text-xs bg-secondary text-foreground border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 {SPORT_OPTIONS.map((s) => (

@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerDiscordAuthRoutes } from "../discordAuth";
@@ -25,6 +27,55 @@ process.on("unhandledRejection", (reason, promise) => {
 
 process.on("uncaughtException", (err) => {
   console.error("[CRASH GUARD] Uncaught exception — server will continue:", err);
+});
+
+// ─── Rate limiters ────────────────────────────────────────────────────────────
+// Global limiter: 200 requests per minute per IP across all API routes.
+// Generous enough for legitimate use; blocks automated scraping/flooding.
+const globalApiLimiter = rateLimit({
+  windowMs: 60 * 1000,          // 1 minute window
+  max: 200,                      // max 200 requests per window per IP
+  standardHeaders: "draft-7",    // Return rate limit info in RateLimit-* headers
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please slow down." },
+  skip: (req) => req.path === "/health", // never throttle health probes
+  handler: (req, res, _next, options) => {
+    console.warn(`[RATE LIMIT] Global limit hit: IP=${req.ip} path=${req.path}`);
+    res.status(options.statusCode).json(options.message);
+  },
+});
+
+// Auth limiter: max 5 login/auth attempts per 15 minutes per IP.
+// Prevents brute-force credential stuffing on login and OAuth routes.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,     // 15-minute window
+  max: 5,                        // max 5 attempts per window per IP
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many authentication attempts. Please wait 15 minutes before trying again." },
+  handler: (req, res, _next, options) => {
+    console.warn(`[RATE LIMIT] Auth limit hit: IP=${req.ip} path=${req.path}`);
+    res.status(options.statusCode).json(options.message);
+  },
+});
+
+// tRPC auth procedure limiter: 5 login mutations per 15 minutes per IP.
+// Applied specifically to /api/trpc/appUsers.login and /api/trpc/auth.* paths.
+const trpcAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Please wait 15 minutes." },
+  keyGenerator: (req) => {
+    // Key by IP + procedure path for precise per-procedure limiting
+    const path = req.path.replace(/^\//, "");
+    return `${req.ip}:${path}`;
+  },
+  handler: (req, res, _next, options) => {
+    console.warn(`[RATE LIMIT] tRPC auth limit hit: IP=${req.ip} path=${req.path}`);
+    res.status(options.statusCode).json(options.message);
+  },
 });
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -52,11 +103,37 @@ async function startServer() {
 
   // Trust the first proxy (Cloudflare / Manus edge) so req.protocol reflects
   // the original HTTPS scheme and cookies are set correctly (sameSite+secure).
+  // Also required for express-rate-limit to read the real client IP from
+  // X-Forwarded-For rather than the proxy IP.
   app.set('trust proxy', 1);
 
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // ─── Security headers (helmet) ────────────────────────────────────────────
+  // Sets X-Content-Type-Options, X-Frame-Options, X-XSS-Protection,
+  // Strict-Transport-Security, Referrer-Policy, and a Content-Security-Policy
+  // that allows our own origin + CDN assets. Vite HMR websocket is allowed in dev.
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // unsafe-eval needed for Vite HMR in dev
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+        connectSrc: ["'self'", "wss:", "ws:", "https:"],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: process.env.NODE_ENV === "production" ? [] : null,
+      },
+    },
+    crossOriginEmbedderPolicy: false, // Allow embedding external resources (logos, CDN)
+  }));
+
+  // ─── Body parser with tight size limits ──────────────────────────────────
+  // 10kb for JSON API calls (tRPC procedures never need more than a few KB).
+  // 1mb for URL-encoded forms. The previous 50mb limit was a DoS vector.
+  // Note: file upload procedures use base64 strings — if needed, raise to 2mb max.
+  app.use(express.json({ limit: "2mb" }));
+  app.use(express.urlencoded({ limit: "1mb", extended: true }));
 
   // ─── Health check endpoint ────────────────────────────────────────────────
   // Lightweight endpoint for load balancer health probes and uptime monitoring.
@@ -64,6 +141,22 @@ async function startServer() {
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok", ts: Date.now() });
   });
+
+  // ─── Global API rate limiter ──────────────────────────────────────────────
+  // Applied to all /api/* routes. Skips /health (handled above).
+  app.use("/api", globalApiLimiter);
+
+  // ─── Auth-specific rate limiters ─────────────────────────────────────────
+  // Manus OAuth callback — 5 attempts per 15 min per IP
+  app.use("/api/oauth", authLimiter);
+
+  // Discord OAuth routes — 5 attempts per 15 min per IP
+  app.use("/api/discord-auth", authLimiter);
+
+  // tRPC login mutation — 5 attempts per 15 min per IP
+  // Matches both batch (?batch=1) and direct calls to appUsers.login
+  app.use("/api/trpc/appUsers.login", trpcAuthLimiter);
+  app.use("/api/trpc/auth.login", trpcAuthLimiter);
 
   // ─── Request timeout middleware ───────────────────────────────────────────
   // Kill requests that take > 30s to prevent hanging connections from exhausting

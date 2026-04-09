@@ -1,5 +1,17 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import {
+  zodGameDate,
+  zodSport,
+  zodTeamId,
+  zodDbSlug,
+  zodFilePath,
+  zodPitcherRsId,
+  zodBase64File,
+  zodHtmlPaste,
+  zodGameIdArray,
+  MAX_GAME_IDS_PER_REQUEST,
+} from "./securityMiddleware";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -78,10 +90,10 @@ export const appRouter = router({
     upload: protectedProcedure
       .input(
         z.object({
-          filename: z.string().min(1).max(255),
-          contentBase64: z.string(),
-          sizeBytes: z.number().int().positive(),
-          sport: z.string().optional(),
+          filename: z.string().min(1).max(255).regex(/^[\w\-. ]+$/, "Invalid filename"),
+          contentBase64: zodBase64File,
+          sizeBytes: z.number().int().positive().max(2_000_000, "File too large (max 2MB)"),
+          sport: zodSport.optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -171,7 +183,7 @@ export const appRouter = router({
 
     /** Get a single NBA team by its DB slug (e.g. "boston_celtics"). */
     byDbSlug: publicProcedure
-      .input(z.object({ dbSlug: z.string() }))
+      .input(z.object({ dbSlug: zodDbSlug }))
       .query(async ({ input }) => {
         return getNbaTeamByDbSlug(input.dbSlug);
       }),
@@ -186,8 +198,8 @@ export const appRouter = router({
       .input(
         z
           .object({
-            sport: z.string().optional(),
-            gameDate: z.string().optional(),
+            sport: zodSport.optional(),
+            gameDate: zodGameDate.optional(),
             gameStatus: z.enum(['upcoming', 'live', 'final']).optional(),
           })
           .optional()
@@ -208,7 +220,7 @@ export const appRouter = router({
      * Owner-only — used by the Publish Model Projections page.
      */
     listStaging: ownerProcedure
-      .input(z.object({ gameDate: z.string(), sport: z.string().optional() }))
+      .input(z.object({ gameDate: zodGameDate, sport: zodSport.optional() }))
       .query(async ({ input }) => {
         const games = await listStagingGames(input.gameDate, input.sport);
         return games.filter(g => isValidGame(g.awayTeam, g.homeTeam, g.sport));
@@ -273,7 +285,7 @@ export const appRouter = router({
      * Owner-only.
      */
     bulkApproveModels: ownerProcedure
-      .input(z.object({ gameDate: z.string(), sport: z.string().optional() }))
+      .input(z.object({ gameDate: zodGameDate, sport: zodSport.optional() }))
       .mutation(async ({ input }) => {
         const count = await bulkApproveModels(input.gameDate, input.sport);
         console.log(`[tRPC] games.bulkApproveModels: gameDate=${input.gameDate} sport=${input.sport ?? 'all'} — approved ${count} games`);
@@ -285,7 +297,7 @@ export const appRouter = router({
      * Owner-only.
      */
     publishAll: ownerProcedure
-      .input(z.object({ gameDate: z.string(), sport: z.string().optional() }))
+      .input(z.object({ gameDate: zodGameDate, sport: zodSport.optional() }))
       .mutation(async ({ input }) => {
         const sportLabel = input.sport ?? "ALL";
         console.log(
@@ -304,7 +316,7 @@ export const appRouter = router({
      * Owner-only — used by Publish Projections for multi-day view.
      */
     listStagingRange: ownerProcedure
-      .input(z.object({ fromDate: z.string(), toDate: z.string(), sport: z.string().optional() }))
+      .input(z.object({ fromDate: zodGameDate, toDate: zodGameDate, sport: zodSport.optional() }))
       .query(async ({ input }) => {
         const games = await listStagingGamesRange(input.fromDate, input.toDate, input.sport);
         return games.filter(g => isValidGame(g.awayTeam, g.homeTeam, g.sport));
@@ -357,8 +369,8 @@ export const appRouter = router({
      */
     ingestAnHtml: ownerProcedure
       .input(z.object({
-        html: z.string().min(100, "HTML too short — paste the full AN best-odds table HTML"),
-        gameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "gameDate must be YYYY-MM-DD"),
+        html: zodHtmlPaste,
+        gameDate: zodGameDate,
         sport: z.enum(["NBA", "NHL"]).default("NBA"),
       }))
       .mutation(async ({ input }) => {
@@ -685,9 +697,9 @@ export const appRouter = router({
      */
     getForGame: publicProcedure
       .input(z.object({
-        awayTeam: z.string(),
-        homeTeam: z.string(),
-        sport: z.string(),
+        awayTeam: zodTeamId,
+        homeTeam: zodTeamId,
+        sport: zodSport,
       }))
       .query(async ({ input }) => {
         return getGameTeamColors(input.awayTeam, input.homeTeam, input.sport);
@@ -808,7 +820,7 @@ export const appRouter = router({
      * Returns all K-prop rows with actualKs, backtestResult, modelCorrect, modelError.
      */
     getDailyBacktest: ownerProcedure
-      .input(z.object({ gameDate: z.string() }))
+      .input(z.object({ gameDate: zodGameDate }))
       .query(async ({ input }) => {
         const { getDailyBacktestResults } = await import("./kPropsBacktestService");
         const results = await getDailyBacktestResults(input.gameDate);
@@ -845,14 +857,14 @@ export const appRouter = router({
       .input(
         z.object({
           gameId: z.number().int().positive(),
-          gameDate: z.string(),
-          awayTeam: z.string(),
-          homeTeam: z.string(),
-          awayPitcherRsId: z.string(),
-          homePitcherRsId: z.string(),
-          playsPath: z.string(),
-          statcastPath: z.string(),
-          crosswalkPath: z.string(),
+          gameDate: zodGameDate,
+          awayTeam: zodTeamId,
+          homeTeam: zodTeamId,
+          awayPitcherRsId: zodPitcherRsId,
+          homePitcherRsId: zodPitcherRsId,
+          playsPath: zodFilePath,
+          statcastPath: zodFilePath,
+          crosswalkPath: zodFilePath,
           awayMarketLine: z.number().optional(),
           awayMarketOverOdds: z.string().optional(),
           awayMarketUnderOdds: z.string().optional(),
@@ -886,7 +898,7 @@ export const appRouter = router({
      * Returns a record of gameId → rows[].
      */
     getByGames: publicProcedure
-      .input(z.object({ gameIds: z.array(z.number().int().positive()) }))
+      .input(z.object({ gameIds: zodGameIdArray }))
       .query(async ({ input }) => {
         const map = await getHrPropsByGames(input.gameIds);
         const result: Record<number, Awaited<ReturnType<typeof getHrPropsByGame>>> = {};
@@ -915,7 +927,7 @@ export const appRouter = router({
      * Owner-only: run multi-market backtest for all completed games on a date.
      */
     runForDate: ownerProcedure
-      .input(z.object({ gameDate: z.string() }))
+      .input(z.object({ gameDate: zodGameDate }))
       .mutation(async ({ input }) => {
         const { runMultiMarketBacktestForDate } = await import('./mlbMultiMarketBacktest');
         return runMultiMarketBacktestForDate(input.gameDate);

@@ -27,4 +27,9 @@ export const ENV = {
   discordPublicKey: process.env.DISCORD_PUBLIC_KEY ?? "",
   discordGuildId: process.env.DISCORD_GUILD_ID ?? "",
   discordRoleAiModelSub: process.env.DISCORD_ROLE_AI_MODEL_SUB ?? "",
+  // Third-party API keys — must be set in environment, never hardcoded in source
+  metabetApiKey: process.env.METABET_API_KEY ?? "",
+  // Google Sheets IDs — non-secret but kept in env for configurability
+  // Falls back to the known NBA model sheet ID if env var not set
+  nbaSheetId: process.env.NBA_SHEET_ID ?? "1MWNh0pMkFdUfldhXj60bq9blLPXCg5N5fKh7yYMI0gU",
 };

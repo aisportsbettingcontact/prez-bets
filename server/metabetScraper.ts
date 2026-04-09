@@ -6,7 +6,7 @@
  *
  * API endpoint:
  *   https://metabet.static.api.areyouwatchingthis.com/api/odds.json
- *     ?apiKey=219f64094f67ed781035f5f7a08840fc
+ *     ?apiKey=<METABET_API_KEY env var>
  *     &includeDonBestData
  *     &leagueCode=<CODE>
  *
@@ -34,6 +34,8 @@
  * Team matching uses team1Initials / team2Initials (e.g. "LAK", "NYI") and
  * team1Name / team1Nickname / team2Name / team2Nickname for downstream matching.
  */
+
+import { ENV } from "./_core/env";
 
 export type MetabetLeagueCode = "BKC" | "BKP" | "HKN";
 
@@ -150,7 +152,8 @@ export function roundToHalf(v: number | undefined | null): number | null {
 
 // ─── Main scraper ─────────────────────────────────────────────────────────────
 
-const METABET_API_KEY = "219f64094f67ed781035f5f7a08840fc";
+// API key sourced from METABET_API_KEY environment variable (never hardcoded)
+const METABET_API_KEY = ENV.metabetApiKey;
 const METABET_BASE =
   "https://metabet.static.api.areyouwatchingthis.com/api/odds.json";
 

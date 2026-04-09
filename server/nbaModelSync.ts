@@ -25,6 +25,7 @@
 import { getDb } from "./db";
 import { games } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
+import { ENV } from "./_core/env";
 
 /** In-memory record of the last completed sync */
 export interface NbaModelSyncResult {
@@ -40,7 +41,8 @@ export function getLastNbaModelSyncResult(): NbaModelSyncResult | null {
   return lastSyncResult;
 }
 
-const SHEET_ID = "1MWNh0pMkFdUfldhXj60bq9blLPXCg5N5fKh7yYMI0gU";
+// Sheet ID sourced from NBA_SHEET_ID environment variable (falls back to known ID)
+const SHEET_ID = ENV.nbaSheetId;
 const GID = "567059198";
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
 
