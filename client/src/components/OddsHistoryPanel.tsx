@@ -1,12 +1,17 @@
 /**
  * OddsHistoryPanel
  *
- * Collapsible panel shown at the bottom of each EditableGameCard in Publish Projections.
- * Displays a chronological table of every DK NJ odds snapshot for the game,
- * with EST timestamps, spread, total, and moneyline columns.
+ * Collapsible panel shown at the bottom of each game card (both frontend Betting Splits
+ * tab and backend Publish Projections). Displays a chronological table of every
+ * DK NJ odds snapshot for the game, with EST timestamps, spread/total/ML lines,
+ * and VSIN betting splits (tickets % + money %) side-by-side.
  *
  * Timestamps are stored as UTC epoch ms in the DB and converted to EST for display.
  * "Manual" rows (triggered by the Refresh Now button) are highlighted with an amber badge.
+ *
+ * Column layout per snapshot row:
+ *   Time (EST) | Source | Spread Line | Spread Bets% | Spread Money% |
+ *   Total Line | Over Bets% | Over Money% | ML | ML Away Bets% | ML Away Money%
  */
 
 import { useState } from "react";
@@ -22,7 +27,6 @@ interface OddsHistoryPanelProps {
 /** Format a UTC epoch ms timestamp as Eastern time string: "Mar 15, 1:59 PM EST" or "Mar 15, 2:59 PM EDT" */
 function fmtEst(epochMs: number): string {
   const d = new Date(epochMs);
-  // Format date + time parts separately so we can append the timezone abbreviation
   const datePart = d.toLocaleDateString("en-US", {
     timeZone: "America/New_York",
     month: "short",
@@ -34,7 +38,6 @@ function fmtEst(epochMs: number): string {
     minute: "2-digit",
     hour12: true,
   });
-  // Determine EST vs EDT based on whether DST is active in New York
   const tzAbbr = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     timeZoneName: "short",
@@ -73,7 +76,24 @@ function fmtML(away: string | null | undefined, home: string | null | undefined)
   return `${a} / ${h}`;
 }
 
-export function OddsHistoryPanel({ gameId, awayTeam, homeTeam }: OddsHistoryPanelProps) {
+/** Format a percentage value: "62%" or "—" if null */
+function fmtPct(val: number | null | undefined): string {
+  if (val == null) return "—";
+  return `${val}%`;
+}
+
+// ── Shared cell styles ────────────────────────────────────────────────────────
+
+const TH_STYLE: React.CSSProperties = {
+  color: "rgba(255,255,255,0.55)",
+  borderBottom: "1px solid rgba(57,255,20,0.12)",
+};
+
+const GROUP_BORDER: React.CSSProperties = {
+  borderLeft: "1px solid rgba(57,255,20,0.18)",
+};
+
+export function OddsHistoryPanel({ gameId, awayTeam, homeTeam: _homeTeam }: OddsHistoryPanelProps) {
   const [open, setOpen] = useState(false);
 
   // Only fetch when the panel is expanded — avoids unnecessary queries on page load
@@ -102,7 +122,7 @@ export function OddsHistoryPanel({ gameId, awayTeam, homeTeam }: OddsHistoryPane
             className="text-[11px] font-black uppercase tracking-[0.18em]"
             style={{ color: "#39FF14" }}
           >
-            Odds History
+            Odds &amp; Splits History
           </span>
           {rows.length > 0 && (
             <span
@@ -129,34 +149,81 @@ export function OddsHistoryPanel({ gameId, awayTeam, homeTeam }: OddsHistoryPane
             </div>
           ) : error ? (
             <p className="text-xs text-center py-4" style={{ color: "#ff4444" }}>
-              Failed to load odds history.
+              Failed to load odds &amp; splits history.
             </p>
           ) : rows.length === 0 ? (
             <p className="text-xs text-center py-4" style={{ color: "rgba(255,255,255,0.35)" }}>
-              No snapshots yet — odds history will populate after the next AN refresh.
+              No snapshots yet — history will populate after the next 10-min refresh cycle.
             </p>
           ) : (
             <div className="overflow-x-auto rounded-md" style={{ border: "1px solid rgba(57,255,20,0.12)" }}>
-              <table className="w-full text-[11px]" style={{ borderCollapse: "collapse" }}>
+              <table className="w-full text-[10px]" style={{ borderCollapse: "collapse" }}>
                 <thead>
-                  <tr style={{ background: "rgba(57,255,20,0.08)" }}>
-                    <th className="text-left px-3 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: "rgba(255,255,255,0.55)", borderBottom: "1px solid rgba(57,255,20,0.12)" }}>
-                      Time (EST)
+                  {/* Group header row */}
+                  <tr style={{ background: "rgba(57,255,20,0.05)" }}>
+                    <th colSpan={2} className="px-3 py-1 text-left font-bold uppercase tracking-wider" style={TH_STYLE} />
+                    {/* Spread group */}
+                    <th
+                      colSpan={3}
+                      className="px-2 py-1 text-center font-bold uppercase tracking-wider whitespace-nowrap"
+                      style={{ ...TH_STYLE, ...GROUP_BORDER, color: "rgba(255,200,80,0.8)" }}
+                    >
+                      Spread / Run Line / Puck Line
                     </th>
-                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: "rgba(255,255,255,0.55)", borderBottom: "1px solid rgba(57,255,20,0.12)" }}>
-                      Source
-                    </th>
-                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: "rgba(255,255,255,0.55)", borderBottom: "1px solid rgba(57,255,20,0.12)" }}>
-                      Away Spread
-                    </th>
-                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: "rgba(255,255,255,0.55)", borderBottom: "1px solid rgba(57,255,20,0.12)" }}>
-                      Home Spread
-                    </th>
-                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: "rgba(255,255,255,0.55)", borderBottom: "1px solid rgba(57,255,20,0.12)" }}>
+                    {/* Total group */}
+                    <th
+                      colSpan={3}
+                      className="px-2 py-1 text-center font-bold uppercase tracking-wider whitespace-nowrap"
+                      style={{ ...TH_STYLE, ...GROUP_BORDER, color: "rgba(80,200,255,0.8)" }}
+                    >
                       Total (O/U)
                     </th>
-                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: "rgba(255,255,255,0.55)", borderBottom: "1px solid rgba(57,255,20,0.12)" }}>
-                      ML (Away / Home)
+                    {/* ML group */}
+                    <th
+                      colSpan={3}
+                      className="px-2 py-1 text-center font-bold uppercase tracking-wider whitespace-nowrap"
+                      style={{ ...TH_STYLE, ...GROUP_BORDER, color: "rgba(180,120,255,0.8)" }}
+                    >
+                      Moneyline
+                    </th>
+                  </tr>
+                  {/* Column header row */}
+                  <tr style={{ background: "rgba(57,255,20,0.08)" }}>
+                    <th className="text-left px-3 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={TH_STYLE}>
+                      Time (ET)
+                    </th>
+                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={TH_STYLE}>
+                      Src
+                    </th>
+                    {/* Spread cols */}
+                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={{ ...TH_STYLE, ...GROUP_BORDER }}>
+                      Line
+                    </th>
+                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={TH_STYLE}>
+                      {awayTeam} Tkts%
+                    </th>
+                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={TH_STYLE}>
+                      {awayTeam} $%
+                    </th>
+                    {/* Total cols */}
+                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={{ ...TH_STYLE, ...GROUP_BORDER }}>
+                      Line
+                    </th>
+                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={TH_STYLE}>
+                      Over Tkts%
+                    </th>
+                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={TH_STYLE}>
+                      Over $%
+                    </th>
+                    {/* ML cols */}
+                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={{ ...TH_STYLE, ...GROUP_BORDER }}>
+                      Line
+                    </th>
+                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={TH_STYLE}>
+                      {awayTeam} Tkts%
+                    </th>
+                    <th className="text-center px-2 py-2 font-bold uppercase tracking-wider whitespace-nowrap" style={TH_STYLE}>
+                      {awayTeam} $%
                     </th>
                   </tr>
                 </thead>
@@ -164,6 +231,7 @@ export function OddsHistoryPanel({ gameId, awayTeam, homeTeam }: OddsHistoryPane
                   {rows.map((row, idx) => {
                     const isManual = row.source === "manual";
                     const isEven = idx % 2 === 0;
+                    const spreadBothZero = row.spreadAwayBetsPct === 0 && row.spreadAwayMoneyPct === 0;
                     return (
                       <tr
                         key={row.id}
@@ -184,40 +252,63 @@ export function OddsHistoryPanel({ gameId, awayTeam, homeTeam }: OddsHistoryPane
                         {/* Source badge */}
                         <td className="px-2 py-2 text-center">
                           <span
-                            className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                            className="inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider"
                             style={isManual
                               ? { background: "rgba(251,191,36,0.18)", color: "#FBB924", border: "1px solid rgba(251,191,36,0.35)" }
                               : { background: "rgba(57,255,20,0.1)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.25)" }
                             }
                           >
-                            {isManual ? "Manual" : "Auto"}
+                            {isManual ? "M" : "A"}
                           </span>
                         </td>
 
-                        {/* Away spread */}
-                        <td className="px-2 py-2 text-center font-mono" style={{ color: "rgba(255,255,255,0.85)" }}>
+                        {/* ── Spread group ── */}
+                        <td className="px-2 py-2 text-center font-mono whitespace-nowrap" style={{ color: "rgba(255,200,80,0.9)", borderLeft: "1px solid rgba(57,255,20,0.1)" }}>
                           {fmtSpread(row.awaySpread, row.awaySpreadOdds)}
                         </td>
-
-                        {/* Home spread */}
-                        <td className="px-2 py-2 text-center font-mono" style={{ color: "rgba(255,255,255,0.85)" }}>
-                          {fmtSpread(row.homeSpread, row.homeSpreadOdds)}
+                        <td className="px-2 py-2 text-center font-mono" style={{ color: spreadBothZero ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.85)" }}>
+                          {spreadBothZero ? "—" : fmtPct(row.spreadAwayBetsPct)}
+                        </td>
+                        <td className="px-2 py-2 text-center font-mono" style={{ color: spreadBothZero ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.85)" }}>
+                          {spreadBothZero ? "—" : fmtPct(row.spreadAwayMoneyPct)}
                         </td>
 
-                        {/* Total */}
-                        <td className="px-2 py-2 text-center font-mono whitespace-nowrap" style={{ color: "rgba(255,255,255,0.85)" }}>
+                        {/* ── Total group ── */}
+                        <td className="px-2 py-2 text-center font-mono whitespace-nowrap" style={{ color: "rgba(80,200,255,0.9)", borderLeft: "1px solid rgba(57,255,20,0.1)" }}>
                           {fmtTotal(row.total, row.overOdds, row.underOdds)}
                         </td>
+                        <td className="px-2 py-2 text-center font-mono" style={{ color: "rgba(255,255,255,0.85)" }}>
+                          {fmtPct(row.totalOverBetsPct)}
+                        </td>
+                        <td className="px-2 py-2 text-center font-mono" style={{ color: "rgba(255,255,255,0.85)" }}>
+                          {fmtPct(row.totalOverMoneyPct)}
+                        </td>
 
-                        {/* Moneyline */}
-                        <td className="px-2 py-2 text-center font-mono whitespace-nowrap" style={{ color: "rgba(255,255,255,0.85)" }}>
+                        {/* ── Moneyline group ── */}
+                        <td className="px-2 py-2 text-center font-mono whitespace-nowrap" style={{ color: "rgba(180,120,255,0.9)", borderLeft: "1px solid rgba(57,255,20,0.1)" }}>
                           {fmtML(row.awayML, row.homeML)}
+                        </td>
+                        <td className="px-2 py-2 text-center font-mono" style={{ color: "rgba(255,255,255,0.85)" }}>
+                          {fmtPct(row.mlAwayBetsPct)}
+                        </td>
+                        <td className="px-2 py-2 text-center font-mono" style={{ color: "rgba(255,255,255,0.85)" }}>
+                          {fmtPct(row.mlAwayMoneyPct)}
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+
+              {/* Legend */}
+              <div className="flex items-center gap-4 px-3 py-2" style={{ borderTop: "1px solid rgba(57,255,20,0.08)" }}>
+                <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
+                  Src: A=Auto (10-min) · M=Manual
+                </span>
+                <span className="text-[9px]" style={{ color: "rgba(255,255,255,0.25)" }}>
+                  Splits: — = market not yet open · Tkts% = tickets · $% = handle
+                </span>
+              </div>
             </div>
           )}
         </div>

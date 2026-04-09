@@ -10,10 +10,13 @@
 
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { OddsHistoryPanel } from "./OddsHistoryPanel";
 
 type MobileMarket = "spread" | "total" | "ml";
 
 interface BettingSplitsPanelProps {
+  /** DB game ID — used to fetch the odds & splits history timeline */
+  gameId?: number;
   game: {
     sport: string | null;
     awayTeam: string;
@@ -541,6 +544,7 @@ function MarketBlock({ title, awayLabel, homeLabel, totalValue, ticketsPct, hand
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export function BettingSplitsPanel({
+  gameId,
   game, awayLabel, homeLabel,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   awayNickname: _aN, homeNickname: _hN,
@@ -705,6 +709,18 @@ export function BettingSplitsPanel({
             awayColor={awayColor} homeColor={homeColor} />
         </div>
       </div>
+
+      {/* ── Odds & Splits History Timeline (both mobile + desktop) ── */}
+      {/* Only rendered when a gameId is provided (all call sites should pass it) */}
+      {gameId != null && (
+        <div className="w-full">
+          <OddsHistoryPanel
+            gameId={gameId}
+            awayTeam={game.awayTeam}
+            homeTeam={game.homeTeam}
+          />
+        </div>
+      )}
     </>
   );
 }

@@ -1084,7 +1084,7 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
 
           {/* RIGHT: betting splits */}
           <div className="flex-1 min-w-0 overflow-hidden">
-            <BettingSplitsPanel game={game} awayLabel={awayName} homeLabel={homeName} />
+            <BettingSplitsPanel gameId={game.id} game={game} awayLabel={awayName} homeLabel={homeName} />
           </div>
         </div>
 
@@ -1418,7 +1418,7 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
 
           {/* ── BETTING SPLITS (mobile) ── */}
           <div style={{ borderBottom: "1px solid hsl(var(--border) / 0.6)" }}>
-            <BettingSplitsPanel game={game} awayLabel={awayName} homeLabel={homeName} />
+            <BettingSplitsPanel gameId={game.id} game={game} awayLabel={awayName} homeLabel={homeName} />
           </div>
 
           {/* ── SAVE / RESET / EDGE VERDICT (mobile) ── */}

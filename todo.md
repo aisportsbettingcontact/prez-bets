@@ -2198,3 +2198,16 @@
 - [ ] Sanitize all string inputs (strip HTML/script injection)
 - [ ] Reject malformed/oversized payloads at middleware level
 - [ ] Run full security audit and produce vulnerability report
+
+## Odds History + Splits Timeline (10-min automation)
+
+- [ ] Add splits columns to odds_history schema (spreadAwayBets/Money, totalOverBets/Money, mlAwayBets/Money for all 3 sports)
+- [ ] Push DB migration (pnpm db:push)
+- [ ] Update insertOddsHistory() to accept splits data
+- [ ] Update all insertOddsHistory call sites (refreshAnApiOdds + MLB cycle) to pass current VSIN splits
+- [ ] Ensure 10-min snapshot cadence for MLB, NBA, NHL (verify all 3 sports hit insertOddsHistory every 10 min)
+- [ ] Change oddsHistory.listForGame from ownerProcedure to publicProcedure
+- [ ] Update OddsHistoryPanel to show splits columns side-by-side with odds
+- [ ] Wire OddsHistoryPanel into frontend BettingSplitsPanel (Betting Splits tab per game)
+- [ ] Ensure OddsHistoryPanel remains in PublishProjections Odds History dropdown
+- [ ] TypeScript check, vitest, checkpoint

@@ -2715,6 +2715,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             <div className="flex flex-col" style={{ flex: "2 1 40%", minWidth: 220, borderLeft: "1px solid hsl(var(--border) / 0.5)" }}>
               <div className="px-3 py-2">
                 <BettingSplitsPanel
+                  gameId={game.id}
                   game={game}
                   awayLabel={awayName}
                   homeLabel={homeName}
@@ -2727,6 +2728,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {mode === "splits" && (
             <div className="flex-1 px-3 py-3" style={{ minWidth: 220 }}>
               <BettingSplitsPanel
+                gameId={game.id}
                 game={game}
                 awayLabel={awayName}
                 homeLabel={homeName}
@@ -2877,6 +2879,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               >
                 <div style={{ minWidth: 260 }}>
                   <BettingSplitsPanel
+                    gameId={game.id}
                     game={game}
                     awayLabel={awayName}
                     homeLabel={homeName}
@@ -3705,6 +3708,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   {mobileTab === 'splits' && (
                     <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                       <BettingSplitsPanel
+                        gameId={game.id}
                         game={game}
                         awayLabel={awayName}
                         homeLabel={homeName}

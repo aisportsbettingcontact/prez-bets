@@ -768,7 +768,7 @@ export const appRouter = router({
      * List all odds snapshots for a specific game, newest first.
      * Owner-only — used in Publish Projections odds history table.
      */
-    listForGame: ownerProcedure
+    listForGame: publicProcedure
       .input(z.object({ gameId: z.number().int().positive() }))
       .query(async ({ input }) => {
         const rows = await listOddsHistory(input.gameId);

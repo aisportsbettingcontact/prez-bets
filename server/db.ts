@@ -985,6 +985,7 @@ export async function insertOddsHistory(
   sport: string,
   source: "auto" | "manual",
   snap: {
+    // DK NJ odds
     awaySpread?: string | null;
     awaySpreadOdds?: string | null;
     homeSpread?: string | null;
@@ -994,6 +995,13 @@ export async function insertOddsHistory(
     underOdds?: string | null;
     awayML?: string | null;
     homeML?: string | null;
+    // VSIN betting splits (null = not yet available)
+    spreadAwayBetsPct?: number | null;
+    spreadAwayMoneyPct?: number | null;
+    totalOverBetsPct?: number | null;
+    totalOverMoneyPct?: number | null;
+    mlAwayBetsPct?: number | null;
+    mlAwayMoneyPct?: number | null;
   }
 ): Promise<void> {
   const db = await getDb();
@@ -1017,6 +1025,13 @@ export async function insertOddsHistory(
       underOdds: snap.underOdds ?? null,
       awayML: snap.awayML ?? null,
       homeML: snap.homeML ?? null,
+      // VSIN splits — only write if non-null (null = market not yet open)
+      spreadAwayBetsPct: snap.spreadAwayBetsPct ?? null,
+      spreadAwayMoneyPct: snap.spreadAwayMoneyPct ?? null,
+      totalOverBetsPct: snap.totalOverBetsPct ?? null,
+      totalOverMoneyPct: snap.totalOverMoneyPct ?? null,
+      mlAwayBetsPct: snap.mlAwayBetsPct ?? null,
+      mlAwayMoneyPct: snap.mlAwayMoneyPct ?? null,
     });
     console.log(
       "[OddsHistory] Snapshot saved: gameId=%d sport=%s source=%s scrapedAt=%s EST",

@@ -664,6 +664,16 @@ export const oddsHistory = mysqlTable("odds_history", {
   // ── DK NJ Moneyline snapshot ──
   awayML: varchar("awayML", { length: 16 }),
   homeML: varchar("homeML", { length: 16 }),
+  // ── VSIN Betting Splits snapshot (all three sports) ──
+  // Spread / Run Line / Puck Line splits
+  spreadAwayBetsPct: tinyint("spreadAwayBetsPct"),
+  spreadAwayMoneyPct: tinyint("spreadAwayMoneyPct"),
+  // Total splits (over side)
+  totalOverBetsPct: tinyint("totalOverBetsPct"),
+  totalOverMoneyPct: tinyint("totalOverMoneyPct"),
+  // Moneyline splits
+  mlAwayBetsPct: tinyint("mlAwayBetsPct"),
+  mlAwayMoneyPct: tinyint("mlAwayMoneyPct"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

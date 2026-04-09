@@ -907,7 +907,19 @@ async function refreshAnApiOdds(
           } : {}),
         });
 
-        // ── ODDS HISTORY: snapshot the DK NJ lines we just wrote ─────────────
+        // ── ODDS HISTORY: snapshot the DK NJ lines + current VSIN splits ───────
+        // Splits are read from the DB game row (written by the VSIN refresh step
+        // that runs in the same cycle, before refreshAnApiOdds is called).
+        // Apply the 0/0 guard: treat both-zero as "not yet available" (null).
+        const _spreadBothZero =
+          (dbGame.spreadAwayBetsPct === 0 || dbGame.spreadAwayBetsPct === null) &&
+          (dbGame.spreadAwayMoneyPct === 0 || dbGame.spreadAwayMoneyPct === null);
+        const _totalBothZero =
+          (dbGame.totalOverBetsPct === 0 || dbGame.totalOverBetsPct === null) &&
+          (dbGame.totalOverMoneyPct === 0 || dbGame.totalOverMoneyPct === null);
+        const _mlBothZero =
+          (dbGame.mlAwayBetsPct === 0 || dbGame.mlAwayBetsPct === null) &&
+          (dbGame.mlAwayMoneyPct === 0 || dbGame.mlAwayMoneyPct === null);
         await insertOddsHistory(
           dbGame.id,
           dbSport,
@@ -922,7 +934,20 @@ async function refreshAnApiOdds(
             underOdds: anGame.dkUnderOdds,
             awayML: dkAwayML,
             homeML: dkHomeML,
+            // VSIN splits — null if market not yet open (0/0 guard)
+            spreadAwayBetsPct: _spreadBothZero ? null : (dbGame.spreadAwayBetsPct ?? null),
+            spreadAwayMoneyPct: _spreadBothZero ? null : (dbGame.spreadAwayMoneyPct ?? null),
+            totalOverBetsPct: _totalBothZero ? null : (dbGame.totalOverBetsPct ?? null),
+            totalOverMoneyPct: _totalBothZero ? null : (dbGame.totalOverMoneyPct ?? null),
+            mlAwayBetsPct: _mlBothZero ? null : (dbGame.mlAwayBetsPct ?? null),
+            mlAwayMoneyPct: _mlBothZero ? null : (dbGame.mlAwayMoneyPct ?? null),
           }
+        );
+        console.log(
+          `[OddsHistory] Splits snapshot: ${dbGame.awayTeam}@${dbGame.homeTeam} ` +
+          `spread=${_spreadBothZero ? 'pending' : `${dbGame.spreadAwayBetsPct}%B/${dbGame.spreadAwayMoneyPct}%M`} ` +
+          `total=${_totalBothZero ? 'pending' : `${dbGame.totalOverBetsPct}%B/${dbGame.totalOverMoneyPct}%M`} ` +
+          `ml=${_mlBothZero ? 'pending' : `${dbGame.mlAwayBetsPct}%B/${dbGame.mlAwayMoneyPct}%M`}`
         );
 
         updated++;
