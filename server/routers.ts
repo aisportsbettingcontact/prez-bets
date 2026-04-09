@@ -610,6 +610,9 @@ export const appRouter = router({
           nhlInserted: 0,
           nhlScheduleInserted: 0,
           nhlTotal: 0,
+          mlbUpdated: 0,
+          mlbInserted: 0,
+          mlbTotal: 0,
           gameDate: "",
         };
       }),

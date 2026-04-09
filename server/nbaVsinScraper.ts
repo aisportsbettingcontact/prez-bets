@@ -1,12 +1,12 @@
 /**
  * VSiN NBA Betting Splits Scraper
  *
- * Mirrors the NCAAM vsinScraper.ts but targets the NBA betting splits page:
+ * Scrapes the VSiN NBA betting splits page:
  *   https://data.vsin.com/nba/betting-splits/
  *
- * Auth flow: same Piano ID JWT as NCAAM scraper (shared token cache).
+ * Auth flow: Piano ID JWT (shared token cache with NHL/MLB scrapers).
  *
- * Table structure: identical to NCAAM — freezetable with 10 <td> cells per row.
+ * Table structure: freezetable with 10 <td> cells per row.
  *   [0] team names (away + home via anchors), [1] spread, [4] total
  *
  * Game ID format: "20260306NBA00064" (YYYYMMDD + "NBA" + number)
@@ -47,7 +47,7 @@ export interface NbaScrapedOdds {
   gameDate: string;
 }
 
-// Share the token cache with the NCAAM scraper (same Piano ID account)
+// Token cache shared with NHL/MLB scrapers (same Piano ID account)
 let cachedToken: string | null = null;
 let tokenExpiry: number = 0;
 

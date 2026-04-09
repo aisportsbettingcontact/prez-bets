@@ -1999,28 +1999,10 @@ export default function PublishProjections() {
           </button>
         </div>
 
-        {/* Sport filter toggle */}
+        {/* Sport filter toggle — MLB primary (leftmost) */}
         <div className="px-4 pb-1 max-w-5xl mx-auto flex items-center gap-2">
 
-          {/* NBA button */}
-          <button
-            onClick={() => setSelectedSport("NBA")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-            style={selectedSport === "NBA"
-              ? { background: "rgba(200,16,46,0.15)", color: "#C8102E", border: "1px solid rgba(200,16,46,0.5)" }
-              : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
-            }
-          >
-            <img
-              src="https://cdn.nba.com/logos/leagues/logo-nba.svg"
-              alt="NBA"
-              width={16}
-              height={16}
-              style={{ opacity: selectedSport === "NBA" ? 1 : 0.5 }}
-            />
-            NBA
-          </button>
-          {/* MLB button — before NHL */}
+          {/* MLB button — primary sport, leftmost */}
           <button
             onClick={() => setSelectedSport("MLB")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
@@ -2055,6 +2037,24 @@ export default function PublishProjections() {
               style={{ opacity: selectedSport === "NHL" ? 1 : 0.5 }}
             />
             NHL
+          </button>
+          {/* NBA button */}
+          <button
+            onClick={() => setSelectedSport("NBA")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+            style={selectedSport === "NBA"
+              ? { background: "rgba(200,16,46,0.15)", color: "#C8102E", border: "1px solid rgba(200,16,46,0.5)" }
+              : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
+            }
+          >
+            <img
+              src="https://cdn.nba.com/logos/leagues/logo-nba.svg"
+              alt="NBA"
+              width={16}
+              height={16}
+              style={{ opacity: selectedSport === "NBA" ? 1 : 0.5 }}
+            />
+            NBA
           </button>
         </div>
 
@@ -2176,6 +2176,31 @@ export default function PublishProjections() {
                       )}
                     </div>
                   )}
+                </div>
+              </>
+            )}
+
+            {/* MLB Refresh Stats — only shown when MLB tab is active */}
+            {selectedSport === "MLB" && lastRefresh && (
+              <>
+                <div className="col-span-2" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+                <div className="col-span-2 flex items-center justify-between">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="uppercase tracking-widest" style={{ color: "hsl(var(--muted-foreground))", fontSize: '14px' }}>
+                      MLB Last Refresh Stats
+                    </span>
+                    <span className="font-mono" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px' }}>
+                      {lastRefresh.mlbTotal ?? 0} VSiN games processed
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px]" style={{ color: "hsl(var(--muted-foreground))" }}>
+                    <span>
+                      <span className="font-bold" style={{ color: "rgba(57,255,20,0.8)" }}>{lastRefresh.mlbUpdated ?? 0}</span> updated
+                    </span>
+                    <span>
+                      <span className="font-bold" style={{ color: "rgba(57,255,20,0.8)" }}>{lastRefresh.mlbInserted ?? 0}</span> inserted
+                    </span>
+                  </div>
                 </div>
               </>
             )}

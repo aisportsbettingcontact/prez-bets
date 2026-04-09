@@ -495,23 +495,23 @@ export default function Dashboard() {
 
         {/* Row 2: Sport filter toggle + splits timestamp */}
         <div className="px-4 pb-1 flex items-center gap-2">
-          {/* NBA button */}
+          {/* MLB button — primary sport, leftmost */}
           <button
-            onClick={() => setSelectedSport("NBA")}
+            onClick={() => setSelectedSport("MLB")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-            style={selectedSport === "NBA"
-              ? { background: "rgba(200,16,46,0.15)", color: "#C8102E", border: "1px solid rgba(200,16,46,0.5)" }
+            style={selectedSport === "MLB"
+              ? { background: "rgba(0,45,114,0.25)", color: "#E31837", border: "1px solid rgba(227,24,55,0.5)" }
               : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
             }
           >
             <img
-              src="https://cdn.nba.com/logos/leagues/logo-nba.svg"
-              alt="NBA"
+              src="https://www.mlbstatic.com/team-logos/league-on-dark/1.svg"
+              alt="MLB"
               width={16}
               height={16}
-              style={{ opacity: selectedSport === "NBA" ? 1 : 0.5 }}
+              style={{ opacity: selectedSport === "MLB" ? 1 : 0.5 }}
             />
-            NBA
+            MLB
           </button>
           {/* NHL button */}
           <button
@@ -531,23 +531,23 @@ export default function Dashboard() {
             />
             NHL
           </button>
-          {/* MLB button */}
+          {/* NBA button */}
           <button
-            onClick={() => setSelectedSport("MLB")}
+            onClick={() => setSelectedSport("NBA")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-            style={selectedSport === "MLB"
-              ? { background: "rgba(0,45,114,0.25)", color: "#E31837", border: "1px solid rgba(227,24,55,0.5)" }
+            style={selectedSport === "NBA"
+              ? { background: "rgba(200,16,46,0.15)", color: "#C8102E", border: "1px solid rgba(200,16,46,0.5)" }
               : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
             }
           >
             <img
-              src="https://www.mlbstatic.com/team-logos/league-on-dark/1.svg"
-              alt="MLB"
+              src="https://cdn.nba.com/logos/leagues/logo-nba.svg"
+              alt="NBA"
               width={16}
               height={16}
-              style={{ opacity: selectedSport === "MLB" ? 1 : 0.5 }}
+              style={{ opacity: selectedSport === "NBA" ? 1 : 0.5 }}
             />
-            MLB
+            NBA
           </button>
           {/* Splits timestamp — pushed to the right */}
           <div className="ml-auto flex items-center gap-1.5">

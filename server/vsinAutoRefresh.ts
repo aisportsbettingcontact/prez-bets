@@ -65,6 +65,9 @@ export interface RefreshResult {
   nhlInserted: number;       // new NHL games inserted (VSiN stubs)
   nhlScheduleInserted: number; // new NHL-only games inserted from schedule
   nhlTotal: number;          // total NHL VSiN games processed
+  mlbUpdated: number;        // MLB games matched + updated (VSiN)
+  mlbInserted: number;       // new MLB games inserted (VSiN stubs)
+  mlbTotal: number;          // total MLB VSiN games processed
   gameDate: string;          // today YYYY-MM-DD (PST)
 }
 
@@ -525,6 +528,7 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
  */
 async function refreshMlb(todayStr: string): Promise<{
   updated: number;
+  inserted: number; // always 0 — MLB schedule insertion is via MLB Stats API, not VSiN
   total: number;
 }> {
   const tag = "[refreshMlb]";
@@ -649,7 +653,7 @@ async function refreshMlb(todayStr: string): Promise<{
   console.log(
     `${tag} ✅ DONE — splits_updated=${totalUpdated} db_games=${existingToday.length} vsin_games=${vsinSplits.length}`
   );
-  return { updated: totalUpdated, total: vsinSplits.length };
+  return { updated: totalUpdated, inserted: 0, total: vsinSplits.length };
 }
 
 // ─── AN API DK Odds Auto-Population ──────────────────────────────────────────
@@ -924,13 +928,18 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
       nhlInserted: nhlResult.inserted,
       nhlScheduleInserted: nhlResult.scheduleInserted,
       nhlTotal: nhlResult.total,
+      mlbUpdated: mlbResult.updated,
+      mlbInserted: mlbResult.inserted,
+      mlbTotal: mlbResult.total,
       gameDate: todayStr,
     };
 
     lastRefreshResult = result;
     console.log(
       `[VSiNAutoRefresh] Done — ` +
-      `NBA: ${nbaResult.updated} updated, ${nbaResult.inserted} inserted, ${nbaResult.scheduleInserted} schedule-only`
+      `NBA: ${nbaResult.updated} updated, ${nbaResult.inserted} inserted, ${nbaResult.scheduleInserted} schedule-only | ` +
+      `NHL: ${nhlResult.updated} updated, ${nhlResult.inserted} inserted, ${nhlResult.scheduleInserted} schedule-only | ` +
+      `MLB: ${mlbResult.updated} updated, ${mlbResult.inserted} inserted, ${mlbResult.total} total`
     );
     return result;
   } catch (err) {
@@ -1099,6 +1108,7 @@ export async function runVsinRefreshManual(
 
     let nbaResult   = { updated: 0, inserted: 0, scheduleInserted: 0, total: 0 };
     let nhlResult   = { updated: 0, inserted: 0, scheduleInserted: 0, total: 0 };
+    let mlbResult   = { updated: 0, inserted: 0, total: 0 };
 
     if (doNba) {
       console.log(`[VSiNAutoRefresh][MANUAL][NBA] ── Refreshing NBA VSiN splits + schedule…`);
@@ -1132,8 +1142,8 @@ export async function runVsinRefreshManual(
 
     // MLB VSiN splits refresh (manual)
     if (doMlb) {
-      console.log(`[VSiNAutoRefresh][MANUAL][MLB] ── Refreshing MLB VSiN splits…`);
-      const mlbResult = await refreshMlb(todayStr);
+      console.log(`[VSiNAutoRefresh][MANUAL][MLB] —— Refreshing MLB VSiN splits…`);
+      mlbResult = await refreshMlb(todayStr);
       console.log(
         `[VSiNAutoRefresh][MANUAL][MLB] ✓ MLB VSiN splits done — ` +
         `updated=${mlbResult.updated} total=${mlbResult.total}`
@@ -1200,6 +1210,9 @@ export async function runVsinRefreshManual(
       nhlInserted: nhlResult.inserted,
       nhlScheduleInserted: nhlResult.scheduleInserted,
       nhlTotal: nhlResult.total,
+      mlbUpdated: mlbResult.updated,
+      mlbInserted: mlbResult.inserted,
+      mlbTotal: mlbResult.total,
       gameDate: todayStr,
     };
 

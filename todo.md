@@ -2177,3 +2177,9 @@
 - [ ] Remove NCAAM-specific tRPC procedures and DB queries that populate NCAAM data
 - [ ] Verify no NCAAM data leaks to public feed after removal
 - [ ] Run vitest suite and save checkpoint
+
+## NCAAM Removal Cleanup (2026-04-08)
+- [ ] Delete all dead NCAAM files (fix_sweet16_games.ts, ncaamModelWatcher.ts, vsinScraper.ts, dbPopulationAudit.ts, and any other dead NCAAM-only files)
+- [ ] Make MLB the primary/default sport tab across Dashboard, ModelProjections, PublishProjections, BettingSplits
+- [ ] Purge all NCAAM games from the database (DELETE WHERE sport = 'NCAAM')
+- [ ] Add MLB to VSiN auto-refresh cron scheduler in vsinAutoRefresh.ts
