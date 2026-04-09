@@ -20,7 +20,7 @@ async function main() {
   
   let allGames;
   try {
-    allGames = await scrapeVsinBettingSplits("front");
+    allGames = await scrapeVsinBettingSplits("today");
     console.log(`\n✅ Total games returned: ${allGames.length}`);
     
     const bySport: Record<string, number> = {};
@@ -87,7 +87,7 @@ async function main() {
   console.log("-".repeat(60));
   
   try {
-    const nbaGames = await scrapeVsinBettingSplits("front", "NBA");
+    const nbaGames = await scrapeVsinBettingSplits("today", "NBA");
     console.log(`✅ NBA games returned: ${nbaGames.length}`);
     
     const nonNba = nbaGames.filter(g => g.sport !== "NBA");

@@ -68,7 +68,10 @@ export interface VsinSplitsGame {
   mlAwayBetsPct: number | null;
 }
 
-const VSIN_BASE = "https://data.vsin.com/betting-splits/?bookid=dk";
+// Combined page (NBA + NHL + CBB): use source=DK with view=today or view=tomorrow
+const VSIN_BASE = "https://data.vsin.com/betting-splits/?source=DK";
+// MLB-specific page: ?source=DK&sport=MLB shows both today + tomorrow in one response
+const VSIN_MLB_URL = "https://data.vsin.com/betting-splits/?source=DK&sport=MLB";
 const HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -263,7 +266,7 @@ function parseSpTable(
  * @returns Array of VsinSplitsGame objects
  */
 export async function scrapeVsinBettingSplits(
-  view: "front" | "tomorrow" = "front",
+  view: "today" | "tomorrow" = "today",
   filterSport?: VsinSplitsSport
 ): Promise<VsinSplitsGame[]> {
   const url = `${VSIN_BASE}&view=${view}`;
@@ -337,16 +340,16 @@ export async function scrapeVsinBettingSplitsBothDays(
   const startTime = Date.now();
 
   // Fetch both views in parallel for speed
-  const [frontResults, tomorrowResults] = await Promise.allSettled([
-    scrapeVsinBettingSplits("front", filterSport),
+  const [todayResults, tomorrowResults] = await Promise.allSettled([
+    scrapeVsinBettingSplits("today", filterSport),
     scrapeVsinBettingSplits("tomorrow", filterSport),
   ]);
 
-  const front = frontResults.status === "fulfilled" ? frontResults.value : [];
+  const front = todayResults.status === "fulfilled" ? todayResults.value : [];
   const tomorrow = tomorrowResults.status === "fulfilled" ? tomorrowResults.value : [];
 
-  if (frontResults.status === "rejected") {
-    console.warn(`${logTag} front fetch failed:`, frontResults.reason);
+  if (todayResults.status === "rejected") {
+    console.warn(`${logTag} today fetch failed:`, todayResults.reason);
   }
   if (tomorrowResults.status === "rejected") {
     console.warn(`${logTag} tomorrow fetch failed:`, tomorrowResults.reason);
@@ -376,23 +379,53 @@ export async function scrapeVsinBettingSplitsBothDays(
 /**
  * Scrapes VSiN MLB betting splits specifically.
  *
- * Previously used a dedicated MLB URL (https://data.vsin.com/mlb/betting-splits/)
- * which now redirects to the unified page. This function is maintained for
- * backward compatibility with callers in vsinAutoRefresh.ts.
+ * MLB games are NOT shown on the combined ?view=today or ?view=tomorrow pages.
+ * They are only available at ?source=DK&sport=MLB which shows both today and
+ * tomorrow in a single response (two sport header blocks).
  *
- * @returns Array of VsinSplitsGame objects for MLB only
+ * @returns Array of VsinSplitsGame objects for MLB only (today + tomorrow)
  */
 export async function scrapeVsinMlbBettingSplits(): Promise<VsinSplitsGame[]> {
   const logTag = `[VSiNSplits][MLB]`;
-  console.log(`${logTag} Fetching MLB splits from unified page (old MLB URL now redirects)...`);
+  console.log(`${logTag} Fetching MLB splits from MLB-specific URL: ${VSIN_MLB_URL}`);
   const startTime = Date.now();
 
-  // Use the unified page with MLB filter — the old /mlb/betting-splits/ URL
-  // redirects to /betting-splits/?source=DK&sport=MLB which is the same page
-  const results = await scrapeVsinBettingSplitsBothDays("MLB");
+  const resp = await fetch(VSIN_MLB_URL, { headers: HEADERS });
+  if (!resp.ok) {
+    throw new Error(`${logTag} HTTP ${resp.status} fetching ${VSIN_MLB_URL}`);
+  }
+  const html = await resp.text();
+  const $ = cheerio.load(html);
+
+  const tables = $("table.sp-table");
+  if (!tables.length) {
+    console.error(`${logTag} No sp-table found on MLB page — page structure unknown`);
+    console.error(`${logTag} Page HTML snippet: ${html.substring(0, 500)}`);
+    return [];
+  }
+
+  console.log(`${logTag} Found ${tables.length} sp-table block(s) on MLB page`);
+  const allResults: VsinSplitsGame[] = [];
+  tables.each((_i, table) => {
+    const sportHeader = $(table).find("th.sp-sport-name").text().trim();
+    const blockTag = `${logTag}[${sportHeader.substring(0, 30)}]`;
+    console.log(`${blockTag} Parsing block (header: "${sportHeader.substring(0, 60)}")`);
+    const parsed = parseSpTable($, $(table), blockTag, "MLB");
+    allResults.push(...parsed);
+  });
+
+  // Deduplicate by gameId (today and tomorrow blocks may share game IDs near midnight)
+  const seen = new Set<string>();
+  const deduped: VsinSplitsGame[] = [];
+  for (const g of allResults) {
+    if (!seen.has(g.gameId)) {
+      seen.add(g.gameId);
+      deduped.push(g);
+    }
+  }
 
   console.log(
-    `${logTag} ✅ DONE — ${results.length} MLB games parsed in ${Date.now() - startTime}ms`
+    `${logTag} ✅ DONE — ${allResults.length} raw rows → ${deduped.length} unique MLB games in ${Date.now() - startTime}ms`
   );
-  return results;
+  return deduped;
 }
