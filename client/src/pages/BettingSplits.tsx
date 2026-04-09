@@ -13,7 +13,6 @@ import { CalendarPicker, todayUTC } from "@/components/CalendarPicker";
 // CDN icon URLs
 const CDN_TEST_TUBE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/icon-test-tube_0cb720ac.png";
 const CDN_MONEY_BAG = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/icon-money-bag_b9c73c5d.png";
-const CDN_MARCH_MADNESS = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/icon-march-madness_ecd8f481.png";
 const CDN_NBA = "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/icon-nba_3fa4f508.png";
 
 function TestTubeIcon({ size = 14 }: { size?: number }) {
@@ -29,7 +28,6 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
-import { getTeamByDbSlug } from "@shared/ncaamTeams";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 import { Link } from "wouter";
 
@@ -86,10 +84,9 @@ function formatDateShort(dateStr: string): string {
 
 // ─── Team Logo Badge ──────────────────────────────────────────────────────────
 function TeamBadge({ slug, size = 22 }: { slug: string; size?: number }) {
-  const ncaa = getTeamByDbSlug(slug);
-  const nba = !ncaa ? getNbaTeamByDbSlug(slug) : null;
-  const logo = ncaa?.logoUrl ?? nba?.logoUrl;
-  const initials = (ncaa?.ncaaName ?? nba?.name ?? slug.replace(/_/g, " ")).slice(0, 2).toUpperCase();
+  const nba = getNbaTeamByDbSlug(slug);
+  const logo = nba?.logoUrl;
+  const initials = (nba?.name ?? slug.replace(/_/g, " ")).slice(0, 2).toUpperCase();
   return (
     <div className="rounded overflow-hidden bg-secondary flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}>
       {logo ? <img src={logo} alt={initials} className="w-full h-full object-contain" /> : <span style={{ fontSize: 7 }} className="font-bold text-muted-foreground">{initials}</span>}
@@ -101,14 +98,12 @@ function TeamBadge({ slug, size = 22 }: { slug: string; size?: number }) {
 type GameRow = { id: number; awayTeam: string; homeTeam: string; gameDate: string; startTimeEst: string | null; awayBookSpread?: string | null };
 
 function SearchResultRow({ game, onClick }: { game: GameRow; onClick: () => void }) {
-  const awayNcaa = getTeamByDbSlug(game.awayTeam);
-  const homeNcaa = getTeamByDbSlug(game.homeTeam);
-  const awayNba = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
-  const homeNba = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
-  const awaySchool = awayNcaa?.ncaaName ?? awayNba?.city ?? game.awayTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  const awayNick = awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? "";
-  const homeSchool = homeNcaa?.ncaaName ?? homeNba?.city ?? game.homeTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  const homeNick = homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? "";
+  const awayNba = getNbaTeamByDbSlug(game.awayTeam);
+  const homeNba = getNbaTeamByDbSlug(game.homeTeam);
+  const awaySchool = awayNba?.city ?? game.awayTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const awayNick = awayNba?.nickname ?? "";
+  const homeSchool = homeNba?.city ?? game.homeTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const homeNick = homeNba?.nickname ?? "";
   const time = formatMilitaryTime(game.startTimeEst);
   const dateShort = formatDateShort(game.gameDate);
   return (
@@ -144,7 +139,7 @@ export default function BettingSplitsPage() {
   const [, setLocation] = useLocation();
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA">("NCAAM");
+  const [selectedSport, setSelectedSport] = useState<"NBA">("NBA");
   const [selectedStatuses, setSelectedStatuses] = useState<Set<"upcoming" | "live" | "final">>(new Set());
   const [selectedDate, setSelectedDate] = useState<string>(() => todayUTC());
   const [searchQuery, setSearchQuery] = useState("");
@@ -265,10 +260,9 @@ export default function BettingSplitsPage() {
     if (!games || !q) return [];
     return [...games.filter(game => {
       if (!game) return false;
-      const awayNcaa = getTeamByDbSlug(game.awayTeam); const homeNcaa = getTeamByDbSlug(game.homeTeam);
-      const awayNba = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
-      const homeNba = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
-      const terms = [awayNcaa?.ncaaName ?? awayNba?.name ?? "", awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? "", game.awayTeam.replace(/_/g, " "), homeNcaa?.ncaaName ?? homeNba?.name ?? "", homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? "", game.homeTeam.replace(/_/g, " ")].map(s => s.toLowerCase());
+      const awayNba = getNbaTeamByDbSlug(game.awayTeam);
+      const homeNba = getNbaTeamByDbSlug(game.homeTeam);
+      const terms = [awayNba?.name ?? "", awayNba?.nickname ?? "", game.awayTeam.replace(/_/g, " "), homeNba?.name ?? "", homeNba?.nickname ?? "", game.homeTeam.replace(/_/g, " ")].map(s => s.toLowerCase());
       return terms.some(t => t.includes(q));
     })].sort((a, b) => {
       const dateCmp = (a!.gameDate ?? "").localeCompare(b!.gameDate ?? "");
@@ -397,7 +391,7 @@ export default function BettingSplitsPage() {
           </Link>
         </div>
 
-        {/* Row 3: Unified filter bar — DATE | NCAAM | NBA | Search */}
+        {/* Row 3: Unified filter bar — DATE | NBA | Search */}
         <div ref={searchRef} className="relative px-3 pt-1 pb-1 flex items-center gap-2">
 
           {/* DATE picker — calendar dropdown */}
@@ -408,12 +402,7 @@ export default function BettingSplitsPage() {
             isAdmin={isOwner || user?.role === "admin"}
           />
 
-          {/* MARCH MADNESS pill */}
-          <button onClick={() => setSelectedSport("NCAAM")} className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide transition-all flex-shrink-0"
-            style={selectedSport === "NCAAM" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }}>
-            <img src={CDN_MARCH_MADNESS} alt="March Madness" width={14} height={10} style={{ objectFit: "contain", filter: selectedSport === "NCAAM" ? "invert(1)" : "invert(0.45)", flexShrink: 0 }} />
-            MARCH MADNESS
-          </button>
+
 
           {/* NBA pill */}
           <button onClick={() => setSelectedSport("NBA")} className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide transition-all flex-shrink-0"
@@ -462,7 +451,7 @@ export default function BettingSplitsPage() {
               <span
                 className="font-semibold"
                 style={{ color: '#a3a3a3', letterSpacing: '0.06em', fontSize: 'clamp(9px, 2.8vw, 17px)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}
-              >{selectedSport === 'NCAAM' ? "MEN'S COLLEGE BASKETBALL" : 'NBA BASKETBALL'}</span>
+              >NBA BASKETBALL</span>
             </div>
             <div className="flex-1" />
           </div>

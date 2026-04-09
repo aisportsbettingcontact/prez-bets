@@ -38,14 +38,14 @@ function formatDate(d: Date): string {
   });
 }
 
-const SPORT_OPTIONS = ["NCAAM", "NBA", "NFL", "NCAAF", "MLB", "NHL"];
+const SPORT_OPTIONS = ["NBA", "NFL", "NCAAF", "MLB", "NHL"];
 
 export default function FilesPage() {
   const [, setLocation] = useLocation();
   const { isAuthenticated, loading } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedSport, setSelectedSport] = useState("NCAAM");
+  const [selectedSport, setSelectedSport] = useState("MLB");
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   const utils = trpc.useUtils();

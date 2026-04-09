@@ -11,7 +11,6 @@ import { serveStatic, setupVite } from "./vite";
 import { startDailyPurgeSchedule } from "../dailyPurge";
 import { startVsinAutoRefresh } from "../vsinAutoRefresh";
 import { startNbaModelSyncScheduler } from "../nbaModelSync";
-import { startModelWatcher } from "../ncaamModelWatcher";
 import { startNhlModelSyncScheduler } from "../nhlModelSync";
 import { startNhlGoalieWatcher } from "../nhlGoalieWatcher";
 import { startDiscordBot } from "../discord/bot";
@@ -124,8 +123,6 @@ async function startServer() {
     startVsinAutoRefresh();
     // Auto-sync NBA model projections from Google Sheet every 3 hours (9AM–midnight PST)
     startNbaModelSyncScheduler();
-    // NCAAM model v9 watcher — polls every 60s, fires v9 on any game with lines but no projections
-    startModelWatcher();
     // NHL model sync — runs every 30 min (9AM–9PM PST), models unmodeled NHL games
     startNhlModelSyncScheduler();
     // NHL goalie watcher — checks RotoWire every 10 min for goalie changes, re-runs model on scratch

@@ -534,7 +534,7 @@ export function BettingSplitsPanel({
   awayNickname: _aN, homeNickname: _hN,
 }: BettingSplitsPanelProps) {
   const [mobileMarket, setMobileMarket] = useState<MobileMarket>("spread");
-  const sport = game.sport ?? "NCAAM";
+  const sport = game.sport ?? "NBA";
   const { data: colors } = trpc.teamColors.getForGame.useQuery(
     { awayTeam: game.awayTeam, homeTeam: game.homeTeam, sport },
     { staleTime: 1000 * 60 * 60 }

@@ -154,9 +154,7 @@ export async function deleteModelFile(id: number) {
 // ─── Games ───────────────────────────────────────────────────────────────────
 
 /**
- * Sort game rows by start time. NCAAM uses PST, NBA/NHL use EST.
- * '21:00' PST (New Mexico @ San Diego St) sorts correctly after '19:00' PST (Hawaii).
- * The old '00:00' special case is no longer needed since NCAAM switched to PST.
+ * Sort game rows by start time ascending.
  * This replaces the CASE WHEN ORDER BY SQL expression which is not supported
  * by the TiDB driver. DB-level sort by sortOrder is done first, then this
  * stable sort applies start-time ordering on top.
@@ -249,9 +247,9 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }): P
     .where(and(...conditions))
     .orderBy(games.gameDate, games.sortOrder);
 
-  // Gate model projections (NCAAM only): only expose model fields when the owner has approved them.
-  // NBA games bypass this gate — their model data (if any) is always returned as-is.
-  // If publishedModel = false on an NCAAM game, null out all model-related fields.
+  // Gate model projections: only expose model fields when the owner has approved them.
+  // NBA/NHL/MLB games bypass this gate — their model data is always returned as-is.
+  // If publishedModel = false on an NCAAM game (legacy), null out all model-related fields.
   const MODEL_FIELDS = [
     'awayModelSpread', 'homeModelSpread', 'modelTotal',
     'modelAwayML', 'modelHomeML', 'modelAwayScore', 'modelHomeScore',
@@ -446,7 +444,7 @@ export async function updateGameProjections(
     modelHomePLOdds?: string | null;
     modelOverOdds?: string | null;
     modelUnderOdds?: string | null;
-    // NCAAM model fair odds at book's spread line
+    // Model fair odds at book's spread line
     modelAwaySpreadOdds?: string | null;
     modelHomeSpreadOdds?: string | null;
   }
@@ -469,7 +467,7 @@ export async function updateBookOdds(
     bookTotal?: number | null;
     sortOrder?: number;
     startTimeEst?: string;
-    // Betting splits (NCAAM: 4 fields; NBA: 6 fields + ML odds)
+    // Betting splits (NBA: 6 fields + ML odds; NHL/MLB: 4 fields)
     spreadAwayBetsPct?: number | null;
     spreadAwayMoneyPct?: number | null;
     totalOverBetsPct?: number | null;
@@ -700,8 +698,9 @@ export interface TeamColors {
 
 /**
  * Fetch team colors from the DB for a given team slug and sport.
- * For NCAAM, looks up ncaam_teams by dbSlug.
  * For NBA, looks up nba_teams by dbSlug.
+ * For NHL, looks up nhl_teams by dbSlug.
+ * For MLB, looks up mlb_teams by abbrev.
  * Returns null if team not found or no colors stored.
  */
 export async function getTeamColors(dbSlug: string, sport: string): Promise<TeamColors | null> {
@@ -758,19 +757,12 @@ export async function getTeamColors(dbSlug: string, sport: string): Promise<Team
       .where(eq(mlbTeams.dbSlug, dbSlug))
       .limit(1);
     return rows2[0] ?? null;
+  } else if (sport === "NCAAM") {
+    // NCAAM season ended — return null for legacy games
+    return null;
   } else {
-    // NCAAM (default)
-    const rows = await db
-      .select({
-        primaryColor: ncaamTeams.primaryColor,
-        secondaryColor: ncaamTeams.secondaryColor,
-        tertiaryColor: ncaamTeams.tertiaryColor,
-        abbrev: ncaamTeams.abbrev,
-      })
-      .from(ncaamTeams)
-      .where(eq(ncaamTeams.dbSlug, dbSlug))
-      .limit(1);
-    return rows[0] ?? null;
+    // Unknown sport — return null
+    return null;
   }
 }
 
@@ -978,7 +970,7 @@ export async function updateAnOdds(
  * Called after every successful AN odds update (auto cron + manual refresh).
  *
  * @param gameId  - games.id FK
- * @param sport   - 'NCAAM' | 'NBA' | 'NHL'
+ * @param sport   - 'NBA' | 'NHL' | 'MLB'
  * @param source  - 'auto' (hourly cron) | 'manual' (Refresh Now button)
  * @param snap    - the current DK NJ lines to snapshot
  */
@@ -1226,7 +1218,7 @@ export async function advanceBracketWinner(gameId: number): Promise<string> {
 }
 
 /**
- * Audit all NCAAM bracket games that are FINAL and ensure their winners
+ * Audit all bracket games (legacy NCAAM) that are FINAL and ensure their winners
  * have been advanced to the next round. Safe to call repeatedly.
  */
 export async function auditAndAdvanceAllBracketWinners(): Promise<number> {
@@ -1263,9 +1255,9 @@ export async function auditAndAdvanceAllBracketWinners(): Promise<number> {
  * Returns which sports have at least one game with live odds on today's UTC date
  * or tomorrow's UTC date. Used by the frontend to hide sport tabs with no upcoming games.
  */
-export async function getActiveSports(): Promise<{ NBA: boolean; NHL: boolean; NCAAM: boolean; MLB: boolean }> {
+export async function getActiveSports(): Promise<{ NBA: boolean; NHL: boolean; MLB: boolean }> {
   const db = await getDb();
-  if (!db) return { NBA: false, NHL: false, NCAAM: false, MLB: false };
+  if (!db) return { NBA: false, NHL: false, MLB: false };
    // Apply the same 11:00 UTC gate used by the frontend todayUTC() function.
   // Before 11:00 UTC the feed still shows the previous day's slate, so
   // "today" for the purposes of active-sport detection is (UTC date - 1 day).
@@ -1303,21 +1295,11 @@ export async function getActiveSports(): Promise<{ NBA: boolean; NHL: boolean; N
     .groupBy(games.sport);
   const proActive = new Set(proRows.map((r: { sport: string }) => r.sport));
 
-  // NCAAM: only bracket games (March Madness tournament) count — regular season games are ignored
-  const oddsFilter = or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!;
-  const ncaamRows = await db
-    .select({ sport: games.sport })
-    .from(games)
-    .where(and(dateFilter, oddsFilter, eq(games.sport, 'NCAAM'), isNotNull(games.bracketGameId)))
-    .limit(1);
-  const ncaamActive = ncaamRows.length > 0;
-
-  console.log(`[activeSports] todayUTC=${todayUTC} tomorrowUTC=${tomorrowUTC} NBA=${proActive.has('NBA')} NHL=${proActive.has('NHL')} MLB=${proActive.has('MLB')} NCAAM=${ncaamActive}`);
+  console.log(`[activeSports] todayUTC=${todayUTC} tomorrowUTC=${tomorrowUTC} NBA=${proActive.has('NBA')} NHL=${proActive.has('NHL')} MLB=${proActive.has('MLB')}`);
   return {
     NBA: proActive.has('NBA'),
     NHL: proActive.has('NHL'),
     MLB: proActive.has('MLB'),
-    NCAAM: ncaamActive,
   };
 }
 

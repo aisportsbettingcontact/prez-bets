@@ -25,7 +25,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/lib/trpc";
-import { getTeamByDbSlug } from "@shared/ncaamTeams";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 import { NHL_BY_DB_SLUG } from "@shared/nhlTeams";
 import { MLB_BY_ABBREV } from "@shared/mlbTeams";
@@ -38,9 +37,7 @@ type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
 
 // ── Time formatting ───────────────────────────────────────────────────────────
-// NCAAM uses PST (Pacific Standard Time) to avoid midnight confusion for
-// late-night West Coast games. NBA and NHL use EST.
-function formatMilitaryTime(time: string, sport?: string): string {
+function formatMilitaryTime(time: string, _sport?: string): string {
   const upper = time?.toUpperCase() ?? "";
   if (!time || upper === "TBD" || upper === "TBA" || !time.includes(":")) return "TBD";
   // Handle already-formatted 12-hour strings like "7:05 PM ET" or "12:15 PM ET"
@@ -49,8 +46,7 @@ function formatMilitaryTime(time: string, sport?: string): string {
     const h = parseInt(already12h[1], 10);
     const m = already12h[2];
     const ap = already12h[3].toUpperCase();
-    const tz = sport === "NCAAM" ? "PST" : "ET";
-    return `${h}:${m} ${ap} ${tz}`;
+    return `${h}:${m} ${ap} ET`;
   }
   // Military time format (e.g. "19:05")
   const parts = time.split(":");
@@ -59,9 +55,7 @@ function formatMilitaryTime(time: string, sport?: string): string {
   if (isNaN(hours)) return "TBD";
   const ampm = hours >= 12 ? "PM" : "AM";
   hours = hours % 12 || 12;
-  // NCAAM uses PST; NBA, NHL, and MLB use ET
-  const tz = sport === "NCAAM" ? "PST" : "ET";
-  return `${hours}:${minutes} ${ampm} ${tz}`;
+  return `${hours}:${minutes} ${ampm} ET`;
 }
 
 // ── Date formatting ───────────────────────────────────────────────────────────
@@ -159,8 +153,6 @@ function parseSideFromLabel(label: string | null | undefined): string | null {
 function normalizeEdgeLabel(label: string | null | undefined): string {
   if (!label || label.toUpperCase() === "PASS") return "PASS";
   return label.replace(/^([a-z][a-z0-9_]*)(\s+\()/i, (_, slug, rest) => {
-    const ncaa = getTeamByDbSlug(slug);
-    if (ncaa) return ncaa.ncaaName + rest;
     const nba = getNbaTeamByDbSlug(slug);
     if (nba) return nba.name + rest;
     return slug.replace(/_/g, " ") + rest;
@@ -730,7 +722,7 @@ interface DesktopMergedPanelProps {
     modelHomePLOdds?: string | null;
     modelOverOdds?: string | null;
     modelUnderOdds?: string | null;
-    // NCAAM model fair odds at derived model spread/total line
+    // Model fair odds at derived model spread/total line
     modelAwaySpreadOdds?: string | null;
     modelHomeSpreadOdds?: string | null;
   };
@@ -762,7 +754,7 @@ function DesktopMergedPanel({
   game,
 }: DesktopMergedPanelProps) {
   // ── Team colors for split bars ────────────────────────────────────────────
-  const sport = game.sport ?? 'NCAAM';
+  const sport = game.sport ?? 'NBA';
   const { data: colors } = trpc.teamColors.getForGame.useQuery(
     { awayTeam: game.awayTeam, homeTeam: game.homeTeam, sport },
     { staleTime: 1000 * 60 * 60 }
@@ -864,42 +856,41 @@ function DesktopMergedPanel({
   const displayAwayML     = game.awayML ?? '—';
   const displayHomeML     = game.homeML ?? '—';
 
-  // For NHL/NCAAM games, append model odds in parentheses
+  // For NHL/MLB games, append model odds in parentheses
   const isNhlGame   = game.sport === 'NHL';
-  const isNcaamGame = game.sport === 'NCAAM';
   const isMlbGame   = game.sport === 'MLB';
   const mdlAwayPLOdds = game.modelAwayPLOdds ?? null;
   const mdlHomePLOdds = game.modelHomePLOdds ?? null;
   const mdlOverOdds   = game.modelOverOdds ?? null;
   const mdlUnderOdds  = game.modelUnderOdds ?? null;
-  // NCAAM model fair odds at book's spread line (computed by Python engine)
+  // MLB model fair odds at book's spread line (computed by Python engine)
   const mdlAwaySpreadOdds = game.modelAwaySpreadOdds ?? null;
   const mdlHomeSpreadOdds = game.modelHomeSpreadOdds ?? null;
 
   const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread)
     ? (isNhlGame && mdlAwayPLOdds
         ? `${spreadSign(mdlAwaySpread)} (${mdlAwayPLOdds})`
-        : (isNcaamGame || isMlbGame) && mdlAwaySpreadOdds
+        : isMlbGame && mdlAwaySpreadOdds
           ? `${spreadSign(mdlAwaySpread)} (${mdlAwaySpreadOdds})`
           : spreadSign(mdlAwaySpread))
     : '—';
   const mdlHomeSpreadStr = hasModelData && !isNaN(mdlHomeSpread)
     ? (isNhlGame && mdlHomePLOdds
         ? `${spreadSign(mdlHomeSpread)} (${mdlHomePLOdds})`
-        : (isNcaamGame || isMlbGame) && mdlHomeSpreadOdds
+        : isMlbGame && mdlHomeSpreadOdds
           ? `${spreadSign(mdlHomeSpread)} (${mdlHomeSpreadOdds})`
           : spreadSign(mdlHomeSpread))
     : '—';
   // For NHL: display BOOK's total line with model fair odds at that line
-  // For NCAAM/MLB: display model's own total with model fair odds at that line
+  // For MLB: display model's own total with model fair odds at that line
   const mdlDisplayTotal = isNhlGame && !isNaN(bkTotal) ? bkTotal : mdlTotal;
   const mdlOver = hasModelData && !isNaN(mdlDisplayTotal)
-    ? ((isNhlGame || isNcaamGame || isMlbGame) && mdlOverOdds
+    ? ((isNhlGame || isMlbGame) && mdlOverOdds
         ? `${String(mdlDisplayTotal)} (${mdlOverOdds})`
         : String(mdlDisplayTotal))
     : '—';
   const mdlUnder = hasModelData && !isNaN(mdlDisplayTotal)
-    ? ((isNhlGame || isNcaamGame || isMlbGame) && mdlUnderOdds
+    ? ((isNhlGame || isMlbGame) && mdlUnderOdds
         ? `${String(mdlDisplayTotal)} (${mdlUnderOdds})`
         : String(mdlDisplayTotal))
     : '—';
@@ -1587,7 +1578,7 @@ interface OddsLinesPanelProps {
   modelHomePLOdds?: string | null;
   modelOverOdds?: string | null;
   modelUnderOdds?: string | null;
-  // NCAAM model fair odds at book's spread line
+  // MLB model fair odds at book's spread line
   modelAwaySpreadOdds?: string | null;
   modelHomeSpreadOdds?: string | null;
 }
@@ -1666,34 +1657,33 @@ function OddsLinesPanel({
   const awayMlDisplay = dkAwayMlProp ?? awayMl;
   const homeMlDisplay = dkHomeMlProp ?? homeMl;
 
-  // Model values — for NHL/NCAAM/MLB games, append odds in parentheses
+  // Model values — for NHL/MLB games, append odds in parentheses
   const isNhlGame   = sport === 'NHL';
-  const isNcaamGame = sport === 'NCAAM';
   const isMlbGame   = sport === 'MLB';
   const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread)
     ? (isNhlGame && modelAwayPLOdds
         ? `${spreadSign(mdlAwaySpread)} (${modelAwayPLOdds})`
-        : (isNcaamGame || isMlbGame) && modelAwaySpreadOdds
+        : isMlbGame && modelAwaySpreadOdds
           ? `${spreadSign(mdlAwaySpread)} (${modelAwaySpreadOdds})`
           : spreadSign(mdlAwaySpread))
     : '—';
   const mdlHomeSpreadStr = hasModelData && !isNaN(mdlHomeSpread)
     ? (isNhlGame && modelHomePLOdds
         ? `${spreadSign(mdlHomeSpread)} (${modelHomePLOdds})`
-        : (isNcaamGame || isMlbGame) && modelHomeSpreadOdds
+        : isMlbGame && modelHomeSpreadOdds
           ? `${spreadSign(mdlHomeSpread)} (${modelHomeSpreadOdds})`
           : spreadSign(mdlHomeSpread))
     : '—';
   // For NHL: display BOOK's total line with model fair odds at that line
-  // For NCAAM/MLB: display model's own total with model fair odds at that line
+  // For MLB: display model's own total with model fair odds at that line
   const mdlDisplayTotal = isNhlGame && !isNaN(bkTotal) ? bkTotal : mdlTotal;
   const mdlOverTotal = hasModelData && !isNaN(mdlDisplayTotal)
-    ? ((isNhlGame || isNcaamGame || isMlbGame) && modelOverOdds
+    ? ((isNhlGame || isMlbGame) && modelOverOdds
         ? `${String(mdlDisplayTotal)} (${modelOverOdds})`
         : String(mdlDisplayTotal))
     : '—';
   const mdlUnderTotal = hasModelData && !isNaN(mdlDisplayTotal)
-    ? ((isNhlGame || isNcaamGame || isMlbGame) && modelUnderOdds
+    ? ((isNhlGame || isMlbGame) && modelUnderOdds
         ? `${String(mdlDisplayTotal)} (${modelUnderOdds})`
         : String(mdlDisplayTotal))
     : '—';
@@ -1979,11 +1969,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const awayBookSpread = toNum(game.awayBookSpread);
   const homeBookSpread = toNum(game.homeBookSpread);
   const isNhlGame   = game.sport === 'NHL';
-  const isNcaamGame = game.sport === 'NCAAM';
   const isMlbGame   = game.sport === 'MLB';
   // For NHL: use modelAwayPuckLine/modelHomePuckLine (simulation-derived, e.g. "+1.5"/"-1.5")
   // instead of awayModelSpread/homeModelSpread (which may contain stale goal-differential values).
-  // For NCAAM/NBA: use awayModelSpread/homeModelSpread as before.
+  // For NBA: use awayModelSpread/homeModelSpread as before.
   const awayModelSpread = isNhlGame
     ? toNum(game.modelAwayPuckLine ?? game.awayModelSpread)
     : toNum(game.awayModelSpread);
@@ -1997,7 +1986,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const modelTotal = toNum(game.modelTotal);
 
   // Use game.spreadDiff (probability edge in pp, set by Python engine) for NHL.
-  // For NCAAM/NBA: compute diff from line values as before.
+  // For NBA: compute diff from line values as before.
   const spreadDiff = isNhlGame
     ? toNum(game.spreadDiff)
     : (!isNaN(awayModelSpread) && !isNaN(awayBookSpread))
@@ -2006,7 +1995,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   // For NHL: totalDiff is a probability edge in percentage points (set by Python engine).
   // Do NOT recalculate from |modelTotal - bookTotal| — that produces a goal difference (0.49)
   // which is always below the 8pp threshold, suppressing all total edges.
-  // For NCAAM/NBA: compute diff from line values as before.
+  // For NBA: compute diff from line values as before.
   const totalDiff = isNhlGame
     ? toNum(game.totalDiff)
     : (!isNaN(modelTotal) && !isNaN(bookTotal))
@@ -2050,27 +2039,24 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const displayAwayML     = game.awayML ?? '—';
   const displayHomeML     = game.homeML ?? '—';
 
-  // Resolve team info from NCAA, NBA, or NHL registry
-  const awayNcaa = getTeamByDbSlug(game.awayTeam);
-  const homeNcaa = getTeamByDbSlug(game.homeTeam);
-  const awayNba  = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
-  const homeNba  = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
-  const awayNhl  = (!awayNcaa && !awayNba) ? NHL_BY_DB_SLUG.get(game.awayTeam) ?? null : null;
-  const homeNhl  = (!homeNcaa && !homeNba) ? NHL_BY_DB_SLUG.get(game.homeTeam) ?? null : null;
-  const awayMlb  = (!awayNcaa && !awayNba && !awayNhl) ? MLB_BY_ABBREV.get(game.awayTeam) ?? null : null;
-  const homeMlb  = (!homeNcaa && !homeNba && !homeNhl) ? MLB_BY_ABBREV.get(game.homeTeam) ?? null : null;
+  // Resolve team info from NBA, NHL, or MLB registry
+  const awayNba  = getNbaTeamByDbSlug(game.awayTeam);
+  const homeNba  = getNbaTeamByDbSlug(game.homeTeam);
+  const awayNhl  = !awayNba ? NHL_BY_DB_SLUG.get(game.awayTeam) ?? null : null;
+  const homeNhl  = !homeNba ? NHL_BY_DB_SLUG.get(game.homeTeam) ?? null : null;
+  const awayMlb  = (!awayNba && !awayNhl) ? MLB_BY_ABBREV.get(game.awayTeam) ?? null : null;
+  const homeMlb  = (!homeNba && !homeNhl) ? MLB_BY_ABBREV.get(game.homeTeam) ?? null : null;
   // Normalize city abbreviations: "LA" → "Los Angeles" (defensive, DB should already have full name)
   const normCity = (c: string | undefined) => c === 'LA' ? 'Los Angeles' : c;
-  const awayName = awayNcaa?.ncaaName ?? normCity(awayNba?.city) ?? awayNhl?.city ?? awayMlb?.city ?? game.awayTeam.replace(/_/g, " ");
-  const homeName = homeNcaa?.ncaaName ?? normCity(homeNba?.city) ?? homeNhl?.city ?? homeMlb?.city ?? game.homeTeam.replace(/_/g, " ");
-  const awayNickname = awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? awayNhl?.nickname ?? awayMlb?.nickname ?? "";
-  const homeNickname = homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? homeNhl?.nickname ?? homeMlb?.nickname ?? "";
-  const awayLogoUrl = awayNcaa?.logoUrl ?? awayNba?.logoUrl ?? awayNhl?.logoUrl ?? awayMlb?.logoUrl;
-  const homeLogoUrl = homeNcaa?.logoUrl ?? homeNba?.logoUrl ?? homeNhl?.logoUrl ?? homeMlb?.logoUrl;
+  const awayName = normCity(awayNba?.city) ?? awayNhl?.city ?? awayMlb?.city ?? game.awayTeam.replace(/_/g, " ");
+  const homeName = normCity(homeNba?.city) ?? homeNhl?.city ?? homeMlb?.city ?? game.homeTeam.replace(/_/g, " ");
+  const awayNickname = awayNba?.nickname ?? awayNhl?.nickname ?? awayMlb?.nickname ?? "";
+  const homeNickname = homeNba?.nickname ?? homeNhl?.nickname ?? homeMlb?.nickname ?? "";
+  const awayLogoUrl = awayNba?.logoUrl ?? awayNhl?.logoUrl ?? awayMlb?.logoUrl;
+  const homeLogoUrl = homeNba?.logoUrl ?? homeNhl?.logoUrl ?? homeMlb?.logoUrl;
 
   const time = formatMilitaryTime(game.startTimeEst, game.sport);
-  // NCAAM uses PST — no midnight date-shift needed (00:00 is no longer used for NCAAM).
-  // NBA/NHL use EST — no date-shift needed either (games end before midnight EST).
+  // All sports use ET — no date-shift needed (games end before midnight ET).
   const displayDate = game.gameDate;
   const dateLabel = formatDate(displayDate);
 
@@ -2203,17 +2189,16 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
   // ── Score Panel ─────────────────────────────────────────────────────────────
   // Compact score panel for splits mode — logo + name only, score pushed right
-  // NCAAM: show school name (awayName/homeName); NBA: show team nickname (awayNickname/homeNickname)
-  const isNba = !awayNcaa && !!awayNba;
+  // NBA: show team nickname; NHL/MLB: show city name
+  const isNba = !!awayNba;
   const compactAwayLabel = isNba ? (awayNickname || awayName) : awayName;
   const compactHomeLabel = isNba ? (homeNickname || homeName) : homeName;
 
   // Mobile abbreviations: city-based 3-char uppercase label for frozen score panel
-  // NHL: use official abbrev (e.g. "NSH", "EDM"). NBA: use abbrev if available.
-  // NCAAM: derive from city/school name (first word, max 4 chars).
+  // NHL: use official abbrev (e.g. "NSH", "EDM"). NBA/MLB: derive from city name.
   const makeCityAbbr = (nhlEntry: typeof awayNhl, _nbaEntry: typeof awayNba, name: string): string => {
     if (nhlEntry?.abbrev) return nhlEntry.abbrev;          // NHL: official 3-letter abbrev
-    // NCAAM / NBA fallback: first word of city/school name, max 4 chars
+    // NBA / MLB fallback: first word of city/school name, max 4 chars
     const word = (name || '').split(/\s+/)[0] ?? name;
     return word.slice(0, 4).toUpperCase();
   };
@@ -2436,7 +2421,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       <div className="flex flex-1 flex-col" style={{ gap: 0, justifyContent: teamGroupJustify, paddingTop: teamGroupPaddingTop }}>
       {/* Away team row */}
       <div className="flex items-center justify-between gap-2 py-1 w-full">
-        {/* Left: logo + name/nickname — always two lines for both NCAAM and NBA */}
+        {/* Left: logo + name/nickname — always two lines */}
           <div className="flex items-center gap-2">
           <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={36} />
           {/* Uniform font size — no auto-scaling, no truncation */}
@@ -2489,7 +2474,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
       {/* Home team row */}
       <div className="flex items-center justify-between gap-2 py-1 w-full">
-        {/* Left: logo + name/nickname — always two lines for both NCAAM and NBA */}
+        {/* Left: logo + name/nickname — always two lines */}
           <div className="flex items-center gap-2">
           <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={36} />
           {/* Uniform font size — no auto-scaling, no truncation */}
@@ -2932,7 +2917,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               if (!raw) return '';
               const s = raw.trim();
 
-              // ── Server-emitted NCAAM clock strings (already transformed) ──────
+              // ── Server-emitted clock strings (already transformed) ──────
               // These come pre-formatted from ncaaScoreboard.ts; pass through directly.
               if (/^END\s+1ST\s+HALF$/i.test(s)) return 'END 1ST HALF';
               if (/^END\s+2ND\s+HALF$/i.test(s)) return 'END 2ND HALF';
@@ -3018,40 +3003,40 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             const bkUnderStr = !isNaN(bookTotal)
               ? (mbUnderOdds ? `u${bkTotalStr} (${mbUnderOdds})` : `u${bkTotalStr}`)
               : 'u—';
-            // For NHL/NCAAM: include puck line / spread odds and total odds in model display strings
+            // For NHL: include puck line / spread odds and total odds in model display strings
             // LOG: [GameCard:MobileOdds] trace model odds for each sport
             if (process.env.NODE_ENV === 'development') {
               console.log(
                 `%c[GameCard:MobileOdds] game=${game.id} sport=${game.sport} ` +
                 `mdlAwaySpreadOdds=${game.modelAwaySpreadOdds ?? 'null'} mdlHomeSpreadOdds=${game.modelHomeSpreadOdds ?? 'null'} ` +
                 `mdlOverOdds=${game.modelOverOdds ?? 'null'} mdlUnderOdds=${game.modelUnderOdds ?? 'null'} ` +
-                `isMlbGame=${isMlbGame} isNhlGame=${isNhlGame} isNcaamGame=${isNcaamGame}`,
+                `isMlbGame=${isMlbGame} isNhlGame=${isNhlGame}`,
                 'color:#FF9900;font-size:9px'
               );
             }
             const mdlAwaySpreadStr = !isNaN(awayModelSpread)
               ? (isNhlGame && game.modelAwayPLOdds
                   ? `${spreadSign(awayModelSpread)} (${game.modelAwayPLOdds})`
-                  : (isNcaamGame || isMlbGame) && game.modelAwaySpreadOdds
+                  : isMlbGame && game.modelAwaySpreadOdds
                   ? `${spreadSign(awayModelSpread)} (${game.modelAwaySpreadOdds})`
                   : spreadSign(awayModelSpread))
               : '—';
             const mdlHomeSpreadStr = !isNaN(homeModelSpread)
               ? (isNhlGame && game.modelHomePLOdds
                   ? `${spreadSign(homeModelSpread)} (${game.modelHomePLOdds})`
-                  : (isNcaamGame || isMlbGame) && game.modelHomeSpreadOdds
+                  : isMlbGame && game.modelHomeSpreadOdds
                   ? `${spreadSign(homeModelSpread)} (${game.modelHomeSpreadOdds})`
                   : spreadSign(homeModelSpread))
               : '—';
             // For NHL: display the BOOK's total line with the model's fair odds at that line
             const mdlDisplayTotal = isNhlGame && !isNaN(bookTotal) ? bookTotal : modelTotal;
             const mdlTotalStr = !isNaN(mdlDisplayTotal) ? String(mdlDisplayTotal) : '—';
-            // For NHL/NCAAM/MLB: total display strings include O/U odds at the model's line
+            // For NHL/MLB: total display strings include O/U odds at the model's line
             const mdlOverTotalStr  = !isNaN(mdlDisplayTotal)
-              ? ((isNhlGame || isNcaamGame || isMlbGame) && game.modelOverOdds  ? `${mdlTotalStr} (${game.modelOverOdds})`  : mdlTotalStr)
+              ? ((isNhlGame || isMlbGame) && game.modelOverOdds  ? `${mdlTotalStr} (${game.modelOverOdds})`  : mdlTotalStr)
               : '—';
             const mdlUnderTotalStr = !isNaN(mdlDisplayTotal)
-              ? ((isNhlGame || isNcaamGame || isMlbGame) && game.modelUnderOdds ? `${mdlTotalStr} (${game.modelUnderOdds})` : mdlTotalStr)
+              ? ((isNhlGame || isMlbGame) && game.modelUnderOdds ? `${mdlTotalStr} (${game.modelUnderOdds})` : mdlTotalStr)
               : '—';
             // ── Split helpers: parse "value (odds)" → { line, odds } for two-line pill rendering ──
             // Used by mobile OddsTable to pass mainValue and juiceStr separately to OddsCell
@@ -3313,7 +3298,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             // Each market is independent — never averaged, never combined.
             // Recalculate on every render (derived state, not stored state).
             // AWAY spread edge: book juice vs model juice
-            // NHL uses puck-line odds (modelAwayPLOdds); MLB/NCAAM use run-line/spread odds (modelAwaySpreadOdds)
+            // NHL uses puck-line odds (modelAwayPLOdds); MLB uses run-line/spread odds (modelAwaySpreadOdds)
             const awaySpreadEdgePP: number = (() => {
               const bkOdds  = toNum(game.awaySpreadOdds);
               const mdlOdds = isNhlGame
@@ -3325,7 +3310,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               return calculateEdge(bkOdds, mdlOdds);
             })();
             // HOME spread edge
-            // NHL uses puck-line odds (modelHomePLOdds); MLB/NCAAM use run-line/spread odds (modelHomeSpreadOdds)
+            // NHL uses puck-line odds (modelHomePLOdds); MLB uses run-line/spread odds (modelHomeSpreadOdds)
             const homeSpreadEdgePP: number = (() => {
               const bkOdds  = toNum(game.homeSpreadOdds);
               const mdlOdds = isNhlGame

@@ -28,7 +28,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { getTeamByDbSlug } from "@shared/ncaamTeams";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 import { NHL_BY_DB_SLUG } from "@shared/nhlTeams";
 import { BettingSplitsPanel } from "@/components/BettingSplitsPanel";
@@ -123,8 +122,6 @@ function toNum(v: string | number | null | undefined): number {
 function normalizeEdgeLabel(label: string | null | undefined): string {
   if (!label || label.toUpperCase() === "PASS") return "PASS";
   return label.replace(/^([a-z][a-z0-9_]*)(\s+\()/i, (_, slug, rest) => {
-    const ncaa = getTeamByDbSlug(slug);
-    if (ncaa) return ncaa.ncaaName + rest;
     const nba = getNbaTeamByDbSlug(slug);
     if (nba) return nba.name + rest;
     return formatTeamName(slug) + rest;
@@ -763,19 +760,17 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
       : "hsl(var(--border))";
 
   const isNHL = game.sport === 'NHL';
-  const awayNcaa = getTeamByDbSlug(game.awayTeam);
-  const homeNcaa = getTeamByDbSlug(game.homeTeam);
-  const awayNba  = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
-  const homeNba  = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
-  const awayNhl  = (!awayNcaa && !awayNba) ? NHL_BY_DB_SLUG.get(game.awayTeam) ?? null : null;
-  const homeNhl  = (!homeNcaa && !homeNba) ? NHL_BY_DB_SLUG.get(game.homeTeam) ?? null : null;
-  // For NBA/NHL: show city on line 1, nickname on line 2 (mirrors NCAAM school/nickname layout)
-  const awayName     = awayNcaa?.ncaaName ?? awayNba?.city ?? awayNhl?.city ?? formatTeamName(game.awayTeam);
-  const homeName     = homeNcaa?.ncaaName ?? homeNba?.city ?? homeNhl?.city ?? formatTeamName(game.homeTeam);
-  const awayNickname = awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? awayNhl?.nickname ?? undefined;
-  const homeNickname = homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? homeNhl?.nickname ?? undefined;
-  const awayLogoUrl  = awayNcaa?.logoUrl ?? awayNba?.logoUrl ?? awayNhl?.logoUrl ?? undefined;
-  const homeLogoUrl  = homeNcaa?.logoUrl ?? homeNba?.logoUrl ?? homeNhl?.logoUrl ?? undefined;
+  const awayNba  = getNbaTeamByDbSlug(game.awayTeam);
+  const homeNba  = getNbaTeamByDbSlug(game.homeTeam);
+  const awayNhl  = !awayNba ? NHL_BY_DB_SLUG.get(game.awayTeam) ?? null : null;
+  const homeNhl  = !homeNba ? NHL_BY_DB_SLUG.get(game.homeTeam) ?? null : null;
+  // Show city on line 1, nickname on line 2
+  const awayName     = awayNba?.city ?? awayNhl?.city ?? formatTeamName(game.awayTeam);
+  const homeName     = homeNba?.city ?? homeNhl?.city ?? formatTeamName(game.homeTeam);
+  const awayNickname = awayNba?.nickname ?? awayNhl?.nickname ?? undefined;
+  const homeNickname = homeNba?.nickname ?? homeNhl?.nickname ?? undefined;
+  const awayLogoUrl  = awayNba?.logoUrl ?? awayNhl?.logoUrl ?? undefined;
+  const homeLogoUrl  = homeNba?.logoUrl ?? homeNhl?.logoUrl ?? undefined;
   const time      = formatMilitaryTime(game.startTimeEst);
   // Midnight ET games (startTimeEst = "00:00") are stored under the actual play date (e.g. Mar 5)
   // but the ET clock has rolled over to the next day (e.g. Fri, Mar 6 · 12:00 AM ET).
@@ -871,26 +866,7 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
           </AlertDialog>
         )}
 
-        {/* Approve Model toggle — NCAAM only, only shown when model data exists */}
-        {game.sport === "NCAAM" && hasAnyModel && (
-          <button
-            onClick={handleToggleModelApproval}
-            disabled={approveModelMutation.isPending}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all"
-            style={game.publishedModel
-              ? { background: "rgba(57,255,20,0.15)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.35)" }
-              : { background: "rgba(255,184,0,0.1)", color: "#FFB800", border: "1px solid rgba(255,184,0,0.3)" }
-            }
-            title={game.publishedModel ? "Retract model projections from feed" : "Approve model projections for public feed"}
-          >
-            {approveModelMutation.isPending
-              ? <Loader2 size={9} className="animate-spin" />
-              : game.publishedModel
-                ? <><Eye size={9} /> Model Live</>
-                : <><EyeOff size={9} /> Approve Model</>
-            }
-          </button>
-        )}
+
 
         {/* Publish toggle */}
         <button
@@ -1633,7 +1609,7 @@ export default function PublishProjections() {
   const { appUser, isOwner, loading: authLoading } = useAppAuth();
   const [filter, setFilter] = useState<"all" | "regular_season" | "conference_tournament">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "upcoming" | "live" | "final" | "missing_odds" | "modeled" | "not_modeled">("all");
-  const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA" | "NHL" | "MLB">("NCAAM");
+  const [selectedSport, setSelectedSport] = useState<"NBA" | "NHL" | "MLB">("MLB");
   const [gameDate, setGameDate] = useState(() => todayPst());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -1729,13 +1705,12 @@ export default function PublishProjections() {
     onSuccess: (result) => {
       setIsRefreshing(false);
       const scope = selectedSport;
-      const ncaamUpdated = result.updated ?? 0;
       const nbaUpdated   = result.nbaUpdated ?? 0;
       const nhlUpdated   = result.nhlUpdated ?? 0;
-      const totalUpdated = ncaamUpdated + nbaUpdated + nhlUpdated;
+      const totalUpdated = nbaUpdated + nhlUpdated;
       console.log(
         `[PublishProjections][RefreshNow] ✅ Complete — scope: ${scope} | ` +
-        `NCAAM: ${ncaamUpdated} updated | NBA: ${nbaUpdated} updated | NHL: ${nhlUpdated} updated | ` +
+        `NBA: ${nbaUpdated} updated | NHL: ${nhlUpdated} updated | ` +
         `total: ${totalUpdated} | refreshedAt: ${result.refreshedAt}`
       );
       const oddsMsg = totalUpdated > 0
@@ -1809,7 +1784,7 @@ export default function PublishProjections() {
     );
     // Pass the active sport so the server only refreshes that sport's data
     if (selectedSport !== "MLB") {
-      triggerRefreshMutation.mutate({ sport: selectedSport as "NCAAM" | "NBA" | "NHL" });
+      triggerRefreshMutation.mutate({ sport: selectedSport as "NBA" | "NHL" });
     }
     // NBA also triggers model sync (NBA-specific model pipeline)
     if (selectedSport === "NBA") {
@@ -2014,7 +1989,7 @@ export default function PublishProjections() {
               ? "Refresh VSiN NBA odds, scores, and NBA model data"
               : selectedSport === "NHL"
               ? "Refresh NHL odds, scores, and check for goalie changes"
-              : "Refresh VSiN NCAAM odds and scores"}
+              : "Refresh odds and scores"}
           >
             <RefreshCw
               size={11}
@@ -2026,24 +2001,7 @@ export default function PublishProjections() {
 
         {/* Sport filter toggle */}
         <div className="px-4 pb-1 max-w-5xl mx-auto flex items-center gap-2">
-          {/* NCAAM button */}
-          <button
-            onClick={() => setSelectedSport("NCAAM")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-            style={selectedSport === "NCAAM"
-              ? { background: "rgba(57,255,20,0.15)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.4)" }
-              : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
-            }
-          >
-            <img
-              src="https://www.ncaa.com/march-madness-live/assets/icons/ncaa/disc.svg"
-              alt="NCAA"
-              width={16}
-              height={16}
-              style={{ opacity: selectedSport === "NCAAM" ? 1 : 0.5 }}
-            />
-            MARCH MADNESS
-          </button>
+
           {/* NBA button */}
           <button
             onClick={() => setSelectedSport("NBA")}
@@ -2100,101 +2058,7 @@ export default function PublishProjections() {
           </button>
         </div>
 
-        {/* Status filter tabs (NCAAM only) — two rows */}
-        {selectedSport === "NCAAM" && (
-          <div className="px-4 pb-1.5 max-w-5xl mx-auto flex flex-col gap-1.5">
-            {/* Row 1: game-status filters */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {([
-                { key: "all", label: "ALL" },
-                { key: "upcoming", label: "UPCOMING" },
-                { key: "live", label: "LIVE" },
-                { key: "final", label: "FINAL" },
-              ] as const).map(({ key, label }) => {
-                const isActive = statusFilter === key;
-                const isLive = key === "live";
-                return (
-                  <button
-                    key={key}
-                    onClick={() => setStatusFilter(key)}
-                    className="relative flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide transition-all"
-                    style={isActive
-                      ? isLive
-                        ? { background: "rgba(239,68,68,0.18)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.45)" }
-                        : { background: "rgba(57,255,20,0.12)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.35)" }
-                      : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
-                    }
-                  >
-                    {isLive && liveCount > 0 && (
-                      <span
-                        className="inline-block rounded-full"
-                        style={{
-                          width: 6, height: 6, flexShrink: 0,
-                          background: "#ef4444",
-                          boxShadow: isActive ? "0 0 6px #ef4444" : "none",
-                          animation: "pulse 1.5s ease-in-out infinite",
-                        }}
-                      />
-                    )}
-                    {label}
-                    {isLive && liveCount > 0 && (
-                      <span className="ml-0.5 text-[10px] font-black" style={{ color: isActive ? "#ef4444" : "hsl(var(--muted-foreground))" }}>
-                        {liveCount}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            {/* Row 2: modeling-status filters — only shown when there's something to filter */}
-            {(missingOddsGames > 0 || notModeledGames > 0) && (<div className="flex items-center gap-1.5 flex-wrap">
-              {/* MISSING ODDS */}
-              <button
-                onClick={() => setStatusFilter("missing_odds")}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide transition-all"
-                style={statusFilter === "missing_odds"
-                  ? { background: "rgba(255,107,0,0.18)", color: "#FF6B00", border: "1px solid rgba(255,107,0,0.45)" }
-                  : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
-                }
-              >
-                MISSING ODDS
-                {missingOddsGames > 0 && (
-                  <span className="ml-0.5 text-[10px] font-black" style={{ color: statusFilter === "missing_odds" ? "#FF6B00" : "hsl(var(--muted-foreground))" }}>
-                    {missingOddsGames}
-                  </span>
-                )}
-              </button>
-              {/* MODELED */}
-              <button
-                onClick={() => setStatusFilter("modeled")}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide transition-all"
-                style={statusFilter === "modeled"
-                  ? { background: "rgba(57,255,20,0.15)", color: "#39FF14", border: "1px solid rgba(57,255,20,0.4)" }
-                  : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
-                }
-              >
-                MODELED
-                <span className="ml-0.5 text-[10px] font-black" style={{ color: statusFilter === "modeled" ? "#39FF14" : "hsl(var(--muted-foreground))" }}>
-                  {modeledGames}
-                </span>
-              </button>
-              {/* NOT MODELED */}
-              <button
-                onClick={() => setStatusFilter("not_modeled")}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide transition-all"
-                style={statusFilter === "not_modeled"
-                  ? { background: "rgba(255,184,0,0.15)", color: "#FFB800", border: "1px solid rgba(255,184,0,0.4)" }
-                  : { background: "hsl(var(--card))", color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }
-                }
-              >
-                NOT MODELED
-                <span className="ml-0.5 text-[10px] font-black" style={{ color: statusFilter === "not_modeled" ? "#FFB800" : "hsl(var(--muted-foreground))" }}>
-                  {notModeledGames}
-                </span>
-              </button>
-            </div>)}
-          </div>
-        )}
+
 
         {/* Stats bar — slate completeness + refresh timestamps */}
         <div className="px-4 pb-3 max-w-5xl mx-auto">

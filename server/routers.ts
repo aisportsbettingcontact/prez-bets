@@ -29,10 +29,8 @@ import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, de
 import { runStrikeoutModel, type StrikeoutRunnerInput } from "./strikeoutModelRunner";
 import { getLastRefreshResult, runVsinRefresh, runVsinRefreshManual, refreshAllScoresNow } from "./vsinAutoRefresh";
 import { syncNbaModelFromSheet, getLastNbaModelSyncResult } from "./nbaModelSync";
-import { triggerModelWatcherForDate } from "./ncaamModelWatcher";
 import { syncNhlModelForToday, getLastNhlSyncResult } from "./nhlModelSync";
 import { checkGoalieChanges, getLastGoalieWatchResult } from "./nhlGoalieWatcher";
-import { VALID_DB_SLUGS, NCAAM_TEAMS, BY_AN_SLUG as NCAAM_BY_AN_SLUG } from "@shared/ncaamTeams";
 import { MARCH_MADNESS_DB_SLUGS } from "@shared/marchMadnessTeams";
 import { parseAnAllMarketsHtml, type AnSport } from "./anHtmlParser";
 import { NBA_VALID_DB_SLUGS, NBA_TEAMS } from "@shared/nbaTeams";
@@ -54,7 +52,7 @@ function isValidGame(awayTeam: string, homeTeam: string, sport?: string | null):
     const homeOk = MLB_VALID_ABBREVS.has(homeTeam) || MLB_VALID_DB_SLUGS.has(homeTeam);
     return awayOk && homeOk;
   }
-  // NCAAM: only show March Madness bracket teams
+  // Unknown sport: fall back to MARCH_MADNESS registry
   return MARCH_MADNESS_DB_SLUGS.has(awayTeam) && MARCH_MADNESS_DB_SLUGS.has(homeTeam);
 }
 
@@ -258,7 +256,7 @@ export const appRouter = router({
       }),
 
     /**
-     * Approve or retract model projections for a single NCAAM game.
+     * Approve or retract model projections for a single game.
      * Owner-only. When approved (published=true), model fields become visible on the public feed.
      */
     setModelPublished: ownerProcedure
@@ -361,13 +359,13 @@ export const appRouter = router({
       .input(z.object({
         html: z.string().min(100, "HTML too short — paste the full AN best-odds table HTML"),
         gameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "gameDate must be YYYY-MM-DD"),
-        sport: z.enum(["NCAAM", "NBA", "NHL"]).default("NCAAM"),
+        sport: z.enum(["NBA", "NHL"]).default("NBA"),
       }))
       .mutation(async ({ input }) => {
         const { html, gameDate, sport } = input;
 
         // Map sport string to AnSport type
-        const anSport: AnSport = sport === "NBA" ? "nba" : sport === "NHL" ? "nhl" : "ncaab";
+        const anSport: AnSport = sport === "NHL" ? "nhl" : "nba";
 
         // ── Parse HTML ──
         const parseResult = parseAnAllMarketsHtml(html, anSport);
@@ -380,33 +378,7 @@ export const appRouter = router({
         // We need to split them into individual team slugs and match to dbSlug.
         const byNormSlug = new Map<string, string>();
 
-        if (sport === "NCAAM") {
-          // NCAAM-specific URL-slug aliases
-          const NCAAM_URL_ALIASES: Record<string, string> = {
-            "wichita-state": "wichita_st",
-            "san-diego-state": "san_diego_st",
-            "utah-state": "utah_st",
-            "prairie-view-am": "prairie_view_a_and_m",
-            "southern-university": "southern_u",
-            "kennesaw-state": "kennesaw_st",
-            "north-carolina-central": "nc_central",
-            "cal-baptist": "california_baptist",
-            "utah-valley": "utah_valley",
-            "penn": "pennsylvania",
-            "ole-miss": "mississippi",
-            "uconn": "connecticut",
-            "vcu": "va_commonwealth",
-          };
-          for (const [alias, dbSlug] of Object.entries(NCAAM_URL_ALIASES)) {
-            byNormSlug.set(alias, dbSlug);
-          }
-          for (const t of NCAAM_TEAMS) {
-            byNormSlug.set(t.dbSlug.replace(/_/g, "-"), t.dbSlug);
-            byNormSlug.set(t.ncaaSlug, t.dbSlug);
-            byNormSlug.set(t.vsinSlug, t.dbSlug);
-            byNormSlug.set(t.anSlug, t.dbSlug);
-          }
-        } else if (sport === "NBA") {
+        if (sport === "NBA") {
           // NBA URL-slug aliases (short nicknames used in AN game URLs)
           const NBA_URL_ALIASES: Record<string, string> = {
             "wizards": "washington_wizards",
@@ -586,12 +558,12 @@ export const appRouter = router({
      * Owner-only.
      *
      * @param sport - Optional scope. When provided, only that sport is refreshed.
-     *                When omitted, all three sports (NCAAM, NBA, NHL) are refreshed.
+     *                When omitted, all sports (NBA, NHL, MLB) are refreshed.
      */
     triggerRefresh: ownerProcedure
       .input(
         z.object({
-          sport: z.enum(["NCAAM", "NBA", "NHL", "MLB"]).optional(),
+          sport: z.enum(["NBA", "NHL", "MLB"]).optional(),
         }).optional()
       )
       .mutation(async ({ input }) => {
@@ -619,7 +591,6 @@ export const appRouter = router({
         } else {
           console.log(
             `[tRPC][triggerRefresh] ✅ Manual refresh complete — scope: ${sportLabel} | ` +
-            `NCAAM updated: ${oddsResult?.updated ?? 0} | ` +
             `NBA updated: ${oddsResult?.nbaUpdated ?? 0} | ` +
             `NHL updated: ${oddsResult?.nhlUpdated ?? 0}`
           );
@@ -630,7 +601,6 @@ export const appRouter = router({
           scoresRefreshedAt: now,
           updated: 0,
           inserted: 0,
-          ncaaInserted: 0,
           nbaUpdated: 0,
           nbaInserted: 0,
           nbaScheduleInserted: 0,
@@ -721,27 +691,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── NCAAM Model v9 ───────────────────────────────────────────────────────────────────────────────────────
-  model: router({
-    /**
-     * Manually trigger model v9 for a specific date.
-     * Owner-only — dispatches via the dedicated ModelWatcher.
-     * skipExisting=false forces a full re-run even for already-projected games.
-     */
-    runForDate: ownerProcedure
-      .input(
-        z.object({
-          date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
-          forceRerun: z.boolean().optional().default(false),
-        })
-      )
-      .mutation(async ({ input }) => {
-        const result = await triggerModelWatcherForDate(input.date, {
-          forceRerun: input.forceRerun,
-        });
-        return result;
-      }),
-  }),
+
   // ─── NHL Model Sync ─────────────────────────────────────────────────────────
   nhlModel: router({
     /**

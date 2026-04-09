@@ -4,36 +4,25 @@
  * Schedules a background job that runs every 30 minutes from 6am–midnight PST.
  *
  * On each tick it:
- *   1. Scrapes the VSiN CBB (NCAAM) betting splits page and upserts every game.
- *   2. Scrapes the VSiN NBA betting splits page and upserts every NBA game.
- *   3. Fetches ALL NCAA DI MBB games for a rolling 7-day window and inserts
- *      any that are not already in the DB (NCAA-only games without VSiN odds).
- *   4. Fetches NBA schedule for a rolling 7-day window and inserts any NBA games
- *      not already in the DB (NBA-only games without VSiN odds).
+ *   1. Scrapes the VSiN NBA/NHL/MLB betting splits pages and upserts every game.
+ *   2. Fetches NBA/NHL schedule for a rolling 7-day window and inserts any games
+ *      not already in the DB (schedule-only games without VSiN odds).
  *
  * The last refresh result is stored in memory and exposed via
  * `trpc.games.lastRefresh` so the UI can show "Last updated HH:MM".
  */
 
-import { listGamesByDate, updateBookOdds, insertGames, getGameByNcaaContestId, updateNcaaStartTime, updateAnOdds, insertOddsHistory, advanceBracketWinner } from "./db";
+import { listGamesByDate, updateBookOdds, insertGames, updateAnOdds, insertOddsHistory, getGameByNcaaContestId, updateNcaaStartTime } from "./db";
 import { fetchActionNetworkOdds, type AnSport } from "./actionNetworkScraper";
 import { scrapeVsinBettingSplits, scrapeVsinBettingSplitsBothDays, scrapeVsinMlbBettingSplits, type VsinSplitsGame } from "./vsinBettingSplitsScraper";
-import { fetchNcaaGames, buildStartTimeMap } from "./ncaaScoreboard";
 import { fetchNbaGamesForDate, buildNbaStartTimeMap, fetchNbaLiveScores } from "./nbaScoreboard";
 import { fetchNhlGamesForRange, buildNhlStartTimeMap, buildNhlGameMap, fetchNhlLiveScores, type NhlScheduleGame } from "./nhlSchedule";
-import { VALID_DB_SLUGS, BY_DB_SLUG, BY_VSIN_SLUG, BY_AN_SLUG as NCAAM_BY_AN, getTeamByAnSlug as getNcaamTeamByAnSlug } from "../shared/ncaamTeams";
 import { NBA_VALID_DB_SLUGS, NBA_BY_VSIN_SLUG, NBA_BY_AN_SLUG, getNbaTeamByVsinSlug, NBA_BY_DB_SLUG } from "../shared/nbaTeams";
 import { NHL_VALID_DB_SLUGS, NHL_BY_ABBREV, NHL_BY_DB_SLUG, NHL_BY_VSIN_SLUG, NHL_BY_AN_SLUG, getNhlTeamByAnSlug, VSIN_NHL_HREF_ALIASES } from "../shared/nhlTeams";
 import { MLB_BY_ABBREV, MLB_BY_VSIN_SLUG, MLB_VALID_ABBREVS, getMlbTeamByAnSlug, getMlbTeamByVsinSlug, VSIN_MLB_HREF_ALIASES } from "../shared/mlbTeams";
 import type { InsertGame } from "../drizzle/schema";
 
 const INTERVAL_MS = 10 * 60 * 1000; // 10 minutes — all sports refresh cadence
-
-// ─── NCAAM Final Four lock: only Illinois, Connecticut, Michigan, Arizona on 04/04/2026 ───
-// After the tournament ends, NCAAM splits are disabled entirely.
-const FINAL_FOUR_DATE = "2026-04-04";
-const NATIONAL_CHAMPIONSHIP_DATE = "2026-04-06";
-const FINAL_FOUR_SLUGS = new Set(["illinois", "connecticut", "michigan", "arizona"]);
 
 // Rolling window: today through N days ahead
 const RANGE_DAYS_AHEAD = 6; // fetch today + 6 more days = 7-day window
@@ -64,14 +53,13 @@ function resolveNhlVsinSlug(rawSlug: string) {
 
 export interface RefreshResult {
   refreshedAt: string;       // ISO timestamp of last VSiN odds/splits refresh
-  scoresRefreshedAt: string; // ISO timestamp of last score refresh (NCAAM + NBA)
-  updated: number;           // NCAAM games matched + updated (VSiN)
-  inserted: number;          // new NCAAM games inserted (VSiN stubs)
-  ncaaInserted: number;      // new NCAA-only games inserted
+  scoresRefreshedAt: string; // ISO timestamp of last score refresh
+  updated: number;           // games matched + updated (VSiN)
+  inserted: number;          // new games inserted (VSiN stubs)
   nbaUpdated: number;        // NBA games matched + updated (VSiN)
   nbaInserted: number;       // new NBA games inserted (VSiN stubs)
   nbaScheduleInserted: number; // new NBA-only games inserted from schedule
-  total: number;             // total NCAAM VSiN games processed
+  total: number;             // total VSiN games processed
   nbaTotal: number;          // total NBA VSiN games processed
   nhlUpdated: number;        // NHL games matched + updated (VSiN)
   nhlInserted: number;       // new NHL games inserted (VSiN stubs)
@@ -97,8 +85,9 @@ function slugsMatch(a: string, b: string): boolean {
   const na = norm(a);
   const nb = norm(b);
   if (na === nb) return true;
-  const teamA = BY_DB_SLUG.get(na);
-  const teamB = BY_DB_SLUG.get(nb);
+  // Check NBA registry for slug aliases
+  const teamA = NBA_BY_DB_SLUG.get(na);
+  const teamB = NBA_BY_DB_SLUG.get(nb);
   if (teamA && teamB) return teamA.dbSlug === teamB.dbSlug;
   return false;
 }
@@ -152,9 +141,7 @@ function dateRange(start: string, end: string): string[] {
   return dates;
 }
 
-// Action Network odds are now ingested exclusively via the ingestAnHtml tRPC procedure
-// (paste AN HTML from actionnetwork.com/ncaab/odds?oddsType=combined etc.)
-// VSiN is used only for betting splits.
+// VSiN is used for betting splits; AN API is used for DK NJ odds.
 
 // ─── Tomorrow's VSiN splits pre-population ──────────────────────────────────
 
@@ -167,49 +154,6 @@ async function runTomorrowSplitsUpdate(tomorrowStr: string): Promise<void> {
   try {
     const allSplits = await scrapeVsinBettingSplits("tomorrow");
     console.log(`[VSiNAutoRefresh][Tomorrow] ${allSplits.length} total splits games`);
-
-    // Process NCAAM (CBB) — Final Four + Championship only (04/04 and 04/06)
-    const cbbSplits = allSplits.filter(g => g.sport === "CBB");
-    if (cbbSplits.length > 0) {
-      // Only process tomorrow's NCAAM splits if tomorrow is a Final Four or Championship date
-      const isTomorrowRelevant = tomorrowStr === FINAL_FOUR_DATE || tomorrowStr === NATIONAL_CHAMPIONSHIP_DATE;
-      if (!isTomorrowRelevant) {
-        console.log(`[VSiNAutoRefresh][Tomorrow][NCAAM] ${tomorrowStr} is not a Final Four/Championship date — skipping NCAAM splits.`);
-      } else {
-      const existingNcaam = await listGamesByDate(tomorrowStr, "NCAAM");
-      let updated = 0;
-      for (const g of cbbSplits) {
-        const awayTeam = BY_VSIN_SLUG.get(g.awayVsinSlug) ?? BY_VSIN_SLUG.get(g.awayVsinSlug.replace(/-/g, '_'));
-        const homeTeam = BY_VSIN_SLUG.get(g.homeVsinSlug) ?? BY_VSIN_SLUG.get(g.homeVsinSlug.replace(/-/g, '_'));
-        if (!awayTeam || !homeTeam) continue;
-        // Final Four / Championship filter — skip NIT and other CBB games
-        if (!FINAL_FOUR_SLUGS.has(awayTeam.dbSlug) || !FINAL_FOUR_SLUGS.has(homeTeam.dbSlug)) {
-          console.log(`[VSiNAutoRefresh][Tomorrow][NCAAM] Skipping non-FF game: ${awayTeam.dbSlug} @ ${homeTeam.dbSlug}`);
-          continue;
-        }
-        // Try direct match first, then reversed team order
-        let dbGame = existingNcaam.find(e => e.awayTeam === awayTeam.dbSlug && e.homeTeam === homeTeam.dbSlug);
-        let teamsSwapped = false;
-        if (!dbGame) {
-          dbGame = existingNcaam.find(e => e.awayTeam === homeTeam.dbSlug && e.homeTeam === awayTeam.dbSlug);
-          if (dbGame) teamsSwapped = true;
-        }
-        if (!dbGame) continue;
-        // When teams are swapped, flip the away/home percentages
-        await updateBookOdds(dbGame.id, {
-          spreadAwayBetsPct: teamsSwapped ? (g.spreadAwayBetsPct != null ? 100 - g.spreadAwayBetsPct : null) : g.spreadAwayBetsPct,
-          spreadAwayMoneyPct: teamsSwapped ? (g.spreadAwayMoneyPct != null ? 100 - g.spreadAwayMoneyPct : null) : g.spreadAwayMoneyPct,
-          totalOverBetsPct: g.totalOverBetsPct,
-          totalOverMoneyPct: g.totalOverMoneyPct,
-          mlAwayBetsPct: teamsSwapped ? (g.mlAwayBetsPct != null ? 100 - g.mlAwayBetsPct : null) : g.mlAwayBetsPct,
-          mlAwayMoneyPct: teamsSwapped ? (g.mlAwayMoneyPct != null ? 100 - g.mlAwayMoneyPct : null) : g.mlAwayMoneyPct,
-        });
-        if (teamsSwapped) console.log(`[VSiNAutoRefresh][Tomorrow][NCAAM] Swapped teams for ${awayTeam.dbSlug}@${homeTeam.dbSlug} → matched DB ${dbGame.awayTeam}@${dbGame.homeTeam}`);
-        updated++;
-      }
-      console.log(`[VSiNAutoRefresh][Tomorrow][NCAAM] ${updated} games updated with tomorrow's splits`);
-      } // end else (isTomorrowRelevant)
-    }
 
     // Process NBA
     const nbaSplits = allSplits.filter(g => g.sport === "NBA");
@@ -276,228 +220,6 @@ async function runTomorrowSplitsUpdate(tomorrowStr: string): Promise<void> {
     console.warn("[VSiNAutoRefresh][Tomorrow] Tomorrow splits update failed (non-fatal):", err);
   }
 }
-/// ─── NCAAM refresh ──────────────────────────────────────────────
-async function refreshNcaam(todayStr: string, allDates: string[]): Promise<{
-  updated: number;
-  inserted: number;
-  ncaaInserted: number;
-  total: number;
-}> {
-  console.log(`[refreshNcaam] ► START — today: ${todayStr} | dates: [${allDates.join(", ")}]`);
-
-  // NCAAM is now locked to Final Four (04/04) and National Championship (04/06) only.
-  // Any date outside these two is a no-op — skip all processing.
-  const relevantDates = allDates.filter(d => d === FINAL_FOUR_DATE || d === NATIONAL_CHAMPIONSHIP_DATE);
-  if (relevantDates.length === 0) {
-    console.log(`[refreshNcaam] No Final Four / Championship dates in window [${allDates.join(", ")}] — skipping NCAAM refresh.`);
-    return { updated: 0, inserted: 0, ncaaInserted: 0, total: 0 };
-  }
-
-  // Scrape VSiN CBB betting splits (today + tomorrow)
-  let vsinSplits: VsinSplitsGame[] = [];
-  try {
-    vsinSplits = await scrapeVsinBettingSplitsBothDays("CBB");
-    console.log(`[refreshNcaam] VSiN CBB splits fetched: ${vsinSplits.length} games (front+tomorrow merged)`);
-  } catch (err) {
-    console.warn("[VSiNAutoRefresh] VSiN CBB splits scrape failed (non-fatal):", err);
-  }
-
-  // Build a map: dbSlug pair → VsinSplitsGame for fast lookup (both orderings)
-  // ONLY include Final Four / Championship teams — NIT and other CBB games are silently ignored.
-  const vsinSplitsMap = new Map<string, { game: VsinSplitsGame; swapped: boolean }>();
-  for (const g of vsinSplits) {
-    const awayTeam = BY_VSIN_SLUG.get(g.awayVsinSlug) ?? BY_VSIN_SLUG.get(g.awayVsinSlug.replace(/-/g, '_'));
-    const homeTeam = BY_VSIN_SLUG.get(g.homeVsinSlug) ?? BY_VSIN_SLUG.get(g.homeVsinSlug.replace(/-/g, '_'));
-    if (awayTeam && homeTeam) {
-      // Filter: only Final Four / Championship teams
-      if (!FINAL_FOUR_SLUGS.has(awayTeam.dbSlug) || !FINAL_FOUR_SLUGS.has(homeTeam.dbSlug)) {
-        console.log(`[refreshNcaam] Skipping non-FF CBB game: ${awayTeam.dbSlug} @ ${homeTeam.dbSlug}`);
-        continue;
-      }
-      vsinSplitsMap.set(`${awayTeam.dbSlug}@${homeTeam.dbSlug}`, { game: g, swapped: false });
-      // Also store reversed key so DB games with swapped team order still match
-      vsinSplitsMap.set(`${homeTeam.dbSlug}@${awayTeam.dbSlug}`, { game: g, swapped: true });
-    } else {
-      console.log(
-        `[VSiNAutoRefresh][NCAAM] Unknown VSiN slug: ${g.awayVsinSlug} @ ${g.homeVsinSlug}`
-      );
-    }
-  }
-
-  // Fetch NCAA scoreboard for rolling window (primary source for game discovery)
-  const ncaaGamesByDate = new Map<string, Awaited<ReturnType<typeof fetchNcaaGames>>>();
-  const startTimeMaps = new Map<string, Map<string, string>>();
-
-  for (const dateStr of allDates) {
-    try {
-      const yyyymmdd = dateStr.replace(/-/g, "");
-      const ncaaGames = await fetchNcaaGames(yyyymmdd);
-      startTimeMaps.set(dateStr, buildStartTimeMap(ncaaGames));
-      ncaaGamesByDate.set(dateStr, ncaaGames);
-      console.log(`[VSiNAutoRefresh] NCAA: ${ncaaGames.length} games for ${dateStr}`);
-    } catch (ncaaErr) {
-      console.warn(`[VSiNAutoRefresh] NCAA fetch failed for ${dateStr} (non-fatal):`, ncaaErr);
-    }
-  }
-
-  // Apply VSiN splits to existing NCAAM games on Final Four + Championship dates
-  let totalUpdated = 0;
-  for (const dateStr of relevantDates) {
-    const existing = await listGamesByDate(dateStr, "NCAAM");
-    for (const dbGame of existing) {
-      // Enforce Final Four / Championship team filter at DB game level
-      if (!FINAL_FOUR_SLUGS.has(dbGame.awayTeam) || !FINAL_FOUR_SLUGS.has(dbGame.homeTeam)) continue;
-      const key = `${dbGame.awayTeam}@${dbGame.homeTeam}`;
-      const entry = vsinSplitsMap.get(key);
-      if (!entry) continue;
-      const { game: splits, swapped } = entry;
-      await updateBookOdds(dbGame.id, {
-        spreadAwayBetsPct: swapped ? (splits.spreadAwayBetsPct != null ? 100 - splits.spreadAwayBetsPct : null) : splits.spreadAwayBetsPct,
-        spreadAwayMoneyPct: swapped ? (splits.spreadAwayMoneyPct != null ? 100 - splits.spreadAwayMoneyPct : null) : splits.spreadAwayMoneyPct,
-        totalOverBetsPct: splits.totalOverBetsPct,
-        totalOverMoneyPct: splits.totalOverMoneyPct,
-        mlAwayBetsPct: swapped ? (splits.mlAwayBetsPct != null ? 100 - splits.mlAwayBetsPct : null) : splits.mlAwayBetsPct,
-        mlAwayMoneyPct: swapped ? (splits.mlAwayMoneyPct != null ? 100 - splits.mlAwayMoneyPct : null) : splits.mlAwayMoneyPct,
-      });
-      totalUpdated++;
-      if (swapped) console.log(`[VSiNAutoRefresh][NCAAM] Swapped splits for ${dbGame.awayTeam}@${dbGame.homeTeam}`);
-      console.log(
-        `[VSiNAutoRefresh][NCAAM] Splits updated: ${dbGame.awayTeam} @ ${dbGame.homeTeam} ` +
-        `spread=${splits.spreadAwayBetsPct}%/${splits.spreadAwayMoneyPct}% ` +
-        `total=${splits.totalOverBetsPct}%/${splits.totalOverMoneyPct}% ` +
-        `ml=${splits.mlAwayBetsPct}%/${splits.mlAwayMoneyPct}%`
-      );
-    }
-  }
-
-  // NCAA-only game insertion (rolling 7-day window)
-  let ncaaInserted = 0;
-  let totalInserted = 0;
-
-  // Only iterate over Final Four + Championship dates for game insertion
-  for (const dateStr of relevantDates) {
-    if (dateStr < todayStr) continue;
-
-    const ncaaGames = ncaaGamesByDate.get(dateStr) ?? [];
-    if (ncaaGames.length === 0) continue;
-
-    const existingForDate = await listGamesByDate(dateStr, "NCAAM");
-    // Cache for PST-date lookups (for late-night games that belong to a prior date)
-    const existingByPstDate = new Map<string, Awaited<ReturnType<typeof listGamesByDate>>>();
-    const startTimeMap = startTimeMaps.get(dateStr);
-
-    for (const ncaaGame of ncaaGames) {
-      const { contestId, awaySeoname, homeSeoname, startTimeEst, gameStatus, gameDatePst } = ncaaGame;
-
-      // FINAL FOUR / CHAMPIONSHIP FILTER: only process Illinois, Connecticut, Michigan, Arizona
-      if (!FINAL_FOUR_SLUGS.has(awaySeoname) || !FINAL_FOUR_SLUGS.has(homeSeoname)) {
-        if (awaySeoname !== "tba" && homeSeoname !== "tba") {
-          console.log(`[refreshNcaam] Skipping non-FF game: ${awaySeoname} @ ${homeSeoname}`);
-        }
-        continue;
-      }
-
-      if (!VALID_DB_SLUGS.has(awaySeoname) || !VALID_DB_SLUGS.has(homeSeoname)) {
-        if (awaySeoname !== "tba" && homeSeoname !== "tba") {
-          console.log(`[VSiNAutoRefresh] Skipping non-D1 NCAA game: ${awaySeoname} @ ${homeSeoname}`);
-        }
-        continue;
-      }
-
-      // Use the PST calendar date as the authoritative gameDate.
-      // For late-night games (e.g. 9 PM PST on March 13 returned by March 14 query),
-      // gameDatePst will differ from dateStr. We must use gameDatePst for DB lookups
-      // and insertions to avoid storing the game under the wrong date.
-      const effectiveDate = gameDatePst ?? dateStr;
-
-      // Get the existing games for the effective PST date
-      let existingForEffectiveDate = existingForDate;
-      if (effectiveDate !== dateStr) {
-        if (!existingByPstDate.has(effectiveDate)) {
-          existingByPstDate.set(effectiveDate, await listGamesByDate(effectiveDate, "NCAAM"));
-        }
-        existingForEffectiveDate = existingByPstDate.get(effectiveDate)!;
-      }
-
-      const byContestId = await getGameByNcaaContestId(contestId);
-      if (byContestId) {
-        // Update scores/status on existing game
-        await updateNcaaStartTime(byContestId.id, {
-          startTimeEst: startTimeEst !== "TBD" ? startTimeEst : byContestId.startTimeEst,
-          ncaaContestId: contestId,
-          gameStatus,
-          awayScore: ncaaGame.awayScore ?? null,
-          homeScore: ncaaGame.homeScore ?? null,
-          gameClock: ncaaGame.gameClock ?? null,
-        });
-        continue;
-      }
-
-      const bySlugCanonical = existingForEffectiveDate.find(
-        e => slugsMatch(e.awayTeam, awaySeoname) && slugsMatch(e.homeTeam, homeSeoname)
-      );
-      const bySlugReversed = !bySlugCanonical ? existingForEffectiveDate.find(
-        e => slugsMatch(e.awayTeam, homeSeoname) && slugsMatch(e.homeTeam, awaySeoname)
-      ) : undefined;
-      const bySlug = bySlugCanonical ?? bySlugReversed;
-
-      if (bySlug) {
-        await updateNcaaStartTime(bySlug.id, {
-          startTimeEst: startTimeEst !== "TBD" ? startTimeEst : bySlug.startTimeEst,
-          ncaaContestId: bySlug.ncaaContestId ?? contestId,
-          gameStatus,
-          awayScore: ncaaGame.awayScore ?? null,
-          homeScore: ncaaGame.homeScore ?? null,
-          gameClock: ncaaGame.gameClock ?? null,
-        });
-        continue;
-      }
-
-      // Insert new game stub from NCAA scoreboard
-      const resolvedStartTime = startTimeMap?.get(`${awaySeoname}@${homeSeoname}`) ?? startTimeEst ?? "TBD";
-      const row: InsertGame = {
-        fileId: 0,
-        gameDate: effectiveDate, // Use PST calendar date (not query date)
-        startTimeEst: resolvedStartTime,
-        awayTeam: awaySeoname,
-        homeTeam: homeSeoname,
-        awayBookSpread: null,
-        homeBookSpread: null,
-        bookTotal: null,
-        awayModelSpread: null,
-        homeModelSpread: null,
-        modelTotal: null,
-        spreadEdge: null,
-        spreadDiff: null,
-        totalEdge: null,
-        totalDiff: null,
-        sport: "NCAAM",
-        gameType: "regular_season",
-        conference: null,
-        publishedToFeed: false,
-        rotNums: null,
-        sortOrder: 9999,
-        ncaaContestId: contestId,
-        gameStatus,
-        awayScore: ncaaGame.awayScore ?? null,
-        homeScore: ncaaGame.homeScore ?? null,
-        gameClock: ncaaGame.gameClock ?? null,
-      };
-      await insertGames([row]);
-      ncaaInserted++;
-      totalInserted++;
-      console.log(
-        `[VSiNAutoRefresh] Inserted NCAA-only: ${awaySeoname} @ ${homeSeoname} (${dateStr})`
-      );
-    }
-  }
-
-  console.log(
-    `[refreshNcaam] ✅ DONE — updated=${totalUpdated} inserted=${totalInserted} ncaaInserted=${ncaaInserted} total=${vsinSplits.length}`
-  );
-  return { updated: totalUpdated, inserted: totalInserted, ncaaInserted, total: vsinSplits.length };
-}
-
 // ─── NBA refresh ──────────────────────────────────────────────────────────────────────────────
 
 async function refreshNba(todayStr: string, allDates: string[]): Promise<{
@@ -941,7 +663,7 @@ async function refreshMlb(todayStr: string): Promise<{
  * Matching strategy:
  *   - NBA:  awayUrlSlug / homeUrlSlug → NBA_BY_AN_SLUG (e.g. "portland-trail-blazers")
  *   - NHL:  awayUrlSlug / homeUrlSlug → NHL_BY_AN_SLUG (e.g. "boston-bruins")
- *   - NCAAM: awayUrlSlug / homeUrlSlug → NCAAM_BY_AN (e.g. "vanderbilt-commodores")
+ *   - NBA/NHL: awayUrlSlug / homeUrlSlug → team registry
  *
  * Non-fatal: errors are caught and logged.
  */
@@ -957,7 +679,7 @@ async function refreshAnApiOdds(
 
   for (const sport of sports) {
     try {
-      const dbSport = sport === "nba" ? "NBA" : sport === "nhl" ? "NHL" : sport === "mlb" ? "MLB" : "NCAAM";
+      const dbSport = sport === "nba" ? "NBA" : sport === "nhl" ? "NHL" : sport === "mlb" ? "MLB" : "NBA";
       const anGames = await fetchActionNetworkOdds(sport, dateStr);
 
       if (anGames.length === 0) {
@@ -1002,10 +724,10 @@ async function refreshAnApiOdds(
             );
           }
         } else {
-          // NCAAM — use alias-aware helper so v2 slugs (e.g. "wichita-state-shockers",
-          // "south-florida-bulls", "pennsylvania-quakers") resolve correctly
-          awayDbSlug = getNcaamTeamByAnSlug(anGame.awayUrlSlug)?.dbSlug;
-          homeDbSlug = getNcaamTeamByAnSlug(anGame.homeUrlSlug)?.dbSlug;
+          // Unknown sport — skip
+          console.warn(`[ANApiOdds] Unknown sport "${dbSport}" — skipping game ${anGame.awayUrlSlug} @ ${anGame.homeUrlSlug}`);
+          skipped++;
+          continue;
         }
 
         if (!awayDbSlug || !homeDbSlug) {
@@ -1140,7 +862,7 @@ async function refreshAnApiOdds(
 // ─── Main refresh orchestrator ─────────────────────────────────────────────────
 
 /**
- * Core refresh logic — fully idempotent upsert of all VSiN games (NCAAM + NBA),
+ * Core refresh logic — fully idempotent upsert of all VSiN games (NBA + NHL + MLB),
  * plus insertion of all schedule-only games for a rolling 7-day window.
  * Safe to call at any time; errors are caught and logged.
  */
@@ -1153,8 +875,7 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     const rangeEnd = datePst(RANGE_DAYS_AHEAD);
     const allDates = dateRange(todayStr, rangeEnd);
 
-    // Run NCAAM, NBA, and NHL refreshes in sequence (share the same VSiN token)
-    const ncaamResult = await refreshNcaam(todayStr, allDates);
+    // Run NBA and NHL refreshes in sequence (share the same VSiN token)
     const nbaResult = await refreshNba(todayStr, allDates);
     const nhlResult = await refreshNhl(todayStr, allDates);
     console.log(
@@ -1172,7 +893,7 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     // Auto-populate DK NJ current lines from Action Network API for today
     // (non-fatal — errors are logged but do not block the refresh)
     // MLB included: run line (spread), total, moneyline from AN DK NJ
-    const anOddsResult = await refreshAnApiOdds(todayStr, ["ncaab", "nba", "nhl", "mlb"], "auto");
+    const anOddsResult = await refreshAnApiOdds(todayStr, ["nba", "nhl", "mlb"], "auto");
     console.log(
       `[VSiNAutoRefresh] AN API DK odds: updated=${anOddsResult.updated} ` +
       `skipped=${anOddsResult.skipped} frozen=${anOddsResult.frozen} errors=${anOddsResult.errors.length}`
@@ -1183,7 +904,7 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     await runTomorrowSplitsUpdate(tomorrowStr);
     // Also populate tomorrow's DK odds from AN API (tomorrow games are never live, no freeze needed)
     // MLB included for tomorrow
-    const anOddsTomorrow = await refreshAnApiOdds(tomorrowStr, ["ncaab", "nba", "nhl", "mlb"], "auto");
+    const anOddsTomorrow = await refreshAnApiOdds(tomorrowStr, ["nba", "nhl", "mlb"], "auto");
     console.log(
       `[VSiNAutoRefresh] AN API DK odds (tomorrow): updated=${anOddsTomorrow.updated} ` +
       `skipped=${anOddsTomorrow.skipped} frozen=${anOddsTomorrow.frozen} errors=${anOddsTomorrow.errors.length}`
@@ -1192,13 +913,12 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     const result: RefreshResult = {
       refreshedAt: new Date().toISOString(),
       scoresRefreshedAt: lastScoresRefreshedAt,
-      updated: ncaamResult.updated,
-      inserted: ncaamResult.inserted,
-      ncaaInserted: ncaamResult.ncaaInserted,
+      updated: 0,
+      inserted: 0,
       nbaUpdated: nbaResult.updated,
       nbaInserted: nbaResult.inserted,
       nbaScheduleInserted: nbaResult.scheduleInserted,
-      total: ncaamResult.total,
+      total: 0,
       nbaTotal: nbaResult.total,
       nhlUpdated: nhlResult.updated,
       nhlInserted: nhlResult.inserted,
@@ -1210,89 +930,12 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     lastRefreshResult = result;
     console.log(
       `[VSiNAutoRefresh] Done — ` +
-      `NCAAM: ${ncaamResult.updated} updated, ${ncaamResult.inserted} inserted, ${ncaamResult.ncaaInserted} NCAA-only | ` +
       `NBA: ${nbaResult.updated} updated, ${nbaResult.inserted} inserted, ${nbaResult.scheduleInserted} schedule-only`
     );
     return result;
   } catch (err) {
     console.error("[VSiNAutoRefresh] Refresh failed:", err);
     return null;
-  }
-}
-
-/**
- * Score-only refresh: re-fetches NCAA scoreboard for today and updates
- * awayScore, homeScore, gameClock, and gameStatus for all NCAAM games.
- * Runs every 5 minutes so live scores stay current.
- */
-async function refreshNcaamScores(): Promise<void> {
-  const todayStr = datePst();
-  try {
-    const yyyymmdd = todayStr.replace(/-/g, "");
-    const ncaaGames = await fetchNcaaGames(yyyymmdd);
-
-    // Also fetch the next UTC day's games from the NCAA API.
-    // The NCAA API uses UTC midnight as the day boundary, so a game at 9 PM PST
-    // on March 13 (= 4 AM UTC on March 14) is returned by the March 14 query.
-    // We use gameDatePst to identify games that actually belong to today (PST).
-    const nextDay = new Date(todayStr + "T00:00:00Z");
-    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-    const nextDayYyyymmdd = nextDay.toISOString().slice(0, 10).replace(/-/g, "");
-    try {
-      const nextDayGames = await fetchNcaaGames(nextDayYyyymmdd);
-      // Include games whose PST calendar date is today (they belong to today's slate
-      // even though the NCAA API returns them under the next UTC day)
-      const todayPstGames = nextDayGames.filter(g => g.gameDatePst === todayStr);
-      ncaaGames.push(...todayPstGames);
-    } catch {
-      // Non-fatal
-    }
-
-    const existing = await listGamesByDate(todayStr, "NCAAM");
-
-    let updated = 0;
-    for (const ncaaGame of ncaaGames) {
-      // Match priority: (1) ncaaContestId exact, (2) canonical slug, (3) reversed slug
-      // Reversed slug handles cases where VSiN inserted the game with swapped home/away
-      const dbGame = existing.find(
-        g => g.ncaaContestId === ncaaGame.contestId
-      ) ?? existing.find(
-        g => slugsMatch(g.awayTeam, ncaaGame.awaySeoname) && slugsMatch(g.homeTeam, ncaaGame.homeSeoname)
-      ) ?? existing.find(
-        g => slugsMatch(g.awayTeam, ncaaGame.homeSeoname) && slugsMatch(g.homeTeam, ncaaGame.awaySeoname)
-      );
-      if (!dbGame) {
-        console.log(
-          `[ScoreRefresh][NCAAM] NO_MATCH: ${ncaaGame.awaySeoname}@${ncaaGame.homeSeoname} ` +
-          `contestId=${ncaaGame.contestId} — not in DB for ${todayStr}`
-        );
-        continue;
-      }
-      const matchType = dbGame.ncaaContestId === ncaaGame.contestId ? 'CONTEST_ID'
-        : (slugsMatch(dbGame.awayTeam, ncaaGame.awaySeoname) ? 'CANONICAL' : 'REVERSED');
-      console.log(
-        `[ScoreRefresh][NCAAM] ${matchType}: ${ncaaGame.awaySeoname}@${ncaaGame.homeSeoname} ` +
-        `→ DB id=${dbGame.id} (${dbGame.awayTeam}@${dbGame.homeTeam}) | ` +
-        `status=${ncaaGame.gameStatus} score=${ncaaGame.awayScore}-${ncaaGame.homeScore} clock=${ncaaGame.gameClock}`
-      );
-
-      await updateNcaaStartTime(dbGame.id, {
-        startTimeEst: dbGame.startTimeEst,
-        ncaaContestId: dbGame.ncaaContestId ?? ncaaGame.contestId,
-        gameStatus: ncaaGame.gameStatus,
-        awayScore: ncaaGame.awayScore ?? null,
-        homeScore: ncaaGame.homeScore ?? null,
-        gameClock: ncaaGame.gameClock ?? null,
-      });
-      // Auto-advance bracket winner when game transitions to final
-      if (ncaaGame.gameStatus === 'final' && dbGame.gameStatus !== 'final') {
-        void advanceBracketWinner(dbGame.id);
-      }
-      updated++;
-    }
-    console.log(`[ScoreRefresh] Updated scores for ${updated} NCAAM games (${todayStr})`);
-  } catch (err) {
-    console.warn("[ScoreRefresh] Score refresh failed (non-fatal):", err);
   }
 }
 
@@ -1404,12 +1047,11 @@ async function refreshMlbScoresNow(): Promise<{ newlyFinalGamePks: number[] }> {
 }
 
 /**
- * Runs NCAAM, NBA, NHL, and MLB score refreshes immediately.
+ * Runs NBA, NHL, and MLB score refreshes immediately.
  * Exported so it can be triggered manually from the admin panel.
  */
 export async function refreshAllScoresNow(): Promise<void> {
   await Promise.allSettled([
-    refreshNcaamScores(),
     refreshNbaScores(),
     refreshNhlScores(),
     refreshMlbScoresNow(),
@@ -1426,12 +1068,12 @@ export async function refreshAllScoresNow(): Promise<void> {
  * to refreshAnApiOdds so every odds snapshot is tagged as a manual trigger.
  * Called by the owner's "Refresh Now" button in Publish Projections.
  *
- * @param sport - Optional sport scope: 'NCAAM' | 'NBA' | 'NHL'. When provided, only that
- *                sport's VSiN data and AN odds are refreshed. When omitted, all three sports
- *                are refreshed (legacy full-refresh behaviour).
+ * @param sport - Optional sport scope: 'NBA' | 'NHL' | 'MLB'. When provided, only that
+ *                sport's VSiN data and AN odds are refreshed. When omitted, all sports
+ *                are refreshed.
  */
 export async function runVsinRefreshManual(
-  sport?: "NCAAM" | "NBA" | "NHL" | "MLB"
+  sport?: "NBA" | "NHL" | "MLB"
 ): Promise<RefreshResult | null> {
   const todayStr = datePst();
   const sportLabel = sport ?? "ALL";
@@ -1451,26 +1093,12 @@ export async function runVsinRefreshManual(
     const allDates = dateRange(todayStr, rangeEnd);
 
     // ── Per-sport VSiN splits + schedule refresh ──────────────────────────────────────────
-    const doNcaam = !sport || sport === "NCAAM";
     const doNba   = !sport || sport === "NBA";
     const doNhl   = !sport || sport === "NHL";
     const doMlb   = !sport || sport === "MLB";
 
-    let ncaamResult = { updated: 0, inserted: 0, ncaaInserted: 0, total: 0 };
     let nbaResult   = { updated: 0, inserted: 0, scheduleInserted: 0, total: 0 };
     let nhlResult   = { updated: 0, inserted: 0, scheduleInserted: 0, total: 0 };
-
-    if (doNcaam) {
-      console.log(`[VSiNAutoRefresh][MANUAL][NCAAM] ── Refreshing NCAAM VSiN splits + schedule…`);
-      ncaamResult = await refreshNcaam(todayStr, allDates);
-      console.log(
-        `[VSiNAutoRefresh][MANUAL][NCAAM] ✓ VSiN done — ` +
-        `updated=${ncaamResult.updated} inserted=${ncaamResult.inserted} ` +
-        `ncaaInserted=${ncaamResult.ncaaInserted} total=${ncaamResult.total}`
-      );
-    } else {
-      console.log(`[VSiNAutoRefresh][MANUAL][${sportLabel}] Skipping NCAAM VSiN refresh (not in scope)`);
-    }
 
     if (doNba) {
       console.log(`[VSiNAutoRefresh][MANUAL][NBA] ── Refreshing NBA VSiN splits + schedule…`);
@@ -1498,7 +1126,6 @@ export async function runVsinRefreshManual(
 
     // ── AN API DK odds refresh (scoped to active sport) ───────────────────────
     const anSports: AnSport[] = [];
-    if (doNcaam) anSports.push("ncaab");
     if (doNba)   anSports.push("nba");
     if (doNhl)   anSports.push("nhl");
     if (doMlb)   anSports.push("mlb");
@@ -1562,13 +1189,12 @@ export async function runVsinRefreshManual(
     const result: RefreshResult = {
       refreshedAt: new Date().toISOString(),
       scoresRefreshedAt: lastScoresRefreshedAt,
-      updated: ncaamResult.updated,
-      inserted: ncaamResult.inserted,
-      ncaaInserted: ncaamResult.ncaaInserted,
+      updated: 0,
+      inserted: 0,
       nbaUpdated: nbaResult.updated,
       nbaInserted: nbaResult.inserted,
       nbaScheduleInserted: nbaResult.scheduleInserted,
-      total: ncaamResult.total,
+      total: 0,
       nbaTotal: nbaResult.total,
       nhlUpdated: nhlResult.updated,
       nhlInserted: nhlResult.inserted,
@@ -1583,7 +1209,6 @@ export async function runVsinRefreshManual(
     );
     console.log(
       `[VSiNAutoRefresh][MANUAL][${sportLabel}] ✅ COMPLETE — ` +
-      `NCAAM: ${ncaamResult.updated} updated | ` +
       `NBA: ${nbaResult.updated} updated | ` +
       `NHL: ${nhlResult.updated} updated | ` +
       `AN odds: ${anOddsResult.updated} updated, ${anOddsResult.frozen} frozen`
@@ -1627,10 +1252,9 @@ export function startVsinAutoRefresh() {
   }, INTERVAL_MS);
 
   // 15-second score refresh (runs independently of the hourly full refresh)
-  // NCAAM, NBA, NHL only — MLB has its own 10-minute cycle below
+  // NBA, NHL only — MLB has its own 10-minute cycle below
   setInterval(() => {
     if (isWithinActiveHours()) {
-      void refreshNcaamScores();
       void refreshNbaScores();
       void refreshNhlScores();
     }
@@ -2079,8 +1703,8 @@ export function startVsinAutoRefresh() {
 
   console.log(
     "[VSiNAutoRefresh] Scheduler started \u2014 " +
-    "ALL SPORTS (NCAAM/NBA/NHL/MLB): every 10 min (14:01\u201304:59 UTC / 6:01 AM\u201311:59 PM EST) | " +
-    "Score refresh: every 15 sec (NCAAM/NBA/NHL) | MLB: every 10 min (scores + splits + AN odds) | " +
+    "ALL SPORTS (NBA/NHL/MLB): every 10 min (14:01–04:59 UTC / 6:01 AM–11:59 PM EST) | " +
+    "Score refresh: every 15 sec (NBA/NHL) | MLB: every 10 min (scores + splits + AN odds) | " +
     "MLB seeders: pitcher/bullpen/rolling5/batting-splits=24h | park-factors/umpires=7d"
   );
 }

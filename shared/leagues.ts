@@ -3,7 +3,8 @@
  * All logo URLs point to the project CDN (same lifecycle as the webdev project).
  */
 
-export type SportKey = "ncaam" | "nba";
+// NCAAM season ended April 2026 — removed from active display.
+export type SportKey = "nba" | "nhl" | "mlb";
 
 export interface League {
   /** Internal sport key used throughout the codebase */
@@ -17,13 +18,6 @@ export interface League {
 }
 
 export const LEAGUES: League[] = [
-  {
-    sport: "ncaam",
-    name: "College Basketball",
-    shortName: "NCAAM",
-    logoUrl:
-      "https://d2xsxph8kpxj0f.cloudfront.net/310519663397752079/MW3FicTy7ae3qrm8dx8Lua/logo-ncaa_11f6d70c.svg",
-  },
   {
     sport: "nba",
     name: "NBA",

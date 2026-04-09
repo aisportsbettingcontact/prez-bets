@@ -2170,3 +2170,10 @@
 - [x] Generate per-game + aggregate backtest report with accuracy, ROI, edge distribution
 - [x] Save checkpoint and deliver full backtest report
 - [x] Model and publish all 15 MLB games and all 3 NHL games for April 8, 2026 (AN odds + Monte Carlo + K-Props + NHL Poisson)
+- [ ] Audit all NCAAM references across frontend, backend, cron jobs, and DB queries
+- [ ] Remove NCAAM tab from Dashboard sport selector and all NCAAM-specific frontend components
+- [ ] Remove NCAAM from PublishProjections page sport filter
+- [ ] Disable all NCAAM cron jobs, auto-refresh, and scraper calls in vsinAutoRefresh.ts
+- [ ] Remove NCAAM-specific tRPC procedures and DB queries that populate NCAAM data
+- [ ] Verify no NCAAM data leaks to public feed after removal
+- [ ] Run vitest suite and save checkpoint

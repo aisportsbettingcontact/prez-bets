@@ -23,7 +23,6 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
-import { getTeamByDbSlug } from "@shared/ncaamTeams";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 import { useMobileDebug, logMobileEvent } from "@/hooks/useMobileDebug";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -113,10 +112,9 @@ function isFavoriteStillActive(gameDate: string): boolean {
 
 // ─── Team Logo Badge ──────────────────────────────────────────────────────────
 function TeamBadge({ slug, size = 22 }: { slug: string; size?: number }) {
-  const ncaa = getTeamByDbSlug(slug);
-  const nba = !ncaa ? getNbaTeamByDbSlug(slug) : null;
-  const logo = ncaa?.logoUrl ?? nba?.logoUrl;
-  const initials = (ncaa?.ncaaName ?? nba?.name ?? slug.replace(/_/g, " ")).slice(0, 2).toUpperCase();
+  const nba = getNbaTeamByDbSlug(slug);
+  const logo = nba?.logoUrl;
+  const initials = (nba?.name ?? slug.replace(/_/g, " ")).slice(0, 2).toUpperCase();
   return (
     <div
       className="rounded overflow-hidden bg-secondary flex items-center justify-center flex-shrink-0"
@@ -135,14 +133,12 @@ function TeamBadge({ slug, size = 22 }: { slug: string; size?: number }) {
 type GameRow = { id: number; awayTeam: string; homeTeam: string; gameDate: string; startTimeEst: string | null; awayBookSpread?: string | null };
 
 function SearchResultRow({ game, onClick }: { game: GameRow; onClick: () => void }) {
-  const awayNcaa = getTeamByDbSlug(game.awayTeam);
-  const homeNcaa = getTeamByDbSlug(game.homeTeam);
-  const awayNba = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
-  const homeNba = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
-  const awaySchool = awayNcaa?.ncaaName ?? awayNba?.city ?? game.awayTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  const awayNick = awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? "";
-  const homeSchool = homeNcaa?.ncaaName ?? homeNba?.city ?? game.homeTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  const homeNick = homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? "";
+  const awayNba = getNbaTeamByDbSlug(game.awayTeam);
+  const homeNba = getNbaTeamByDbSlug(game.homeTeam);
+  const awaySchool = awayNba?.city ?? game.awayTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const awayNick = awayNba?.nickname ?? "";
+  const homeSchool = homeNba?.city ?? game.homeTeam.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const homeNick = homeNba?.nickname ?? "";
   const time = formatMilitaryTime(game.startTimeEst);
   const dateShort = formatDateShort(game.gameDate);
 
@@ -185,12 +181,10 @@ interface FavNotification {
 }
 
 function FavNotificationBanner({ notif, onDismiss }: { notif: FavNotification; onDismiss: (id: number) => void }) {
-  const awayNcaa = getTeamByDbSlug(notif.awayTeam);
-  const homeNcaa = getTeamByDbSlug(notif.homeTeam);
-  const awayNba = !awayNcaa ? getNbaTeamByDbSlug(notif.awayTeam) : null;
-  const homeNba = !homeNcaa ? getNbaTeamByDbSlug(notif.homeTeam) : null;
-  const awayName = awayNcaa?.ncaaName ?? awayNba?.city ?? notif.awayTeam.replace(/_/g, " ");
-  const homeName = homeNcaa?.ncaaName ?? homeNba?.city ?? notif.homeTeam.replace(/_/g, " ");
+  const awayNba = getNbaTeamByDbSlug(notif.awayTeam);
+  const homeNba = getNbaTeamByDbSlug(notif.homeTeam);
+  const awayName = awayNba?.city ?? notif.awayTeam.replace(/_/g, " ");
+  const homeName = homeNba?.city ?? notif.homeTeam.replace(/_/g, " ");
 
   useEffect(() => {
     const t = setTimeout(() => onDismiss(notif.id), 4000);
@@ -276,7 +270,7 @@ export default function ModelProjections() {
   const [, setLocation] = useLocation();
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [selectedSport, setSelectedSport] = useState<"NCAAM" | "NBA" | "NHL" | "MLB">("NCAAM");
+  const [selectedSport, setSelectedSport] = useState<"MLB" | "NBA" | "NHL">("MLB");
 
   // Query which sports have games today or tomorrow (UTC) — hides pills with no games
   const { data: activeSports } = trpc.games.activeSports.useQuery(undefined, {
@@ -286,10 +280,10 @@ export default function ModelProjections() {
   // Auto-switch away from a sport with no games once activeSports loads
   useEffect(() => {
     if (!activeSports) return;
-    const sportActive = activeSports[selectedSport as 'NBA' | 'NHL' | 'NCAAM' | 'MLB'];
+    const sportActive = activeSports[selectedSport as 'NBA' | 'NHL' | 'MLB'];
     if (!sportActive) {
-      // Pick the first active sport in display order: MLB → NHL → NBA → NCAAM
-      const fallback = (['MLB', 'NHL', 'NBA', 'NCAAM'] as const).find(s => activeSports[s]);
+      // Pick the first active sport in display order: MLB → NHL → NBA
+      const fallback = (['MLB', 'NHL', 'NBA'] as const).find(s => activeSports[s]);
       if (fallback) setSelectedSport(fallback);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -469,12 +463,6 @@ export default function ModelProjections() {
   );
 
   // Cross-sport game lists for the Favorites tab (needs ALL sports regardless of selectedSport)
-  // NOTE: isAppAuthedForFav is defined below — we use a lazy ref pattern to avoid forward-ref issues.
-  // These queries are enabled after isAppAuthedForFav is computed (see below).
-  const { data: allNcaamGames } = trpc.games.list.useQuery(
-    { sport: "NCAAM" },
-    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
-  );
   const { data: allNbaGames } = trpc.games.list.useQuery(
     { sport: "NBA" },
     { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
@@ -667,10 +655,9 @@ export default function ModelProjections() {
   type GameItem = NonNullable<NonNullable<typeof allGames>[number]>;
   const allGamesPool = useMemo((): GameItem[] => {
     const pool: GameItem[] = [];
-    if (allNcaamGames) for (const g of allNcaamGames) { if (g) pool.push(g as GameItem); }
     if (allNbaGames) for (const g of allNbaGames) { if (g) pool.push(g as GameItem); }
     return pool;
-  }, [allNcaamGames, allNbaGames]);
+  }, [allNbaGames]);
 
   // Games to show in the Favorites tab (all sports, all dates, filtered by active favs)
   const favoritesTabGames = useMemo((): GameItem[] => {
@@ -707,10 +694,9 @@ export default function ModelProjections() {
     if (!games || !q) return [];
     return [...games.filter(game => {
       if (!game) return false;
-      const awayNcaa = getTeamByDbSlug(game.awayTeam); const homeNcaa = getTeamByDbSlug(game.homeTeam);
-      const awayNba = !awayNcaa ? getNbaTeamByDbSlug(game.awayTeam) : null;
-      const homeNba = !homeNcaa ? getNbaTeamByDbSlug(game.homeTeam) : null;
-      const terms = [awayNcaa?.ncaaName ?? awayNba?.name ?? "", awayNcaa?.ncaaNickname ?? awayNba?.nickname ?? "", game.awayTeam.replace(/_/g, " "), homeNcaa?.ncaaName ?? homeNba?.name ?? "", homeNcaa?.ncaaNickname ?? homeNba?.nickname ?? "", game.homeTeam.replace(/_/g, " ")].map(s => s.toLowerCase());
+      const awayNba = getNbaTeamByDbSlug(game.awayTeam);
+      const homeNba = getNbaTeamByDbSlug(game.homeTeam);
+      const terms = [awayNba?.name ?? "", awayNba?.nickname ?? "", game.awayTeam.replace(/_/g, " "), homeNba?.name ?? "", homeNba?.nickname ?? "", game.homeTeam.replace(/_/g, " ")].map(s => s.toLowerCase());
       return terms.some(t => t.includes(q));
     })].sort((a, b) => {
       const dateCmp = (a!.gameDate ?? "").localeCompare(b!.gameDate ?? "");
@@ -930,7 +916,7 @@ export default function ModelProjections() {
         </div>
 
 
-        {/* Row 3: Unified filter bar — FAVORITES | DATE | NCAAM | NBA | Search */}
+        {/* Row 3: Unified filter bar — FAVORITES | DATE | MLB | NHL | NBA | Search */}
         {/* Mobile: gap-1 px-2 to keep all pills + search on one row within 375-430px screens */}
         {/* sm+: gap-2 px-3 (unchanged from original) */}
         <div ref={searchRef} className="relative px-2 sm:px-3 pt-1 pb-0 flex items-center gap-1 sm:gap-2">
@@ -987,13 +973,7 @@ export default function ModelProjections() {
             </button>
           )}
 
-          {/* NCAAM pill — only shown when NCAAM has games today or tomorrow */}
-          {(!activeSports || activeSports.NCAAM) && (
-            <button onClick={() => setSelectedSport("NCAAM")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
-              style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NCAAM" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
-              NCAAM
-            </button>
-          )}
+
 
           {/* Search bar — always visible, shrinks when Favorites button is present */}
           {/* Mobile: min-w-[28px] so it always shows at least the icon; flex-1 fills remaining space */}
@@ -1074,7 +1054,7 @@ export default function ModelProjections() {
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
                 }}
-              >{selectedSport === 'NCAAM' ? "MEN'S COLLEGE BASKETBALL" : selectedSport === 'NBA' ? 'NBA BASKETBALL' : selectedSport === 'MLB' ? 'MLB BASEBALL' : 'NHL HOCKEY'}</span>
+              >{selectedSport === 'NBA' ? 'NBA BASKETBALL' : selectedSport === 'MLB' ? 'MLB BASEBALL' : 'NHL HOCKEY'}</span>
             </div>
           </div>
         )}
@@ -1090,7 +1070,7 @@ export default function ModelProjections() {
           </div>
         )}
 
-        {/* Row 5: Feed-wide mobile tab filter — MODEL PROJECTIONS | BETTING SPLITS | BRACKET (NCAAM) */}
+        {/* Row 5: Feed-wide mobile tab filter — MODEL PROJECTIONS | BETTING SPLITS | LINEUPS (MLB) */}
         {/* Tab bar: mobile always shown; desktop shown when MLB is selected (for LINEUPS tab) */}
         <div className="grid" style={{
             gridTemplateColumns: `repeat(${FEED_TABS.length}, 1fr)`,

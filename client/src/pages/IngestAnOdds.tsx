@@ -59,7 +59,7 @@ export default function IngestAnOdds() {
 
   const [html, setHtml] = useState("");
   const [gameDate, setGameDate] = useState(todayEst());
-  const [sport, setSport] = useState<"NCAAM" | "NBA" | "NHL">("NCAAM");
+  const [sport, setSport] = useState<"NBA" | "NHL">("NBA");
 
   const ingestMutation = trpc.games.ingestAnHtml.useMutation({
     onSuccess: (data) => {
@@ -181,13 +181,12 @@ export default function IngestAnOdds() {
             <Label className="text-sm font-medium">Sport</Label>
             <Select
               value={sport}
-              onValueChange={(v) => setSport(v as "NCAAM" | "NBA" | "NHL")}
+              onValueChange={(v) => setSport(v as "NBA" | "NHL")}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="NCAAM">NCAAM</SelectItem>
                 <SelectItem value="NBA">NBA</SelectItem>
                 <SelectItem value="NHL">NHL</SelectItem>
               </SelectContent>

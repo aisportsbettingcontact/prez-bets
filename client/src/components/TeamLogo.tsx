@@ -1,9 +1,7 @@
 /**
- * TeamLogo — resolves team logos from the shared registry (ncaamTeams / nbaTeams).
+ * TeamLogo — resolves team logos from the shared registry (nbaTeams / nhlTeams / mlbTeams).
  * Falls back to a colored circle badge with initials if no logo is found.
  */
-
-import { getTeamByDbSlug } from "@shared/ncaamTeams";
 
 const PALETTE = [
   "#e63946", "#2a9d8f", "#e9c46a", "#f4a261", "#264653",
@@ -28,37 +26,12 @@ function abbrev(name: string): string {
 }
 
 interface TeamLogoProps {
-  /** Team DB slug, e.g. "duke", "nc_state" */
+  /** Team DB slug, e.g. "lakers", "bruins" */
   name: string;
   size?: number;
 }
 
 export default function TeamLogo({ name, size = 36 }: TeamLogoProps) {
-  const team = getTeamByDbSlug(name);
-  const logoUrl = team?.logoUrl;
-
-  if (logoUrl) {
-    return (
-      <img
-        src={logoUrl}
-        alt={team?.ncaaName ?? name}
-        width={size}
-        height={size}
-        style={{
-          width: size,
-          height: size,
-          minWidth: size,
-          objectFit: "contain",
-          borderRadius: "4px",
-          mixBlendMode: "multiply",
-        }}
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = "none";
-        }}
-      />
-    );
-  }
-
   // Fallback: colored badge with initials
   const bg = colorFromName(name);
   const text = abbrev(name);
