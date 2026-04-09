@@ -14,7 +14,7 @@
 
 import { listGamesByDate, updateBookOdds, insertGames, updateAnOdds, insertOddsHistory, getGameByNcaaContestId, updateNcaaStartTime } from "./db";
 import { fetchActionNetworkOdds, type AnSport } from "./actionNetworkScraper";
-import { scrapeVsinBettingSplits, scrapeVsinBettingSplitsBothDays, scrapeVsinMlbBettingSplits, type VsinSplitsGame } from "./vsinBettingSplitsScraper";
+import { scrapeVsinBettingSplits, scrapeVsinBettingSplitsBothDays, scrapeVsinMlbBettingSplits, scrapeVsinNbaBettingSplits, scrapeVsinNhlBettingSplits, type VsinSplitsGame } from "./vsinBettingSplitsScraper";
 import { fetchNbaGamesForDate, buildNbaStartTimeMap, fetchNbaLiveScores } from "./nbaScoreboard";
 import { fetchNhlGamesForRange, buildNhlStartTimeMap, buildNhlGameMap, fetchNhlLiveScores, type NhlScheduleGame } from "./nhlSchedule";
 import { NBA_VALID_DB_SLUGS, NBA_BY_VSIN_SLUG, NBA_BY_AN_SLUG, getNbaTeamByVsinSlug, NBA_BY_DB_SLUG } from "../shared/nbaTeams";
@@ -243,8 +243,10 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
   // Scrape VSiN NBA betting splits (today only)
   let vsinSplits: VsinSplitsGame[] = [];
   try {
-    vsinSplits = await scrapeVsinBettingSplitsBothDays("NBA");
-    console.log(`[refreshNba] VSiN NBA splits fetched: ${vsinSplits.length} games (front+tomorrow merged)`);
+    // NBA: view=today and view=tomorrow both serve NBA on the combined page.
+    // scrapeVsinNbaBettingSplits() uses ?source=DK&sport=NBA for reliability.
+    vsinSplits = await scrapeVsinNbaBettingSplits();
+    console.log(`[refreshNba] VSiN NBA splits fetched: ${vsinSplits.length} games (sport-specific URL, today+tomorrow merged)`);
   } catch (err) {
     console.warn("[VSiNAutoRefresh] VSiN NBA splits scrape failed (non-fatal):", err);
   }
@@ -282,15 +284,21 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
 
   // Apply VSiN splits to today's existing NBA games
   let totalUpdated = 0;
+  let spreadPopulated = 0;   // freshness monitor: games with real spread splits
+  let spreadPending = 0;     // freshness monitor: games with 0/0 spread (market not open)
+  let spreadUnmatched = 0;   // freshness monitor: DB games not found in VSIN map
   const existingToday = await listGamesByDate(todayStr, "NBA");
   for (const dbGame of existingToday) {
     const key = `${dbGame.awayTeam}@${dbGame.homeTeam}`;
     const entry = vsinSplitsMap.get(key);
-    if (!entry) continue;
+    if (!entry) { spreadUnmatched++; continue; }
     const { game: splits, swapped } = entry;
+    const rawSpreadBets = swapped ? (splits.spreadAwayBetsPct != null ? 100 - splits.spreadAwayBetsPct : null) : splits.spreadAwayBetsPct;
+    const rawSpreadMoney = swapped ? (splits.spreadAwayMoneyPct != null ? 100 - splits.spreadAwayMoneyPct : null) : splits.spreadAwayMoneyPct;
+    if (rawSpreadBets === 0 && rawSpreadMoney === 0) { spreadPending++; } else if (rawSpreadBets != null) { spreadPopulated++; }
     await updateBookOdds(dbGame.id, {
-      spreadAwayBetsPct: swapped ? (splits.spreadAwayBetsPct != null ? 100 - splits.spreadAwayBetsPct : null) : splits.spreadAwayBetsPct,
-      spreadAwayMoneyPct: swapped ? (splits.spreadAwayMoneyPct != null ? 100 - splits.spreadAwayMoneyPct : null) : splits.spreadAwayMoneyPct,
+      spreadAwayBetsPct: rawSpreadBets,
+      spreadAwayMoneyPct: rawSpreadMoney,
       totalOverBetsPct: splits.totalOverBetsPct,
       totalOverMoneyPct: splits.totalOverMoneyPct,
       mlAwayBetsPct: swapped ? (splits.mlAwayBetsPct != null ? 100 - splits.mlAwayBetsPct : null) : splits.mlAwayBetsPct,
@@ -373,6 +381,17 @@ async function refreshNba(todayStr: string, allDates: string[]): Promise<{
   console.log(
     `[refreshNba] ✅ DONE — updated=${totalUpdated} inserted=${totalInserted} scheduleInserted=${scheduleInserted} total=${vsinSplits.length}`
   );
+  // ── Splits freshness health-check ──────────────────────────────────────────
+  const spreadStatus = spreadPopulated > 0
+    ? `${spreadPopulated}/${existingToday.length} spread_populated`
+    : spreadPending > 0
+      ? `0/${existingToday.length} spread_populated (${spreadPending} pending — market not yet open)`
+      : `0/${existingToday.length} spread_populated`;
+  console.log(
+    `[refreshNba][SPLITS_HEALTH] today=${todayStr} | ${spreadStatus}` +
+    ` | unmatched=${spreadUnmatched} | vsin_fetched=${vsinSplits.length}` +
+    (spreadPopulated === 0 && vsinSplits.length > 0 ? " ⚠️  WARN: VSIN has games but 0 spread splits written — check team slug mapping" : "")
+  );
   return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: vsinSplits.length };
 }
 
@@ -388,8 +407,11 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
   // Scrape VSiN NHL betting splits (today only)
   let vsinSplits: VsinSplitsGame[] = [];
   try {
-    vsinSplits = await scrapeVsinBettingSplitsBothDays("NHL");
-    console.log(`[refreshNhl] VSiN NHL splits fetched: ${vsinSplits.length} games (front+tomorrow merged)`);
+    // NHL: view=today and view=tomorrow both serve NHL on the combined page.
+    // scrapeVsinNhlBettingSplits() uses ?source=DK&sport=NHL for reliability.
+    vsinSplits = await scrapeVsinNhlBettingSplits();
+    console.log(`[refreshNhl] VSiN NHL splits fetched: ${vsinSplits.length} games (sport-specific URL, today+tomorrow merged)`);
+
   } catch (err) {
     console.warn("[VSiNAutoRefresh] VSiN NHL splits scrape failed (non-fatal):", err);
   }
@@ -432,15 +454,21 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
 
   // Apply VSiN splits to today's existing NHL games
   let totalUpdated = 0;
+  let spreadPopulated = 0;   // freshness monitor: games with real puck line splits
+  let spreadPending = 0;     // freshness monitor: games with 0/0 puck line (market not open)
+  let spreadUnmatched = 0;   // freshness monitor: DB games not found in VSIN map
   const existingToday = await listGamesByDate(todayStr, "NHL");
   for (const dbGame of existingToday) {
     const key = `${dbGame.awayTeam}@${dbGame.homeTeam}`;
     const entry = vsinSplitsMap.get(key);
-    if (!entry) continue;
+    if (!entry) { spreadUnmatched++; continue; }
     const { game: splits, swapped } = entry;
+    const rawSpreadBets = swapped ? (splits.spreadAwayBetsPct != null ? 100 - splits.spreadAwayBetsPct : null) : splits.spreadAwayBetsPct;
+    const rawSpreadMoney = swapped ? (splits.spreadAwayMoneyPct != null ? 100 - splits.spreadAwayMoneyPct : null) : splits.spreadAwayMoneyPct;
+    if (rawSpreadBets === 0 && rawSpreadMoney === 0) { spreadPending++; } else if (rawSpreadBets != null) { spreadPopulated++; }
     await updateBookOdds(dbGame.id, {
-      spreadAwayBetsPct: swapped ? (splits.spreadAwayBetsPct != null ? 100 - splits.spreadAwayBetsPct : null) : splits.spreadAwayBetsPct,
-      spreadAwayMoneyPct: swapped ? (splits.spreadAwayMoneyPct != null ? 100 - splits.spreadAwayMoneyPct : null) : splits.spreadAwayMoneyPct,
+      spreadAwayBetsPct: rawSpreadBets,
+      spreadAwayMoneyPct: rawSpreadMoney,
       totalOverBetsPct: splits.totalOverBetsPct,
       totalOverMoneyPct: splits.totalOverMoneyPct,
       mlAwayBetsPct: swapped ? (splits.mlAwayBetsPct != null ? 100 - splits.mlAwayBetsPct : null) : splits.mlAwayBetsPct,
@@ -520,6 +548,17 @@ async function refreshNhl(todayStr: string, allDates: string[]): Promise<{
   console.log(
     `[refreshNhl] ✅ DONE — updated=${totalUpdated} inserted=${totalInserted} scheduleInserted=${scheduleInserted} total=${vsinSplits.length}`
   );
+  // ── Splits freshness health-check ──────────────────────────────────────────
+  const nhlSpreadStatus = spreadPopulated > 0
+    ? `${spreadPopulated}/${existingToday.length} puck_line_populated`
+    : spreadPending > 0
+      ? `0/${existingToday.length} puck_line_populated (${spreadPending} pending — market not yet open)`
+      : `0/${existingToday.length} puck_line_populated`;
+  console.log(
+    `[refreshNhl][SPLITS_HEALTH] today=${todayStr} | ${nhlSpreadStatus}` +
+    ` | unmatched=${spreadUnmatched} | vsin_fetched=${vsinSplits.length}` +
+    (spreadPopulated === 0 && vsinSplits.length > 0 ? " ⚠️  WARN: VSIN has games but 0 puck line splits written — check team slug mapping" : "")
+  );
   return { updated: totalUpdated, inserted: totalInserted, scheduleInserted, total: vsinSplits.length };
 }
 
@@ -594,6 +633,9 @@ async function refreshMlb(todayStr: string): Promise<{
   // VSiN's MLB page shows games for the next 1-2 days, so we query both
   // today and tomorrow to ensure we catch games on either side of midnight.
   let totalUpdated = 0;
+  let rlPopulated = 0;    // freshness monitor: today's games with real run-line splits
+  let rlPending = 0;      // freshness monitor: today's games with 0/0 RL (market not open)
+  let rlUnmatched = 0;    // freshness monitor: DB games not found in VSIN map
   const tomorrowStr = (() => {
     const d = new Date(todayStr + "T12:00:00Z");
     d.setUTCDate(d.getUTCDate() + 1);
@@ -644,6 +686,10 @@ async function refreshMlb(todayStr: string): Promise<{
     // misleading 100% home bar (home = 100 - 0 = 100). Skip run-line writes when both
     // bets AND money are 0 — treat as "not yet available" and preserve any existing DB value.
     const rlSplitsAvailable = !(spreadAwayBetsPct === 0 && spreadAwayMoneyPct === 0);
+    // Track freshness for today's games only
+    if (dbGame.gameDate === todayStr) {
+      if (!rlSplitsAvailable) { rlPending++; } else if (spreadAwayBetsPct != null) { rlPopulated++; }
+    }
     if (!rlSplitsAvailable) {
       console.log(
         `${tag} SKIP_RL_ZERO: ${dbGame.awayTeam} @ ${dbGame.homeTeam} (gameId=${dbGame.id}) ` +
@@ -679,6 +725,17 @@ async function refreshMlb(todayStr: string): Promise<{
 
   console.log(
     `${tag} ✅ DONE — splits_updated=${totalUpdated} db_games=${existingToday.length} vsin_games=${vsinSplits.length}`
+  );
+  // ── Splits freshness health-check ──────────────────────────────────────────
+  const mlbRlStatus = rlPopulated > 0
+    ? `${rlPopulated}/${todayGames.length} run_line_populated`
+    : rlPending > 0
+      ? `0/${todayGames.length} run_line_populated (${rlPending} pending — market not yet open)`
+      : `0/${todayGames.length} run_line_populated`;
+  console.log(
+    `${tag}[SPLITS_HEALTH] today=${todayStr} | ${mlbRlStatus}` +
+    ` | tomorrow_skipped=${rlPending} | unmatched=${rlUnmatched} | vsin_fetched=${vsinSplits.length}` +
+    (rlPopulated === 0 && todayGames.length > 0 && vsinSplits.length > 0 ? " ⚠️  WARN: VSIN has games but 0 run-line splits written for today — check team slug mapping" : "")
   );
   return { updated: totalUpdated, inserted: 0, total: vsinSplits.length };
 }
