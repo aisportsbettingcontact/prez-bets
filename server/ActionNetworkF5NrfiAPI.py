@@ -37,8 +37,6 @@ import sys
 import json
 import requests
 import logging
-from datetime import datetime
-from typing import Any
 
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
 FD_NJ_BOOK_ID = "69"

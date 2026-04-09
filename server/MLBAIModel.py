@@ -23,11 +23,11 @@ Implements the full 12-step MAX SPEC blueprint:
   Step 12: Logging + Debugging (mandatory structured logging)
 """
 
-import os, sys, json, math, time, warnings
+import sys, math, time, warnings
 import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
-from scipy.stats import norm, gamma as scipy_gamma
+from scipy.stats import norm
 from collections import defaultdict
 
 warnings.filterwarnings('ignore')
@@ -225,11 +225,9 @@ def _select_optimal_total(total_dist: np.ndarray, key_numbers: List[float],
 
     for line in key_numbers:
         p_over  = float((total_dist > line).mean())
-        p_under = float((total_dist < line).mean())
         p_push  = float((total_dist == line).mean())
         # Penalize push mass: redistribute half to over, half to under
         p_over_adj  = p_over  + p_push * 0.5
-        p_under_adj = p_under + p_push * 0.5
         score = abs(p_over_adj - 0.5)
         logger.state(f"  Total line {line}: P(over)={p_over:.4f} P(push)={p_push:.4f} "
                      f"P(over_adj)={p_over_adj:.4f} score={score:.4f}")
@@ -640,7 +638,6 @@ class MonteCarloEngine:
         p_f5_away_win = float(f5_away_win.mean()) + float(f5_tie.mean()) * 0.5
         # F5 run line cover (default -0.5 for favorite)
         # Positive rl_spread = home is dog, negative = home is fav
-        f5_rl = rl_spread * F5_RUN_SHARE  # scale RL to F5 context
         # For F5, standard RL is -0.5 / +0.5
         F5_RL = -0.5
         p_f5_home_rl  = float((f5_margins > abs(F5_RL)).mean())  # home covers -0.5
@@ -699,8 +696,6 @@ class MonteCarloEngine:
         # Realistic range: bins 4 through 20 inclusive (totals 4-20).
         realistic_counts = hist_counts_full[4:21]  # 17 bins covering totals 4..20
         sparse_buckets = int((realistic_counts < MIN_SAMPLE_PER_BUCKET).sum())
-        hist_counts = hist_counts_full  # keep full array for logging
-
         if logger:
             logger.log_distribution("totals", totals, KEY_TOTAL_NUMBERS)
             logger.log_distribution("home_runs", home_runs, [3, 4, 5, 6, 7])
@@ -1511,8 +1506,6 @@ def project_game(
     away_bullpen_feat = _build_bullpen_from_db(away_bullpen, away_abbrev)
     home_bullpen_feat = _build_bullpen_from_db(home_bullpen, home_abbrev)
     # For game state building: home lineup faces away SP + away bullpen; away lineup faces home SP + home bullpen
-    bullpen = _default_bullpen()  # kept as legacy fallback, overridden per-state below
-
     # Step 1: Deep diagnostic logging for pitcher features
     logger.step("Step 1b: Pitcher Feature Diagnostics")
     logger.state(

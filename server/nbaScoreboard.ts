@@ -146,7 +146,8 @@ export async function fetchNbaGamesForDate(dateEst: string): Promise<NbaGame[]> 
 /**
  * Returns NBA games for a date range [fromDate, toDate] inclusive (YYYY-MM-DD).
  */
-export async function fetchNbaGamesForRange(fromDate: string, toDate: string): Promise<NbaGame[]> {
+// Dead export — no active callers in pipeline
+async function fetchNbaGamesForRange(fromDate: string, toDate: string): Promise<NbaGame[]> {
   const all = await fetchNbaSchedule();
   return all.filter(g => {
     if (g.gameDateEst < fromDate || g.gameDateEst > toDate) return false;
@@ -172,7 +173,8 @@ export function buildNbaStartTimeMap(games: NbaGame[]): Map<string, string> {
  * Invalidates the cached schedule, forcing a fresh fetch on the next call.
  * Call this after a manual refresh or when stale data is suspected.
  */
-export function invalidateNbaScheduleCache(): void {
+// Dead export — no active callers in pipeline
+function invalidateNbaScheduleCache(): void {
   cachedSchedule = null;
 }
 

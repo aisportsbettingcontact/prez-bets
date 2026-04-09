@@ -97,7 +97,6 @@ def scrape_action_network_strikeouts(date_str: str | None = None) -> list[dict]:
     log(f"Navigating to: {url}")
 
     props_data: list[dict] = []
-    api_responses: list[dict] = []
 
     try:
         with sync_playwright() as pw:

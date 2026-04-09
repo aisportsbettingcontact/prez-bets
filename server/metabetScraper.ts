@@ -178,7 +178,8 @@ const HEADERS = {
  * @param leagueCode - "BKC" (NCAAB), "BKP" (NBA), or "HKN" (NHL)
  * @returns Array of MetabetConsensusOdds, one per game.
  */
-export async function fetchMetabetConsensusOdds(
+// Dead export — no active callers in pipeline
+async function fetchMetabetConsensusOdds(
   leagueCode: MetabetLeagueCode
 ): Promise<MetabetConsensusOdds[]> {
   const url = `${METABET_BASE}?apiKey=${METABET_API_KEY}&includeDonBestData&leagueCode=${leagueCode}`;

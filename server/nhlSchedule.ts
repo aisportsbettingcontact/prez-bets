@@ -296,7 +296,8 @@ async function fetchNhlScheduleForDate(dateStr: string = "now"): Promise<NhlSche
  * Fetches NHL games for a specific date in YYYY-MM-DD format.
  * Filters to only regular season and playoff games.
  */
-export async function fetchNhlGamesForDate(dateStr: string): Promise<NhlScheduleGame[]> {
+// Dead export — no active callers in pipeline
+async function fetchNhlGamesForDate(dateStr: string): Promise<NhlScheduleGame[]> {
   const all = await fetchNhlScheduleForDate(dateStr);
   return all.filter((g) => g.gameDateEst === dateStr && g.gameType >= 2);
 }
@@ -354,7 +355,8 @@ export function buildNhlGameMap(games: NhlScheduleGame[]): Map<string, NhlSchedu
 /**
  * Invalidates the cached schedule, forcing a fresh fetch on the next call.
  */
-export function invalidateNhlScheduleCache(): void {
+// Dead export — no active callers in pipeline
+function invalidateNhlScheduleCache(): void {
   cachedSchedule = null;
   console.log("[NHLSchedule] Cache invalidated");
 }

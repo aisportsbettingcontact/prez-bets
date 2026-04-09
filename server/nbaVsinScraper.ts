@@ -344,7 +344,8 @@ function parseNbaGames(
  * Scrapes the VSiN NBA betting splits page for games on a given date.
  * @param dateLabel - Date string in YYYYMMDD format, or "ALL" for all dates.
  */
-export async function scrapeNbaVsinOdds(dateLabel: string): Promise<NbaScrapedOdds[]> {
+// Dead export — no active callers in pipeline
+async function scrapeNbaVsinOdds(dateLabel: string): Promise<NbaScrapedOdds[]> {
   const startTime = Date.now();
   console.log(`[VSiN-NBA] Starting scrape for date: ${dateLabel}`);
 

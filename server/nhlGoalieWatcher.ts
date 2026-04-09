@@ -386,7 +386,8 @@ export function startNhlGoalieWatcher(): void {
   console.log("[GoalieWatcher] Watcher started - runs every 10 minutes (9AM-9PM PST)");
 }
 
-export function stopNhlGoalieWatcher(): void {
+// Dead export — no active callers in pipeline
+function stopNhlGoalieWatcher(): void {
   if (watcherIntervalId) {
     clearInterval(watcherIntervalId);
     watcherIntervalId = null;

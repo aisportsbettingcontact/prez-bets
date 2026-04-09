@@ -402,7 +402,8 @@ export function startNbaModelSyncScheduler(): void {
   console.log("[NBAModelSync] Scheduler started (every 30 min, 9AM–9PM PST).");
 }
 
-export function stopNbaModelSyncScheduler(): void {
+// Dead export — no active callers in pipeline
+function stopNbaModelSyncScheduler(): void {
   if (syncInterval) {
     clearInterval(syncInterval);
     syncInterval = null;

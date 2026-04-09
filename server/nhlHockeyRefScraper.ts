@@ -225,7 +225,8 @@ export async function computeNhlRestDays(
 /**
  * Invalidate the schedule cache (e.g. call at midnight to force a fresh fetch).
  */
-export function invalidateScheduleCache(): void {
+// Dead export — no active callers in pipeline
+function invalidateScheduleCache(): void {
   scheduleCache = null;
   console.log("[HockeyRef] Schedule cache invalidated");
 }

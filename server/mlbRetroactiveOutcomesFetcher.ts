@@ -515,7 +515,8 @@ export interface RetroactiveOutcomesSummary {
   errors: string[];
 }
 
-export async function fetchRetroactiveOutcomes(
+// Dead export — no active callers in pipeline
+async function fetchRetroactiveOutcomes(
   startDate: string,
   endDate: string
 ): Promise<RetroactiveOutcomesSummary> {

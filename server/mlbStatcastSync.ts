@@ -152,7 +152,8 @@ function parseCSVLine(line: string): string[] {
 
 // ─── Main sync function ───────────────────────────────────────────────────────
 
-export async function syncStatcastData(year: number = 2025): Promise<StatcastSyncResult> {
+// Dead export — no active callers in pipeline
+async function syncStatcastData(year: number = 2025): Promise<StatcastSyncResult> {
   const result: StatcastSyncResult = {
     fetched: 0,
     updated: 0,

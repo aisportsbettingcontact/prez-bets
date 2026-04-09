@@ -53,7 +53,7 @@ USAGE
         --home-market   5.5 +110 -130 \\
         --output        /path/to/output.html
 """
-import os, sys, json, math, argparse, warnings
+import json, math, argparse, warnings
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -672,8 +672,6 @@ class StrikeoutProjectionModel:
         # Replaces derived variance scale which over-dispersed the distribution
         nb_r  = NEGBIN_R
         nb_p  = float(np.clip(nb_r / (nb_r + max(expected_k, 0.3)), 0.01, 0.99))
-        k_var = nb_r * (1 - nb_p) / (nb_p ** 2)  # NegBin variance (for display)
-
         # PMF for 0–10+
         dist_pcts = []
         for k in range(10):
@@ -841,18 +839,6 @@ def generate_html(away_team: str, home_team: str, game_date: str,
         if p <= 0.40: return '#FF2D55'
         return '#EDF2F7'
 
-    # Build matchup tables
-    a_matchup = _matchup_table(away_proj['matchup_rows'])
-    h_matchup = _matchup_table(home_proj['matchup_rows'])
-
-    # Build inning tables
-    a_inn_tbl = _inning_table(away_proj['signal']['inning_rates'])
-    h_inn_tbl = _inning_table(home_proj['signal']['inning_rates'])
-
-    # Distribution cells
-    a_dist = _dist_cells(away_proj['dist_pcts'])
-    h_dist = _dist_cells(home_proj['dist_pcts'])
-
     # Edge colors
     a_over_col  = _prop_edge_color(away_proj['p_over_k_line'])
     a_under_col = _prop_edge_color(away_proj['p_under_k_line'])
@@ -900,9 +886,6 @@ def generate_html(away_team: str, home_team: str, game_date: str,
             return 0.5
         bk_over_be  = _breakeven(bk_over_ml)   # breakeven rate for Over bet
         bk_under_be = _breakeven(bk_under_ml)  # breakeven rate for Under bet
-        # Raw implied (with vig) — shown for reference only
-        bk_over_imp  = _ml2p(bk_over_ml)
-        bk_under_imp = _ml2p(bk_under_ml)
         # Model probability at the BOOK line (may differ from model line)
         raw_samps = proj.get('_samps', None)
         if raw_samps is not None and bk_line != proj['k_line']:
@@ -916,24 +899,15 @@ def generate_html(away_team: str, home_team: str, game_date: str,
         # Positive edge means model says this side wins more often than needed to profit
         edge_over  = samps_over  - bk_over_be
         edge_under = samps_under - bk_under_be
-        # ROI = edge / breakeven rate (expected profit per dollar risked)
-        roi_over  = edge_over  / max(bk_over_be,  0.01) * 100
-        roi_under = edge_under / max(bk_under_be, 0.01) * 100
         # Best edge side
         if edge_over >= edge_under:
-            best_side      = 'OVER'
-            best_edge      = edge_over
-            best_roi       = roi_over
-            best_model_pct = samps_over * 100
-            best_be        = bk_over_be
-            best_ml        = bk_over_ml
+            best_side = 'OVER'
+            best_edge = edge_over
+            best_ml   = bk_over_ml
         else:
-            best_side      = 'UNDER'
-            best_edge      = edge_under
-            best_roi       = roi_under
-            best_model_pct = samps_under * 100
-            best_be        = bk_under_be
-            best_ml        = bk_under_ml
+            best_side = 'UNDER'
+            best_edge = edge_under
+            best_ml   = bk_under_ml
         # Verdict: EDGE if model prob > breakeven by ≥3%, FADE if below by ≥3%
         edge_col    = '#39FF14' if best_edge >= 0.03 else ('#FF2D55' if best_edge <= -0.03 else '#EDF2F7')
         verdict     = 'EDGE'    if best_edge >= 0.03 else ('FADE'    if best_edge <= -0.03 else 'NEUTRAL')
@@ -972,9 +946,6 @@ def generate_html(away_team: str, home_team: str, game_date: str,
     </div>
   </div>
 </div>'''
-
-    a_mkt_block = _market_comparison_block(away_proj, away_market, a_col2)
-    h_mkt_block = _market_comparison_block(home_proj, home_market, h_col2)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">

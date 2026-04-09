@@ -50,7 +50,6 @@ Output schema (last line of stdout):
 import sys
 import json
 import numpy as np
-from scipy.stats import norm
 import time
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -794,7 +793,6 @@ def run_engine(inp: dict) -> dict:
     home_sp_display = -model_sp_r
     away_sp_display = +model_sp_r
 
-    orig_to = sim['originated_total']
     raw_sp  = sim['raw_spread']
     raw_to  = sim['raw_total']
     # Scores from derived rounded line
