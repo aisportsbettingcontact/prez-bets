@@ -1,0 +1,105 @@
+# .github/dependabot.yml
+#
+# Dependabot auto-update configuration.
+#
+# Strategy:
+#   - Weekly PRs for npm dependencies (Monday 09:00 UTC)
+#   - Patch and minor updates grouped into a single PR to reduce noise
+#   - Major version bumps get individual PRs for manual review
+#   - Security updates are always opened immediately regardless of schedule
+#
+# Integration with CI:
+#   - Every Dependabot PR triggers the full ci.yml workflow
+#   - pnpm audit --audit-level=high blocks merge if the update introduces a new CVE
+#   - TypeScript check and Vitest suite must pass before merge is allowed
+#
+# Merge policy (set in GitHub branch protection rules):
+#   - Require status checks: ci / security-audit, ci / typecheck, ci / test
+#   - Require 1 approval (or enable auto-merge for patch-only PRs)
+
+version: 2
+
+updates:
+  # ─── npm / Node.js ──────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+
+    # Open PRs against main
+    target-branch: "main"
+
+    # Reviewer and assignee for all Dependabot PRs
+    reviewers:
+      - "aisportsbettingcontact"
+    assignees:
+      - "aisportsbettingcontact"
+
+    # Group patch + minor updates into a single PR per week
+    # Major updates get individual PRs for manual review
+    groups:
+      patch-and-minor:
+        # All packages except those explicitly excluded below
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+    # Ignore major version bumps for these packages until manually reviewed
+    ignore:
+      # drizzle-orm major versions require schema migration review
+      - dependency-name: "drizzle-orm"
+        update-types: ["version-update:semver-major"]
+      # drizzle-kit major versions require migration tooling review
+      - dependency-name: "drizzle-kit"
+        update-types: ["version-update:semver-major"]
+      # @trpc/* major versions require API contract review
+      - dependency-name: "@trpc/*"
+        update-types: ["version-update:semver-major"]
+      # React major versions require full UI regression testing
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      # Tailwind major versions require CSS variable and theme review
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+
+    # Limit open PRs to avoid overwhelming the review queue
+    open-pull-requests-limit: 10
+
+    # Add labels to Dependabot PRs for easy filtering
+    labels:
+      - "dependencies"
+      - "automated"
+
+    # Commit message prefix for conventional commits
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(dev-deps)"
+      include: "scope"
+
+  # ─── GitHub Actions ──────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    target-branch: "main"
+    reviewers:
+      - "aisportsbettingcontact"
+    assignees:
+      - "aisportsbettingcontact"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "chore(actions)"
+    open-pull-requests-limit: 5

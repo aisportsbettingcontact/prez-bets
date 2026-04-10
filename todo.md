@@ -2228,3 +2228,17 @@
 - [x] Add ciSecrets.test.ts: 5 tests validating all 7 required GitHub Actions secrets (presence, length, format) with safe preview logging (never logs full values)
 - [x] Update ci.yml: fix test count to 435, improve secrets documentation with formats and values, add MySQL format note for DATABASE_URL
 - [x] TypeScript: 0 errors | Vitest: 435/435 passing (24 test files)
+
+## Security Hardening Round 3 (2026-04-10)
+- [x] Weekly moderate-level security audit GitHub Actions workflow (security-audit-weekly.yml)
+- [x] CSRF block → notifyOwner() alert with in-memory rate-limit guard (1 alert/IP/10min)
+- [x] ciSecrets.test.ts — 5 Vitest tests validating all 7 required GitHub Actions secrets
+- [x] security_events DB table (migration 0054) with indexes on eventType, ip, occurredAt
+- [x] DB helpers: insertSecurityEvent, getSecurityEvents, getSecurityEventCounts, pruneSecurityEvents
+- [x] CSRF block persistence: fireCsrfBlockAlert() writes to security_events table
+- [x] tRPC security router: security.events.list, security.events.counts, security.events.prune
+- [x] SecurityEvents.tsx owner-only admin page: 24h rolling counts, filterable event log, prune dialog
+- [x] /admin/security route registered in App.tsx
+- [x] Security Events button added to UserManagement.tsx header nav
+- [x] Dependabot config (.github/dependabot.yml): weekly npm + GitHub Actions updates, grouped patch/minor PRs
+- [x] GitHub Secrets documentation (.github/SECRETS_SETUP.md) with all 7 required + 10 optional secrets

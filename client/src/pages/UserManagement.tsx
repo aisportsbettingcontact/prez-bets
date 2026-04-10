@@ -31,7 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Shield, User, Crown, RefreshCw,
-  Eye, EyeOff, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, X, LogOut,
+  Eye, EyeOff, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, X, LogOut, ShieldAlert,
 } from "lucide-react";
 
 type AppUserRow = {
@@ -510,6 +510,15 @@ export default function UserManagement() {
               <LogOut className="w-4 h-4" />
             )}
             Force Logout All
+          </Button>
+          <Button
+            onClick={() => navigate("/admin/security")}
+            size="sm"
+            variant="outline"
+            className="gap-1.5 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+          >
+            <ShieldAlert className="w-4 h-4" />
+            Security Events
           </Button>
           <Button onClick={openCreate} size="sm" className="gap-1.5">
             <Plus className="w-4 h-4" />

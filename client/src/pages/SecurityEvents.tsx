@@ -1,0 +1,495 @@
+/**
+ * SecurityEvents.tsx
+ *
+ * Owner-only Security Events dashboard panel.
+ *
+ * Displays:
+ *   - 24h rolling window summary cards (CSRF_BLOCK, RATE_LIMIT, AUTH_FAIL, Total)
+ *   - Filterable, sortable event log table (newest first)
+ *   - Prune control to delete events older than N days
+ *
+ * Access: owner role only — redirects to /admin/users if not owner.
+ */
+
+import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
+import { useAppAuth } from "@/_core/hooks/useAppAuth";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
+import {
+  ArrowLeft,
+  RefreshCw,
+  ShieldAlert,
+  ShieldOff,
+  Activity,
+  Trash2,
+  AlertTriangle,
+  CheckCircle2,
+} from "lucide-react";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type EventType = "CSRF_BLOCK" | "RATE_LIMIT" | "AUTH_FAIL";
+
+interface SecurityEventRow {
+  id: number;
+  eventType: string;
+  ip: string;
+  blockedOrigin: string | null;
+  trpcPath: string | null;
+  httpMethod: string | null;
+  userAgent: string | null;
+  context: string | null;
+  occurredAt: number;
+  createdAt: Date;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const EST_OPTS: Intl.DateTimeFormatOptions = { timeZone: "America/New_York" };
+
+function formatTs(ms: number): string {
+  const d = new Date(ms);
+  const date = d.toLocaleDateString("en-US", {
+    ...EST_OPTS,
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  });
+  const time = d.toLocaleTimeString("en-US", {
+    ...EST_OPTS,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  return `${date} ${time} EST`;
+}
+
+const EVENT_TYPE_CONFIG: Record<
+  string,
+  { label: string; color: string; icon: React.ReactNode }
+> = {
+  CSRF_BLOCK: {
+    label: "CSRF Block",
+    color: "bg-red-500/15 text-red-400 border-red-500/30",
+    icon: <ShieldOff className="w-3 h-3" />,
+  },
+  RATE_LIMIT: {
+    label: "Rate Limit",
+    color: "bg-orange-500/15 text-orange-400 border-orange-500/30",
+    icon: <Activity className="w-3 h-3" />,
+  },
+  AUTH_FAIL: {
+    label: "Auth Fail",
+    color: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+    icon: <ShieldAlert className="w-3 h-3" />,
+  },
+};
+
+// ─── Summary Card ─────────────────────────────────────────────────────────────
+
+function SummaryCard({
+  label,
+  count,
+  color,
+  icon,
+}: {
+  label: string;
+  count: number;
+  color: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 flex flex-col gap-1">
+      <div className="flex items-center gap-2 text-zinc-400 text-xs font-medium uppercase tracking-wide">
+        {icon}
+        {label}
+      </div>
+      <div className={`text-2xl font-bold tabular-nums ${count > 0 ? "text-red-400" : "text-zinc-300"}`}>
+        {count}
+      </div>
+      <div className="text-zinc-500 text-xs">last 24 hours</div>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function SecurityEvents() {
+  const [, navigate] = useLocation();
+  const { appUser: user, loading: authLoading, isOwner } = useAppAuth();
+
+  // ── Filter state ──────────────────────────────────────────────────────────
+  const [eventTypeFilter, setEventTypeFilter] = useState<EventType | "ALL">("ALL");
+  const [windowHours, setWindowHours] = useState<number>(24);
+
+  // ── Prune dialog state ────────────────────────────────────────────────────
+  const [pruneOpen, setPruneOpen] = useState(false);
+  const [retentionDays, setRetentionDays] = useState<number>(90);
+
+  // ── Computed sinceMs ──────────────────────────────────────────────────────
+  const sinceMs = useMemo(
+    () => Date.now() - windowHours * 60 * 60 * 1000,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [windowHours]
+  );
+
+  // ── tRPC queries ──────────────────────────────────────────────────────────
+  const countsQuery = trpc.security.events.counts.useQuery(
+    { sinceMs },
+    { enabled: !authLoading && isOwner, refetchInterval: 30_000 }
+  );
+
+  const eventsQuery = trpc.security.events.list.useQuery(
+    {
+      limit: 200,
+      eventType: eventTypeFilter === "ALL" ? undefined : eventTypeFilter,
+      sinceMs,
+    },
+    { enabled: !authLoading && isOwner, refetchInterval: 30_000 }
+  );
+
+  // ── Prune mutation ────────────────────────────────────────────────────────
+  const utils = trpc.useUtils();
+  const pruneMutation = trpc.security.events.prune.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Pruned ${data.deleted} events older than ${retentionDays} days`);
+      setPruneOpen(false);
+      utils.security.events.list.invalidate();
+      utils.security.events.counts.invalidate();
+    },
+    onError: (err) => {
+      toast.error(`Prune failed: ${err.message}`);
+    },
+  });
+
+  // ── Auth guard ────────────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-zinc-400 text-sm">Verifying access...</div>
+      </div>
+    );
+  }
+
+  if (!user || !isOwner) {
+    navigate("/admin/users");
+    return null;
+  }
+
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const counts = countsQuery.data ?? {
+    CSRF_BLOCK: 0,
+    RATE_LIMIT: 0,
+    AUTH_FAIL: 0,
+    total: 0,
+  };
+  const events: SecurityEventRow[] = (eventsQuery.data as SecurityEventRow[] | undefined) ?? [];
+  const isLoading = eventsQuery.isLoading || countsQuery.isLoading;
+  const isRefetching = eventsQuery.isFetching || countsQuery.isFetching;
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      {/* ── Header ── */}
+      <div className="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-zinc-400 hover:text-zinc-100 gap-1.5"
+              onClick={() => navigate("/admin/users")}
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </Button>
+            <div className="h-4 w-px bg-zinc-700" />
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-red-400" />
+              <span className="font-semibold text-sm">Security Events</span>
+              {counts.total > 0 && (
+                <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs px-1.5 py-0">
+                  {counts.total} in window
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-zinc-400 hover:text-zinc-100 gap-1.5"
+              onClick={() => {
+                eventsQuery.refetch();
+                countsQuery.refetch();
+              }}
+              disabled={isRefetching}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefetching ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-red-400 border-red-500/30 hover:bg-red-500/10 gap-1.5"
+              onClick={() => setPruneOpen(true)}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Prune Old Events
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        {/* ── Summary Cards ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <SummaryCard
+            label="Total"
+            count={counts.total}
+            color=""
+            icon={<Activity className="w-3 h-3" />}
+          />
+          <SummaryCard
+            label="CSRF Blocks"
+            count={counts.CSRF_BLOCK}
+            color="text-red-400"
+            icon={<ShieldOff className="w-3 h-3" />}
+          />
+          <SummaryCard
+            label="Rate Limits"
+            count={counts.RATE_LIMIT}
+            color="text-orange-400"
+            icon={<Activity className="w-3 h-3" />}
+          />
+          <SummaryCard
+            label="Auth Fails"
+            count={counts.AUTH_FAIL}
+            color="text-yellow-400"
+            icon={<ShieldAlert className="w-3 h-3" />}
+          />
+        </div>
+
+        {/* ── Filters ── */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-zinc-400 text-xs font-medium">Event Type</span>
+            <Select
+              value={eventTypeFilter}
+              onValueChange={(v) => setEventTypeFilter(v as EventType | "ALL")}
+            >
+              <SelectTrigger className="h-8 w-36 bg-zinc-900 border-zinc-700 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-zinc-700">
+                <SelectItem value="ALL" className="text-xs">All Types</SelectItem>
+                <SelectItem value="CSRF_BLOCK" className="text-xs">CSRF Block</SelectItem>
+                <SelectItem value="RATE_LIMIT" className="text-xs">Rate Limit</SelectItem>
+                <SelectItem value="AUTH_FAIL" className="text-xs">Auth Fail</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-zinc-400 text-xs font-medium">Window</span>
+            <Select
+              value={String(windowHours)}
+              onValueChange={(v) => setWindowHours(Number(v))}
+            >
+              <SelectTrigger className="h-8 w-28 bg-zinc-900 border-zinc-700 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-zinc-700">
+                <SelectItem value="1" className="text-xs">Last 1 hour</SelectItem>
+                <SelectItem value="6" className="text-xs">Last 6 hours</SelectItem>
+                <SelectItem value="24" className="text-xs">Last 24 hours</SelectItem>
+                <SelectItem value="72" className="text-xs">Last 3 days</SelectItem>
+                <SelectItem value="168" className="text-xs">Last 7 days</SelectItem>
+                <SelectItem value="720" className="text-xs">Last 30 days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="ml-auto text-zinc-500 text-xs">
+            {isLoading ? "Loading..." : `${events.length} event${events.length !== 1 ? "s" : ""}`}
+          </div>
+        </div>
+
+        {/* ── Event Table ── */}
+        <div className="rounded-lg border border-zinc-800 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-zinc-800 hover:bg-transparent">
+                <TableHead className="text-zinc-400 text-xs w-36">Timestamp (EST)</TableHead>
+                <TableHead className="text-zinc-400 text-xs w-28">Type</TableHead>
+                <TableHead className="text-zinc-400 text-xs w-36">IP Address</TableHead>
+                <TableHead className="text-zinc-400 text-xs">Blocked Origin</TableHead>
+                <TableHead className="text-zinc-400 text-xs">tRPC Path</TableHead>
+                <TableHead className="text-zinc-400 text-xs w-16">Method</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-zinc-500 text-sm py-12">
+                    <RefreshCw className="w-4 h-4 animate-spin inline mr-2" />
+                    Loading events...
+                  </TableCell>
+                </TableRow>
+              ) : events.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-12">
+                    <div className="flex flex-col items-center gap-2">
+                      <CheckCircle2 className="w-8 h-8 text-green-500/60" />
+                      <span className="text-zinc-400 text-sm">No security events in this window</span>
+                      <span className="text-zinc-600 text-xs">System is clean</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                events.map((event) => {
+                  const config = EVENT_TYPE_CONFIG[event.eventType] ?? {
+                    label: event.eventType,
+                    color: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+                    icon: <AlertTriangle className="w-3 h-3" />,
+                  };
+                  return (
+                    <TableRow
+                      key={event.id}
+                      className="border-zinc-800/60 hover:bg-zinc-900/40 transition-colors"
+                    >
+                      <TableCell className="text-zinc-300 text-xs font-mono whitespace-nowrap">
+                        {formatTs(event.occurredAt)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={`${config.color} border text-xs px-1.5 py-0 gap-1 font-medium`}
+                        >
+                          {config.icon}
+                          {config.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-zinc-300 text-xs font-mono">
+                        {event.ip}
+                      </TableCell>
+                      <TableCell
+                        className="text-zinc-400 text-xs font-mono max-w-xs truncate"
+                        title={event.blockedOrigin ?? "—"}
+                      >
+                        {event.blockedOrigin ?? (
+                          <span className="text-zinc-600">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell
+                        className="text-zinc-400 text-xs font-mono max-w-xs truncate"
+                        title={event.trpcPath ?? "—"}
+                      >
+                        {event.trpcPath ?? (
+                          <span className="text-zinc-600">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-zinc-400 text-xs font-mono">
+                        {event.httpMethod ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* ── Auto-refresh notice ── */}
+        <div className="text-zinc-600 text-xs text-center">
+          Auto-refreshes every 30 seconds &nbsp;·&nbsp; Showing newest {events.length} events
+        </div>
+      </div>
+
+      {/* ── Prune Dialog ── */}
+      <Dialog open={pruneOpen} onOpenChange={setPruneOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-700 text-zinc-100 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <Trash2 className="w-4 h-4" />
+              Prune Security Events
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-zinc-400 text-sm">
+              Delete all security events older than the selected retention period.
+              This action cannot be undone.
+            </p>
+            <div className="flex items-center gap-3">
+              <span className="text-zinc-300 text-sm">Keep last</span>
+              <Select
+                value={String(retentionDays)}
+                onValueChange={(v) => setRetentionDays(Number(v))}
+              >
+                <SelectTrigger className="h-8 w-28 bg-zinc-800 border-zinc-600 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-800 border-zinc-600">
+                  <SelectItem value="7">7 days</SelectItem>
+                  <SelectItem value="14">14 days</SelectItem>
+                  <SelectItem value="30">30 days</SelectItem>
+                  <SelectItem value="60">60 days</SelectItem>
+                  <SelectItem value="90">90 days</SelectItem>
+                  <SelectItem value="180">180 days</SelectItem>
+                  <SelectItem value="365">365 days</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-zinc-400 text-sm">of events</span>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPruneOpen(false)}
+              className="text-zinc-400"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white gap-1.5"
+              disabled={pruneMutation.isPending}
+              onClick={() => pruneMutation.mutate({ retentionDays })}
+            >
+              {pruneMutation.isPending ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5" />
+              )}
+              Prune Events
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
-import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, mlbTeams, appUsers as appUsersTable, oddsHistory, mlbLineups, mlbStrikeoutProps, mlbParkFactors, mlbBullpenStats, mlbUmpireModifiers, mlbHrProps, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow, type MlbLineupRow, type InsertMlbLineup, type MlbStrikeoutPropRow, type InsertMlbStrikeoutProp, type MlbParkFactorRow, type MlbBullpenStatsRow, type MlbUmpireModifierRow, type MlbHrPropRow } from "../drizzle/schema";
+import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, mlbTeams, appUsers as appUsersTable, oddsHistory, mlbLineups, mlbStrikeoutProps, mlbParkFactors, mlbBullpenStats, mlbUmpireModifiers, mlbHrProps, securityEvents, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow, type MlbLineupRow, type InsertMlbLineup, type MlbStrikeoutPropRow, type InsertMlbStrikeoutProp, type MlbParkFactorRow, type MlbBullpenStatsRow, type MlbUmpireModifierRow, type MlbHrPropRow, type InsertSecurityEvent, type SecurityEventRow } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1731,4 +1731,164 @@ export async function getHrPropsByGames(gameIds: number[]): Promise<Map<number, 
     console.error(`${tag} DB error: ${msg}`);
   }
   return result;
+}
+
+// ─── Security Events DB helpers ───────────────────────────────────────────────
+
+
+/**
+ * Insert one security event row.
+ *
+ * [INPUT]  event  — InsertSecurityEvent (eventType, ip, occurredAt required)
+ * [STEP]   Validate required fields
+ * [STEP]   Insert into security_events table
+ * [OUTPUT] void — fire-and-forget, errors are logged but never thrown
+ * [VERIFY] Log insert result with structured tag
+ */
+export async function insertSecurityEvent(event: InsertSecurityEvent): Promise<void> {
+  const tag = "[DB][insertSecurityEvent]";
+  const db = await getDb();
+  if (!db) {
+    console.warn(`${tag} DB not available — event not persisted | type=${event.eventType} ip=${event.ip}`);
+    return;
+  }
+  try {
+    await db.insert(securityEvents).values({
+      eventType: event.eventType,
+      ip: event.ip,
+      blockedOrigin: event.blockedOrigin ?? null,
+      trpcPath: event.trpcPath ?? null,
+      httpMethod: event.httpMethod ?? null,
+      userAgent: event.userAgent ? event.userAgent.substring(0, 512) : null,
+      context: event.context ?? null,
+      occurredAt: event.occurredAt,
+    });
+    console.log(
+      `${tag} Inserted | type=${event.eventType} ip=${event.ip}` +
+      ` path=${event.trpcPath ?? "N/A"} origin=${event.blockedOrigin ?? "N/A"}`
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${tag} Insert failed (non-critical) | type=${event.eventType} ip=${event.ip} | error="${msg}"`);
+  }
+}
+
+/**
+ * Fetch the most recent security events, newest first.
+ *
+ * [INPUT]  limit      — max rows to return (default 200, max 500)
+ * [INPUT]  eventType  — optional filter: 'CSRF_BLOCK' | 'RATE_LIMIT' | 'AUTH_FAIL'
+ * [INPUT]  sinceMs    — optional: only return events with occurredAt >= sinceMs
+ * [OUTPUT] SecurityEventRow[]
+ */
+export async function getSecurityEvents(opts: {
+  limit?: number;
+  eventType?: string;
+  sinceMs?: number;
+}): Promise<SecurityEventRow[]> {
+  const tag = "[DB][getSecurityEvents]";
+  const db = await getDb();
+  if (!db) {
+    console.warn(`${tag} DB not available — returning empty list`);
+    return [];
+  }
+  const limit = Math.min(opts.limit ?? 200, 500);
+  try {
+    const conditions = [];
+    if (opts.eventType) conditions.push(eq(securityEvents.eventType, opts.eventType));
+    if (opts.sinceMs) conditions.push(gte(securityEvents.occurredAt, opts.sinceMs));
+
+    const rows = await db
+      .select()
+      .from(securityEvents)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(securityEvents.occurredAt))
+      .limit(limit) as SecurityEventRow[];
+
+    console.log(`${tag} Fetched ${rows.length} rows | limit=${limit} type=${opts.eventType ?? "ALL"}`);
+    return rows;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${tag} Query failed | error="${msg}"`);
+    return [];
+  }
+}
+
+/**
+ * Count security events grouped by eventType for the 24h rolling window.
+ *
+ * [INPUT]  sinceMs  — UTC ms lower bound (default: now - 24h)
+ * [OUTPUT] { CSRF_BLOCK: number, RATE_LIMIT: number, AUTH_FAIL: number, total: number }
+ */
+export async function getSecurityEventCounts(sinceMs?: number): Promise<{
+  CSRF_BLOCK: number;
+  RATE_LIMIT: number;
+  AUTH_FAIL: number;
+  total: number;
+}> {
+  const tag = "[DB][getSecurityEventCounts]";
+  const db = await getDb();
+  const defaultResult = { CSRF_BLOCK: 0, RATE_LIMIT: 0, AUTH_FAIL: 0, total: 0 };
+  if (!db) {
+    console.warn(`${tag} DB not available — returning zero counts`);
+    return defaultResult;
+  }
+  const since = sinceMs ?? (Date.now() - 24 * 60 * 60 * 1000);
+  try {
+    const rows = await db
+      .select({
+        eventType: securityEvents.eventType,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(securityEvents)
+      .where(gte(securityEvents.occurredAt, since))
+      .groupBy(securityEvents.eventType) as { eventType: string; count: number }[];
+
+    const result = { ...defaultResult };
+    let total = 0;
+    for (const row of rows) {
+      const count = Number(row.count);
+      total += count;
+      if (row.eventType === "CSRF_BLOCK") result.CSRF_BLOCK = count;
+      else if (row.eventType === "RATE_LIMIT") result.RATE_LIMIT = count;
+      else if (row.eventType === "AUTH_FAIL") result.AUTH_FAIL = count;
+    }
+    result.total = total;
+    console.log(`${tag} Counts since ${new Date(since).toISOString()} | ${JSON.stringify(result)}`);
+    return result;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${tag} Query failed | error="${msg}"`);
+    return defaultResult;
+  }
+}
+
+/**
+ * Delete security events older than retentionDays (default 90).
+ * Called by a scheduled cleanup job.
+ *
+ * [INPUT]  retentionDays  — rows older than this many days are deleted
+ * [OUTPUT] number         — rows deleted
+ */
+export async function pruneSecurityEvents(retentionDays = 90): Promise<number> {
+  const tag = "[DB][pruneSecurityEvents]";
+  const db = await getDb();
+  if (!db) {
+    console.warn(`${tag} DB not available — prune skipped`);
+    return 0;
+  }
+  const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  try {
+    const result = await db
+      .delete(securityEvents)
+      .where(sql`${securityEvents.occurredAt} < ${cutoffMs}`);
+    const [header] = result as unknown as [{ affectedRows?: number }];
+    const deleted = header?.affectedRows ?? 0;
+    console.log(`${tag} Pruned ${deleted} rows older than ${retentionDays} days (cutoff=${new Date(cutoffMs).toISOString()})`);
+    return deleted;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${tag} Prune failed | error="${msg}"`);
+    return 0;
+  }
 }

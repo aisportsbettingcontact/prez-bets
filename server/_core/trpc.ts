@@ -44,6 +44,7 @@
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "@shared/const";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
+import { insertSecurityEvent } from "../db";
 import { ENV } from "./env";
 import { notifyOwner } from "./notification";
 import type { TrpcContext } from "./context";
@@ -232,6 +233,19 @@ async function fireCsrfBlockAlert(
     `Action: Review server logs for additional requests from IP ${ip}. ` +
     `If this is a legitimate client, add its origin to PUBLIC_ORIGIN or the dev allowlist. ` +
     `If this is an attack, consider blocking IP ${ip} at the firewall/CDN level.`;
+
+  // [STEP] Persist event to security_events table (async, non-blocking)
+  insertSecurityEvent({
+    eventType: "CSRF_BLOCK",
+    ip,
+    blockedOrigin: origin,
+    trpcPath: path,
+    httpMethod: method,
+    occurredAt: Date.now(),
+  }).catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[CSRF] DB persist error (non-critical) | IP=${ip} | error="${msg}"`);
+  });
 
   console.log(
     `[CSRF] Firing owner alert for CSRF block | IP=${ip} Origin="${origin}" path=${path}`

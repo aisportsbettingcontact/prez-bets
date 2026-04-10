@@ -10,6 +10,7 @@ import PublishProjections from "./pages/PublishProjections";
 import IngestAnOdds from "./pages/IngestAnOdds";
 import ModelProjections from "./pages/ModelProjections";
 import ModelResults from "./pages/ModelResults";
+import SecurityEvents from "./pages/SecurityEvents";
 
 function Router() {
   return (
@@ -30,6 +31,8 @@ function Router() {
       <Route path="/admin/ingest-an" component={IngestAnOdds} />
       {/* Owner-only: K-Props model backtest results */}
       <Route path="/admin/model-results" component={ModelResults} />
+      {/* Owner-only: Security Events dashboard */}
+      <Route path="/admin/security" component={SecurityEvents} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

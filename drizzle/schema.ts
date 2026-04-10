@@ -1343,3 +1343,43 @@ export const mlbModelLearningLog = mysqlTable("mlb_model_learning_log", {
 }));
 export type MlbModelLearningLogRow = typeof mlbModelLearningLog.$inferSelect;
 export type InsertMlbModelLearningLog = typeof mlbModelLearningLog.$inferInsert;
+
+// ─── Security Events (CSRF blocks, auth anomalies) ───────────────────────────
+/**
+ * One row per security event detected by server-side middleware.
+ *
+ * Event types:
+ *   CSRF_BLOCK   — Origin header mismatch on a tRPC mutation
+ *   RATE_LIMIT   — Rate limiter triggered (too many requests from one IP)
+ *   AUTH_FAIL    — Authentication failure (invalid token, expired session)
+ *
+ * Retention: rows older than 90 days can be pruned by a scheduled job.
+ * Access: owner-only — no user-facing queries.
+ */
+export const securityEvents = mysqlTable("security_events", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Event category: 'CSRF_BLOCK' | 'RATE_LIMIT' | 'AUTH_FAIL' */
+  eventType: varchar("eventType", { length: 32 }).notNull(),
+  /** Attacker/client IP address (IPv4 or IPv6) */
+  ip: varchar("ip", { length: 64 }).notNull(),
+  /** Blocked Origin header value (null for non-CSRF events) */
+  blockedOrigin: varchar("blockedOrigin", { length: 512 }),
+  /** tRPC procedure path that was blocked (e.g. 'appUsers.login') */
+  trpcPath: varchar("trpcPath", { length: 256 }),
+  /** HTTP method (POST, GET, etc.) */
+  httpMethod: varchar("httpMethod", { length: 16 }),
+  /** User agent string (truncated to 512 chars) */
+  userAgent: varchar("userAgent", { length: 512 }),
+  /** Additional context as JSON string (flexible per event type) */
+  context: text("context"),
+  /** UTC milliseconds timestamp of the event */
+  occurredAt: bigint("occurredAt", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxEventType: index("idx_sec_event_type").on(t.eventType),
+  idxIp: index("idx_sec_event_ip").on(t.ip),
+  idxOccurredAt: index("idx_sec_event_occurred_at").on(t.occurredAt),
+}));
+
+export type SecurityEventRow = typeof securityEvents.$inferSelect;
+export type InsertSecurityEvent = typeof securityEvents.$inferInsert;

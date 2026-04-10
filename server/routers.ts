@@ -37,6 +37,7 @@ import { storagePut } from "./storage";
 import { parseFileBuffer, detectSportFromFilename, detectDateFromFilename } from "./fileParser";
 import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure, appUserProcedure } from "./routers/appUsers";
+import { securityRouter } from "./routers/security";
 import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById, getFavoriteGameIds, getFavoriteGamesWithDates, toggleFavoriteGame, updateAnOdds, listGamesByDate, listOddsHistory, getBracketGames, auditAndAdvanceAllBracketWinners, getMlbLineupsByGameIds, getStrikeoutPropsByGame, getStrikeoutPropsByGames, getMlbGameEnvSignals, getHrPropsByGame, getHrPropsByGames } from "./db";
 import { runStrikeoutModel, type StrikeoutRunnerInput } from "./strikeoutModelRunner";
 import { getLastRefreshResult, runVsinRefresh, runVsinRefreshManual, refreshAllScoresNow } from "./vsinAutoRefresh";
@@ -71,6 +72,7 @@ function isValidGame(awayTeam: string, homeTeam: string, sport?: string | null):
 export const appRouter = router({
   system: systemRouter,
   appUsers: appUsersRouter,
+  security: securityRouter,
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
   auth: router({
