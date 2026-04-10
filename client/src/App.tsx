@@ -4,7 +4,6 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
 import UserManagement from "./pages/UserManagement";
 import PublishProjections from "./pages/PublishProjections";
