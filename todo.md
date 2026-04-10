@@ -2242,3 +2242,10 @@
 - [x] Security Events button added to UserManagement.tsx header nav
 - [x] Dependabot config (.github/dependabot.yml): weekly npm + GitHub Actions updates, grouped patch/minor PRs
 - [x] GitHub Secrets documentation (.github/SECRETS_SETUP.md) with all 7 required + 10 optional secrets
+
+## Security Hardening Round 4 (2026-04-10)
+- [x] GitHub secrets set via API (7/7 confirmed): DATABASE_URL, JWT_SECRET, PUBLIC_ORIGIN, VITE_APP_ID, OAUTH_SERVER_URL, OWNER_OPEN_ID, NBA_SHEET_ID
+- [x] RATE_LIMIT events wired into all 3 Express rate limiter handlers (global, auth, trpc_auth)
+- [x] In-memory dedup guard on RATE_LIMIT events (1 DB write per IP per 60s, auto-prune at 5000 entries)
+- [x] AUTH_FAIL events wired into login mutation (4 failure paths: user_not_found, account_access_disabled, account_expired, invalid_password)
+- [x] Dependabot auto-merge workflow (auto-merge-dependabot.yml): patch-only PRs auto-approved + squash-merged after CI passes; minor/major skipped with explicit log

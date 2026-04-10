@@ -17,6 +17,58 @@ import { startNhlModelSyncScheduler } from "../nhlModelSync";
 import { startNhlGoalieWatcher } from "../nhlGoalieWatcher";
 import { startDiscordBot } from "../discord/bot";
 import { startMlbPlayerSyncScheduler } from "../mlbPlayerSync";
+import { insertSecurityEvent } from "../db";
+
+// ─── Rate limit event helper ─────────────────────────────────────────────────
+// Fire-and-forget: writes a RATE_LIMIT row to security_events.
+// Never awaited — the 429 response is always sent synchronously first.
+// In-memory dedup: at most 1 DB write per IP per 60s to prevent DB flooding
+// when a single attacker hammers the endpoint repeatedly.
+const rateLimitLastPersisted = new Map<string, number>();
+const RATE_LIMIT_DEDUP_MS = 60_000; // 1 minute
+
+function fireRateLimitEvent(
+  ip: string,
+  path: string,
+  method: string,
+  limitType: "global" | "auth" | "trpc_auth",
+  ua: string | null,
+) {
+  const now = Date.now();
+  const dedupKey = `${ip}:${path}:${limitType}`;
+  const lastSent = rateLimitLastPersisted.get(dedupKey) ?? 0;
+
+  // Prune stale entries to prevent unbounded map growth
+  if (rateLimitLastPersisted.size > 5000) {
+    const cutoff = now - RATE_LIMIT_DEDUP_MS;
+    Array.from(rateLimitLastPersisted.entries()).forEach(([k, v]) => {
+      if (v < cutoff) rateLimitLastPersisted.delete(k);
+    });
+  }
+
+  const tag = `[RateLimit][${limitType.toUpperCase()}]`;
+  console.warn(
+    `${tag} BLOCKED | IP=${ip} path=${path} method=${method}` +
+    ` ua="${ua?.substring(0, 60) ?? "none"}"` +
+    (now - lastSent < RATE_LIMIT_DEDUP_MS ? " [DB_DEDUP_SKIP]" : "")
+  );
+
+  if (now - lastSent < RATE_LIMIT_DEDUP_MS) return; // deduplicated
+  rateLimitLastPersisted.set(dedupKey, now);
+
+  insertSecurityEvent({
+    eventType: "RATE_LIMIT",
+    ip,
+    blockedOrigin: null,
+    trpcPath: path,
+    httpMethod: method,
+    userAgent: ua,
+    context: limitType,
+    occurredAt: now,
+  }).catch((err) =>
+    console.error(`${tag} DB insert failed: ${(err as Error).message}`)
+  );
+}
 
 // ─── Global crash protection ─────────────────────────────────────────────────
 // Prevent unhandled promise rejections and uncaught exceptions from killing the
@@ -40,7 +92,10 @@ const globalApiLimiter = rateLimit({
   message: { error: "Too many requests. Please slow down." },
   skip: (req) => req.path === "/health", // never throttle health probes
   handler: (req, res, _next, options) => {
-    console.warn(`[RATE LIMIT] Global limit hit: IP=${req.ip} path=${req.path}`);
+    const ip = (req.headers["x-forwarded-for"] as string | undefined)
+      ?.split(",")[0].trim() ?? req.ip ?? "unknown";
+    const ua = (req.headers["user-agent"] as string | undefined) ?? null;
+    fireRateLimitEvent(ip, req.path, req.method, "global", ua);
     res.status(options.statusCode).json(options.message);
   },
 });
@@ -54,7 +109,10 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many authentication attempts. Please wait 15 minutes before trying again." },
   handler: (req, res, _next, options) => {
-    console.warn(`[RATE LIMIT] Auth limit hit: IP=${req.ip} path=${req.path}`);
+    const ip = (req.headers["x-forwarded-for"] as string | undefined)
+      ?.split(",")[0].trim() ?? req.ip ?? "unknown";
+    const ua = (req.headers["user-agent"] as string | undefined) ?? null;
+    fireRateLimitEvent(ip, req.path, req.method, "auth", ua);
     res.status(options.statusCode).json(options.message);
   },
 });
@@ -73,7 +131,10 @@ const trpcAuthLimiter = rateLimit({
     return `${req.ip}:${path}`;
   },
   handler: (req, res, _next, options) => {
-    console.warn(`[RATE LIMIT] tRPC auth limit hit: IP=${req.ip} path=${req.path}`);
+    const ip = (req.headers["x-forwarded-for"] as string | undefined)
+      ?.split(",")[0].trim() ?? req.ip ?? "unknown";
+    const ua = (req.headers["user-agent"] as string | undefined) ?? null;
+    fireRateLimitEvent(ip, req.path, req.method, "trpc_auth", ua);
     res.status(options.statusCode).json(options.message);
   },
 });

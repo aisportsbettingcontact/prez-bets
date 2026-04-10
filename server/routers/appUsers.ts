@@ -19,6 +19,7 @@ import {
   updateAppUserLastSignedIn,
   incrementTokenVersion,
   incrementAllTokenVersions,
+  insertSecurityEvent,
 } from "../db";
 
 const APP_USER_COOKIE = "app_session";
@@ -132,18 +133,47 @@ export const appUsersRouter = router({
         ? await getAppUserByEmail(input.emailOrUsername.toLowerCase())
         : await getAppUserByUsername(input.emailOrUsername.replace(/^@/, "").toLowerCase());
 
+      // ── AUTH_FAIL helper — fire-and-forget, never blocks the response ──────
+      const fireAuthFailEvent = (reason: string) => {
+        const ip = (ctx.req.headers["x-forwarded-for"] as string | undefined)
+          ?.split(",")[0]
+          .trim() ?? ctx.req.socket?.remoteAddress ?? "unknown";
+        const ua = (ctx.req.headers["user-agent"] as string | undefined) ?? null;
+        const tag = "[AppAuth][AUTH_FAIL]";
+        console.warn(
+          `${tag} BLOCKED | IP=${ip} reason="${reason}"` +
+          ` identifier="${input.emailOrUsername.substring(0, 3)}***" ua="${ua?.substring(0, 60) ?? "none"}"`
+        );
+        insertSecurityEvent({
+          eventType: "AUTH_FAIL",
+          ip,
+          blockedOrigin: null,
+          trpcPath: "appUsers.login",
+          httpMethod: ctx.req.method ?? "POST",
+          userAgent: ua,
+          context: reason,
+          occurredAt: Date.now(),
+        }).catch((err) =>
+          console.error(`${tag} DB insert failed: ${(err as Error).message}`)
+        );
+      };
+
       if (!user) {
+        fireAuthFailEvent("user_not_found");
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
       }
       if (!user.hasAccess) {
+        fireAuthFailEvent("account_access_disabled");
         throw new TRPCError({ code: "FORBIDDEN", message: "Account access disabled" });
       }
       if (user.expiryDate && Date.now() > user.expiryDate) {
+        fireAuthFailEvent("account_expired");
         throw new TRPCError({ code: "FORBIDDEN", message: "Account has expired" });
       }
 
       const valid = await bcrypt.compare(input.password, user.passwordHash);
       if (!valid) {
+        fireAuthFailEvent("invalid_password");
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
       }
 
