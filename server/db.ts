@@ -1006,10 +1006,29 @@ export async function insertOddsHistory(
 ): Promise<void> {
   const db = await getDb();
   if (!db) {
-    console.warn("[OddsHistory] DB not available — skipping snapshot for gameId=%d", gameId);
+    console.warn(`[OddsHistory][INSERT] SKIP gameId=${gameId} - DB not available`);
     return;
   }
   const now = Date.now();
+  const estStr = new Date(now).toLocaleString("en-US", { timeZone: "America/New_York" });
+
+  // [INPUT] Log every field being written so the snapshot is fully traceable
+  const spreadPending = (snap.spreadAwayBetsPct == null || snap.spreadAwayBetsPct === 0) &&
+                        (snap.spreadAwayMoneyPct == null || snap.spreadAwayMoneyPct === 0);
+  const totalPending  = (snap.totalOverBetsPct == null || snap.totalOverBetsPct === 0) &&
+                        (snap.totalOverMoneyPct == null || snap.totalOverMoneyPct === 0);
+  const mlPending     = (snap.mlAwayBetsPct == null || snap.mlAwayBetsPct === 0) &&
+                        (snap.mlAwayMoneyPct == null || snap.mlAwayMoneyPct === 0);
+  console.log(
+    `[OddsHistory][INSERT][INPUT] gameId=${gameId} sport=${sport} source=${source} scrapedAt=${estStr} EST | ` +
+    `spread=${snap.awaySpread ?? 'null'}(${snap.awaySpreadOdds ?? 'null'}) ` +
+    `total=${snap.total ?? 'null'} over=${snap.overOdds ?? 'null'} under=${snap.underOdds ?? 'null'} ` +
+    `ml=${snap.awayML ?? 'null'}/${snap.homeML ?? 'null'} | ` +
+    `splits: spread=${spreadPending ? 'PENDING' : `${snap.spreadAwayBetsPct}%T/${snap.spreadAwayMoneyPct}%M`} ` +
+    `total=${totalPending ? 'PENDING' : `${snap.totalOverBetsPct}%T/${snap.totalOverMoneyPct}%M`} ` +
+    `ml=${mlPending ? 'PENDING' : `${snap.mlAwayBetsPct}%T/${snap.mlAwayMoneyPct}%M`}`
+  );
+
   try {
     await db.insert(oddsHistory).values({
       gameId,
@@ -1033,15 +1052,16 @@ export async function insertOddsHistory(
       mlAwayBetsPct: snap.mlAwayBetsPct ?? null,
       mlAwayMoneyPct: snap.mlAwayMoneyPct ?? null,
     });
+    // [OUTPUT] Confirm successful write with full context
     console.log(
-      "[OddsHistory] Snapshot saved: gameId=%d sport=%s source=%s scrapedAt=%s EST",
-      gameId,
-      sport,
-      source,
-      new Date(now).toLocaleString("en-US", { timeZone: "America/New_York" })
+      `[OddsHistory][INSERT][OUTPUT] OK gameId=${gameId} sport=${sport} source=${source} at ${estStr} EST`
     );
   } catch (err) {
-    console.error("[OddsHistory] Failed to insert snapshot for gameId=%d:", gameId, err);
+    // [VERIFY] FAIL - log full error with context for immediate diagnosis
+    console.error(
+      `[OddsHistory][INSERT][VERIFY] FAIL gameId=${gameId} sport=${sport} source=${source}:`,
+      err
+    );
   }
 }
 
@@ -1051,16 +1071,33 @@ export async function insertOddsHistory(
  */
 export async function listOddsHistory(gameId: number): Promise<OddsHistoryRow[]> {
   const db = await getDb();
-  if (!db) return [];
+  if (!db) {
+    console.warn(`[OddsHistory][LIST] SKIP gameId=${gameId} - DB not available`);
+    return [];
+  }
+  // [INPUT] Log query intent
+  console.log(`[OddsHistory][LIST][INPUT] gameId=${gameId} - querying history (limit=200, newest first)`);
   try {
-    return await db
+    const rows = await db
       .select()
       .from(oddsHistory)
       .where(eq(oddsHistory.gameId, gameId))
       .orderBy(desc(oddsHistory.scrapedAt))
       .limit(200);
+    // [OUTPUT] Log result summary with timestamps for traceability
+    const latest = rows[0];
+    const oldest = rows[rows.length - 1];
+    console.log(
+      `[OddsHistory][LIST][OUTPUT] gameId=${gameId} rows=${rows.length}` +
+      (rows.length > 0
+        ? ` | latest=${new Date(latest!.scrapedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} EST` +
+          ` | oldest=${new Date(oldest!.scrapedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} EST`
+        : ' | no snapshots yet')
+    );
+    return rows;
   } catch (err) {
-    console.error("[OddsHistory] Failed to list history for gameId=%d:", gameId, err);
+    // [VERIFY] FAIL - log full error with context
+    console.error(`[OddsHistory][LIST][VERIFY] FAIL gameId=${gameId}:`, err);
     return [];
   }
 }

@@ -710,17 +710,6 @@ export function BettingSplitsPanel({
         </div>
       </div>
 
-      {/* ── Odds & Splits History Timeline (both mobile + desktop) ── */}
-      {/* Only rendered when a gameId is provided (all call sites should pass it) */}
-      {gameId != null && (
-        <div className="w-full">
-          <OddsHistoryPanel
-            gameId={gameId}
-            awayTeam={game.awayTeam}
-            homeTeam={game.homeTeam}
-          />
-        </div>
-      )}
     </>
   );
 }
