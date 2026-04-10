@@ -53,7 +53,10 @@ USAGE
         --home-market   5.5 +110 -130 \\
         --output        /path/to/output.html
 """
-import json, math, argparse, warnings
+import json
+import math
+import argparse
+import warnings
 import numpy as np
 import pandas as pd
 from datetime import datetime

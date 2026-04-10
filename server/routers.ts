@@ -234,20 +234,20 @@ export const appRouter = router({
       .input(
         z.object({
           id: z.number().int().positive(),
-          awayModelSpread: z.string().nullable().optional(),
-          homeModelSpread: z.string().nullable().optional(),
-          modelTotal: z.string().nullable().optional(),
-          modelAwayML: z.string().nullable().optional(),
-          modelHomeML: z.string().nullable().optional(),
-          spreadEdge: z.string().nullable().optional(),
-          spreadDiff: z.string().nullable().optional(),
-          totalEdge: z.string().nullable().optional(),
-          totalDiff: z.string().nullable().optional(),
+          awayModelSpread: z.string().max(50).nullable().optional(),
+          homeModelSpread: z.string().max(50).nullable().optional(),
+          modelTotal: z.string().max(50).nullable().optional(),
+          modelAwayML: z.string().max(50).nullable().optional(),
+          modelHomeML: z.string().max(50).nullable().optional(),
+          spreadEdge: z.string().max(50).nullable().optional(),
+          spreadDiff: z.string().max(50).nullable().optional(),
+          totalEdge: z.string().max(50).nullable().optional(),
+          totalDiff: z.string().max(50).nullable().optional(),
           // NHL-specific odds fields
-          awaySpreadOdds: z.string().nullable().optional(),
-          homeSpreadOdds: z.string().nullable().optional(),
-          overOdds: z.string().nullable().optional(),
-          underOdds: z.string().nullable().optional(),
+          awaySpreadOdds: z.string().max(50).nullable().optional(),
+          homeSpreadOdds: z.string().max(50).nullable().optional(),
+          overOdds: z.string().max(50).nullable().optional(),
+          underOdds: z.string().max(50).nullable().optional(),
         })
       )
       .mutation(async ({ input }) => {
@@ -655,7 +655,7 @@ export const appRouter = router({
       .input(z.object({
         homeTeam: z.string().min(2).max(8),
         awayTeam: z.string().min(2).max(8),
-        umpireName: z.string().nullable().optional(),
+        umpireName: z.string().max(100).regex(/^[A-Za-z\s\-\.]+$/, "Invalid umpire name").nullable().optional(),
       }))
       .query(async ({ input }) => {
         return getMlbGameEnvSignals({
@@ -831,7 +831,7 @@ export const appRouter = router({
      * Used exclusively by the Model Results backend page.
      */
     getRichDailyBacktest: ownerProcedure
-      .input(z.object({ gameDate: z.string() }))
+      .input(z.object({ gameDate: zodGameDate }))
       .query(async ({ input }) => {
         const { getRichDailyBacktestResults } = await import("./kPropsBacktestService");
         const results = await getRichDailyBacktestResults(input.gameDate);
@@ -866,11 +866,11 @@ export const appRouter = router({
           statcastPath: zodFilePath,
           crosswalkPath: zodFilePath,
           awayMarketLine: z.number().optional(),
-          awayMarketOverOdds: z.string().optional(),
-          awayMarketUnderOdds: z.string().optional(),
+          awayMarketOverOdds: z.string().max(20).optional(),
+          awayMarketUnderOdds: z.string().max(20).optional(),
           homeMarketLine: z.number().optional(),
-          homeMarketOverOdds: z.string().optional(),
-          homeMarketUnderOdds: z.string().optional(),
+          homeMarketOverOdds: z.string().max(20).optional(),
+          homeMarketUnderOdds: z.string().max(20).optional(),
         })
       )
       .mutation(async ({ input }) => {

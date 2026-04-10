@@ -30,6 +30,6 @@ export const ENV = {
   // Third-party API keys — must be set in environment, never hardcoded in source
   metabetApiKey: process.env.METABET_API_KEY ?? "",
   // Google Sheets IDs — non-secret but kept in env for configurability
-  // Falls back to the known NBA model sheet ID if env var not set
-  nbaSheetId: process.env.NBA_SHEET_ID ?? "1MWNh0pMkFdUfldhXj60bq9blLPXCg5N5fKh7yYMI0gU",
+  // Must be set via NBA_SHEET_ID env var — no hardcoded fallback permitted
+  nbaSheetId: process.env.NBA_SHEET_ID ?? "",
 };

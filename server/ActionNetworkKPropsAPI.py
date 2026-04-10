@@ -248,7 +248,7 @@ def main():
     else:
         date_clean = date.today().strftime("%Y%m%d")
 
-    log(f"=== ActionNetworkKPropsAPI START ===")
+    log("=== ActionNetworkKPropsAPI START ===")
     log(f"Date: {date_clean}")
 
     try:

@@ -1,0 +1,4 @@
+[lint]
+# E701/E702: compact inline if-return patterns are intentional in math model helpers
+# These are not bugs — they are deliberate compact notation for mathematical functions
+ignore = ["E701", "E702"]

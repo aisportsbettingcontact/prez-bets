@@ -279,7 +279,7 @@ def scrape_action_network_strikeouts(date_str: str | None = None) -> list[dict]:
                 log(f"  Processing: {player_name} ({team}) — {len(book_cells)} book cells")
 
                 if not book_cells:
-                    log(f"    SKIP: no book cells")
+                    log("    SKIP: no book cells")
                     continue
 
                 # Cell 0 = Best Odds, Cell 1 = Consensus, Cell 2+ = individual books

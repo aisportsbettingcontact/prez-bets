@@ -737,12 +737,12 @@ def detect_edges(
     total_dist   = build_total_distribution(away_scores, home_scores)
     margin_dist  = build_margin_distribution(away_scores, home_scores)
 
-    print(f"[EdgeDetect] ┌─────────────────────────────────────────────────────", file=sys.stderr)
+    print("[EdgeDetect] ┌─────────────────────────────────────────────────────", file=sys.stderr)
     print(f"[EdgeDetect] │  EDGE DETECTION AUDIT (N={n:,} simulations)", file=sys.stderr)
-    print(f"[EdgeDetect] │  Rule: edge = p_model - p_market_no_vig > 0 → EDGE", file=sys.stderr)
-    print(f"[EdgeDetect] │  Thresholds: ML≥5pp PLAYABLE, PL≥6pp PLAYABLE, TOT≥8pp PLAYABLE", file=sys.stderr)
-    print(f"[EdgeDetect] │  Minimum to report: ≥1.5pp (SMALL EDGE)", file=sys.stderr)
-    print(f"[EdgeDetect] ├─────────────────────────────────────────────────────", file=sys.stderr)
+    print("[EdgeDetect] │  Rule: edge = p_model - p_market_no_vig > 0 → EDGE", file=sys.stderr)
+    print("[EdgeDetect] │  Thresholds: ML≥5pp PLAYABLE, PL≥6pp PLAYABLE, TOT≥8pp PLAYABLE", file=sys.stderr)
+    print("[EdgeDetect] │  Minimum to report: ≥1.5pp (SMALL EDGE)", file=sys.stderr)
+    print("[EdgeDetect] ├─────────────────────────────────────────────────────", file=sys.stderr)
 
     # ── TOTAL MARKET ─────────────────────────────────────────────────────────
     if mkt_over_odds is not None and mkt_under_odds is not None and mkt_total is not None:
@@ -967,7 +967,7 @@ def detect_edges(
 
         # ── DEEP DIAGNOSTIC LOG: MONEYLINE ──
         vig_pct_ml = (p_away_ml_raw + p_home_ml_raw - 1.0) * 100
-        print(f"[EdgeDetect] │  MONEYLINE", file=sys.stderr)
+        print("[EdgeDetect] │  MONEYLINE", file=sys.stderr)
         print(f"[EdgeDetect] │    Book odds: AWAY {mkt_away_ml:+d}  HOME {mkt_home_ml:+d}  (vig={vig_pct_ml:.2f}%)", file=sys.stderr)
         print(f"[EdgeDetect] │    Book implied (raw):    AWAY={p_away_ml_raw*100:.2f}%  HOME={p_home_ml_raw*100:.2f}%", file=sys.stderr)
         print(f"[EdgeDetect] │    Book break-even (no-vig): AWAY={p_away_ml_market*100:.2f}%  HOME={p_home_ml_market*100:.2f}%", file=sys.stderr)
@@ -1011,14 +1011,14 @@ def detect_edges(
             })
 
     # ── FINAL EDGE SUMMARY ──
-    print(f"[EdgeDetect] ├─────────────────────────────────────────────────────", file=sys.stderr)
+    print("[EdgeDetect] ├─────────────────────────────────────────────────────", file=sys.stderr)
     if edges:
         print(f"[EdgeDetect] │  EDGES FLAGGED ({len(edges)}):", file=sys.stderr)
         for e in edges:
             print(f"[EdgeDetect] │    ► {e['type']} {e['side']}: {e['classification']} | model={e['model_prob']:.2f}% BE={e['mkt_prob']:.2f}% edge={e['edge_vs_be']:+.2f}pp EV={e['ev']:+.2f}% fair={e['fair_odds']:+d}", file=sys.stderr)
     else:
-        print(f"[EdgeDetect] │  NO EDGES FLAGGED (all markets within threshold)", file=sys.stderr)
-    print(f"[EdgeDetect] └─────────────────────────────────────────────────────", file=sys.stderr)
+        print("[EdgeDetect] │  NO EDGES FLAGGED (all markets within threshold)", file=sys.stderr)
+    print("[EdgeDetect] └─────────────────────────────────────────────────────", file=sys.stderr)
 
     return edges
 
@@ -1114,7 +1114,7 @@ def originate_game(inp: dict) -> dict:
     mkt_under_odds   = inp.get("mkt_under_odds")
 
     # ── Logging ──────────────────────────────────────────────────────────────
-    print(f"\n[NHLModel] ════════════════════════════════════════════════════", file=sys.stderr)
+    print("\n[NHLModel] ════════════════════════════════════════════════════", file=sys.stderr)
     print(f"[NHLModel] ► ORIGINATING: {away_name} @ {home_name}", file=sys.stderr)
     print(f"[NHLModel]   Away goalie: {inp.get('away_goalie','?')} | GSAx={away_goalie_gsax:.2f} | GP={away_goalie_gp} | SF={away_goalie_shots_faced}", file=sys.stderr)
     print(f"[NHLModel]   Home goalie: {inp.get('home_goalie','?')} | GSAx={home_goalie_gsax:.2f} | GP={home_goalie_gp} | SF={home_goalie_shots_faced}", file=sys.stderr)
@@ -1195,7 +1195,7 @@ def originate_game(inp: dict) -> dict:
         for v in violations:
             print(f"[NHLModel]   ⚠ {v}", file=sys.stderr)
     else:
-        print(f"[NHLModel]   ✓ All Section 11 consistency constraints satisfied", file=sys.stderr)
+        print("[NHLModel]   ✓ All Section 11 consistency constraints satisfied", file=sys.stderr)
 
     # ── Step 9: Sharp Edge Detection (distribution-translated, vig-removed, EV+price) ──
     edges = detect_edges(
@@ -1268,7 +1268,7 @@ def originate_game(inp: dict) -> dict:
 
     elapsed = time.time() - t0
     print(f"[NHLModel]   ✓ Done in {elapsed:.3f}s | Edges detected: {len(edges)}", file=sys.stderr)
-    print(f"[NHLModel] ════════════════════════════════════════════════════\n", file=sys.stderr)
+    print("[NHLModel] ════════════════════════════════════════════════════\n", file=sys.stderr)
 
     # ── Section 12: Final market output ──────────────────────────────────────
     return {

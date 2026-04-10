@@ -23,7 +23,10 @@ Implements the full 12-step MAX SPEC blueprint:
   Step 12: Logging + Debugging (mandatory structured logging)
 """
 
-import sys, math, time, warnings
+import sys
+import math
+import time
+import warnings
 import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple

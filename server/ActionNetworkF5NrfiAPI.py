@@ -140,7 +140,7 @@ def fetch_f5_nrfi_odds(date_str: str) -> list[dict]:
     }
 
     params = {
-        "bookIds": f"15,30,358,69,68,2787,356,357,1863,2161,79,2988",
+        "bookIds": "15,30,358,69,68,2787,356,357,1863,2161,79,2988",
         "date": date_api,
         "periods": PERIODS,
     }
