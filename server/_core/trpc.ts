@@ -7,6 +7,7 @@
  *   1. csrfOriginCheck   — validates Origin header on all state-mutating requests
  *                          (POST/PATCH/PUT/DELETE). Blocks cross-site request forgery
  *                          from attacker-controlled pages on other domains.
+ *                          On block: fires notifyOwner() alert (rate-limited per IP).
  *   2. requireUser       — validates session cookie, rejects unauthenticated callers.
  *   3. requireAdmin      — validates role === 'admin' (Manus OAuth user).
  *
@@ -21,7 +22,7 @@
  *   JavaScript running on attacker-controlled pages. We validate it against
  *   the canonical public origin (PUBLIC_ORIGIN env var) and a set of known-safe
  *   dev origins. Requests with a missing or mismatched Origin on mutations are
- *   rejected with 403 FORBIDDEN.
+ *   rejected with 403 FORBIDDEN and trigger a real-time owner notification.
  *
  *   Exemptions (safe by design):
  *   - GET requests (queries): read-only, no state change possible.
@@ -31,12 +32,20 @@
  *   Defense-in-depth: SameSite=Strict cookies are the primary CSRF defense.
  *   This Origin check is the secondary layer that catches subdomain-takeover
  *   scenarios where SameSite alone is insufficient.
+ *
+ * CSRF Alert Rate-Limiting:
+ *   notifyOwner() is called at most once per IP per CSRF_ALERT_WINDOW_MS.
+ *   This prevents notification spam from a single attacker making repeated
+ *   requests. The in-memory rate-limit map is cleared on a rolling window basis.
+ *   In production, the alert fires; in development, it is suppressed to avoid
+ *   noise during local testing with misconfigured clients.
  */
 
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "@shared/const";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ENV } from "./env";
+import { notifyOwner } from "./notification";
 import type { TrpcContext } from "./context";
 
 // ─── CSRF-safe origin set ─────────────────────────────────────────────────────
@@ -124,6 +133,131 @@ function isOriginAllowed(origin: string | undefined): boolean {
   return false;
 }
 
+// ─── CSRF alert rate-limit guard ──────────────────────────────────────────────
+/**
+ * In-memory map: IP address → timestamp of last CSRF alert notification.
+ *
+ * Purpose: prevent notification spam from a single attacker making repeated
+ * cross-origin requests. At most one alert is sent per IP per window.
+ *
+ * [INPUT]  ip                      — attacker's IP address (string)
+ * [INPUT]  CSRF_ALERT_WINDOW_MS    — cooldown window (10 minutes)
+ * [OUTPUT] boolean                 — true if alert should fire, false if suppressed
+ *
+ * Memory management: entries older than CSRF_ALERT_WINDOW_MS are pruned on
+ * every check to prevent unbounded map growth under sustained attack.
+ */
+const CSRF_ALERT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const csrfAlertLastSent = new Map<string, number>();
+
+function shouldSendCsrfAlert(ip: string): boolean {
+  const now = Date.now();
+
+  // [STEP] Prune expired entries to prevent memory growth under sustained attack
+  for (const [entryIp, lastSent] of Array.from(csrfAlertLastSent.entries())) {
+    if (now - lastSent > CSRF_ALERT_WINDOW_MS) {
+      csrfAlertLastSent.delete(entryIp);
+    }
+  }
+
+  const lastSent = csrfAlertLastSent.get(ip);
+  if (lastSent !== undefined && now - lastSent < CSRF_ALERT_WINDOW_MS) {
+    // [STATE] Alert suppressed — within cooldown window for this IP
+    const remainingMs = CSRF_ALERT_WINDOW_MS - (now - lastSent);
+    const remainingSec = Math.ceil(remainingMs / 1000);
+    console.log(
+      `[CSRF] Alert suppressed for IP=${ip} — cooldown active, ${remainingSec}s remaining`
+    );
+    return false;
+  }
+
+  // [STATE] Alert allowed — record timestamp before firing
+  csrfAlertLastSent.set(ip, now);
+  return true;
+}
+
+/**
+ * Fire a notifyOwner() alert when a CSRF block occurs in production.
+ *
+ * [INPUT]  ip      — attacker IP address
+ * [INPUT]  origin  — the blocked Origin header value
+ * [INPUT]  path    — tRPC procedure path that was blocked
+ * [INPUT]  method  — HTTP method (POST, etc.)
+ * [STEP]   Check rate-limit guard — at most 1 alert per IP per 10 minutes
+ * [STEP]   Build structured alert payload with full context
+ * [OUTPUT] notifyOwner() fires async (non-blocking — CSRF block is synchronous)
+ * [VERIFY] Log alert outcome (sent / suppressed / failed)
+ *
+ * NOTE: This function is fire-and-forget. The CSRF block (403 FORBIDDEN) is
+ * thrown synchronously before this async call resolves. The alert is best-effort.
+ * If the notification service is down, the block still happens — the alert is
+ * supplementary, not a dependency of the security enforcement.
+ */
+async function fireCsrfBlockAlert(
+  ip: string,
+  origin: string,
+  path: string,
+  method: string
+): Promise<void> {
+  // [STEP] Only fire in production — dev environments have misconfigured clients
+  //        that would spam alerts during local development and testing.
+  if (!ENV.isProduction) {
+    console.log(
+      `[CSRF] Alert suppressed — not in production (dev environment). ` +
+      `IP=${ip} Origin="${origin}" path=${path}`
+    );
+    return;
+  }
+
+  // [STEP] Check rate-limit guard
+  if (!shouldSendCsrfAlert(ip)) {
+    return;
+  }
+
+  // [STEP] Build structured alert payload
+  const timestamp = new Date().toISOString();
+  const allowedList = Array.from(ALLOWED_ORIGINS).join(", ");
+  const title = `[SECURITY] CSRF Attack Blocked — ${timestamp.slice(0, 10)}`;
+  const content =
+    `A cross-origin mutation request was blocked by the CSRF Origin check middleware.\n\n` +
+    `Timestamp:       ${timestamp}\n` +
+    `IP Address:      ${ip}\n` +
+    `Blocked Origin:  "${origin}"\n` +
+    `tRPC Path:       ${method} /api/trpc/${path}\n` +
+    `Allowed Origins: [${allowedList}]\n\n` +
+    `This may indicate:\n` +
+    `  1. A CSRF attack from an attacker-controlled page on another domain\n` +
+    `  2. A misconfigured client sending requests from an unexpected origin\n` +
+    `  3. A subdomain takeover attempt\n\n` +
+    `Action: Review server logs for additional requests from IP ${ip}. ` +
+    `If this is a legitimate client, add its origin to PUBLIC_ORIGIN or the dev allowlist. ` +
+    `If this is an attack, consider blocking IP ${ip} at the firewall/CDN level.`;
+
+  console.log(
+    `[CSRF] Firing owner alert for CSRF block | IP=${ip} Origin="${origin}" path=${path}`
+  );
+
+  try {
+    const delivered = await notifyOwner({ title, content });
+    if (delivered) {
+      console.log(
+        `[CSRF] Owner alert delivered successfully | IP=${ip} Origin="${origin}"`
+      );
+    } else {
+      console.warn(
+        `[CSRF] Owner alert delivery failed (notification service unavailable) | IP=${ip}`
+      );
+    }
+  } catch (err: unknown) {
+    // notifyOwner() throws TRPCError on validation failure — log but never
+    // let the alert failure propagate or affect the CSRF block response.
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[CSRF] Owner alert threw an error (non-critical) | IP=${ip} | error="${msg}"`
+    );
+  }
+}
+
 // ─── tRPC instance ────────────────────────────────────────────────────────────
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -136,10 +270,15 @@ export const router = t.router;
  * Validates the Origin header on all state-mutating HTTP requests (POST/PATCH/PUT/DELETE).
  * GET requests (tRPC queries) are exempt — they are read-only and carry no CSRF risk.
  *
+ * On block:
+ *   1. Logs full audit entry to server console (synchronous)
+ *   2. Fires notifyOwner() alert async (non-blocking, rate-limited per IP)
+ *   3. Throws TRPCError FORBIDDEN (synchronous — response sent immediately)
+ *
  * [STEP] Extract Origin header from request
  * [STEP] Determine if request method is mutation-capable
  * [STEP] Validate origin against allowed set
- * [OUTPUT] Pass to next middleware, or throw FORBIDDEN
+ * [OUTPUT] Pass to next middleware, or throw FORBIDDEN + fire alert
  * [VERIFY] Log every decision with IP, path, method, and origin for audit trail
  */
 const csrfOriginCheck = t.middleware(async ({ ctx, next, path }) => {
@@ -174,6 +313,17 @@ const csrfOriginCheck = t.middleware(async ({ ctx, next, path }) => {
       ` | allowedOrigins=[${Array.from(ALLOWED_ORIGINS).join(", ")}]` +
       ` | This may indicate a CSRF attack or misconfigured client`
     );
+
+    // [STEP] Fire owner alert async — non-blocking, rate-limited per IP per 10 min.
+    // The CSRF block (403 FORBIDDEN) is thrown synchronously below regardless of
+    // whether the alert succeeds. The alert is best-effort and supplementary.
+    fireCsrfBlockAlert(ip, origin ?? "", path, method).catch((err: unknown) => {
+      // Catch at the call site to guarantee no unhandled promise rejection
+      // can propagate and affect the server process.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[CSRF] Unhandled error in fireCsrfBlockAlert: ${msg}`);
+    });
+
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "Request origin not permitted",

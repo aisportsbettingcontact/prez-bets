@@ -2221,3 +2221,10 @@
 - [x] Create nbaSheetId.test.ts — validates NBA_SHEET_ID format + live sheet reachability
 - [x] Fix auth.logout.test.ts mock req to include req.get() for CSRF middleware compatibility
 - [x] TypeScript: 0 errors | Vitest: 430/430 passing (23 test files)
+
+## Security Hardening Round 3 (Apr 10, 2026)
+- [x] Add weekly GitHub Actions workflow (security-audit-weekly.yml): pnpm audit --audit-level=moderate, every Monday 09:00 UTC, manual dispatch with configurable level, artifact upload, structured severity breakdown log
+- [x] Wire CSRF block to notifyOwner() alert: production-only, rate-limited 1 alert per IP per 10 min, in-memory cooldown map with auto-pruning, structured alert payload with IP/origin/path/timestamp/remediation steps, fire-and-forget async (never blocks the 403 response)
+- [x] Add ciSecrets.test.ts: 5 tests validating all 7 required GitHub Actions secrets (presence, length, format) with safe preview logging (never logs full values)
+- [x] Update ci.yml: fix test count to 435, improve secrets documentation with formats and values, add MySQL format note for DATABASE_URL
+- [x] TypeScript: 0 errors | Vitest: 435/435 passing (24 test files)
