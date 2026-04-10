@@ -37,6 +37,8 @@ interface BettingSplitsPanelProps {
   homeLabel: string;
   awayNickname?: string;
   homeNickname?: string;
+  /** Called whenever the user switches the SPREAD/TOTAL/MONEYLINE toggle */
+  onMarketChange?: (market: MobileMarket) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -548,8 +550,15 @@ export function BettingSplitsPanel({
   game, awayLabel, homeLabel,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   awayNickname: _aN, homeNickname: _hN,
+  onMarketChange,
 }: BettingSplitsPanelProps) {
   const [mobileMarket, setMobileMarket] = useState<MobileMarket>("spread");
+
+  // Wrapper that updates internal state AND notifies parent (GameCard)
+  const handleMarketChange = (m: MobileMarket) => {
+    setMobileMarket(m);
+    onMarketChange?.(m);
+  };
   const sport = (game.sport ?? "NBA") as "MLB" | "NBA" | "NHL";
   const { data: colors } = trpc.teamColors.getForGame.useQuery(
     { awayTeam: game.awayTeam, homeTeam: game.homeTeam, sport },
@@ -626,7 +635,7 @@ export function BettingSplitsPanel({
             return (
               <button
                 key={m}
-                onClick={() => setMobileMarket(m)}
+                onClick={() => handleMarketChange(m)}
                 disabled={!isAvailable}
                 style={{
                   flex: 1,

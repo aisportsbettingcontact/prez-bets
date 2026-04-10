@@ -2077,6 +2077,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const awayWins = (isFinal || isLive) && hasScores && (game.awayScore! > game.homeScore!);
   const homeWins = (isFinal || isLive) && hasScores && (game.homeScore! > game.awayScore!);
 
+  // Active market toggle — shared between BettingSplitsPanel and OddsHistoryPanel
+  // Defaults to 'spread'; mirrors the SPREAD/TOTAL/MONEYLINE toggle in BettingSplitsPanel
+  const [activeMarket, setActiveMarket] = useState<'spread' | 'total' | 'ml'>('spread');
+
   // Model toggle state (lifted from OddsLinesPanel)
   const [showModelInternal, setShowModelInternal] = useState(true);
   const showModel = showModelProp !== undefined ? showModelProp : showModelInternal;
@@ -2722,6 +2726,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                   homeLabel={homeName}
                   awayNickname={awayNickname}
                   homeNickname={homeNickname}
+                  onMarketChange={setActiveMarket}
                 />
               </div>
             </div>
@@ -2735,6 +2740,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 homeLabel={homeName}
                 awayNickname={awayNickname}
                 homeNickname={homeNickname}
+                onMarketChange={setActiveMarket}
               />
             </div>
           )}
@@ -2886,6 +2892,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     homeLabel={homeName}
                     awayNickname={awayNickname}
                     homeNickname={homeNickname}
+                    onMarketChange={setActiveMarket}
                   />
                 </div>
               </div>
@@ -3715,6 +3722,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                         homeLabel={homeName}
                         awayNickname={awayNickname}
                         homeNickname={homeNickname}
+                        onMarketChange={setActiveMarket}
                       />
                     </div>
                   )}
@@ -3746,6 +3754,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             gameId={game.id}
             awayTeam={game.awayTeam}
             homeTeam={game.homeTeam}
+            activeMarket={activeMarket}
           />
         </div>
       )}

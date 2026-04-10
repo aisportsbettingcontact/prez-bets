@@ -496,6 +496,9 @@ type GameRow = {
 // ─── EditableGameCard ─────────────────────────────────────────────────────────
 
 function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: GameRow; onSaved: () => void; showDeleteButton?: boolean }) {
+  // Active market toggle — mirrors the SPREAD/TOTAL/MONEYLINE toggle for OddsHistoryPanel
+  const [activeMarket, setActiveMarket] = useState<'spread' | 'total' | 'ml'>('spread');
+
   const [awaySpread, setAwaySpread] = useState(game.awayModelSpread ?? "");
   const [homeSpread, setHomeSpread] = useState(game.homeModelSpread ?? "");
   const [modelTotal, setModelTotal] = useState(game.modelTotal ?? "");
@@ -1565,6 +1568,7 @@ function EditableGameCard({ game, onSaved, showDeleteButton = false }: { game: G
         gameId={game.id}
         awayTeam={game.awayTeam}
         homeTeam={game.homeTeam}
+        activeMarket={activeMarket}
       />
 
     </motion.div>
