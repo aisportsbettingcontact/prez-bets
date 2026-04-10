@@ -141,9 +141,25 @@ export const appUsersRouter = router({
           .trim() ?? ctx.req.socket?.remoteAddress ?? "unknown";
         const ua = (ctx.req.headers["user-agent"] as string | undefined) ?? null;
         const tag = "[AppAuth][AUTH_FAIL]";
+
+        // Sanitize the identifier for logging — show first 3 chars + *** to avoid
+        // logging full credentials in plaintext while still being useful for debugging.
+        // For emails: show first 3 chars of the local part (before @) + *** + @domain
+        // For usernames: show first 3 chars + ***
+        const rawId = input.emailOrUsername;
+        const isEmailId = rawId.includes("@");
+        const sanitizedId = isEmailId
+          ? (() => {
+              const atIdx = rawId.indexOf("@");
+              const local = rawId.substring(0, atIdx);
+              const domain = rawId.substring(atIdx); // includes the @
+              return `${local.substring(0, 3)}***${domain}`;
+            })()
+          : `${rawId.replace(/^@/, "").substring(0, 3)}***`;
+
         console.warn(
           `${tag} BLOCKED | IP=${ip} reason="${reason}"` +
-          ` identifier="${input.emailOrUsername.substring(0, 3)}***" ua="${ua?.substring(0, 60) ?? "none"}"`
+          ` identifier="${sanitizedId}" ua="${ua?.substring(0, 60) ?? "none"}"`
         );
         const authFailAt = Date.now();
         insertSecurityEvent({
@@ -159,6 +175,8 @@ export const appUsersRouter = router({
           console.error(`${tag} DB insert failed: ${(err as Error).message}`)
         );
         // [STEP] Post structured embed to 🗒️-𝗦𝗘𝗖𝗨𝗥𝗜𝗧𝗬-𝗘𝗩𝗘𝗡𝗧𝗦 Discord channel (async, non-blocking)
+        // targetIdentifier: the sanitized login credential the attacker used.
+        // Shows WHAT account was targeted without exposing the full credential in logs.
         postSecurityAlert({
           eventType: "AUTH_FAIL",
           ip,
@@ -166,6 +184,7 @@ export const appUsersRouter = router({
           method: ctx.req.method ?? "POST",
           userAgent: ua,
           context: reason,
+          targetIdentifier: sanitizedId,
           occurredAt: authFailAt,
         }).catch((err) =>
           console.error(`${tag} Discord alert failed: ${(err as Error).message}`)

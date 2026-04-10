@@ -2273,3 +2273,26 @@
 - [x] security.test.fireDigest tRPC procedure (manual digest trigger)
 - [x] SecurityEvents.tsx Discord Test Controls panel (Send Test + Post Digest buttons)
 - [x] TypeScript: 0 errors | Vitest: 458/458 pass
+
+## Discord Security Enhancements — Round 2 (Apr 10 2026)
+- [ ] Add targeted username/email to AUTH_FAIL SecurityAlertPayload and embed
+- [ ] Wire targetIdentifier into all AUTH_FAIL call sites in appUsers.ts
+- [ ] Implement weekly threat trend digest (Sunday 08:00 EST) with 7-day bar breakdown
+- [ ] Add Cloudflare IP block tRPC procedure (security.blockIp) with CF API secrets
+- [ ] Add Block IP button to SecurityEvents.tsx table rows
+
+## Cloudflare Removal (2026-04-10)
+- [x] Delete server/cloudflareBlock.ts
+- [x] Delete server/cloudflareBlock.test.ts
+- [x] Remove cloudflare router block from server/routers/security.ts
+- [x] Remove CF import from security.ts
+- [x] Confirm zero CF references remain in codebase
+- [x] TypeScript: 0 errors | Vitest: 458/458
+
+## Cloudflare Removal (2026-04-10)
+- [x] Delete server/cloudflareBlock.ts
+- [x] Delete server/cloudflareBlock.test.ts
+- [x] Remove cloudflare router block from server/routers/security.ts
+- [x] Remove CF import from security.ts
+- [x] Confirm zero CF references remain in codebase
+- [x] TypeScript: 0 errors | Vitest: 458/458

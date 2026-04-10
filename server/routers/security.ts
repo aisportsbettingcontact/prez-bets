@@ -31,6 +31,7 @@ import {
 } from "../db";
 import { postSecurityAlert } from "../discord/discordSecurityAlert";
 import { triggerSecurityDigestNow } from "../securityDigest";
+import { triggerWeeklySecurityDigestNow } from "../weeklySecurityDigest";
 
 // ─── Input validators ─────────────────────────────────────────────────────────
 
@@ -177,6 +178,7 @@ export const securityRouter = router({
         return { deleted };
       }),
   }),
+
 
   test: router({
     /**

@@ -88,6 +88,13 @@ export interface SecurityAlertPayload {
   userAgent?: string | null;
   /** Contextual label: limiter type for RATE_LIMIT, failure reason for AUTH_FAIL */
   context?: string | null;
+  /**
+   * AUTH_FAIL only — the sanitized login credential that was targeted.
+   * Format: first 3 chars of local email part + *** + @domain (e.g. "ais***@gmail.com")
+   * or first 3 chars of username + *** (e.g. "pre***").
+   * Never contains the full credential — safe to log and display.
+   */
+  targetIdentifier?: string | null;
   /** Epoch ms when the event occurred */
   occurredAt: number;
 }
@@ -358,9 +365,18 @@ function buildAuthFailEmbed(p: SecurityAlertPayload): EmbedBuilder {
       "the same IP, watch for a BRUTE FORCE escalation alert — that means the threshold has been crossed."
     )
     .addFields(
-      {
-        name: "❌ Why the Login Failed",
+      { name: "❌ Why the Login Failed",
         value: `\`${reasonDisplay}\``,
+        inline: false,
+      },
+      {
+        // targetIdentifier: the sanitized login credential that was used in this attempt.
+        // Shows WHAT account was targeted (e.g. "ais***@gmail.com" or "pre***") so @prez
+        // can immediately see which account is under attack without exposing the full credential.
+        name: "🎯 Account Targeted (Sanitized — First 3 Chars Only)",
+        value: p.targetIdentifier
+          ? `\`${p.targetIdentifier}\`\n*The first 3 characters of the login credential used in this attempt. Full credential is never logged.*`
+          : "`unknown — identifier not captured`",
         inline: false,
       },
       { name: "🔗 Login Procedure",       value: `\`${p.path}\``,   inline: true  },

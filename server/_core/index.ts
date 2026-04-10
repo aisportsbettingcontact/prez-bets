@@ -19,6 +19,7 @@ import { startDiscordBot } from "../discord/bot";
 import { startMlbPlayerSyncScheduler } from "../mlbPlayerSync";
 import { insertSecurityEvent } from "../db";
 import { startSecurityDigestScheduler } from "../securityDigest";
+import { startWeeklySecurityDigestScheduler } from "../weeklySecurityDigest";
 import { postSecurityAlert } from "../discord/discordSecurityAlert";
 
 // ─── Rate limit event helper ─────────────────────────────────────────────────
@@ -301,6 +302,8 @@ async function startServer() {
     startMlbPlayerSyncScheduler();
     // Security digest — daily at 08:00 EST (13:00 UTC), sends 24h threat summary via notifyOwner()
     startSecurityDigestScheduler();
+    // Weekly security threat trend digest — every Sunday at 08:00 EST, 7-day bar chart + top IPs
+    startWeeklySecurityDigestScheduler();
   });
 }
 
