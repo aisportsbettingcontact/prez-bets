@@ -2263,3 +2263,13 @@
 - [x] Wire AUTH_FAIL → postSecurityAlert() in server/routers/appUsers.ts (inside fireAuthFailEvent, after DB insert)
 - [x] All 3 wires are fire-and-forget (non-blocking), 30s per-IP dedup guard, full structured logging
 - [x] TypeScript: 0 errors | Vitest: 458/458 passing | Build: clean
+
+## Discord Security Channel — Full Integration (Apr 10 2026)
+- [x] postSecurityAlert() helper with CSRF_BLOCK, RATE_LIMIT, AUTH_FAIL embeds
+- [x] Brute-force IP escalation detector (3+ AUTH_FAIL in 10 min → @here alert)
+- [x] Daily digest Discord embed in securityDigest.ts (plain-English, layman-friendly)
+- [x] triggerSecurityDigestNow() manual export for owner-initiated digest
+- [x] security.test.fireEvent tRPC procedure (fire test embeds per type or ALL)
+- [x] security.test.fireDigest tRPC procedure (manual digest trigger)
+- [x] SecurityEvents.tsx Discord Test Controls panel (Send Test + Post Digest buttons)
+- [x] TypeScript: 0 errors | Vitest: 458/458 pass
