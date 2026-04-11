@@ -1892,3 +1892,231 @@ export async function pruneSecurityEvents(retentionDays = 90): Promise<number> {
     return 0;
   }
 }
+
+// ─── User Session Tracking (DAU / MAU / WAU / avg session duration) ──────────
+import { userSessions, type UserSession, type InsertUserSession } from "../drizzle/schema";
+
+// Idle threshold: sessions with no heartbeat for > 30 min are considered closed
+const SESSION_IDLE_MS = 30 * 60 * 1000;
+
+/**
+ * Create a new session row on login.
+ *
+ * [INPUT]  userId    — app_users.id of the logging-in user
+ * [OUTPUT] sessionId — id of the newly created row
+ */
+export async function createUserSession(userId: number): Promise<number | null> {
+  const tag = "[DB][createUserSession]";
+  const db = await getDb();
+  if (!db) { console.warn(`${tag} DB not available — session not created`); return null; }
+  const now = Date.now();
+  try {
+    const result = await db.insert(userSessions).values({
+      userId,
+      startedAt: now,
+      lastHeartbeat: now,
+    } satisfies InsertUserSession);
+    const [header] = result as unknown as [{ insertId?: number }];
+    const sessionId = header?.insertId ?? null;
+    console.log(`${tag} [OUTPUT] Created session | userId=${userId} sessionId=${sessionId} startedAt=${new Date(now).toISOString()}`);
+    return sessionId;
+  } catch (err: unknown) {
+    console.error(`${tag} Failed | userId=${userId} error=${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+/**
+ * Update lastHeartbeat on the most recent open session for a user.
+ * Called every 5 minutes by the frontend heartbeat ping.
+ *
+ * [INPUT]  userId — app_users.id
+ * [OUTPUT] void
+ */
+export async function heartbeatUserSession(userId: number): Promise<void> {
+  const tag = "[DB][heartbeatUserSession]";
+  const db = await getDb();
+  if (!db) { console.warn(`${tag} DB not available — heartbeat skipped`); return; }
+  const now = Date.now();
+  try {
+    await db
+      .update(userSessions)
+      .set({ lastHeartbeat: now })
+      .where(and(eq(userSessions.userId, userId), isNull(userSessions.endedAt)));
+    console.log(`${tag} [OUTPUT] Heartbeat updated | userId=${userId} at=${new Date(now).toISOString()}`);
+  } catch (err: unknown) {
+    console.error(`${tag} Failed | userId=${userId} error=${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Close all open sessions for a user on logout.
+ * Sets endedAt = now, durationMs = endedAt - startedAt.
+ *
+ * [INPUT]  userId — app_users.id
+ * [OUTPUT] void
+ */
+export async function closeUserSessions(userId: number): Promise<void> {
+  const tag = "[DB][closeUserSessions]";
+  const db = await getDb();
+  if (!db) { console.warn(`${tag} DB not available — sessions not closed`); return; }
+  const now = Date.now();
+  try {
+    // Fetch open sessions to compute durationMs per row
+    const open = await db
+      .select({ id: userSessions.id, startedAt: userSessions.startedAt })
+      .from(userSessions)
+      .where(and(eq(userSessions.userId, userId), isNull(userSessions.endedAt)));
+    for (const s of open) {
+      const dur = now - s.startedAt;
+      await db
+        .update(userSessions)
+        .set({ endedAt: now, durationMs: dur })
+        .where(eq(userSessions.id, s.id));
+      console.log(`${tag} [OUTPUT] Closed session | sessionId=${s.id} userId=${userId} durationMs=${dur} (${Math.round(dur/60000)} min)`);
+    }
+    if (open.length === 0) {
+      console.log(`${tag} [STATE] No open sessions found for userId=${userId}`);
+    }
+  } catch (err: unknown) {
+    console.error(`${tag} Failed | userId=${userId} error=${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Close idle sessions that have not received a heartbeat for > SESSION_IDLE_MS.
+ * Called by a scheduled job every 30 minutes.
+ *
+ * [OUTPUT] number — rows closed
+ */
+export async function closeIdleSessions(): Promise<number> {
+  const tag = "[DB][closeIdleSessions]";
+  const db = await getDb();
+  if (!db) { console.warn(`${tag} DB not available — idle cleanup skipped`); return 0; }
+  const idleCutoff = Date.now() - SESSION_IDLE_MS;
+  try {
+    const idle = await db
+      .select({ id: userSessions.id, startedAt: userSessions.startedAt })
+      .from(userSessions)
+      .where(and(isNull(userSessions.endedAt), sql`${userSessions.lastHeartbeat} < ${idleCutoff}`));
+    const now = Date.now();
+    for (const s of idle) {
+      const dur = now - s.startedAt;
+      await db.update(userSessions).set({ endedAt: now, durationMs: dur }).where(eq(userSessions.id, s.id));
+    }
+    console.log(`${tag} [OUTPUT] Closed ${idle.length} idle sessions (idleCutoff=${new Date(idleCutoff).toISOString()})`);
+    return idle.length;
+  } catch (err: unknown) {
+    console.error(`${tag} Failed | error=${err instanceof Error ? err.message : String(err)}`);
+    return 0;
+  }
+}
+
+/**
+ * Compute DAU / MAU / WAU and average session duration.
+ *
+ * DAU = distinct users with a session that started in the last 24 hours
+ * WAU = distinct users with a session that started in the last 7 days
+ * MAU = distinct users with a session that started in the last 30 days
+ * avgSessionDurationMs = mean of all closed session durationMs values in the last 30 days
+ *
+ * [OUTPUT] { dau, wau, mau, avgSessionDurationMs }
+ */
+export async function getSessionMetrics(): Promise<{
+  dau: number; wau: number; mau: number; avgSessionDurationMs: number;
+}> {
+  const tag = "[DB][getSessionMetrics]";
+  const db = await getDb();
+  const fallback = { dau: 0, wau: 0, mau: 0, avgSessionDurationMs: 0 };
+  if (!db) { console.warn(`${tag} DB not available`); return fallback; }
+  const now = Date.now();
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const since24h = now - DAY_MS;
+  const since7d  = now - 7  * DAY_MS;
+  const since30d = now - 30 * DAY_MS;
+  try {
+    // DAU
+    const [dauRow] = await db
+      .select({ count: sql<number>`COUNT(DISTINCT ${userSessions.userId})` })
+      .from(userSessions)
+      .where(gte(userSessions.startedAt, since24h));
+    // WAU
+    const [wauRow] = await db
+      .select({ count: sql<number>`COUNT(DISTINCT ${userSessions.userId})` })
+      .from(userSessions)
+      .where(gte(userSessions.startedAt, since7d));
+    // MAU
+    const [mauRow] = await db
+      .select({ count: sql<number>`COUNT(DISTINCT ${userSessions.userId})` })
+      .from(userSessions)
+      .where(gte(userSessions.startedAt, since30d));
+    // Avg session duration (closed sessions in last 30 days only)
+    const [avgRow] = await db
+      .select({ avg: sql<number>`AVG(${userSessions.durationMs})` })
+      .from(userSessions)
+      .where(and(isNotNull(userSessions.durationMs), gte(userSessions.startedAt, since30d)));
+    const result = {
+      dau: Number(dauRow?.count ?? 0),
+      wau: Number(wauRow?.count ?? 0),
+      mau: Number(mauRow?.count ?? 0),
+      avgSessionDurationMs: Number(avgRow?.avg ?? 0),
+    };
+    console.log(`${tag} [OUTPUT] dau=${result.dau} wau=${result.wau} mau=${result.mau} avgDurMs=${Math.round(result.avgSessionDurationMs)}`);
+    return result;
+  } catch (err: unknown) {
+    console.error(`${tag} Failed | error=${err instanceof Error ? err.message : String(err)}`);
+    return fallback;
+  }
+}
+
+/**
+ * Compute member tier counts and Discord connection count.
+ *
+ * TOTAL_PAYING     = users with hasAccess=true AND (expiryDate IS NULL OR expiryDate > now)
+ * LIFETIME_MEMBERS = users with hasAccess=true AND expiryDate IS NULL
+ * NON_PAYING       = users with hasAccess=false OR (expiryDate IS NOT NULL AND expiryDate <= now)
+ * DISCORD_CONNECTED = users with discordId IS NOT NULL
+ *
+ * [OUTPUT] { totalPaying, lifetimeMembers, nonPaying, discordConnected, totalUsers }
+ */
+export async function getMemberMetrics(): Promise<{
+  totalPaying: number; lifetimeMembers: number; nonPaying: number;
+  discordConnected: number; totalUsers: number;
+}> {
+  const tag = "[DB][getMemberMetrics]";
+  const db = await getDb();
+  const fallback = { totalPaying: 0, lifetimeMembers: 0, nonPaying: 0, discordConnected: 0, totalUsers: 0 };
+  if (!db) { console.warn(`${tag} DB not available`); return fallback; }
+  const now = Date.now();
+  try {
+    const [totalRow] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(appUsersTable);
+    const [payingRow] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(appUsersTable)
+      .where(and(
+        eq(appUsersTable.hasAccess, true),
+        or(isNull(appUsersTable.expiryDate), sql`${appUsersTable.expiryDate} > ${now}`)
+      ));
+    const [lifetimeRow] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(appUsersTable)
+      .where(and(eq(appUsersTable.hasAccess, true), isNull(appUsersTable.expiryDate)));
+    const [discordRow] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(appUsersTable)
+      .where(isNotNull(appUsersTable.discordId));
+    const total = Number(totalRow?.count ?? 0);
+    const paying = Number(payingRow?.count ?? 0);
+    const lifetime = Number(lifetimeRow?.count ?? 0);
+    const discord = Number(discordRow?.count ?? 0);
+    const nonPaying = total - paying;
+    const result = { totalPaying: paying, lifetimeMembers: lifetime, nonPaying, discordConnected: discord, totalUsers: total };
+    console.log(`${tag} [OUTPUT] total=${total} paying=${paying} lifetime=${lifetime} nonPaying=${nonPaying} discord=${discord}`);
+    return result;
+  } catch (err: unknown) {
+    console.error(`${tag} Failed | error=${err instanceof Error ? err.message : String(err)}`);
+    return fallback;
+  }
+}

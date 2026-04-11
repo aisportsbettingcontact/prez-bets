@@ -2296,3 +2296,13 @@
 - [x] Remove CF import from security.ts
 - [x] Confirm zero CF references remain in codebase
 - [x] TypeScript: 0 errors | Vitest: 458/458
+
+## New Features (2026-04-10)
+- [ ] Fix ?code= OAuth redirect loop on published domain
+- [ ] Fix Last Sign In format: MM/DD/YYYY HH:MM AM/PM EST in User Management
+- [ ] Add session_activity table to DB (userId, date, sessionStart, sessionEnd, durationMs)
+- [ ] Add session tracking middleware (record login, heartbeat, logout)
+- [ ] Add tRPC procedures: metrics.activityStats (DAU/MAU/WAU, avgSessionTime)
+- [ ] Add member tier tracking: payingMembers, lifetimeMembers, nonPayingMembers
+- [ ] Add discordConnected field to app_users + tRPC metrics.memberStats
+- [ ] Build metrics panel UI with 8 KPI cards (DAU/MAU/WAU, avgSession, paying/lifetime/nonPaying/discord)

@@ -76,8 +76,12 @@ function formatExpiry(expiryDate: number | null) {
 function formatDate(d: Date | null) {
   if (!d) return "Never";
   const dt = new Date(d);
+  // [STEP] Build MM/DD/YYYY date string in EST
+  const date = dt.toLocaleDateString("en-US", { ...EST_OPTS, month: "2-digit", day: "2-digit", year: "numeric" });
+  // [STEP] Build HH:MM AM/PM time string in EST
   const time = dt.toLocaleTimeString("en-US", { ...EST_OPTS, hour: "2-digit", minute: "2-digit", hour12: true });
-  return `${time} EST`;
+  // [OUTPUT] Full format: MM/DD/YYYY HH:MM AM/PM EST
+  return `${date} ${time} EST`;
 }
 
 type FormState = {
@@ -268,6 +272,123 @@ function getSortValue(u: AppUserRow, key: ColKey): string | number {
     case "lastSignIn":
       return u.lastSignedIn ? new Date(u.lastSignedIn).getTime() : 0;
   }
+}
+
+// ── Metrics Panel ───────────────────────────────────────────────────────────
+/** Formats milliseconds → HH:MM:SS */
+function fmtDuration(ms: number): string {
+  if (!ms || ms <= 0) return "00:00:00";
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function MetricsPanel() {
+  const { data: sessionData, isLoading: sessLoading } = trpc.metrics.getSessionMetrics.useQuery(undefined, {
+    refetchInterval: 60_000, // refresh every 60s
+  });
+  const { data: memberData, isLoading: membLoading } = trpc.metrics.getMemberMetrics.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
+
+  const loading = sessLoading || membLoading;
+
+  const sessionKpis = [
+    {
+      label: "DAILY ACTIVE USERS",
+      sublabel: "Unique logins in last 24 hours",
+      value: loading ? "—" : String(sessionData?.dau ?? 0),
+      color: "text-emerald-400",
+      border: "border-emerald-500/20",
+    },
+    {
+      label: "WEEKLY ACTIVE USERS",
+      sublabel: "Unique logins in last 7 days",
+      value: loading ? "—" : String(sessionData?.wau ?? 0),
+      color: "text-blue-400",
+      border: "border-blue-500/20",
+    },
+    {
+      label: "MONTHLY ACTIVE USERS",
+      sublabel: "Unique logins in last 30 days",
+      value: loading ? "—" : String(sessionData?.mau ?? 0),
+      color: "text-violet-400",
+      border: "border-violet-500/20",
+    },
+    {
+      label: "AVG SESSION DURATION",
+      sublabel: "Average time on platform per day",
+      value: loading ? "—" : fmtDuration(sessionData?.avgSessionDurationMs ?? 0),
+      color: "text-amber-400",
+      border: "border-amber-500/20",
+    },
+  ];
+
+  const memberKpis = [
+    {
+      label: "TOTAL PAYING MEMBERS",
+      sublabel: "Active paid access (all tiers)",
+      value: loading ? "—" : String(memberData?.totalPaying ?? 0),
+      color: "text-yellow-400",
+      border: "border-yellow-500/20",
+    },
+    {
+      label: "LIFETIME MEMBERS",
+      sublabel: "Never-expiring access accounts",
+      value: loading ? "—" : String(memberData?.lifetimeMembers ?? 0),
+      color: "text-orange-400",
+      border: "border-orange-500/20",
+    },
+    {
+      label: "NON-PAYING MEMBERS",
+      sublabel: "Accounts without active access",
+      value: loading ? "—" : String(memberData?.nonPaying ?? 0),
+      color: "text-zinc-400",
+      border: "border-zinc-500/20",
+    },
+    {
+      label: "CONNECTED DISCORD USERS",
+      sublabel: "Accounts with Discord linked",
+      value: loading ? "—" : String(memberData?.discordConnected ?? 0),
+      color: "text-indigo-400",
+      border: "border-indigo-500/20",
+    },
+  ];
+
+  return (
+    <div className="mb-6 space-y-3">
+      {/* Section label */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold tracking-[0.15em] text-zinc-500 uppercase">Platform Metrics</span>
+        <div className="flex-1 h-px bg-white/6" />
+        {loading && <RefreshCw className="w-3 h-3 text-zinc-600 animate-spin" />}
+      </div>
+
+      {/* Row 1 — Session KPIs */}
+      <div className="grid grid-cols-4 gap-3">
+        {sessionKpis.map((k) => (
+          <div key={k.label} className={`bg-white/3 border ${k.border} rounded-lg px-4 py-3`}>
+            <div className={`text-xl font-bold font-mono ${k.color}`}>{k.value}</div>
+            <div className="text-[10px] font-semibold tracking-wider text-zinc-300 mt-0.5">{k.label}</div>
+            <div className="text-[10px] text-zinc-600 mt-0.5">{k.sublabel}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Row 2 — Member KPIs */}
+      <div className="grid grid-cols-4 gap-3">
+        {memberKpis.map((k) => (
+          <div key={k.label} className={`bg-white/3 border ${k.border} rounded-lg px-4 py-3`}>
+            <div className={`text-xl font-bold font-mono ${k.color}`}>{k.value}</div>
+            <div className="text-[10px] font-semibold tracking-wider text-zinc-300 mt-0.5">{k.label}</div>
+            <div className="text-[10px] text-zinc-600 mt-0.5">{k.sublabel}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -542,6 +663,9 @@ export default function UserManagement() {
             </div>
           ))}
         </div>
+
+        {/* ── Metrics Panel ─────────────────────────────────────────────── */}
+        <MetricsPanel />
 
         {/* Search bar */}
         <div className="mb-4 relative">

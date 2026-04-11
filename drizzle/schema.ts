@@ -1383,3 +1383,40 @@ export const securityEvents = mysqlTable("security_events", {
 
 export type SecurityEventRow = typeof securityEvents.$inferSelect;
 export type InsertSecurityEvent = typeof securityEvents.$inferInsert;
+
+// ─── User Sessions (DAU / MAU / WAU / avg session duration tracking) ─────────
+/**
+ * One row per user session. A session starts on login and ends when the user
+ * logs out or when the heartbeat stops for > 30 min (SESSION_IDLE_THRESHOLD_MS).
+ *
+ * Fields:
+ *   startedAt     — UTC ms when the session began (login event)
+ *   endedAt       — UTC ms when the session ended; NULL = still active
+ *   durationMs    — Computed on close: endedAt - startedAt; NULL while active
+ *   lastHeartbeat — UTC ms of the most recent client ping (every 5 min)
+ *
+ * Indexes:
+ *   idx_sess_user_id    — fast per-user queries
+ *   idx_sess_started_at — fast time-window aggregations (DAU/MAU/WAU)
+ *   idx_sess_ended_at   — fast active-session queries (WHERE endedAt IS NULL)
+ */
+export const userSessions = mysqlTable("user_sessions", {
+  id:            int("id").autoincrement().primaryKey(),
+  /** app_users.id of the user who owns this session */
+  userId:        int("userId").notNull(),
+  /** UTC ms when the session started */
+  startedAt:     bigint("startedAt", { mode: "number" }).notNull(),
+  /** UTC ms when the session ended; NULL = session still active */
+  endedAt:       bigint("endedAt",   { mode: "number" }),
+  /** Duration in ms (endedAt - startedAt); NULL while active */
+  durationMs:    bigint("durationMs", { mode: "number" }),
+  /** UTC ms of the most recent heartbeat ping from the client */
+  lastHeartbeat: bigint("lastHeartbeat", { mode: "number" }),
+  createdAt:     timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxUserId:    index("idx_sess_user_id").on(t.userId),
+  idxStartedAt: index("idx_sess_started_at").on(t.startedAt),
+  idxEndedAt:   index("idx_sess_ended_at").on(t.endedAt),
+}));
+export type UserSession = typeof userSessions.$inferSelect;
+export type InsertUserSession = typeof userSessions.$inferInsert;

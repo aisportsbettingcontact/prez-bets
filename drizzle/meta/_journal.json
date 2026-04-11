@@ -386,6 +386,13 @@
       "when": 1775852537536,
       "tag": "0054_short_annihilus",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "5",
+      "when": 1775868007928,
+      "tag": "0055_easy_photon",
+      "breakpoints": true
     }
   ]
 }

@@ -447,10 +447,18 @@ export default function ModelProjections() {
     onSuccess: () => { refetchAppUser(); setShowAgeModal(false); },
   });
 
+  const closeSessionMutation = trpc.metrics.closeSession.useMutation();
+  const heartbeatMutation = trpc.metrics.sessionHeartbeat.useMutation();
   const appLogoutMutation = trpc.appUsers.logout.useMutation({
     onSuccess: () => { setLocation("/"); toast.success("Signed out"); },
   });
-  const appLogout = () => appLogoutMutation.mutate();
+  const appLogout = () => { closeSessionMutation.mutate(); appLogoutMutation.mutate(); };
+  // Heartbeat every 5 minutes to track active session duration
+  useEffect(() => {
+    const interval = setInterval(() => { heartbeatMutation.mutate(); }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setSelectedStatuses(new Set());

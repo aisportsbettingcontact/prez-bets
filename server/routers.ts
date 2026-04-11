@@ -38,6 +38,7 @@ import { parseFileBuffer, detectSportFromFilename, detectDateFromFilename } from
 import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure, appUserProcedure } from "./routers/appUsers";
 import { securityRouter } from "./routers/security";
+import { metricsRouter } from "./routers/metrics";
 import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById, getFavoriteGameIds, getFavoriteGamesWithDates, toggleFavoriteGame, updateAnOdds, listGamesByDate, listOddsHistory, getBracketGames, auditAndAdvanceAllBracketWinners, getMlbLineupsByGameIds, getStrikeoutPropsByGame, getStrikeoutPropsByGames, getMlbGameEnvSignals, getHrPropsByGame, getHrPropsByGames } from "./db";
 import { runStrikeoutModel, type StrikeoutRunnerInput } from "./strikeoutModelRunner";
 import { getLastRefreshResult, runVsinRefresh, runVsinRefreshManual, refreshAllScoresNow } from "./vsinAutoRefresh";
@@ -73,6 +74,7 @@ export const appRouter = router({
   system: systemRouter,
   appUsers: appUsersRouter,
   security: securityRouter,
+  metrics: metricsRouter,
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
   auth: router({

@@ -179,8 +179,9 @@ export default function BettingSplitsPage() {
   }, []);
 
   const acceptTermsMutation = trpc.appUsers.acceptTerms.useMutation({ onSuccess: () => { refetchAppUser(); setShowAgeModal(false); } });
+  const closeSessionMutation = trpc.metrics.closeSession.useMutation();
   const appLogoutMutation = trpc.appUsers.logout.useMutation({ onSuccess: () => { setLocation("/"); toast.success("Signed out"); } });
-  const appLogout = () => appLogoutMutation.mutate();
+  const appLogout = () => { closeSessionMutation.mutate(); appLogoutMutation.mutate(); };
 
   useEffect(() => { setSelectedStatuses(new Set()); setSelectedDate(todayUTC()); }, [selectedSport]);
 

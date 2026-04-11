@@ -65,8 +65,12 @@ export default function Home() {
     return () => document.removeEventListener("mousedown", handler);
   }, [showLoginPanel]);
 
+  // Fire-and-forget session open — creates a user_sessions row for DAU/MAU/WAU tracking
+  const openSessionMutation = trpc.metrics.openSession.useMutation();
+
   const loginMutation = trpc.appUsers.login.useMutation({
     onSuccess: () => {
+      openSessionMutation.mutate();
       refetch();
       toast.success("Welcome back!");
       setLocation("/feed");
