@@ -688,6 +688,11 @@ export async function backfillMlbScheduleHistory(
  * Returns games where the team was either the away or home team.
  * Sorted by gameDate DESC (most recent first).
  *
+ * IMPLEMENTATION NOTE: Uses SQL-level OR filter on awaySlug/homeSlug so the
+ * DB engine does the heavy lifting — no full-table scan, no JS-side filtering.
+ * The LIMIT is pushed to the DB after ordering, so we always get the true
+ * most-recent N games regardless of how large the table grows.
+ *
  * @param teamSlug - AN url_slug, e.g. "arizona-diamondbacks"
  * @param limit    - Number of games to return (default: 5 for Last 5 panel)
  */
@@ -696,27 +701,48 @@ export async function getLastNGamesForTeam(
   limit = 5
 ) {
   console.log(
-    `${TAG}[QUERY] Fetching last ${limit} completed games for team slug="${teamSlug}"`
+    `${TAG}[QUERY] getLastNGamesForTeam | team="${teamSlug}" limit=${limit}`
+  );
+  console.log(
+    `${TAG}[QUERY] [INPUT] teamSlug="${teamSlug}" limit=${limit}`
   );
 
   const db = await getDb();
+
+  // ── SQL-level filter: only rows where this team appears, status=complete ──────
+  // ORDER BY gameDate DESC + LIMIT pushed to DB — no JS filtering needed
   const rows = await db
     .select()
     .from(mlbScheduleHistory)
-    .where(eq(mlbScheduleHistory.gameStatus, "complete"))
-    .orderBy(mlbScheduleHistory.gameDate)
-    .limit(500);
+    .where(
+      and(
+        eq(mlbScheduleHistory.gameStatus, "complete"),
+        or(
+          eq(mlbScheduleHistory.awaySlug, teamSlug),
+          eq(mlbScheduleHistory.homeSlug, teamSlug)
+        )
+      )
+    )
+    .orderBy(desc(mlbScheduleHistory.gameDate))
+    .limit(limit);
 
-  // Filter to games involving this team, sort most recent first
-  const teamGames = (rows as MlbScheduleHistoryRow[])
-    .filter((r) => r.awaySlug === teamSlug || r.homeSlug === teamSlug)
-    .sort((a, b) => b.gameDate.localeCompare(a.gameDate))
-    .slice(0, limit);
+  const teamGames = rows as MlbScheduleHistoryRow[];
 
   console.log(
-    `${TAG}[QUERY] Found ${teamGames.length} completed games for team="${teamSlug}"` +
-    ` (searched ${rows.length} total complete games)`
+    `${TAG}[QUERY] [OUTPUT] team="${teamSlug}" → ${teamGames.length} completed games returned`
   );
+
+  if (teamGames.length > 0) {
+    console.log(
+      `${TAG}[QUERY] [STATE] most recent=${teamGames[0].gameDate}` +
+      ` oldest=${teamGames[teamGames.length - 1].gameDate}`
+    );
+  } else {
+    console.log(
+      `${TAG}[QUERY] [VERIFY] WARN — 0 completed games found for team="${teamSlug}"` +
+      ` (DB may not yet have data for this team)`
+    );
+  }
 
   return teamGames;
 }
@@ -728,24 +754,45 @@ export async function getLastNGamesForTeam(
  * @param teamSlug - AN url_slug, e.g. "arizona-diamondbacks"
  */
 export async function getFullScheduleForTeam(teamSlug: string) {
-  console.log(
-    `${TAG}[QUERY] Fetching full schedule for team slug="${teamSlug}"`
-  );
+  console.log(`${TAG}[QUERY] getFullScheduleForTeam | [INPUT] teamSlug="${teamSlug}"`);
 
   const db = await getDb();
+
+  // ── SQL-level filter: only rows where this team appears (any status) ─────────
+  // ORDER BY gameDate DESC — no JS filtering, no JS sorting, no row cap
   const rows = await db
     .select()
     .from(mlbScheduleHistory)
-    .orderBy(mlbScheduleHistory.gameDate)
-    .limit(1000);
+    .where(
+      or(
+        eq(mlbScheduleHistory.awaySlug, teamSlug),
+        eq(mlbScheduleHistory.homeSlug, teamSlug)
+      )
+    )
+    .orderBy(desc(mlbScheduleHistory.gameDate));
 
-  const teamGames = (rows as MlbScheduleHistoryRow[])
-    .filter((r) => r.awaySlug === teamSlug || r.homeSlug === teamSlug)
-    .sort((a, b) => b.gameDate.localeCompare(a.gameDate));
+  const teamGames = rows as MlbScheduleHistoryRow[];
+
+  const completed = teamGames.filter((r) => r.gameStatus === "complete").length;
+  const scheduled = teamGames.filter((r) => r.gameStatus === "scheduled").length;
+  const inprogress = teamGames.filter((r) => r.gameStatus === "inprogress").length;
 
   console.log(
-    `${TAG}[QUERY] Found ${teamGames.length} total games for team="${teamSlug}"`
+    `${TAG}[QUERY] [OUTPUT] team="${teamSlug}" → ${teamGames.length} total games` +
+    ` | complete=${completed} scheduled=${scheduled} inprogress=${inprogress}`
   );
+
+  if (teamGames.length > 0) {
+    console.log(
+      `${TAG}[QUERY] [STATE] date range: ${teamGames[teamGames.length - 1].gameDate}` +
+      ` → ${teamGames[0].gameDate}`
+    );
+  } else {
+    console.log(
+      `${TAG}[QUERY] [VERIFY] WARN — 0 games found for team="${teamSlug}"` +
+      ` (check that backfill has run for this team)`
+    );
+  }
 
   return teamGames;
 }
@@ -788,13 +835,13 @@ export async function getMlbH2HGames(
   slugB: string,
   limit = 10
 ): Promise<MlbScheduleHistoryRow[]> {
-  console.log(
-    `${TAG}[H2H] Fetching H2H games: "${slugA}" vs "${slugB}" limit=${limit}`
-  );
+  console.log(`${TAG}[H2H] getMlbH2HGames | [INPUT] slugA="${slugA}" slugB="${slugB}" limit=${limit}`);
 
   const db = await getDb();
 
-  // Fetch all completed games involving either team (broad filter, then narrow in JS)
+  // ── Precise SQL filter: rows where slugA and slugB are BOTH present ────────────
+  // This avoids the broad-OR approach that returns false-positive single-team games.
+  // Pattern: (away=A AND home=B) OR (away=B AND home=A) — covers both orderings.
   const rows = await db
     .select()
     .from(mlbScheduleHistory)
@@ -802,25 +849,40 @@ export async function getMlbH2HGames(
       and(
         eq(mlbScheduleHistory.gameStatus, "complete"),
         or(
-          eq(mlbScheduleHistory.awaySlug, slugA),
-          eq(mlbScheduleHistory.homeSlug, slugA),
-          eq(mlbScheduleHistory.awaySlug, slugB),
-          eq(mlbScheduleHistory.homeSlug, slugB)
+          and(
+            eq(mlbScheduleHistory.awaySlug, slugA),
+            eq(mlbScheduleHistory.homeSlug, slugB)
+          ),
+          and(
+            eq(mlbScheduleHistory.awaySlug, slugB),
+            eq(mlbScheduleHistory.homeSlug, slugA)
+          )
         )
       )
     )
     .orderBy(desc(mlbScheduleHistory.gameDate))
-    .limit(500);
+    .limit(limit);
 
-  // Narrow to games where BOTH teams are present
-  const h2h = (rows as MlbScheduleHistoryRow[]).filter((r) => {
-    const teams = new Set([r.awaySlug, r.homeSlug]);
-    return teams.has(slugA) && teams.has(slugB);
-  }).slice(0, limit);
+  const h2h = rows as MlbScheduleHistoryRow[];
 
   console.log(
-    `${TAG}[H2H] Found ${h2h.length} H2H games between "${slugA}" and "${slugB}"`
+    `${TAG}[H2H] [OUTPUT] "${slugA}" vs "${slugB}" → ${h2h.length} H2H games returned`
   );
+
+  if (h2h.length > 0) {
+    const latest = h2h[0];
+    const oldest = h2h[h2h.length - 1];
+    console.log(
+      `${TAG}[H2H] [STATE] most recent=${latest.gameDate}` +
+      ` (${latest.awayAbbr}@${latest.homeAbbr} ${latest.awayScore ?? "?"}–${latest.homeScore ?? "?"})` +
+      ` | oldest=${oldest.gameDate}`
+    );
+  } else {
+    console.log(
+      `${TAG}[H2H] [VERIFY] WARN — 0 H2H games found between "${slugA}" and "${slugB}"` +
+      ` (teams may not have played each other in the DB date range)`
+    );
+  }
 
   return h2h;
 }
@@ -839,21 +901,40 @@ export async function getMlbH2HGames(
  */
 export async function getMlbSituationalStats(teamSlug: string, limit = 162) {
   console.log(
-    `${TAG}[SITUATIONAL] Computing situational stats for team="${teamSlug}" limit=${limit}`
+    `${TAG}[SITUATIONAL] getMlbSituationalStats | [INPUT] team="${teamSlug}" limit=${limit}`
   );
 
   const db = await getDb();
+
+  // ── SQL-level filter: only completed games for this team, newest first ────────
+  // LIMIT pushed to DB — no full-table scan, no JS filtering, no JS sorting
   const rows = await db
     .select()
     .from(mlbScheduleHistory)
-    .where(eq(mlbScheduleHistory.gameStatus, "complete"))
-    .orderBy(mlbScheduleHistory.gameDate)
-    .limit(1000);
+    .where(
+      and(
+        eq(mlbScheduleHistory.gameStatus, "complete"),
+        or(
+          eq(mlbScheduleHistory.awaySlug, teamSlug),
+          eq(mlbScheduleHistory.homeSlug, teamSlug)
+        )
+      )
+    )
+    .orderBy(desc(mlbScheduleHistory.gameDate))
+    .limit(limit);
 
-  const teamGames = (rows as MlbScheduleHistoryRow[])
-    .filter((r) => r.awaySlug === teamSlug || r.homeSlug === teamSlug)
-    .sort((a, b) => b.gameDate.localeCompare(a.gameDate))
-    .slice(0, limit);
+  const teamGames = rows as MlbScheduleHistoryRow[];
+
+  console.log(
+    `${TAG}[SITUATIONAL] [STATE] team="${teamSlug}" → ${teamGames.length} completed games fetched from DB`
+  );
+
+  if (teamGames.length === 0) {
+    console.log(
+      `${TAG}[SITUATIONAL] [VERIFY] WARN — 0 completed games for team="${teamSlug}"` +
+      ` — all situational records will be 0-0`
+    );
+  }
 
   const isAway = (g: MlbScheduleHistoryRow) => g.awaySlug === teamSlug;
 
@@ -942,12 +1023,51 @@ export async function getMlbSituationalStats(teamSlug: string, limit = 162) {
     gamesAnalyzed: teamGames.length,
   };
 
+  // ── Comprehensive output log ────────────────────────────────────────────
   console.log(
-    `${TAG}[SITUATIONAL] team="${teamSlug}" analyzed=${teamGames.length} games` +
-    ` | ML overall=${stats.ml.overall.wins}-${stats.ml.overall.losses}` +
-    ` | ATS overall=${stats.spread.overall.wins}-${stats.spread.overall.losses}` +
-    ` | O/U overall=${stats.total.overall.wins}-${stats.total.overall.losses}`
+    `${TAG}[SITUATIONAL] [OUTPUT] team="${teamSlug}" analyzed=${teamGames.length} games` +
+    ` | home=${homeGames.length} away=${awayGames.length}` +
+    ` | fav=${favGames.length} dog=${dogGames.length} last10=${last10.length}`
   );
+  console.log(
+    `${TAG}[SITUATIONAL] [OUTPUT] ML:` +
+    ` overall=${stats.ml.overall.wins}-${stats.ml.overall.losses}` +
+    ` last10=${stats.ml.last10.wins}-${stats.ml.last10.losses}` +
+    ` home=${stats.ml.home.wins}-${stats.ml.home.losses}` +
+    ` away=${stats.ml.away.wins}-${stats.ml.away.losses}` +
+    ` fav=${stats.ml.favorite.wins}-${stats.ml.favorite.losses}` +
+    ` dog=${stats.ml.underdog.wins}-${stats.ml.underdog.losses}`
+  );
+  console.log(
+    `${TAG}[SITUATIONAL] [OUTPUT] ATS:` +
+    ` overall=${stats.spread.overall.wins}-${stats.spread.overall.losses}` +
+    ` last10=${stats.spread.last10.wins}-${stats.spread.last10.losses}` +
+    ` home=${stats.spread.home.wins}-${stats.spread.home.losses}` +
+    ` away=${stats.spread.away.wins}-${stats.spread.away.losses}` +
+    ` fav=${stats.spread.favorite.wins}-${stats.spread.favorite.losses}` +
+    ` dog=${stats.spread.underdog.wins}-${stats.spread.underdog.losses}`
+  );
+  console.log(
+    `${TAG}[SITUATIONAL] [OUTPUT] O/U:` +
+    ` overall=${stats.total.overall.wins}O-${stats.total.overall.losses}U-${stats.total.overall.pushes}P` +
+    ` last10=${stats.total.last10.wins}O-${stats.total.last10.losses}U-${stats.total.last10.pushes}P` +
+    ` home=${stats.total.home.wins}O-${stats.total.home.losses}U` +
+    ` away=${stats.total.away.wins}O-${stats.total.away.losses}U`
+  );
+
+  // ── Sanity check: ML wins + losses should not exceed gamesAnalyzed ──────────
+  const mlTotal = stats.ml.overall.wins + stats.ml.overall.losses;
+  if (mlTotal > teamGames.length) {
+    console.error(
+      `${TAG}[SITUATIONAL] [VERIFY] FAIL — ML wins+losses (${mlTotal}) > gamesAnalyzed (${teamGames.length})` +
+      ` — data integrity issue`
+    );
+  } else {
+    console.log(
+      `${TAG}[SITUATIONAL] [VERIFY] PASS — ML total=${mlTotal} ≤ gamesAnalyzed=${teamGames.length}` +
+      ` | null/pending games=${teamGames.length - mlTotal}`
+    );
+  }
 
   return stats;
 }

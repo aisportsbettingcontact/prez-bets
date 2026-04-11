@@ -384,6 +384,127 @@ function TeamScheduleTable({
   );
 }
 
+// ─── Head-to-Head Row ─────────────────────────────────────────────────────────
+//
+// Unlike GameRow (single-team perspective), H2HRow shows BOTH teams in the game.
+// The winner is determined from awayWon, and ATS is shown from the AWAY team's
+// perspective (the team that was actually away in that specific game — which may
+// be either awaySlug or homeSlug depending on who hosted that game).
+
+function H2HRow({
+  game,
+  sport,
+}: {
+  game: ScheduleGame;
+  sport: Sport;
+}) {
+  // Resolve logos for the actual away/home teams in this specific game
+  const awayLogo = resolveLogoUrl(game.awaySlug, sport, game.awayTeamId);
+  const homeLogo = resolveLogoUrl(game.homeSlug, sport, game.homeTeamId);
+
+  // Winner determination
+  const awayWon = game.awayWon;
+  const awayVariant: "win" | "loss" | "neutral" =
+    awayWon === true ? "win" : awayWon === false ? "loss" : "neutral";
+  const homeVariant: "win" | "loss" | "neutral" =
+    awayWon === false ? "win" : awayWon === true ? "loss" : "neutral";
+
+  // Score string: "AWAY_SCORE – HOME_SCORE"
+  const scoreStr =
+    game.awayScore != null && game.homeScore != null
+      ? `${game.awayScore}–${game.homeScore}`
+      : "—";
+
+  // ATS — shown from the actual away team's perspective for this game
+  const awaySpread  = getMySpread(game, true, sport);
+  const awayCovered = getMyCovered(game, true, sport);
+
+  // O/U
+  const ouVariant: "win" | "loss" | "push" | "neutral" =
+    game.totalResult === "OVER" ? "win"
+    : game.totalResult === "UNDER" ? "loss"
+    : game.totalResult === "PUSH" ? "push"
+    : "neutral";
+  const ouLabel = game.totalResult === "OVER" ? "O"
+    : game.totalResult === "UNDER" ? "U"
+    : "—";
+
+  return (
+    <tr className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+      {/* Date */}
+      <td className="px-3 py-2 text-[11px] text-gray-400 font-mono whitespace-nowrap">
+        {fmtDate(game.gameDate)}
+      </td>
+
+      {/* Matchup: AWAY @ HOME with logos and W/L badges */}
+      <td className="px-2 py-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Away team */}
+          <div className="flex items-center gap-1">
+            <ResultBadge
+              label={awayWon === true ? "W" : awayWon === false ? "L" : "—"}
+              variant={awayVariant}
+              size="xs"
+            />
+            {awayLogo ? (
+              <img
+                src={awayLogo}
+                alt={game.awayAbbr}
+                className="w-4 h-4 object-contain flex-shrink-0"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            ) : null}
+            <span className="text-[10px] font-mono font-semibold text-gray-200">{game.awayAbbr}</span>
+          </div>
+
+          {/* @ separator */}
+          <span className="text-[9px] text-gray-600 font-mono">@</span>
+
+          {/* Home team */}
+          <div className="flex items-center gap-1">
+            {homeLogo ? (
+              <img
+                src={homeLogo}
+                alt={game.homeAbbr}
+                className="w-4 h-4 object-contain flex-shrink-0"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            ) : null}
+            <span className="text-[10px] font-mono font-semibold text-gray-200">{game.homeAbbr}</span>
+            <ResultBadge
+              label={awayWon === false ? "W" : awayWon === true ? "L" : "—"}
+              variant={homeVariant}
+              size="xs"
+            />
+          </div>
+        </div>
+      </td>
+
+      {/* Score */}
+      <td className="px-2 py-2">
+        <span
+          className="text-[11px] font-mono font-bold text-gray-300"
+        >
+          {scoreStr}
+        </span>
+      </td>
+
+      {/* ATS — from actual away team's perspective */}
+      <td className="px-2 py-2">
+        <AtsBadge spread={awaySpread} covered={awayCovered} />
+      </td>
+
+      {/* O/U */}
+      <td className="px-2 py-2">
+        <div className="flex items-center gap-1">
+          <ResultBadge label={ouLabel} variant={ouVariant} size="xs" />
+          <span className="text-[10px] font-mono text-gray-300">{fmtTotal(game.dkTotal)}</span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 // ─── Head-to-Head Section ────────────────────────────────────────────────────
 
 function H2HSection({
@@ -426,28 +547,50 @@ function H2HSection({
         <p className="text-[11px] text-gray-600 font-mono">
           No head-to-head history found in the database.
         </p>
+        <p className="text-[10px] text-gray-700 font-mono mt-1">
+          H2H data populates automatically as the season progresses.
+        </p>
       </div>
     );
   }
 
+  // Compute H2H summary: wins for each team
+  const awayTeamWins = games.filter((g) =>
+    (g.awaySlug === awaySlug && g.awayWon === true) ||
+    (g.homeSlug === awaySlug && g.awayWon === false)
+  ).length;
+  const homeTeamWins = games.filter((g) =>
+    (g.awaySlug === homeSlug && g.awayWon === true) ||
+    (g.homeSlug === homeSlug && g.awayWon === false)
+  ).length;
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[360px]">
-        <thead>
-          <tr className="border-b border-white/[0.06]">
-            <th className="px-3 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">DATE</th>
-            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">MATCHUP</th>
-            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">RESULT</th>
-            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">ATS</th>
-            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">O/U</th>
-          </tr>
-        </thead>
-        <tbody>
-          {games.map((g) => (
-            <GameRow key={g.anGameId} game={g} teamSlug={awaySlug} sport={sport} />
-          ))}
-        </tbody>
-      </table>
+    <div>
+      {/* H2H summary header */}
+      <div className="flex items-center justify-center gap-3 px-3 py-1.5 border-b border-white/[0.04] bg-white/[0.015]">
+        <span className="text-[10px] font-mono font-bold text-emerald-400">{awayTeamWins}W</span>
+        <span className="text-[9px] font-mono text-gray-600">LAST {games.length}</span>
+        <span className="text-[10px] font-mono font-bold text-emerald-400">{homeTeamWins}W</span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[380px]">
+          <thead>
+            <tr className="border-b border-white/[0.06]">
+              <th className="px-3 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">DATE</th>
+              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">MATCHUP</th>
+              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">SCORE</th>
+              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">ATS</th>
+              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">O/U</th>
+            </tr>
+          </thead>
+          <tbody>
+            {games.map((g) => (
+              <H2HRow key={g.anGameId} game={g} sport={sport} />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
