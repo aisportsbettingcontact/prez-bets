@@ -22,7 +22,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "./db.js";
 import { games } from "../drizzle/schema.js";
 import type { Game } from "../drizzle/schema.js";
-import { scrapeNhlStartingGoalies } from "./nhlRotoWireScraper.js";
+import { scrapeNhlStartingGoalies, scrapeNhlStartingGoaliesBoth } from "./nhlRotoWireScraper.js";
 import type { NhlLineupGame } from "./nhlRotoWireScraper.js";
 import { syncNhlModelForToday } from "./nhlModelSync.js";
 import { NHL_BY_DB_SLUG } from "../shared/nhlTeams.js";
@@ -59,6 +59,17 @@ export function getLastGoalieWatchResult(): GoalieWatchResult | null {
 function getTodayDate(): string {
   const now = new Date();
   const etStr = now.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  const [m, d, y] = etStr.split("/");
+  return `${y}-${m}-${d}`;
+}
+
+function getTomorrowDate(): string {
+  const now = new Date();
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const etStr = tomorrow.toLocaleDateString("en-US", {
     timeZone: "America/New_York",
     year: "numeric", month: "2-digit", day: "2-digit",
   });
@@ -353,9 +364,178 @@ export async function checkGoalieChanges(source: "auto" | "manual" = "auto"): Pr
   return result;
 }
 
+// ─── Tomorrow Seeder ─────────────────────────────────────────────────────────
+
+/**
+ * Seed tomorrow's NHL games with initial goalie data from RotoWire.
+ * Runs every evening (6PM–9PM PST) to populate tomorrow's games a day in advance.
+ * Triggers the model for any tomorrow game that has both goalies populated.
+ */
+export async function seedNhlTomorrowGoalies(source: "auto" | "manual" = "auto"): Promise<GoalieWatchResult> {
+  const tag = source === "manual" ? "[MANUAL]" : "[AUTO]";
+  const checkedAt = new Date().toISOString();
+  console.log(`\n[GoalieTomorrowSeeder]${tag} START - ${checkedAt}`);
+
+  const result: GoalieWatchResult = {
+    checkedAt,
+    gamesChecked: 0,
+    changes: [],
+    modelRerun: false,
+    errors: [],
+  };
+
+  const tomorrowDate = getTomorrowDate();
+
+  // Step 1: Get tomorrow's NHL games from DB
+  let db: Awaited<ReturnType<typeof getDb>>;
+  try {
+    db = await getDb();
+    if (!db) {
+      result.errors.push("Database not available");
+      return result;
+    }
+  } catch (err) {
+    result.errors.push(`DB connection error: ${err}`);
+    return result;
+  }
+
+  const tomorrowGames = await db
+    .select()
+    .from(games)
+    .where(
+      and(
+        eq(games.gameDate, tomorrowDate),
+        eq(games.sport, "NHL"),
+      )
+    );
+
+  result.gamesChecked = tomorrowGames.length;
+  console.log(`[GoalieTomorrowSeeder]${tag}   Found ${tomorrowGames.length} NHL games for ${tomorrowDate}`);
+
+  if (tomorrowGames.length === 0) {
+    console.log(`[GoalieTomorrowSeeder]${tag}   No NHL games tomorrow (${tomorrowDate}) - nothing to seed`);
+    return result;
+  }
+
+  // Step 2: Scrape RotoWire tomorrow lineups
+  let rotoGames: NhlLineupGame[] = [];
+  try {
+    rotoGames = await scrapeNhlStartingGoalies("tomorrow");
+    console.log(`[GoalieTomorrowSeeder]${tag}   RotoWire TOMORROW returned ${rotoGames.length} games`);
+  } catch (err) {
+    const msg = `RotoWire tomorrow scrape failed: ${err}`;
+    console.error(`[GoalieTomorrowSeeder]${tag} ${msg}`);
+    result.errors.push(msg);
+    return result;
+  }
+
+  if (rotoGames.length === 0) {
+    console.warn(`[GoalieTomorrowSeeder]${tag}   RotoWire returned 0 tomorrow games - lineups not yet posted`);
+    return result;
+  }
+
+  // Step 3: Seed / update goalies for each tomorrow game
+  const gameIdsToModel: number[] = [];
+
+  for (const rotoGame of rotoGames) {
+    const dbGame = matchGameToDb(rotoGame, tomorrowGames);
+    if (!dbGame) {
+      console.log(`[GoalieTomorrowSeeder]${tag}   No DB match for: ${rotoGame.awayTeam} @ ${rotoGame.homeTeam}`);
+      continue;
+    }
+
+    const gameLabel = `${dbGame.awayTeam} @ ${dbGame.homeTeam}`;
+    const updatePayload: Record<string, unknown> = {};
+    let hasChange = false;
+
+    if (rotoGame.awayGoalie) {
+      const nameChanged        = !isSameGoalie(dbGame.awayGoalie, rotoGame.awayGoalie.name);
+      const confirmImproved    = !dbGame.awayGoalieConfirmed && rotoGame.awayGoalie.confirmed;
+      const isMissing          = !dbGame.awayGoalie;
+      if (isMissing || nameChanged || confirmImproved) {
+        const changeType = isMissing ? "NEW" : nameChanged ? "SCRATCH" : "CONFIRMED";
+        console.log(`[GoalieTomorrowSeeder]${tag}   AWAY [${changeType}] ${gameLabel}: "${dbGame.awayGoalie ?? "TBD"}" -> "${rotoGame.awayGoalie.name}" (${rotoGame.awayGoalie.confirmed ? "confirmed" : "expected"})`);
+        updatePayload.awayGoalie          = rotoGame.awayGoalie.name;
+        updatePayload.awayGoalieConfirmed = rotoGame.awayGoalie.confirmed;
+        hasChange = true;
+        result.changes.push({
+          gameId: dbGame.id, gameLabel, side: "away",
+          oldGoalie: dbGame.awayGoalie ?? null, newGoalie: rotoGame.awayGoalie.name,
+          oldConfirmed: dbGame.awayGoalieConfirmed ?? false, newConfirmed: rotoGame.awayGoalie.confirmed,
+          changeType: isMissing ? "new" : nameChanged ? "scratch" : "confirmation",
+        });
+      }
+    }
+
+    if (rotoGame.homeGoalie) {
+      const nameChanged        = !isSameGoalie(dbGame.homeGoalie, rotoGame.homeGoalie.name);
+      const confirmImproved    = !dbGame.homeGoalieConfirmed && rotoGame.homeGoalie.confirmed;
+      const isMissing          = !dbGame.homeGoalie;
+      if (isMissing || nameChanged || confirmImproved) {
+        const changeType = isMissing ? "NEW" : nameChanged ? "SCRATCH" : "CONFIRMED";
+        console.log(`[GoalieTomorrowSeeder]${tag}   HOME [${changeType}] ${gameLabel}: "${dbGame.homeGoalie ?? "TBD"}" -> "${rotoGame.homeGoalie.name}" (${rotoGame.homeGoalie.confirmed ? "confirmed" : "expected"})`);
+        updatePayload.homeGoalie          = rotoGame.homeGoalie.name;
+        updatePayload.homeGoalieConfirmed = rotoGame.homeGoalie.confirmed;
+        hasChange = true;
+        result.changes.push({
+          gameId: dbGame.id, gameLabel, side: "home",
+          oldGoalie: dbGame.homeGoalie ?? null, newGoalie: rotoGame.homeGoalie.name,
+          oldConfirmed: dbGame.homeGoalieConfirmed ?? false, newConfirmed: rotoGame.homeGoalie.confirmed,
+          changeType: isMissing ? "new" : nameChanged ? "scratch" : "confirmation",
+        });
+      }
+    }
+
+    if (hasChange) {
+      // Check if both goalies will be available after this update
+      const awayAfter = (updatePayload.awayGoalie as string | undefined) ?? dbGame.awayGoalie;
+      const homeAfter = (updatePayload.homeGoalie as string | undefined) ?? dbGame.homeGoalie;
+      const bothAvailable = !!awayAfter && !!homeAfter;
+      const modelNotRun   = !dbGame.modelRunAt;
+
+      if (bothAvailable && modelNotRun) {
+        updatePayload.modelRunAt = null; // ensure cleared for model run
+        gameIdsToModel.push(dbGame.id);
+        console.log(`[GoalieTomorrowSeeder]${tag}   Both goalies available for ${gameLabel} — queuing model run`);
+      }
+
+      try {
+        await db.update(games).set(updatePayload).where(eq(games.id, dbGame.id));
+        console.log(`[GoalieTomorrowSeeder]${tag}   DB updated: ${gameLabel}`);
+      } catch (err) {
+        const msg = `DB update failed for ${gameLabel}: ${err}`;
+        console.error(`[GoalieTomorrowSeeder]${tag} ${msg}`);
+        result.errors.push(msg);
+      }
+    } else {
+      console.log(`[GoalieTomorrowSeeder]${tag}   No changes for ${gameLabel} (goalies already current)`);
+    }
+  }
+
+  // Step 4: Run model for tomorrow's games that now have both goalies
+  if (gameIdsToModel.length > 0) {
+    console.log(`\n[GoalieTomorrowSeeder]${tag} Triggering model for ${gameIdsToModel.length} tomorrow game(s)...`);
+    try {
+      const syncResult = await syncNhlModelForToday("auto", false, false, tomorrowDate);
+      result.modelRerun = true;
+      console.log(`[GoalieTomorrowSeeder]${tag} Model run complete: synced=${syncResult.synced} skipped=${syncResult.skipped} errors=${syncResult.errors.length}`);
+    } catch (err) {
+      const msg = `Model run failed for tomorrow: ${err}`;
+      console.error(`[GoalieTomorrowSeeder]${tag} ${msg}`);
+      result.errors.push(msg);
+    }
+  } else {
+    console.log(`[GoalieTomorrowSeeder]${tag} No new goalie data — model not triggered`);
+  }
+
+  console.log(`[GoalieTomorrowSeeder]${tag} DONE - changes=${result.changes.length} modelRerun=${result.modelRerun} errors=${result.errors.length}`);
+  return result;
+}
+
 // ─── Scheduler ───────────────────────────────────────────────────────────────
 
 let watcherIntervalId: ReturnType<typeof setInterval> | null = null;
+let tomorrowSeederIntervalId: ReturnType<typeof setInterval> | null = null;
 
 export function startNhlGoalieWatcher(): void {
   if (watcherIntervalId) {
@@ -363,19 +543,18 @@ export function startNhlGoalieWatcher(): void {
     return;
   }
 
-  console.log("[GoalieWatcher] Starting 10-minute goalie change watcher");
+  console.log("[GoalieWatcher] Starting 10-minute goalie change watcher (today) + 30-minute tomorrow seeder");
 
-  // Run immediately on startup if within window
+  // ── TODAY WATCHER: runs every 10 min, 9AM–9PM PST ─────────────────────────
   if (isWithinWatchWindow()) {
     checkGoalieChanges("auto").catch(err => {
-      console.error("[GoalieWatcher] Initial run error:", err);
+      console.error("[GoalieWatcher] Initial today-run error:", err);
     });
   }
 
-  // Then every 10 minutes
   watcherIntervalId = setInterval(() => {
     if (!isWithinWatchWindow()) {
-      console.log("[GoalieWatcher] Outside sync window (9AM-9PM PST) - skipping");
+      console.log("[GoalieWatcher] Outside today-watch window (9AM-9PM PST) - skipping");
       return;
     }
     checkGoalieChanges("auto").catch(err => {
@@ -383,7 +562,29 @@ export function startNhlGoalieWatcher(): void {
     });
   }, 10 * 60 * 1000);
 
-  console.log("[GoalieWatcher] Watcher started - runs every 10 minutes (9AM-9PM PST)");
+  // ── TOMORROW SEEDER: runs every 30 min, 12PM–11PM PST ─────────────────────
+  // Seeds tomorrow's games with initial goalie data and runs the model day-ahead.
+  // Window: noon to 11PM PST — covers when RotoWire first posts next-day lineups
+  // through the end of the evening when lineups are fully confirmed.
+  const runTomorrowSeeder = () => {
+    const h = getPSTHour();
+    if (h < 12 || h >= 23) {
+      // Outside seeder window — silent skip
+      return;
+    }
+    console.log(`[GoalieTomorrowSeeder] [AUTO] Scheduled 30-min run at PST hour ${h}`);
+    seedNhlTomorrowGoalies("auto").catch(err => {
+      console.error("[GoalieTomorrowSeeder] Scheduled run error:", err);
+    });
+  };
+
+  // Run immediately on startup if within window
+  runTomorrowSeeder();
+
+  tomorrowSeederIntervalId = setInterval(runTomorrowSeeder, 30 * 60 * 1000);
+
+  console.log("[GoalieWatcher] TODAY watcher: every 10 min (9AM-9PM PST)");
+  console.log("[GoalieTomorrowSeeder] TOMORROW seeder: every 30 min (12PM-11PM PST)");
 }
 
 // Dead export — no active callers in pipeline

@@ -24,6 +24,7 @@ import {
   backfillNhlScheduleHistory,
   type NhlScheduleRefreshResult,
 } from "../nhlScheduleHistoryService";
+import { seedNhlTomorrowGoalies, checkGoalieChanges } from "../nhlGoalieWatcher";
 
 const TAG = "[NhlScheduleRouter]";
 
@@ -234,6 +235,53 @@ export const nhlScheduleRouter = router({
           code: "INTERNAL_SERVER_ERROR",
           message: `NHL backfill failed: ${msg}`,
         });
+      }
+    }),
+
+  /**
+   * Owner-only: Manually seed tomorrow's NHL games with goalie data from RotoWire.
+   * Triggers the NHL model for any tomorrow game that has both goalies populated.
+   */
+  seedTomorrowGoalies: ownerProcedure
+    .mutation(async () => {
+      console.log(`${TAG}[seedTomorrowGoalies] Manual tomorrow goalie seed triggered`);
+      try {
+        const result = await seedNhlTomorrowGoalies("manual");
+        console.log(
+          `${TAG}[seedTomorrowGoalies] Complete:` +
+          ` gamesChecked=${result.gamesChecked}` +
+          ` changes=${result.changes.length}` +
+          ` modelRerun=${result.modelRerun}` +
+          ` errors=${result.errors.length}`
+        );
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`${TAG}[seedTomorrowGoalies] ERROR: ${msg}`);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Tomorrow goalie seed failed: ${msg}` });
+      }
+    }),
+
+  /**
+   * Owner-only: Manually trigger today's goalie change check and model re-run.
+   */
+  checkGoaliesNow: ownerProcedure
+    .mutation(async () => {
+      console.log(`${TAG}[checkGoaliesNow] Manual goalie check triggered`);
+      try {
+        const result = await checkGoalieChanges("manual");
+        console.log(
+          `${TAG}[checkGoaliesNow] Complete:` +
+          ` gamesChecked=${result.gamesChecked}` +
+          ` changes=${result.changes.length}` +
+          ` modelRerun=${result.modelRerun}` +
+          ` errors=${result.errors.length}`
+        );
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`${TAG}[checkGoaliesNow] ERROR: ${msg}`);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Goalie check failed: ${msg}` });
       }
     }),
 });
