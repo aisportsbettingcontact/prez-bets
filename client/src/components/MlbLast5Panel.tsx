@@ -485,14 +485,7 @@ export default function MlbLast5Panel({
             </div>
           )}
 
-          {/* Attribution */}
-          {!isLoading && !error && (awayLast5.length > 0 || homeLast5.length > 0) && (
-            <div className="px-3 py-1.5 border-t border-white/[0.04]">
-              <p className="text-[8px] text-gray-700 font-mono text-center">
-                Odds sourced exclusively from DraftKings NJ via Action Network API
-              </p>
-            </div>
-          )}
+
         </div>
       )}
     </div>

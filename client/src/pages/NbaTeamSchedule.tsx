@@ -413,11 +413,6 @@ export default function NbaTeamSchedule() {
             </div>
           </div>
         )}
-
-        {/* ── Attribution ─────────────────────────────────────────────────────── */}
-        <p className="text-center text-[8px] text-gray-700 font-mono mt-4">
-          All odds sourced exclusively from DraftKings NJ via Action Network API (book_id=68)
-        </p>
       </div>
     </div>
   );

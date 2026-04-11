@@ -693,12 +693,7 @@ export default function RecentSchedulePanel({
             </div>
           )}
 
-          {/* ── Attribution ───────────────────────────────────────────────── */}
-          <div className="px-3 py-1 border-t border-white/[0.04]">
-            <p className="text-[8px] text-gray-700 font-mono text-center">
-              Odds sourced exclusively from DraftKings NJ via Action Network API
-            </p>
-          </div>
+
         </div>
       )}
     </div>

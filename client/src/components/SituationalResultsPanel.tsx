@@ -341,10 +341,7 @@ function StatsSection({
         </>
       )}
 
-      {/* ── Games analyzed footnote ─────────────────────────────────────── */}
-      <p className="text-[8px] text-gray-700 font-mono text-center mt-2">
-        Based on {awayStats?.gamesAnalyzed ?? 0} / {homeStats?.gamesAnalyzed ?? 0} completed games
-      </p>
+
     </div>
   );
 }
@@ -437,12 +434,7 @@ export default function SituationalResultsPanel({
             tab={tab}
           />
 
-          {/* ── Attribution ───────────────────────────────────────────────── */}
-          <div className="px-3 py-1 border-t border-white/[0.04]">
-            <p className="text-[8px] text-gray-700 font-mono text-center">
-              Odds sourced exclusively from DraftKings NJ via Action Network API
-            </p>
-          </div>
+
         </div>
       )}
     </div>

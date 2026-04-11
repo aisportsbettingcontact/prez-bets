@@ -495,12 +495,7 @@ export default function MlbTeamSchedule() {
           </div>
         )}
 
-        {/* Data source attribution */}
-        {!isLoading && games.length > 0 && (
-          <p className="text-[10px] text-gray-600 font-mono mt-4 text-center">
-            Odds sourced exclusively from DraftKings NJ via Action Network API
-          </p>
-        )}
+
       </div>
     </div>
   );
