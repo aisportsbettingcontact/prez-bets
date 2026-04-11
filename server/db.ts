@@ -938,6 +938,19 @@ export async function updateAnOdds(
     underOdds?: string | null;
     awayML?: string | null;
     homeML?: string | null;
+    // MLB run line dual-write — same values as awayBookSpread/homeBookSpread
+    // For MLB, AN spread market IS the run line. Write to both column sets.
+    awayRunLine?: string | null;
+    homeRunLine?: string | null;
+    awayRunLineOdds?: string | null;
+    homeRunLineOdds?: string | null;
+    /**
+     * Computed odds source label for the primary book columns.
+     * 'dk'   = all 3 DK NJ markets complete (spread+odds, total+odds, ML)
+     * 'open' = using AN Opening line (DK not yet fully posted)
+     * Never null, never partial.
+     */
+    oddsSource?: 'open' | 'dk' | null;
   }
 ): Promise<void> {
   const db = await getDb();
@@ -970,6 +983,12 @@ export async function updateAnOdds(
   if (data.underOdds !== undefined) updateData.underOdds = data.underOdds;
   if (data.awayML !== undefined) updateData.awayML = data.awayML;
   if (data.homeML !== undefined) updateData.homeML = data.homeML;
+  // MLB run line dual-write
+  if (data.awayRunLine !== undefined) updateData.awayRunLine = data.awayRunLine;
+  if (data.homeRunLine !== undefined) updateData.homeRunLine = data.homeRunLine;
+  if (data.awayRunLineOdds !== undefined) updateData.awayRunLineOdds = data.awayRunLineOdds;
+  if (data.homeRunLineOdds !== undefined) updateData.homeRunLineOdds = data.homeRunLineOdds;
+  if (data.oddsSource !== undefined) updateData.oddsSource = data.oddsSource;
   if (Object.keys(updateData).length === 0) return;
   await db.update(games).set(updateData).where(eq(games.id, id));
 }
@@ -983,14 +1002,14 @@ export async function updateAnOdds(
  * @param gameId  - games.id FK
  * @param sport   - 'NBA' | 'NHL' | 'MLB'
  * @param source  - 'auto' (hourly cron) | 'manual' (Refresh Now button)
- * @param snap    - the current DK NJ lines to snapshot
+ * @param snap    - the current lines to snapshot (DK NJ, Opening, or mixed)
  */
 export async function insertOddsHistory(
   gameId: number,
   sport: string,
   source: "auto" | "manual",
   snap: {
-    // DK NJ odds
+    // Lines (may be DK NJ, Opening line, or a mix)
     awaySpread?: string | null;
     awaySpreadOdds?: string | null;
     homeSpread?: string | null;
@@ -1007,6 +1026,13 @@ export async function insertOddsHistory(
     totalOverMoneyPct?: number | null;
     mlAwayBetsPct?: number | null;
     mlAwayMoneyPct?: number | null;
+    /**
+     * Odds line source label for this snapshot.
+     * 'dk'   = all lines are from DK NJ current market (all 3 markets complete)
+     * 'open' = all lines are from AN Opening line (DK not yet fully posted)
+     * Never null, never partial.
+     */
+    lineSource?: 'open' | 'dk' | null;
   }
 ): Promise<void> {
   const db = await getDb();
@@ -1025,7 +1051,7 @@ export async function insertOddsHistory(
   const mlPending     = (snap.mlAwayBetsPct == null || snap.mlAwayBetsPct === 0) &&
                         (snap.mlAwayMoneyPct == null || snap.mlAwayMoneyPct === 0);
   console.log(
-    `[OddsHistory][INSERT][INPUT] gameId=${gameId} sport=${sport} source=${source} scrapedAt=${estStr} EST | ` +
+    `[OddsHistory][INSERT][INPUT] gameId=${gameId} sport=${sport} source=${source} lineSource=${snap.lineSource ?? 'null'} scrapedAt=${estStr} EST | ` +
     `spread=${snap.awaySpread ?? 'null'}(${snap.awaySpreadOdds ?? 'null'}) ` +
     `total=${snap.total ?? 'null'} over=${snap.overOdds ?? 'null'} under=${snap.underOdds ?? 'null'} ` +
     `ml=${snap.awayML ?? 'null'}/${snap.homeML ?? 'null'} | ` +
@@ -1056,10 +1082,11 @@ export async function insertOddsHistory(
       totalOverMoneyPct: snap.totalOverMoneyPct ?? null,
       mlAwayBetsPct: snap.mlAwayBetsPct ?? null,
       mlAwayMoneyPct: snap.mlAwayMoneyPct ?? null,
+      lineSource: snap.lineSource ?? null,
     });
     // [OUTPUT] Confirm successful write with full context
     console.log(
-      `[OddsHistory][INSERT][OUTPUT] OK gameId=${gameId} sport=${sport} source=${source} at ${estStr} EST`
+      `[OddsHistory][INSERT][OUTPUT] OK gameId=${gameId} sport=${sport} source=${source} lineSource=${snap.lineSource ?? 'null'} at ${estStr} EST`
     );
   } catch (err) {
     // [VERIFY] FAIL - log full error with context for immediate diagnosis

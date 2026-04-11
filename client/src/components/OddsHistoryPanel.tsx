@@ -147,6 +147,7 @@ type HistoryRow = {
   id: number;
   scrapedAt: number;
   source: string | null;
+  lineSource: string | null;
   awaySpread: string | null;
   homeSpread: string | null;
   awaySpreadOdds: string | null;
@@ -197,6 +198,74 @@ function deduplicateRows(rows: HistoryRow[], market: ActiveMarket): HistoryRow[]
     }
   }
   return out;
+}
+
+// ── Source badge ─────────────────────────────────────────────────────────────
+
+/**
+ * Renders the odds line source indicator:
+ *   'dk'   → DraftKings logo image (official DK OSB logo)
+ *   'open' → Plain "OPEN" text label (amber)
+ *
+ * Never null, never partial. Every game always has either DK or Open.
+ * Applied to MLB and NHL only (F5/NRFI/K-Props/HR Props have no source column).
+ */
+const DK_LOGO_URL = "https://www.draftkings.com/v2/landingpages-assets/blt02fb52e5e7a6fbb9/blta03e790d330c9bf1/65821604c3fb27b9ef19b9e4/OSB.png";
+
+function SourceBadge({ lineSource }: { lineSource: string | null }) {
+  if (!lineSource) {
+    // Should never happen — every game has either 'dk' or 'open'
+    return <span style={{ color: "rgba(255,255,255,0.25)", fontFamily: "monospace", fontSize: "inherit" }}>—</span>;
+  }
+
+  if (lineSource.toLowerCase() === 'dk') {
+    return (
+      <img
+        src={DK_LOGO_URL}
+        alt="DraftKings"
+        title="DraftKings NJ — live market odds"
+        style={{
+          height: 14,
+          width: "auto",
+          objectFit: "contain",
+          display: "inline-block",
+          verticalAlign: "middle",
+          filter: "brightness(1.1) saturate(1.2)",
+        }}
+        onError={(e) => {
+          // Fallback to text if image fails to load
+          const el = e.currentTarget as HTMLImageElement;
+          el.style.display = "none";
+          const span = document.createElement("span");
+          span.textContent = "DK";
+          span.style.cssText = "color:#39FF14;font-family:monospace;font-weight:700;font-size:inherit;";
+          el.parentNode?.insertBefore(span, el.nextSibling);
+        }}
+      />
+    );
+  }
+
+  // 'open' — AN Opening line fallback
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "1px 5px",
+        borderRadius: 3,
+        background: "rgba(255,200,80,0.10)",
+        color: "#FFC850",
+        border: "1px solid rgba(255,200,80,0.35)",
+        fontFamily: "monospace",
+        fontWeight: 700,
+        fontSize: "inherit",
+        letterSpacing: "0.05em",
+        whiteSpace: "nowrap",
+      }}
+      title="Opening line (DK NJ not yet fully posted)"
+    >
+      OPEN
+    </span>
+  );
 }
 
 // ── Market color map ───────────────────────────────────────────────────────────
@@ -442,6 +511,14 @@ export function OddsHistoryPanel({
                       Time&nbsp;(EST)
                     </th>
 
+                    {/* SOURCE */}
+                    <th
+                      style={{ ...TH, textAlign: "center" }}
+                      title="Odds line source: DK NJ logo = live DraftKings NJ market | OPEN = AN Opening line (DK not yet fully posted)"
+                    >
+                      SRC
+                    </th>
+
                     {/* ── SPREAD: [AwayLogo AwayName] Line 🎟️ 💰 | [HomeLogo HomeName] Line 🎟️ 💰 ── */}
                     {activeMarket === "spread" && (
                       <>
@@ -530,6 +607,11 @@ export function OddsHistoryPanel({
                         {/* Timestamp */}
                         <td style={{ ...TD, textAlign: "left", color: "rgba(255,255,255,0.7)" }}>
                           {fmtTimestamp(row.scrapedAt)}
+                        </td>
+
+                        {/* SOURCE badge */}
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <SourceBadge lineSource={row.lineSource} />
                         </td>
 
                         {/* ── SPREAD cells ── */}

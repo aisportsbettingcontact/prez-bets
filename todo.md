@@ -2363,3 +2363,24 @@
 - [x] Automated nightly MLB TRENDS refresh: cron job fires at 2:59 AM EST (11:59 PM PST) nightly, re-ingests yesterday+today, per-row validation, 30-team cross-validation, owner notification, manual trigger via tRPC triggerNightlyTrendsRefresh
 - [x] Manual on-demand backfill tRPC procedure for owner-triggered date re-ingestion
 - [x] Full 30-team cross-validation audit after nightly refresh confirms accuracy
+
+## Open-Line Seeding + Odds Source Labeling (MLB + NHL)
+- [x] Backend: seed every MLB/NHL game with AN Opening line on day-prior (spread, total, ML + juice)
+- [x] Backend: per-field DK NJ replacement — only overwrite Opening field when DK NJ has a non-null value for that field
+- [x] Backend: add oddsSource field to games table: enum('open','dk') — tracks current state of primary book columns
+- [x] Backend: add oddsSource column to odds_history table: enum('open','dk') — per-snapshot label
+- [x] Backend: updateAnOdds writes oddsSource='open' when using Opening line, 'dk' when all DK fields present
+- [x] Backend: insertOddsHistory includes lineSource in every snapshot
+- [x] Backend: post-cycle completeness validation gate — after every AN odds cycle, query DB and log every game with any null field
+- [x] Backend: atomic DK-vs-Open switch (not per-field) — all 3 markets use same source
+- [x] Frontend: odds+splits history table shows source label per snapshot (DK logo / OPEN text)
+- [x] Frontend: SOURCE column in OddsHistoryPanel (DK logo / OPEN text)
+- [x] Run full Apr 12 verification — NHL 6/6 complete, MLB 11/15 complete (4 pending DK odds)
+
+## Open-Line Seeding + DK Logo Source Column (Apr 11 v2)
+- [x] Backend: atomic Open-vs-DK switch — use OPEN for ALL 3 markets until DK NJ has ALL 3 (RL/PL + ML + O/U)
+- [x] Backend: dual-write spread to awayRunLine+awayBookSpread (MLB) / awayPuckLine+awayBookSpread (NHL)
+- [x] Backend: AN API fetch retry with exponential backoff (3 attempts: 2s/4s/8s)
+- [x] Backend: completeness gate uses correct field set (runLine/puckLine + total + ML)
+- [x] Frontend: OddsHistoryPanel SOURCE — DK logo image for dk, OPEN text for open, NO PARTIAL badge
+- [x] Frontend: SOURCE column only for MLB/NHL; F5/NRFI/K-Props/HR Props have no source column

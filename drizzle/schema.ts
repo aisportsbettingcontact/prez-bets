@@ -431,6 +431,16 @@ export const games = mysqlTable("games", {
   /** Model expected HR count for home team */
   modelHomeExpHr: decimal("modelHomeExpHr", { precision: 4, scale: 2 }),
 
+  /**
+   * Tracks the source of the current primary book columns (awayBookSpread, homeBookSpread,
+   * bookTotal, awayML, homeML, awaySpreadOdds, homeSpreadOdds, overOdds, underOdds).
+   *
+   * 'open' — All 9 primary fields are sourced from the AN Opening line (DK not yet fully posted)
+   * 'dk'   — All 3 DK NJ markets complete (spread+odds, total+odds, ML) — using DK for all 9 fields
+   * Never null, never partial. Every game always has either DK or Open.
+   */
+  oddsSource: mysqlEnum("oddsSource", ["open", "dk"]),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (t) => ({
   /** Prevent duplicate rows for the same matchup on the same date */
@@ -652,6 +662,13 @@ export const oddsHistory = mysqlTable("odds_history", {
   scrapedAt: bigint("scrapedAt", { mode: "number" }).notNull(),
   /** Source: 'auto' (hourly cron) or 'manual' (Refresh Now button) */
   source: mysqlEnum("source", ["auto", "manual"]).notNull().default("auto"),
+  /**
+   * Odds line source for this snapshot.
+   * 'open' — All lines in this snapshot are from the AN Opening line (DK not yet fully posted)
+   * 'dk'   — All lines are from DK NJ current market (all 3 markets complete)
+   * Never null, never partial.
+   */
+  lineSource: mysqlEnum("lineSource", ["open", "dk"]),
   // ── DK NJ Spread snapshot ──
   awaySpread: varchar("awaySpread", { length: 16 }),
   awaySpreadOdds: varchar("awaySpreadOdds", { length: 16 }),
