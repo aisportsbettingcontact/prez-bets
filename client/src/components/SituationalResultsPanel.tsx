@@ -1,19 +1,20 @@
 /**
- * SituationalResultsPanel.tsx
+ * SituationalResultsPanel.tsx  —  "TRENDS"
  *
- * Situational Results panel for MLB, NBA, and NHL matchup cards.
- * Matches the Action Network reference design (second screenshot):
- *   - Tab selector: [Moneyline] [Total] [Spread/Run Line/Puck Line]
- *   - Side-by-side record bars for both teams:
- *       Overall Record, Last 10, Away/Home, Underdog/Favorite
- *   - Color bars: green = winning record, red = losing record
+ * Renamed to TRENDS per product spec.
+ * Changes from previous version:
+ *   - Title: "TRENDS" (was "Situational Results")
+ *   - Subtitle "ML · Run Line · Total" removed
+ *   - Team header uses full awayName / homeName (not abbreviations)
+ *   - fmtRecord shows pushes when non-zero: "W-L-P"
+ *   - barColor is COMPARATIVE: the team with the better win% in each row
+ *     gets emerald-600 (green), the worse team gets red-700 (red).
+ *     Equal win% → both get a neutral gray bar.
  *
  * Data source: DraftKings NJ via Action Network API (book_id=68)
  *   MLB  → trpc.mlbSchedule.getSituationalStats
- *   NBA  → trpc.nbaSchedule.getSituationalStats
- *   NHL  → trpc.nhlSchedule.getSituationalStats
  *
- * Logging: [SituationalResultsPanel][STEP] fully traceable
+ * Logging: [TRENDS][STEP] fully traceable
  */
 
 import { useState } from "react";
@@ -80,26 +81,56 @@ export interface SituationalResultsPanelProps {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Format a record as "W-L" or "W-L-P" when pushes > 0.
+ * Returns "—" when no games played.
+ */
 function fmtRecord(rec: SituationalRecord | undefined): string {
   if (!rec) return "—";
   const total = rec.wins + rec.losses + (rec.pushes ?? 0);
   if (total === 0) return "—";
+  if (rec.pushes && rec.pushes > 0) return `${rec.wins}-${rec.losses}-${rec.pushes}`;
   return `${rec.wins}-${rec.losses}`;
 }
 
+/**
+ * Win percentage for a record (pushes excluded from denominator).
+ * Returns -1 when no games played (used to detect "no data").
+ */
 function winPct(rec: SituationalRecord | undefined): number {
-  if (!rec) return 0;
-  const total = rec.wins + rec.losses;
-  if (total === 0) return 0;
-  return rec.wins / total;
+  if (!rec) return -1;
+  const denom = rec.wins + rec.losses;
+  if (denom === 0) return -1;
+  return rec.wins / denom;
 }
 
-function barColor(rec: SituationalRecord | undefined): string {
-  const pct = winPct(rec);
-  if (pct >= 0.55) return "bg-emerald-700";
-  if (pct >= 0.5)  return "bg-emerald-900";
-  if (pct >= 0.45) return "bg-red-900";
-  return "bg-red-700";
+/**
+ * Comparative bar colors.
+ * leftPct and rightPct are win percentages (-1 = no data).
+ * Returns [leftClass, rightClass].
+ *
+ * Rules:
+ *   - If both have no data → both neutral gray
+ *   - If only one has data → that one gets green, other neutral
+ *   - If equal win% → both neutral gray
+ *   - Otherwise → higher win% gets emerald-600 (green), lower gets red-700 (red)
+ */
+function comparativeColors(
+  leftPct: number,
+  rightPct: number
+): [string, string] {
+  const noLeft  = leftPct  < 0;
+  const noRight = rightPct < 0;
+
+  if (noLeft && noRight) return ["bg-zinc-700", "bg-zinc-700"];
+  if (noLeft)  return ["bg-zinc-700", "bg-emerald-600"];
+  if (noRight) return ["bg-emerald-600", "bg-zinc-700"];
+
+  const EPSILON = 0.001;
+  if (Math.abs(leftPct - rightPct) < EPSILON) return ["bg-zinc-700", "bg-zinc-700"];
+
+  if (leftPct > rightPct) return ["bg-emerald-600", "bg-red-700"];
+  return ["bg-red-700", "bg-emerald-600"];
 }
 
 function resolveLogoUrl(slug: string, sport: Sport): string | undefined {
@@ -121,16 +152,14 @@ function RecordRow({
   label,
   awayRec,
   homeRec,
-  awayIsLeft,
 }: {
   label: string;
   awayRec: SituationalRecord | undefined;
   homeRec: SituationalRecord | undefined;
-  /** away team is always on the left (true), home on right */
-  awayIsLeft: boolean;
 }) {
-  const leftRec  = awayIsLeft ? awayRec  : homeRec;
-  const rightRec = awayIsLeft ? homeRec  : awayRec;
+  const awayPct = winPct(awayRec);
+  const homePct = winPct(homeRec);
+  const [awayColor, homeColor] = comparativeColors(awayPct, homePct);
 
   return (
     <div className="mb-3">
@@ -141,23 +170,23 @@ function RecordRow({
       </div>
       {/* Bar row */}
       <div className="flex gap-2">
-        {/* Left (away) bar */}
+        {/* Away (left) bar */}
         <div
           className={cn(
             "flex-1 flex items-center justify-center py-1.5 rounded text-[11px] font-bold text-white font-mono",
-            barColor(leftRec)
+            awayColor
           )}
         >
-          {fmtRecord(leftRec)}
+          {fmtRecord(awayRec)}
         </div>
-        {/* Right (home) bar */}
+        {/* Home (right) bar */}
         <div
           className={cn(
             "flex-1 flex items-center justify-center py-1.5 rounded text-[11px] font-bold text-white font-mono",
-            barColor(rightRec)
+            homeColor
           )}
         >
-          {fmtRecord(rightRec)}
+          {fmtRecord(homeRec)}
         </div>
       </div>
     </div>
@@ -170,8 +199,8 @@ function StatsSection({
   sport,
   awaySlug,
   homeSlug,
-  awayAbbr,
-  homeAbbr,
+  awayName,
+  homeName,
   awayLogoUrl,
   homeLogoUrl,
   tab,
@@ -179,8 +208,8 @@ function StatsSection({
   sport: Sport;
   awaySlug: string;
   homeSlug: string;
-  awayAbbr: string;
-  homeAbbr: string;
+  awayName: string;
+  homeName: string;
   awayLogoUrl?: string;
   homeLogoUrl?: string;
   tab: SitTab;
@@ -238,7 +267,7 @@ function StatsSection({
     return (
       <div className="flex items-center justify-center py-6">
         <RefreshCw className="w-4 h-4 text-blue-400 animate-spin mr-2" />
-        <span className="text-[10px] text-gray-500 font-mono">Loading situational stats...</span>
+        <span className="text-[10px] text-gray-500 font-mono">Loading trends...</span>
       </div>
     );
   }
@@ -246,42 +275,48 @@ function StatsSection({
   if (error) {
     return (
       <div className="px-4 py-4">
-        <p className="text-[10px] text-red-400 font-mono">Error: {error.message}</p>
+        <p className="text-[10px] text-red-400 font-mono">
+          [TRENDS][ERROR] {error.message}
+        </p>
       </div>
     );
   }
 
-  // Select the correct sub-object based on tab
+  // Select the correct sub-object based on active tab
   const awayData = awayStats?.[tab];
   const homeData = homeStats?.[tab];
 
   return (
     <div className="px-3 py-3">
-      {/* ── Team header row ─────────────────────────────────────────────── */}
+      {/* ── Team header row — full names ─────────────────────────────────── */}
       <div className="flex items-center justify-between mb-4">
         {/* Away team */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           {awayLogo && (
             <img
               src={awayLogo}
-              alt={awayAbbr}
-              className="w-6 h-6 object-contain"
+              alt={awayName}
+              className="w-6 h-6 object-contain flex-shrink-0"
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           )}
-          <span className="text-[12px] font-bold text-white font-mono">{awayAbbr}</span>
+          <span className="text-[11px] font-bold text-white font-mono uppercase truncate">
+            {awayName}
+          </span>
         </div>
         {/* Home team */}
-        <div className="flex items-center gap-2 flex-row-reverse">
+        <div className="flex items-center gap-2 flex-row-reverse min-w-0">
           {homeLogo && (
             <img
               src={homeLogo}
-              alt={homeAbbr}
-              className="w-6 h-6 object-contain"
+              alt={homeName}
+              className="w-6 h-6 object-contain flex-shrink-0"
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           )}
-          <span className="text-[12px] font-bold text-white font-mono">{homeAbbr}</span>
+          <span className="text-[11px] font-bold text-white font-mono uppercase truncate">
+            {homeName}
+          </span>
         </div>
       </div>
 
@@ -290,25 +325,21 @@ function StatsSection({
         label="Overall Record"
         awayRec={awayData?.overall}
         homeRec={homeData?.overall}
-        awayIsLeft={true}
       />
       <RecordRow
         label="Last 10"
         awayRec={awayData?.last10}
         homeRec={homeData?.last10}
-        awayIsLeft={true}
       />
       <RecordRow
         label={tab === "total" ? "Home O/U" : "Home"}
         awayRec={awayData?.home}
         homeRec={homeData?.home}
-        awayIsLeft={true}
       />
       <RecordRow
         label={tab === "total" ? "Away O/U" : "Away"}
         awayRec={awayData?.away}
         homeRec={homeData?.away}
-        awayIsLeft={true}
       />
       {tab !== "total" && (
         <>
@@ -316,13 +347,11 @@ function StatsSection({
             label="Underdog"
             awayRec={awayData?.underdog}
             homeRec={homeData?.underdog}
-            awayIsLeft={true}
           />
           <RecordRow
             label="Favorite"
             awayRec={awayData?.favorite}
             homeRec={homeData?.favorite}
-            awayIsLeft={true}
           />
         </>
       )}
@@ -332,18 +361,14 @@ function StatsSection({
             label="Fav O/U"
             awayRec={awayData?.favorite}
             homeRec={homeData?.favorite}
-            awayIsLeft={true}
           />
           <RecordRow
             label="Dog O/U"
             awayRec={awayData?.underdog}
             homeRec={homeData?.underdog}
-            awayIsLeft={true}
           />
         </>
       )}
-
-
     </div>
   );
 }
@@ -364,7 +389,6 @@ export default function SituationalResultsPanel({
   defaultCollapsed = false,
 }: SituationalResultsPanelProps) {
   const [tab, setTab] = useState<SitTab>("ml");
-  // defaultCollapsed=true → starts collapsed; false → starts expanded (legacy default)
   const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
 
   const sLabel = spreadTabLabel(sport);
@@ -374,6 +398,10 @@ export default function SituationalResultsPanel({
     { key: "total",  label: "Total"     },
     { key: "spread", label: sLabel      },
   ];
+
+  // Suppress unused-variable warnings for abbr props (kept in interface for
+  // backward compat with GameCard which passes them)
+  void awayAbbr; void homeAbbr;
 
   return (
     <div
@@ -389,14 +417,9 @@ export default function SituationalResultsPanel({
         onClick={() => setIsExpanded((v) => !v)}
         className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/[0.02] transition-colors"
       >
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-gray-400 font-mono tracking-widest uppercase">
-            Situational Results
-          </span>
-          <span className="text-[9px] text-gray-600 font-mono">
-            ML · {sLabel} · Total
-          </span>
-        </div>
+        <span className="text-[10px] font-bold text-gray-400 font-mono tracking-widest uppercase">
+          Trends
+        </span>
         <div className="flex items-center gap-1">
           {isExpanded
             ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" />
@@ -431,14 +454,12 @@ export default function SituationalResultsPanel({
             sport={sport}
             awaySlug={awaySlug}
             homeSlug={homeSlug}
-            awayAbbr={awayAbbr}
-            homeAbbr={homeAbbr}
+            awayName={awayName}
+            homeName={homeName}
             awayLogoUrl={awayLogoUrl}
             homeLogoUrl={homeLogoUrl}
             tab={tab}
           />
-
-
         </div>
       )}
     </div>

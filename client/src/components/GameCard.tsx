@@ -3740,11 +3740,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
       {/* ── ODDS & SPLITS HISTORY — Full-width, below the card body ──
            Rendered outside all overflow:hidden containers so the collapsible
-           table can expand freely. Shown for ALL modes (splits, projections,
-           full, default) whenever a gameId is available. The border-left
-           matches the card's accent stripe for visual continuity.
+           table can expand freely. Shown ONLY when the SPLITS tab is active.
+           The border-left matches the card's accent stripe for visual continuity.
       */}
-      {game.id != null && (
+      {mobileTab === 'splits' && game.id != null && (
         <div
           className="w-full"
           style={{

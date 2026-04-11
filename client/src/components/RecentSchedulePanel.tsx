@@ -689,7 +689,7 @@ export default function RecentSchedulePanel({
       >
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold text-gray-400 font-mono tracking-widest uppercase">
-            Recent Schedule
+            Last 5 Games
           </span>
 
         </div>
