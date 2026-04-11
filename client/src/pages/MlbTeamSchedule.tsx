@@ -1,7 +1,7 @@
 /**
  * MlbTeamSchedule.tsx — 2026 MLB Team Schedule Page
  *
- * Display changes (2026-04-11 rev-3):
+ * Display changes (2026-04-11 rev-4):
  *   1. All W-L-P stat values are white font
  *   2. GAMES chip removed — user can infer from W-L
  *   3. Upcoming row renders in one line (time inline, no wrap)
@@ -10,6 +10,10 @@
  *   6. O/U badge values: OVER→O, UNDER→U, PUSH→P
  *   7. Table: table-fixed, all columns centered, optimized colgroup widths
  *      — no horizontal scroll, fits every viewport
+ *   8. Smart polling: 60s interval when in-progress games exist, disabled otherwise
+ *   9. Stale-data indicator: shows "stale" badge when data > 5 min old
+ *  10. Error state: retry button, never silent — always surfaces failure
+ *  11. Dead isNeutralSite field removed (not in DB schema)
  *
  * Status partitioning:
  *   - "complete"   → Completed Games section
@@ -21,11 +25,11 @@
  * Season filter: 2026-03-26 → present (enforced in backend service)
  */
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { MLB_BY_AN_SLUG } from "@shared/mlbTeams";
-import { ArrowLeft, RefreshCw, Calendar, TrendingUp } from "lucide-react";
+import { ArrowLeft, RefreshCw, Calendar, TrendingUp, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -60,7 +64,8 @@ interface ScheduleGame {
   homeRunLineCovered: boolean | null;
   totalResult: string | null;   // "OVER" | "UNDER" | "PUSH" | null
   awayWon: boolean | null;
-  isNeutralSite?: boolean;
+  lastRefreshedAt: number | null;
+  // NOTE: isNeutralSite is NOT in the DB schema — field intentionally omitted
 }
 
 // ─── Status constants ─────────────────────────────────────────────────────────
@@ -179,12 +184,9 @@ function ScheduleRow({
     : null;
 
   // ── Location ───────────────────────────────────────────────────────────────
-  const location  = game.isNeutralSite ? "Neutral" : isAway ? "Away" : "Home";
-  const locStyle  = game.isNeutralSite
-    ? "bg-gray-500/20 text-gray-400"
-    : isAway
-    ? "bg-blue-500/20 text-blue-400"
-    : "bg-purple-500/20 text-purple-400";
+  // NOTE: isNeutralSite not in DB schema — future: add neutral_site column when AN API provides it
+  const location  = isAway ? "Away" : "Home";
+  const locStyle  = isAway ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400";
 
   // ── Score / Time ───────────────────────────────────────────────────────────
   const isComplete  = game.gameStatus === STATUS_COMPLETE;
@@ -460,26 +462,78 @@ export default function MlbTeamSchedule() {
 
   const teamInfo = MLB_BY_AN_SLUG.get(teamSlug);
 
-  const { data, isLoading, error, refetch, isFetching } =
+  // ── Smart polling strategy ───────────────────────────────────────────────────
+  // - refetchInterval: 60s when ANY game is in-progress (live game window)
+  // - refetchInterval: false when all games are complete or scheduled (no live games)
+  // - staleTime: 90s — prevents redundant fetches on tab focus
+  // - retry: 3 attempts with exponential backoff before surfacing error
+  // - onError: NEVER silent — always logged to console with full context
+  const { data, isLoading, error, refetch, isFetching, dataUpdatedAt } =
     trpc.mlbSchedule.getTeamSchedule.useQuery(
       { teamSlug },
-      { enabled: !!teamSlug, staleTime: 2 * 60 * 1000 }
+      {
+        enabled: !!teamSlug,
+        staleTime: 90 * 1000,
+        retry: 3,
+        retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+        refetchInterval: (query) => {
+          const games = (query.state.data?.games ?? []) as ScheduleGame[];
+          const hasLive = games.some((g) => g.gameStatus === "inprogress");
+          if (hasLive) {
+            console.log(
+              `[MlbTeamSchedule][POLL] In-progress game detected — polling every 60s` +
+              ` | team="${teamSlug}" liveGames=${games.filter((g) => g.gameStatus === "inprogress").length}`
+            );
+            return 60_000;
+          }
+          return false; // No live games — stop polling
+        },
+      }
     );
 
   const games = (data?.games ?? []) as ScheduleGame[];
 
+  // ── Stale-data detection ─────────────────────────────────────────────────────
+  // Show a stale indicator if data is > 5 minutes old and there are upcoming/live games.
+  const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+  const isStale = dataUpdatedAt > 0 && (Date.now() - dataUpdatedAt) > STALE_THRESHOLD_MS;
+
+  // ── Error logging — never silent ─────────────────────────────────────────────
+  const errorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (error) {
+      const msg = error.message ?? String(error);
+      if (errorRef.current !== msg) {
+        errorRef.current = msg;
+        console.error(
+          `[MlbTeamSchedule][ERROR] getTeamSchedule FAILED` +
+          ` | team="${teamSlug}"` +
+          ` | message="${msg}"` +
+          ` | timestamp=${new Date().toISOString()}`
+        );
+      }
+    } else {
+      errorRef.current = null;
+    }
+  }, [error, teamSlug]);
+
   // ── Status partitioning ──────────────────────────────────────────────────────
   // CRITICAL: postponed games hidden from both sections — no score, no time, no result.
-  const completedGames = games.filter(isCompleteGame);
-  const upcomingGames  = games.filter(isUpcomingGame);
-  const postponedCount = games.filter((g) => g.gameStatus === STATUS_POSTPONED).length;
+  const completedGames  = games.filter(isCompleteGame);
+  const upcomingGames   = games.filter(isUpcomingGame);
+  const inProgressGames = games.filter((g) => g.gameStatus === "inprogress");
+  const postponedCount  = games.filter((g) => g.gameStatus === STATUS_POSTPONED).length;
 
   console.log(
     `[MlbTeamSchedule] [STATE] team="${teamSlug}"` +
     ` | total=${games.length}` +
     ` | complete=${completedGames.length}` +
     ` | upcoming=${upcomingGames.length}` +
-    ` | postponed=${postponedCount} (hidden — no score/time/result)`
+    ` | inprogress=${inProgressGames.length}` +
+    ` | postponed=${postponedCount} (hidden)` +
+    ` | polling=${inProgressGames.length > 0 ? "60s" : "off"}` +
+    ` | stale=${isStale}` +
+    ` | dataAge=${dataUpdatedAt > 0 ? Math.round((Date.now() - dataUpdatedAt) / 1000) + "s" : "no-data"}`
   );
 
   if (!teamSlug) {
@@ -525,15 +579,26 @@ export default function MlbTeamSchedule() {
             </p>
           </div>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="text-gray-400 hover:text-white flex-shrink-0 px-2"
-          >
-            <RefreshCw className={cn("w-3 h-3 sm:w-3.5 sm:h-3.5", isFetching && "animate-spin")} />
-          </Button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Stale indicator — shown when data > 5 min old and page has live/upcoming games */}
+            {isStale && !isFetching && upcomingGames.length > 0 && (
+              <span className="text-[7px] font-mono text-yellow-500/80 bg-yellow-500/10 border border-yellow-500/20 rounded px-1 py-0.5">
+                STALE
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                console.log(`[MlbTeamSchedule][STEP] Manual refresh triggered | team="${teamSlug}"`);
+                refetch();
+              }}
+              disabled={isFetching}
+              className="text-gray-400 hover:text-white px-2"
+            >
+              <RefreshCw className={cn("w-3 h-3 sm:w-3.5 sm:h-3.5", isFetching && "animate-spin")} />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -550,12 +615,31 @@ export default function MlbTeamSchedule() {
           </div>
         )}
 
-        {/* Error */}
+        {/* Error — never silent: shows message + retry button */}
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4">
-            <p className="text-red-400 font-mono text-xs">
-              Error loading schedule: {error.message}
-            </p>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 mb-4 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-red-400 font-mono text-[10px] font-bold mb-1">
+                SCHEDULE LOAD FAILED
+              </p>
+              <p className="text-red-300/70 font-mono text-[9px] break-all mb-2">
+                {error.message}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  console.log(`[MlbTeamSchedule][STEP] Manual retry triggered | team="${teamSlug}"`);
+                  refetch();
+                }}
+                disabled={isFetching}
+                className="text-[9px] font-mono h-6 px-2 border-red-500/40 text-red-400 hover:text-white"
+              >
+                <RefreshCw className={cn("w-3 h-3 mr-1", isFetching && "animate-spin")} />
+                RETRY
+              </Button>
+            </div>
           </div>
         )}
 
