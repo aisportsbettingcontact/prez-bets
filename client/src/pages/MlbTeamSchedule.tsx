@@ -1,28 +1,27 @@
 /**
  * MlbTeamSchedule.tsx — 2026 MLB Team Schedule Page
  *
- * Display changes (2026-04-11 rev-2):
- *   1. O/U stat: plain numbers — "{overs}–{unders}–{pushes}" (no O/U/P suffix)
- *   2. Date column: MM/DD format, single-digit month (3/31 not 03/31)
- *   3. LOC → LOCATION header; values: Away | Home | Neutral
- *   4. OPP column: logo only (no abbreviation or name text)
- *   5. Score: team's score first, then opponent's (already correct logic)
- *   6. COV → COVER header; values: Y (covered) | N (did not cover) | — (push/null)
- *   7. ML column: always white font (no color coding)
- *   8. No horizontal scroll — table fits viewport at all times via column compression
- *      and viewport-relative font/padding sizing
+ * Display changes (2026-04-11 rev-3):
+ *   1. All W-L-P stat values are white font
+ *   2. GAMES chip removed — user can infer from W-L
+ *   3. Upcoming row renders in one line (time inline, no wrap)
+ *   4. Count labels (1) / (13) removed from section headers
+ *   5. Stats chips are larger and bolder for immediate readability
+ *   6. O/U badge values: OVER→O, UNDER→U, PUSH→P
+ *   7. Table: table-fixed, all columns centered, optimized colgroup widths
+ *      — no horizontal scroll, fits every viewport
  *
  * Status partitioning:
  *   - "complete"   → Completed Games section
  *   - "scheduled" / "inprogress" → Upcoming / Live section
- *   - "postponed"  → HIDDEN from both sections (no score, no valid time)
+ *   - "postponed"  → HIDDEN (no score, no valid time, no result)
  *
  * Logging: [MlbTeamSchedule][TAG] structured console logs throughout.
- *
- * Data source: mlb_schedule_history (Action Network DK NJ API)
+ * Data source: mlb_schedule_history via Action Network DK NJ API
  * Season filter: 2026-03-26 → present (enforced in backend service)
  */
 
+import React from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { MLB_BY_AN_SLUG } from "@shared/mlbTeams";
@@ -35,9 +34,9 @@ import { cn } from "@/lib/utils";
 interface ScheduleGame {
   id: number;
   anGameId: number;
-  gameDate: string;        // "YYYY-MM-DD"
-  startTimeUtc: string;   // ISO-8601 UTC
-  gameStatus: string;     // "complete" | "scheduled" | "inprogress" | "postponed"
+  gameDate: string;         // "YYYY-MM-DD"
+  startTimeUtc: string;    // ISO-8601 UTC
+  gameStatus: string;      // "complete" | "scheduled" | "inprogress" | "postponed"
   awaySlug: string;
   awayAbbr: string;
   awayName: string;
@@ -61,27 +60,27 @@ interface ScheduleGame {
   homeRunLineCovered: boolean | null;
   totalResult: string | null;   // "OVER" | "UNDER" | "PUSH" | null
   awayWon: boolean | null;
-  isNeutralSite?: boolean;       // optional — future neutral-site games
+  isNeutralSite?: boolean;
 }
 
-// ─── Status helpers ───────────────────────────────────────────────────────────
+// ─── Status constants ─────────────────────────────────────────────────────────
 
-const STATUS_COMPLETE   = "complete";
-const STATUS_POSTPONED  = "postponed";
+const STATUS_COMPLETE  = "complete";
+const STATUS_POSTPONED = "postponed";
 
-const isCompleteGame  = (g: ScheduleGame) => g.gameStatus === STATUS_COMPLETE;
-const isUpcomingGame  = (g: ScheduleGame) =>
+const isCompleteGame = (g: ScheduleGame) => g.gameStatus === STATUS_COMPLETE;
+const isUpcomingGame = (g: ScheduleGame) =>
   g.gameStatus !== STATUS_COMPLETE && g.gameStatus !== STATUS_POSTPONED;
 
 // ─── Date formatter: MM/DD, single-digit month ────────────────────────────────
-// March 31 → "3/31"   |   October 4 → "10/4"
-// Rule: single-digit month for Mar–Sep (months 3–9), double-digit for Oct–Nov (10–11)
+// 2026-03-31 → "3/31"  |  2026-10-04 → "10/4"
 function fmtDate(dateStr: string): string {
   const [, m, d] = dateStr.split("-").map(Number);
   return `${m}/${d}`;
 }
 
-// ─── Start time formatter ─────────────────────────────────────────────────────
+// ─── Start time formatter (ET, inline) ───────────────────────────────────────
+// Returns "2:20 PM ET" — single line, no wrapping
 function fmtTime(utcIso: string): string {
   const d = new Date(utcIso);
   return (
@@ -132,9 +131,8 @@ function Badge({ label, variant }: { label: string; variant: BadgeVariant }) {
   return (
     <span
       className={cn(
-        // Base: tiny, bold, mono, rounded, border
-        "inline-flex items-center justify-center rounded border font-mono font-bold tracking-wide whitespace-nowrap",
-        // Responsive sizing: 8px on mobile, 9px on sm+
+        "inline-flex items-center justify-center rounded border font-mono font-bold",
+        "tracking-wide whitespace-nowrap",
         "text-[8px] sm:text-[9px] px-[3px] sm:px-1 py-[1px]",
         BADGE_CLS[variant]
       )}
@@ -155,40 +153,40 @@ function ScheduleRow({
   teamSlug: string;
   isUpcoming: boolean;
 }) {
-  // ── Perspective: is the team we're viewing the away or home team? ──────────
+  // ── Perspective ────────────────────────────────────────────────────────────
   const isAway = game.awaySlug === teamSlug;
 
-  // ── Opponent info ──────────────────────────────────────────────────────────
+  // ── Opponent ───────────────────────────────────────────────────────────────
   const oppSlug   = isAway ? game.homeSlug   : game.awaySlug;
   const oppTeamId = isAway ? game.homeTeamId : game.awayTeamId;
   const oppAbbr   = isAway ? game.homeAbbr   : game.awayAbbr;
   const oppTeam   = MLB_BY_AN_SLUG.get(oppSlug);
   const oppLogo   = oppTeam?.logoUrl ?? `https://www.mlbstatic.com/team-logos/${oppTeamId}.svg`;
 
-  // ── Scores (team first, then opponent) ────────────────────────────────────
+  // ── Scores ─────────────────────────────────────────────────────────────────
   const myScore  = isAway ? game.awayScore : game.homeScore;
   const oppScore = isAway ? game.homeScore : game.awayScore;
 
-  // ── Odds (from team's perspective) ────────────────────────────────────────
+  // ── Odds ───────────────────────────────────────────────────────────────────
   const myRunLine     = isAway ? game.dkAwayRunLine     : game.dkHomeRunLine;
   const myRunLineOdds = isAway ? game.dkAwayRunLineOdds : game.dkHomeRunLineOdds;
   const myML          = isAway ? game.dkAwayML          : game.dkHomeML;
   const myCovered     = isAway ? game.awayRunLineCovered : game.homeRunLineCovered;
 
-  // ── W/L (from team's perspective) ─────────────────────────────────────────
+  // ── W/L ────────────────────────────────────────────────────────────────────
   const myWon = game.awayWon != null
     ? (isAway ? game.awayWon : !game.awayWon)
     : null;
 
-  // ── LOCATION: Away | Home | Neutral ───────────────────────────────────────
-  const location = game.isNeutralSite
-    ? "Neutral"
-    : isAway ? "Away" : "Home";
-  const locVariant = game.isNeutralSite
-    ? "neutral"
-    : isAway ? "away" : "home";
+  // ── Location ───────────────────────────────────────────────────────────────
+  const location  = game.isNeutralSite ? "Neutral" : isAway ? "Away" : "Home";
+  const locStyle  = game.isNeutralSite
+    ? "bg-gray-500/20 text-gray-400"
+    : isAway
+    ? "bg-blue-500/20 text-blue-400"
+    : "bg-purple-500/20 text-purple-400";
 
-  // ── Score / Time display ───────────────────────────────────────────────────
+  // ── Score / Time ───────────────────────────────────────────────────────────
   const isComplete  = game.gameStatus === STATUS_COMPLETE;
   const isScheduled = game.gameStatus === "scheduled";
 
@@ -203,51 +201,49 @@ function ScheduleRow({
   const wlVariant: BadgeVariant = myWon === true ? "win" : myWon === false ? "loss" : "neutral";
   const wlLabel = myWon === true ? "W" : myWon === false ? "L" : "—";
 
-  // ── COVER badge: Y | N | — (push = neutral dash) ──────────────────────────
-  // myCovered: true=covered, false=did not cover, null=push or no odds
+  // ── COVER badge: Y | N | — ────────────────────────────────────────────────
   const covVariant: BadgeVariant =
     myCovered === true ? "win" : myCovered === false ? "loss" : "neutral";
   const covLabel = myCovered === true ? "Y" : myCovered === false ? "N" : "—";
 
-  // ── O/U badge ─────────────────────────────────────────────────────────────
+  // ── O/U badge: O | U | P | — ─────────────────────────────────────────────
+  // OVER→O, UNDER→U, PUSH→P (single character saves column space)
   const ouVariant: BadgeVariant =
     game.totalResult === "OVER"  ? "win"
     : game.totalResult === "UNDER" ? "loss"
     : game.totalResult === "PUSH"  ? "push"
     : "neutral";
-  const ouLabel = game.totalResult ?? "—";
+  const ouLabel =
+    game.totalResult === "OVER"  ? "O"
+    : game.totalResult === "UNDER" ? "U"
+    : game.totalResult === "PUSH"  ? "P"
+    : "—";
 
-  // ── Cell base classes ──────────────────────────────────────────────────────
-  // px-1 on mobile, px-2 on sm+; py-1.5 always — keeps rows compact
-  const cell = "px-1 sm:px-2 py-1.5";
+  // ── Cell classes ───────────────────────────────────────────────────────────
+  const cell = "px-[2px] sm:px-1 py-1.5 align-middle";
   const mono = "font-mono text-[8px] sm:text-[9px]";
+  const dash = <span className={cn(mono, "text-gray-600")}>—</span>;
 
   return (
     <tr className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
 
-      {/* DATE: MM/DD */}
-      <td className={cn(cell, mono, "text-gray-400 whitespace-nowrap")}>
+      {/* DATE */}
+      <td className={cn(cell, mono, "text-gray-400 text-center whitespace-nowrap")}>
         {fmtDate(game.gameDate)}
       </td>
 
-      {/* LOCATION: Away | Home | Neutral */}
+      {/* LOCATION */}
       <td className={cn(cell, "text-center")}>
-        <span
-          className={cn(
-            "inline-block rounded font-mono font-bold whitespace-nowrap",
-            "text-[7px] sm:text-[8px] px-[3px] sm:px-1 py-[1px]",
-            locVariant === "away"
-              ? "bg-blue-500/20 text-blue-400"
-              : locVariant === "home"
-              ? "bg-purple-500/20 text-purple-400"
-              : "bg-gray-500/20 text-gray-400"
-          )}
-        >
+        <span className={cn(
+          "inline-block rounded font-mono font-bold whitespace-nowrap",
+          "text-[7px] sm:text-[8px] px-[2px] sm:px-1 py-[1px]",
+          locStyle
+        )}>
           {location}
         </span>
       </td>
 
-      {/* OPP: logo only */}
+      {/* OPP — logo only */}
       <td className={cn(cell, "text-center")}>
         <img
           src={oppLogo}
@@ -257,61 +253,50 @@ function ScheduleRow({
         />
       </td>
 
-      {/* SCORE / TIME */}
+      {/* SCORE / TIME — single line, no wrap */}
       <td className={cn(cell, "text-center")}>
-        <span
-          className={cn(
-            mono, "font-bold",
-            isComplete
-              ? myWon ? "text-green-400" : "text-red-400"
-              : "text-gray-400"
-          )}
-        >
+        <span className={cn(
+          mono, "font-bold whitespace-nowrap",
+          isComplete
+            ? myWon ? "text-green-400" : "text-red-400"
+            : "text-gray-400"
+        )}>
           {scoreDisplay}
         </span>
       </td>
 
       {/* W/L */}
       <td className={cn(cell, "text-center")}>
-        {isUpcoming
-          ? <span className={cn(mono, "text-gray-600")}>—</span>
-          : <Badge label={wlLabel} variant={wlVariant} />
-        }
+        {isUpcoming ? dash : <Badge label={wlLabel} variant={wlVariant} />}
       </td>
 
       {/* RUN LINE */}
-      <td className={cn(cell)}>
+      <td className={cn(cell, "text-center")}>
         <span className={cn(mono, "text-gray-300 whitespace-nowrap")}>
           {fmtRunLine(myRunLine, myRunLineOdds)}
         </span>
       </td>
 
-      {/* COVER: Y | N | — */}
+      {/* COVER */}
       <td className={cn(cell, "text-center")}>
-        {isUpcoming
-          ? <span className={cn(mono, "text-gray-600")}>—</span>
-          : <Badge label={covLabel} variant={covVariant} />
-        }
+        {isUpcoming ? dash : <Badge label={covLabel} variant={covVariant} />}
       </td>
 
       {/* TOTAL */}
-      <td className={cn(cell)}>
+      <td className={cn(cell, "text-center")}>
         <span className={cn(mono, "text-gray-300 whitespace-nowrap")}>
           {fmtTotal(game.dkTotal, game.dkOverOdds, game.dkUnderOdds)}
         </span>
       </td>
 
-      {/* O/U */}
+      {/* O/U — single char: O | U | P */}
       <td className={cn(cell, "text-center")}>
-        {isUpcoming
-          ? <span className={cn(mono, "text-gray-600")}>—</span>
-          : <Badge label={ouLabel} variant={ouVariant} />
-        }
+        {isUpcoming ? dash : <Badge label={ouLabel} variant={ouVariant} />}
       </td>
 
       {/* ML — always white */}
       <td className={cn(cell, "text-center")}>
-        <span className={cn(mono, "font-bold text-white")}>
+        <span className={cn(mono, "font-bold text-white whitespace-nowrap")}>
           {myML ?? "—"}
         </span>
       </td>
@@ -321,8 +306,9 @@ function ScheduleRow({
 }
 
 // ─── Stats Summary ────────────────────────────────────────────────────────────
-// Single row: RECORD · RL COVER · O/U · GAMES
-// O/U: plain numbers — "6–5–2" (overs–unders–pushes), pushes shown only when > 0
+// Three chips: RECORD · RL COVER · O/U
+// All number values are white.
+// GAMES chip removed — user can infer from W-L.
 
 function StatsSummary({
   games,
@@ -341,7 +327,7 @@ function StatsSummary({
   }).length;
   const losses = completed.length - wins;
 
-  // RL Cover (explicit true/false — null = push, excluded from both)
+  // RL Cover (null = push, excluded from W and L counts)
   const covered = completed.filter((g) => {
     const ia = g.awaySlug === teamSlug;
     return ia ? g.awayRunLineCovered === true : g.homeRunLineCovered === true;
@@ -351,7 +337,7 @@ function StatsSummary({
     return ia ? g.awayRunLineCovered === false : g.homeRunLineCovered === false;
   }).length;
 
-  // O/U — plain numbers
+  // O/U
   const overs  = completed.filter((g) => g.totalResult === "OVER").length;
   const unders = completed.filter((g) => g.totalResult === "UNDER").length;
   const ouPush = completed.filter((g) => g.totalResult === "PUSH").length;
@@ -362,74 +348,50 @@ function StatsSummary({
     ` | record=${wins}-${losses}` +
     ` | rlCover=${covered}-${notCovered}` +
     ` | ou=${overs}-${unders}-${ouPush}` +
-    ` | games=${completed.length}`
+    ` | completedGames=${completed.length}`
   );
 
-  const stats: Array<{ label: string; node: React.ReactNode }> = [
-    {
-      label: "RECORD",
-      node: (
-        <span className="font-mono text-[11px] sm:text-sm font-bold text-white">
+  return (
+    // Three chips, single row, no scroll — flex-nowrap, chips shrink if needed
+    <div className="flex items-stretch gap-2 sm:gap-3 mb-4 sm:mb-5">
+
+      {/* RECORD */}
+      <div className="flex-1 flex flex-col items-center justify-center bg-white/5 rounded-xl px-3 py-2.5 sm:py-3 min-w-0">
+        <span className="text-[8px] sm:text-[9px] text-gray-500 font-mono tracking-widest mb-1">
+          RECORD
+        </span>
+        <span className="font-mono text-sm sm:text-base font-bold text-white leading-none">
           {wins}–{losses}
         </span>
-      ),
-    },
-    {
-      label: "RL COVER",
-      node: (
-        <span className="font-mono text-[11px] sm:text-sm font-bold">
-          <span className="text-green-400">{covered}</span>
-          <span className="text-gray-500 mx-0.5">–</span>
-          <span className="text-red-400">{notCovered}</span>
-        </span>
-      ),
-    },
-    {
-      label: "O/U",
-      node: (
-        <span className="font-mono text-[11px] sm:text-sm font-bold">
-          <span className="text-green-400">{overs}</span>
-          <span className="text-gray-500 mx-0.5">–</span>
-          <span className="text-red-400">{unders}</span>
-          {ouPush > 0 && (
-            <>
-              <span className="text-gray-500 mx-0.5">–</span>
-              <span className="text-yellow-400">{ouPush}</span>
-            </>
-          )}
-        </span>
-      ),
-    },
-    {
-      label: "GAMES",
-      node: (
-        <span className="font-mono text-[11px] sm:text-sm font-bold text-white">
-          {completed.length}
-        </span>
-      ),
-    },
-  ];
+      </div>
 
-  return (
-    <div className="flex items-center gap-1.5 sm:gap-2 mb-3 sm:mb-4 overflow-x-auto pb-0.5">
-      {stats.map(({ label, node }) => (
-        <div
-          key={label}
-          className="flex items-center gap-1 sm:gap-1.5 bg-white/5 rounded-lg px-2 sm:px-3 py-1.5 flex-shrink-0"
-        >
-          <span className="text-[8px] sm:text-[9px] text-gray-400 font-mono whitespace-nowrap">
-            {label}
-          </span>
-          {node}
-        </div>
-      ))}
+      {/* RL COVER */}
+      <div className="flex-1 flex flex-col items-center justify-center bg-white/5 rounded-xl px-3 py-2.5 sm:py-3 min-w-0">
+        <span className="text-[8px] sm:text-[9px] text-gray-500 font-mono tracking-widest mb-1">
+          RL COVER
+        </span>
+        <span className="font-mono text-sm sm:text-base font-bold text-white leading-none">
+          {covered}–{notCovered}
+        </span>
+      </div>
+
+      {/* O/U */}
+      <div className="flex-1 flex flex-col items-center justify-center bg-white/5 rounded-xl px-3 py-2.5 sm:py-3 min-w-0">
+        <span className="text-[8px] sm:text-[9px] text-gray-500 font-mono tracking-widest mb-1">
+          O/U
+        </span>
+        <span className="font-mono text-sm sm:text-base font-bold text-white leading-none">
+          {overs}–{unders}{ouPush > 0 ? `–${ouPush}` : ""}
+        </span>
+      </div>
+
     </div>
   );
 }
 
 // ─── Schedule Table ───────────────────────────────────────────────────────────
-// NO overflow-x-auto / NO minWidth — table must fit viewport at all times.
-// Column widths are controlled by content compression (tiny fonts, minimal padding).
+// table-fixed + colgroup percentages = no horizontal scroll on any viewport.
+// All columns centered. Header and value cells vertically aligned to middle.
 
 function ScheduleTable({
   games,
@@ -440,36 +402,38 @@ function ScheduleTable({
   teamSlug: string;
   isUpcoming: boolean;
 }) {
-  // Header cell base
-  const th = "px-1 sm:px-2 py-1.5 text-[7px] sm:text-[8px] font-bold text-gray-500 font-mono tracking-widest whitespace-nowrap";
+  const th = cn(
+    "px-[2px] sm:px-1 py-1.5 text-[7px] sm:text-[8px] font-bold",
+    "text-gray-500 font-mono tracking-widest text-center whitespace-nowrap align-middle"
+  );
 
   return (
-    <div className="rounded-lg border border-white/10 w-full">
-      <table className="w-full table-fixed text-left">
+    <div className="rounded-lg border border-white/10 w-full overflow-hidden">
+      <table className="w-full table-fixed text-left border-collapse">
         <colgroup>
-          {/* DATE */}     <col style={{ width: "9%" }} />
-          {/* LOCATION */} <col style={{ width: "11%" }} />
-          {/* OPP */}      <col style={{ width: "7%" }} />
-          {/* SCORE/TIME */}<col style={{ width: "13%" }} />
-          {/* W/L */}      <col style={{ width: "6%" }} />
-          {/* RUN LINE */} <col style={{ width: "19%" }} />
-          {/* COVER */}    <col style={{ width: "7%" }} />
-          {/* TOTAL */}    <col style={{ width: "19%" }} />
-          {/* O/U */}      <col style={{ width: "7%" }} />
-          {/* ML */}       <col style={{ width: "7%" }} />
+          {/* DATE     */} <col style={{ width: "8%" }} />
+          {/* LOCATION */} <col style={{ width: "12%" }} />
+          {/* OPP      */} <col style={{ width: "7%" }} />
+          {/* SCORE    */} <col style={{ width: "10%" }} />
+          {/* W/L      */} <col style={{ width: "5%" }} />
+          {/* RUN LINE */} <col style={{ width: "18%" }} />
+          {/* COVER    */} <col style={{ width: "7%" }} />
+          {/* TOTAL    */} <col style={{ width: "20%" }} />
+          {/* O/U      */} <col style={{ width: "5%" }} />
+          {/* ML       */} <col style={{ width: "8%" }} />
         </colgroup>
         <thead>
           <tr className="border-b border-white/10 bg-white/[0.03]">
             <th className={th}>DATE</th>
-            <th className={cn(th, "text-center")}>LOCATION</th>
-            <th className={cn(th, "text-center")}>OPP</th>
-            <th className={cn(th, "text-center")}>{isUpcoming ? "TIME" : "SCORE"}</th>
-            <th className={cn(th, "text-center")}>W/L</th>
+            <th className={th}>LOCATION</th>
+            <th className={th}>OPP</th>
+            <th className={th}>{isUpcoming ? "TIME" : "SCORE"}</th>
+            <th className={th}>W/L</th>
             <th className={th}>RUN LINE</th>
-            <th className={cn(th, "text-center")}>COVER</th>
+            <th className={th}>COVER</th>
             <th className={th}>TOTAL</th>
-            <th className={cn(th, "text-center")}>O/U</th>
-            <th className={cn(th, "text-center")}>ML</th>
+            <th className={th}>O/U</th>
+            <th className={th}>ML</th>
           </tr>
         </thead>
         <tbody>
@@ -489,8 +453,6 @@ function ScheduleTable({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-import React from "react";
-
 export default function MlbTeamSchedule() {
   const params = useParams<{ slug: string }>();
   const [, navigate] = useLocation();
@@ -507,10 +469,10 @@ export default function MlbTeamSchedule() {
   const games = (data?.games ?? []) as ScheduleGame[];
 
   // ── Status partitioning ──────────────────────────────────────────────────────
-  // CRITICAL: postponed games are excluded from BOTH sections.
-  const completedGames  = games.filter(isCompleteGame);
-  const upcomingGames   = games.filter(isUpcomingGame);
-  const postponedCount  = games.filter((g) => g.gameStatus === STATUS_POSTPONED).length;
+  // CRITICAL: postponed games hidden from both sections — no score, no time, no result.
+  const completedGames = games.filter(isCompleteGame);
+  const upcomingGames  = games.filter(isUpcomingGame);
+  const postponedCount = games.filter((g) => g.gameStatus === STATUS_POSTPONED).length;
 
   console.log(
     `[MlbTeamSchedule] [STATE] team="${teamSlug}"` +
@@ -608,12 +570,12 @@ export default function MlbTeamSchedule() {
           </div>
         )}
 
-        {/* Stats summary */}
+        {/* Stats summary — 3 chips, all white values */}
         {!isLoading && completedGames.length > 0 && (
           <StatsSummary games={games} teamSlug={teamSlug} />
         )}
 
-        {/* Upcoming / Live */}
+        {/* Upcoming / Live — no count label */}
         {!isLoading && upcomingGames.length > 0 && (
           <div className="mb-4 sm:mb-5">
             <div className="flex items-center gap-1.5 mb-2">
@@ -621,9 +583,6 @@ export default function MlbTeamSchedule() {
               <h2 className="text-[9px] sm:text-[10px] font-bold text-blue-400 font-mono tracking-widest uppercase">
                 Upcoming / Live
               </h2>
-              <span className="text-[9px] text-gray-600 font-mono">
-                ({upcomingGames.length})
-              </span>
             </div>
             <ScheduleTable
               games={upcomingGames}
@@ -633,7 +592,7 @@ export default function MlbTeamSchedule() {
           </div>
         )}
 
-        {/* Completed Games */}
+        {/* Completed Games — no count label */}
         {!isLoading && completedGames.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 mb-2">
@@ -641,9 +600,6 @@ export default function MlbTeamSchedule() {
               <h2 className="text-[9px] sm:text-[10px] font-bold text-gray-400 font-mono tracking-widest uppercase">
                 Completed Games
               </h2>
-              <span className="text-[9px] text-gray-600 font-mono">
-                ({completedGames.length})
-              </span>
             </div>
             <ScheduleTable
               games={completedGames}
