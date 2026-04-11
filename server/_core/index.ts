@@ -21,6 +21,9 @@ import { insertSecurityEvent } from "../db";
 import { startSecurityDigestScheduler } from "../securityDigest";
 import { startWeeklySecurityDigestScheduler } from "../weeklySecurityDigest";
 import { postSecurityAlert } from "../discord/discordSecurityAlert";
+import { startMlbScheduleHistoryScheduler } from "../mlbScheduleHistoryScheduler";
+import { startNbaScheduleHistoryScheduler } from "../nbaScheduleHistoryScheduler";
+import { startNhlScheduleHistoryScheduler } from "../nhlScheduleHistoryScheduler";
 
 // ─── Rate limit event helper ─────────────────────────────────────────────────
 // Fire-and-forget: writes a RATE_LIMIT row to security_events.
@@ -300,6 +303,12 @@ async function startServer() {
     startDiscordBot();
     // MLB player sync — nightly at 08:00 UTC, updates active rosters from MLB Stats API
     startMlbPlayerSyncScheduler();
+    // MLB schedule history — startup 7-day backfill + refresh every 4h (6AM–midnight EST)
+    startMlbScheduleHistoryScheduler();
+    // NBA schedule history — startup 7-day backfill + refresh every 4h (6AM–midnight EST)
+    startNbaScheduleHistoryScheduler();
+    // NHL schedule history — startup 7-day backfill + refresh every 4h (6AM–midnight EST)
+    startNhlScheduleHistoryScheduler();
     // Security digest — daily at 08:00 EST (13:00 UTC), sends 24h threat summary via notifyOwner()
     startSecurityDigestScheduler();
     // Weekly security threat trend digest — every Sunday at 08:00 EST, 7-day bar chart + top IPs

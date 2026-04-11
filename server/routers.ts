@@ -39,6 +39,9 @@ import { nanoid } from "nanoid";
 import { appUsersRouter, ownerProcedure, appUserProcedure } from "./routers/appUsers";
 import { securityRouter } from "./routers/security";
 import { metricsRouter } from "./routers/metrics";
+import { mlbScheduleRouter } from "./routers/mlbSchedule";
+import { nbaScheduleRouter } from "./routers/nbaSchedule";
+import { nhlScheduleRouter } from "./routers/nhlSchedule";
 import { updateBookOdds, listNbaTeams, getNbaTeamByDbSlug, getGameTeamColors, deleteGameById, getFavoriteGameIds, getFavoriteGamesWithDates, toggleFavoriteGame, updateAnOdds, listGamesByDate, listOddsHistory, getBracketGames, auditAndAdvanceAllBracketWinners, getMlbLineupsByGameIds, getStrikeoutPropsByGame, getStrikeoutPropsByGames, getMlbGameEnvSignals, getHrPropsByGame, getHrPropsByGames } from "./db";
 import { runStrikeoutModel, type StrikeoutRunnerInput } from "./strikeoutModelRunner";
 import { getLastRefreshResult, runVsinRefresh, runVsinRefreshManual, refreshAllScoresNow } from "./vsinAutoRefresh";
@@ -75,6 +78,9 @@ export const appRouter = router({
   appUsers: appUsersRouter,
   security: securityRouter,
   metrics: metricsRouter,
+  mlbSchedule: mlbScheduleRouter,
+  nbaSchedule: nbaScheduleRouter,
+  nhlSchedule: nhlScheduleRouter,
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
   auth: router({

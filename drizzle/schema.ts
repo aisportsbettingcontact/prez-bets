@@ -1420,3 +1420,253 @@ export const userSessions = mysqlTable("user_sessions", {
 }));
 export type UserSession = typeof userSessions.$inferSelect;
 export type InsertUserSession = typeof userSessions.$inferInsert;
+
+// ─── MLB Schedule History (Action Network DK NJ odds + results per game) ─────
+/**
+ * One row per MLB game, populated from the Action Network v2 API using
+ * DraftKings NJ (book_id=68) as the sole odds source.
+ *
+ * Purpose:
+ *   - Powers the "Last 5 Games" panel on each MLB matchup card
+ *   - Powers the full Team Schedule page for every MLB team
+ *   - Stores pre-game DK NJ run line / total / moneyline odds
+ *   - Stores final scores and derived result columns (covered/won/O-U)
+ *
+ * Result derivation (computed when status='complete'):
+ *   awayRunLineCovered  — true if away team covered the run line
+ *   homeRunLineCovered  — true if home team covered the run line
+ *   totalResult         — 'OVER' | 'UNDER' | 'PUSH' based on final score vs dkTotal
+ *   awayWon             — true if away team won outright
+ *
+ * Deduplication key: anGameId (Action Network internal game ID)
+ */
+export const mlbScheduleHistory = mysqlTable("mlb_schedule_history", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Action Network internal game ID — primary deduplication key */
+  anGameId: int("anGameId").notNull().unique(),
+  /** Game date in YYYY-MM-DD format (EST) */
+  gameDate: varchar("gameDate", { length: 10 }).notNull(),
+  /** Game start time as ISO 8601 UTC string from AN API */
+  startTimeUtc: varchar("startTimeUtc", { length: 32 }).notNull(),
+  /** Game status: 'scheduled' | 'inprogress' | 'complete' */
+  gameStatus: varchar("gameStatus", { length: 16 }).notNull().default("scheduled"),
+  // ─── Away Team ──────────────────────────────────────────────────────────────
+  /** Away team Action Network URL slug, e.g. "arizona-diamondbacks" */
+  awaySlug: varchar("awaySlug", { length: 128 }).notNull(),
+  /** Away team abbreviation from AN, e.g. "ARI" */
+  awayAbbr: varchar("awayAbbr", { length: 8 }).notNull(),
+  /** Away team full name from AN, e.g. "Arizona Diamondbacks" */
+  awayName: varchar("awayName", { length: 128 }).notNull(),
+  /** Away team Action Network numeric ID */
+  awayTeamId: int("awayTeamId").notNull(),
+  /** Away team final score (null = game not yet final) */
+  awayScore: int("awayScore"),
+  // ─── Home Team ──────────────────────────────────────────────────────────────
+  /** Home team Action Network URL slug, e.g. "philadelphia-phillies" */
+  homeSlug: varchar("homeSlug", { length: 128 }).notNull(),
+  /** Home team abbreviation from AN, e.g. "PHI" */
+  homeAbbr: varchar("homeAbbr", { length: 8 }).notNull(),
+  /** Home team full name from AN, e.g. "Philadelphia Phillies" */
+  homeName: varchar("homeName", { length: 128 }).notNull(),
+  /** Home team Action Network numeric ID */
+  homeTeamId: int("homeTeamId").notNull(),
+  /** Home team final score (null = game not yet final) */
+  homeScore: int("homeScore"),
+  // ─── DK NJ Pre-Game Odds (book_id=68, is_live=false) ────────────────────────
+  /** DK NJ away run line spread, e.g. 1.5 (positive = underdog) */
+  dkAwayRunLine: decimal("dkAwayRunLine", { precision: 4, scale: 1 }),
+  /** DK NJ away run line juice in American format, e.g. "-144" */
+  dkAwayRunLineOdds: varchar("dkAwayRunLineOdds", { length: 16 }),
+  /** DK NJ home run line spread, e.g. -1.5 */
+  dkHomeRunLine: decimal("dkHomeRunLine", { precision: 4, scale: 1 }),
+  /** DK NJ home run line juice in American format, e.g. "+119" */
+  dkHomeRunLineOdds: varchar("dkHomeRunLineOdds", { length: 16 }),
+  /** DK NJ game total (over line), e.g. 8.5 */
+  dkTotal: decimal("dkTotal", { precision: 5, scale: 1 }),
+  /** DK NJ over juice in American format, e.g. "-112" */
+  dkOverOdds: varchar("dkOverOdds", { length: 16 }),
+  /** DK NJ under juice in American format, e.g. "-108" */
+  dkUnderOdds: varchar("dkUnderOdds", { length: 16 }),
+  /** DK NJ away team moneyline in American format, e.g. "+153" */
+  dkAwayML: varchar("dkAwayML", { length: 16 }),
+  /** DK NJ home team moneyline in American format, e.g. "-186" */
+  dkHomeML: varchar("dkHomeML", { length: 16 }),
+  // ─── Derived Result Columns (populated after game is complete) ───────────────
+  /** true = away team covered the run line; false = did not cover; null = game not final or no line */
+  awayRunLineCovered: boolean("awayRunLineCovered"),
+  /** true = home team covered the run line; false = did not cover; null = game not final or no line */
+  homeRunLineCovered: boolean("homeRunLineCovered"),
+  /** 'OVER' | 'UNDER' | 'PUSH' — based on final combined score vs dkTotal; null = game not final or no total */
+  totalResult: varchar("totalResult", { length: 8 }),
+  /** true = away team won outright; false = home team won; null = game not final */
+  awayWon: boolean("awayWon"),
+  /** UTC ms timestamp of the last data refresh for this row */
+  lastRefreshedAt: bigint("lastRefreshedAt", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxAnGameId:   index("idx_msh_an_game_id").on(t.anGameId),
+  idxGameDate:   index("idx_msh_game_date").on(t.gameDate),
+  idxAwaySlug:   index("idx_msh_away_slug").on(t.awaySlug),
+  idxHomeSlug:   index("idx_msh_home_slug").on(t.homeSlug),
+  idxGameStatus: index("idx_msh_game_status").on(t.gameStatus),
+}));
+export type MlbScheduleHistoryRow = typeof mlbScheduleHistory.$inferSelect;
+export type InsertMlbScheduleHistory = typeof mlbScheduleHistory.$inferInsert;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NBA SCHEDULE HISTORY
+// Stores every NBA game with DK NJ pre-game odds (spread, total, moneyline)
+// and derived result columns (covered, O/U, won) for Recent Schedule and
+// Situational Results panels. Source: Action Network v2 API, book_id=68.
+// ═══════════════════════════════════════════════════════════════════════════════
+export const nbaScheduleHistory = mysqlTable("nba_schedule_history", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Action Network internal game ID — primary deduplication key */
+  anGameId: int("anGameId").notNull().unique(),
+  /** Game date in YYYY-MM-DD format (EST) */
+  gameDate: varchar("gameDate", { length: 10 }).notNull(),
+  /** Game start time as ISO 8601 UTC string from AN API */
+  startTimeUtc: varchar("startTimeUtc", { length: 32 }).notNull(),
+  /** Game status: 'scheduled' | 'inprogress' | 'complete' */
+  gameStatus: varchar("gameStatus", { length: 16 }).notNull().default("scheduled"),
+  // ─── Away Team ──────────────────────────────────────────────────────────────
+  /** Away team Action Network URL slug, e.g. "boston-celtics" */
+  awaySlug: varchar("awaySlug", { length: 128 }).notNull(),
+  /** Away team abbreviation from AN, e.g. "BOS" */
+  awayAbbr: varchar("awayAbbr", { length: 8 }).notNull(),
+  /** Away team full name from AN, e.g. "Boston Celtics" */
+  awayName: varchar("awayName", { length: 128 }).notNull(),
+  /** Away team Action Network numeric ID */
+  awayTeamId: int("awayTeamId").notNull(),
+  /** Away team final score (null = game not yet final) */
+  awayScore: int("awayScore"),
+  // ─── Home Team ──────────────────────────────────────────────────────────────
+  /** Home team Action Network URL slug, e.g. "los-angeles-lakers" */
+  homeSlug: varchar("homeSlug", { length: 128 }).notNull(),
+  /** Home team abbreviation from AN, e.g. "LAL" */
+  homeAbbr: varchar("homeAbbr", { length: 8 }).notNull(),
+  /** Home team full name from AN, e.g. "Los Angeles Lakers" */
+  homeName: varchar("homeName", { length: 128 }).notNull(),
+  /** Home team Action Network numeric ID */
+  homeTeamId: int("homeTeamId").notNull(),
+  /** Home team final score (null = game not yet final) */
+  homeScore: int("homeScore"),
+  // ─── DK NJ Pre-Game Odds (book_id=68, is_live=false) ────────────────────────
+  /** DK NJ away spread value, e.g. 11.5 (positive = underdog) */
+  dkAwaySpread: decimal("dkAwaySpread", { precision: 5, scale: 1 }),
+  /** DK NJ away spread juice in American format, e.g. "-108" */
+  dkAwaySpreadOdds: varchar("dkAwaySpreadOdds", { length: 16 }),
+  /** DK NJ home spread value, e.g. -11.5 */
+  dkHomeSpread: decimal("dkHomeSpread", { precision: 5, scale: 1 }),
+  /** DK NJ home spread juice in American format, e.g. "-112" */
+  dkHomeSpreadOdds: varchar("dkHomeSpreadOdds", { length: 16 }),
+  /** DK NJ game total (over line), e.g. 233.5 */
+  dkTotal: decimal("dkTotal", { precision: 6, scale: 1 }),
+  /** DK NJ over juice in American format, e.g. "-105" */
+  dkOverOdds: varchar("dkOverOdds", { length: 16 }),
+  /** DK NJ under juice in American format, e.g. "-115" */
+  dkUnderOdds: varchar("dkUnderOdds", { length: 16 }),
+  /** DK NJ away team moneyline in American format, e.g. "+360" */
+  dkAwayML: varchar("dkAwayML", { length: 16 }),
+  /** DK NJ home team moneyline in American format, e.g. "-470" */
+  dkHomeML: varchar("dkHomeML", { length: 16 }),
+  // ─── Derived Result Columns (populated after game is complete) ───────────────
+  /** true = away team covered the spread; false = did not cover; null = not final or no line */
+  awaySpreadCovered: boolean("awaySpreadCovered"),
+  /** true = home team covered the spread; false = did not cover; null = not final or no line */
+  homeSpreadCovered: boolean("homeSpreadCovered"),
+  /** 'OVER' | 'UNDER' | 'PUSH' — based on final combined score vs dkTotal */
+  totalResult: varchar("totalResult", { length: 8 }),
+  /** true = away team won outright; false = home team won; null = not final */
+  awayWon: boolean("awayWon"),
+  /** UTC ms timestamp of the last data refresh for this row */
+  lastRefreshedAt: bigint("lastRefreshedAt", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxAnGameId:   index("idx_nbash_an_game_id").on(t.anGameId),
+  idxGameDate:   index("idx_nbash_game_date").on(t.gameDate),
+  idxAwaySlug:   index("idx_nbash_away_slug").on(t.awaySlug),
+  idxHomeSlug:   index("idx_nbash_home_slug").on(t.homeSlug),
+  idxGameStatus: index("idx_nbash_game_status").on(t.gameStatus),
+}));
+export type NbaScheduleHistoryRow = typeof nbaScheduleHistory.$inferSelect;
+export type InsertNbaScheduleHistory = typeof nbaScheduleHistory.$inferInsert;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NHL SCHEDULE HISTORY
+// Stores every NHL game with DK NJ pre-game odds (puck line, total, moneyline)
+// and derived result columns for Recent Schedule and Situational Results panels.
+// Source: Action Network v2 API, book_id=68.
+// ═══════════════════════════════════════════════════════════════════════════════
+export const nhlScheduleHistory = mysqlTable("nhl_schedule_history", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Action Network internal game ID — primary deduplication key */
+  anGameId: int("anGameId").notNull().unique(),
+  /** Game date in YYYY-MM-DD format (EST) */
+  gameDate: varchar("gameDate", { length: 10 }).notNull(),
+  /** Game start time as ISO 8601 UTC string from AN API */
+  startTimeUtc: varchar("startTimeUtc", { length: 32 }).notNull(),
+  /** Game status: 'scheduled' | 'inprogress' | 'complete' */
+  gameStatus: varchar("gameStatus", { length: 16 }).notNull().default("scheduled"),
+  // ─── Away Team ──────────────────────────────────────────────────────────────
+  /** Away team Action Network URL slug, e.g. "boston-bruins" */
+  awaySlug: varchar("awaySlug", { length: 128 }).notNull(),
+  /** Away team abbreviation from AN, e.g. "BOS" */
+  awayAbbr: varchar("awayAbbr", { length: 8 }).notNull(),
+  /** Away team full name from AN, e.g. "Boston Bruins" */
+  awayName: varchar("awayName", { length: 128 }).notNull(),
+  /** Away team Action Network numeric ID */
+  awayTeamId: int("awayTeamId").notNull(),
+  /** Away team final score (null = game not yet final) */
+  awayScore: int("awayScore"),
+  // ─── Home Team ──────────────────────────────────────────────────────────────
+  /** Home team Action Network URL slug, e.g. "toronto-maple-leafs" */
+  homeSlug: varchar("homeSlug", { length: 128 }).notNull(),
+  /** Home team abbreviation from AN, e.g. "TOR" */
+  homeAbbr: varchar("homeAbbr", { length: 8 }).notNull(),
+  /** Home team full name from AN, e.g. "Toronto Maple Leafs" */
+  homeName: varchar("homeName", { length: 128 }).notNull(),
+  /** Home team Action Network numeric ID */
+  homeTeamId: int("homeTeamId").notNull(),
+  /** Home team final score (null = game not yet final) */
+  homeScore: int("homeScore"),
+  // ─── DK NJ Pre-Game Odds (book_id=68, is_live=false) ────────────────────────
+  /** DK NJ away puck line value, e.g. 1.5 (positive = underdog) */
+  dkAwayPuckLine: decimal("dkAwayPuckLine", { precision: 4, scale: 1 }),
+  /** DK NJ away puck line juice in American format, e.g. "+150" */
+  dkAwayPuckLineOdds: varchar("dkAwayPuckLineOdds", { length: 16 }),
+  /** DK NJ home puck line value, e.g. -1.5 */
+  dkHomePuckLine: decimal("dkHomePuckLine", { precision: 4, scale: 1 }),
+  /** DK NJ home puck line juice in American format, e.g. "-180" */
+  dkHomePuckLineOdds: varchar("dkHomePuckLineOdds", { length: 16 }),
+  /** DK NJ game total (over line), e.g. 6.5 */
+  dkTotal: decimal("dkTotal", { precision: 5, scale: 1 }),
+  /** DK NJ over juice in American format, e.g. "-102" */
+  dkOverOdds: varchar("dkOverOdds", { length: 16 }),
+  /** DK NJ under juice in American format, e.g. "-118" */
+  dkUnderOdds: varchar("dkUnderOdds", { length: 16 }),
+  /** DK NJ away team moneyline in American format, e.g. "-135" */
+  dkAwayML: varchar("dkAwayML", { length: 16 }),
+  /** DK NJ home team moneyline in American format, e.g. "+115" */
+  dkHomeML: varchar("dkHomeML", { length: 16 }),
+  // ─── Derived Result Columns (populated after game is complete) ───────────────
+  /** true = away team covered the puck line; false = did not cover; null = not final or no line */
+  awayPuckLineCovered: boolean("awayPuckLineCovered"),
+  /** true = home team covered the puck line; false = did not cover; null = not final or no line */
+  homePuckLineCovered: boolean("homePuckLineCovered"),
+  /** 'OVER' | 'UNDER' | 'PUSH' — based on final combined score vs dkTotal */
+  totalResult: varchar("totalResult", { length: 8 }),
+  /** true = away team won outright; false = home team won; null = not final */
+  awayWon: boolean("awayWon"),
+  /** UTC ms timestamp of the last data refresh for this row */
+  lastRefreshedAt: bigint("lastRefreshedAt", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxAnGameId:   index("idx_nhlsh_an_game_id").on(t.anGameId),
+  idxGameDate:   index("idx_nhlsh_game_date").on(t.gameDate),
+  idxAwaySlug:   index("idx_nhlsh_away_slug").on(t.awaySlug),
+  idxHomeSlug:   index("idx_nhlsh_home_slug").on(t.homeSlug),
+  idxGameStatus: index("idx_nhlsh_game_status").on(t.gameStatus),
+}));
+export type NhlScheduleHistoryRow = typeof nhlScheduleHistory.$inferSelect;
+export type InsertNhlScheduleHistory = typeof nhlScheduleHistory.$inferInsert;

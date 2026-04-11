@@ -33,6 +33,9 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { BettingSplitsPanel } from "./BettingSplitsPanel";
 import { OddsHistoryPanel } from "./OddsHistoryPanel";
+import MlbLast5Panel from "./MlbLast5Panel";
+import RecentSchedulePanel from "./RecentSchedulePanel";
+import SituationalResultsPanel from "./SituationalResultsPanel";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
@@ -3759,6 +3762,101 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
         </div>
       )}
 
+      {/* ── Recent Schedule Panel (Last 5 Games) ─────────────────────────────
+           Shown for MLB, NBA, and NHL games below the OddsHistoryPanel.
+           Clicking a team logo navigates to the team schedule page.
+           Data sourced exclusively from DK NJ via Action Network API.
+      */}
+      {game.sport === 'MLB' && awayMlb?.anSlug && homeMlb?.anSlug && (
+        <RecentSchedulePanel
+          sport="MLB"
+          awaySlug={awayMlb.anSlug}
+          homeSlug={homeMlb.anSlug}
+          awayAbbr={awayAbbr}
+          homeAbbr={homeAbbr}
+          awayName={awayName}
+          homeName={homeName}
+          awayLogoUrl={awayLogoUrl}
+          homeLogoUrl={homeLogoUrl}
+          borderColor={borderColor}
+        />
+      )}
+      {game.sport === 'NBA' && awayNba?.anSlug && homeNba?.anSlug && (
+        <RecentSchedulePanel
+          sport="NBA"
+          awaySlug={awayNba.anSlug}
+          homeSlug={homeNba.anSlug}
+          awayAbbr={awayAbbr}
+          homeAbbr={homeAbbr}
+          awayName={awayName}
+          homeName={homeName}
+          awayLogoUrl={awayLogoUrl}
+          homeLogoUrl={homeLogoUrl}
+          borderColor={borderColor}
+        />
+      )}
+      {game.sport === 'NHL' && awayNhl?.anSlug && homeNhl?.anSlug && (
+        <RecentSchedulePanel
+          sport="NHL"
+          awaySlug={awayNhl.anSlug}
+          homeSlug={homeNhl.anSlug}
+          awayAbbr={awayAbbr}
+          homeAbbr={homeAbbr}
+          awayName={awayName}
+          homeName={homeName}
+          awayLogoUrl={awayLogoUrl}
+          homeLogoUrl={homeLogoUrl}
+          borderColor={borderColor}
+        />
+      )}
+
+      {/* ── Situational Results Panel (ML/Spread/Total records) ────────────────
+           Shown for MLB, NBA, and NHL games below the RecentSchedulePanel.
+           Side-by-side record bars for both teams across all market types.
+           Data sourced exclusively from DK NJ via Action Network API.
+      */}
+      {game.sport === 'MLB' && awayMlb?.anSlug && homeMlb?.anSlug && (
+        <SituationalResultsPanel
+          sport="MLB"
+          awaySlug={awayMlb.anSlug}
+          homeSlug={homeMlb.anSlug}
+          awayAbbr={awayAbbr}
+          homeAbbr={homeAbbr}
+          awayName={awayName}
+          homeName={homeName}
+          awayLogoUrl={awayLogoUrl}
+          homeLogoUrl={homeLogoUrl}
+          borderColor={borderColor}
+        />
+      )}
+      {game.sport === 'NBA' && awayNba?.anSlug && homeNba?.anSlug && (
+        <SituationalResultsPanel
+          sport="NBA"
+          awaySlug={awayNba.anSlug}
+          homeSlug={homeNba.anSlug}
+          awayAbbr={awayAbbr}
+          homeAbbr={homeAbbr}
+          awayName={awayName}
+          homeName={homeName}
+          awayLogoUrl={awayLogoUrl}
+          homeLogoUrl={homeLogoUrl}
+          borderColor={borderColor}
+        />
+      )}
+      {game.sport === 'NHL' && awayNhl?.anSlug && homeNhl?.anSlug && (
+        <SituationalResultsPanel
+          sport="NHL"
+          awaySlug={awayNhl.anSlug}
+          homeSlug={homeNhl.anSlug}
+          awayAbbr={awayAbbr}
+          homeAbbr={homeAbbr}
+          awayName={awayName}
+          homeName={homeName}
+          awayLogoUrl={awayLogoUrl}
+          homeLogoUrl={homeLogoUrl}
+          borderColor={borderColor}
+        />
+      )}
     </>
   );
 }

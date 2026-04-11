@@ -2306,3 +2306,32 @@
 - [ ] Add member tier tracking: payingMembers, lifetimeMembers, nonPayingMembers
 - [ ] Add discordConnected field to app_users + tRPC metrics.memberStats
 - [ ] Build metrics panel UI with 8 KPI cards (DAU/MAU/WAU, avgSession, paying/lifetime/nonPaying/discord)
+
+## MLB Last 5 Games + Team Schedule (2026-04-11)
+- [ ] Add mlb_schedule_history DB table (migration 0056) for AN DK NJ schedule/odds history
+- [ ] Build mlbScheduleHistoryService.ts — AN DK NJ fetcher for MLB team schedule + odds + results
+- [ ] Build tRPC procedures: mlbSchedule.getTeamSchedule, mlbSchedule.getLast5ForMatchup
+- [ ] Build MlbTeamSchedule.tsx — full team schedule page with run line/total/ML/covered/won/O-U
+- [ ] Add Last 5 Games panel to each MLB matchup card in GameCard.tsx
+- [ ] Wire team logo click → /mlb/team/:slug route
+- [ ] Wire daily refresh scheduler for mlb_schedule_history (runs nightly, backfills last 30 days)
+- [ ] TypeScript 0 errors + Vitest 458/458 after all changes
+
+## Recent Schedule + Situational Results Panels — MLB/NBA/NHL (2026-04-11)
+- [x] Add nba_schedule_history DB table (migration 0057) for AN DK NJ schedule/odds history
+- [x] Add nhl_schedule_history DB table (migration 0057) for AN DK NJ schedule/odds history
+- [x] Build nbaScheduleHistoryService.ts — AN DK NJ fetcher for NBA team schedule + odds + results
+- [x] Build nhlScheduleHistoryService.ts — AN DK NJ fetcher for NHL team schedule + odds + results
+- [x] Add getSituationalStats to mlbScheduleHistoryService.ts (ML/Spread/Total records)
+- [x] Build nbaSchedule tRPC router (getTeamSchedule, getLast5ForMatchup, getSituationalStats, refreshSchedule)
+- [x] Build nhlSchedule tRPC router (getTeamSchedule, getLast5ForMatchup, getSituationalStats, refreshSchedule)
+- [x] Build RecentSchedulePanel.tsx — unified MLB/NBA/NHL Last 5 games panel (team tab selector, W/L + ATS + O/U chips)
+- [x] Build SituationalResultsPanel.tsx — ML/Spread/Total tabs with side-by-side record bars for both teams
+- [x] Wire RecentSchedulePanel + SituationalResultsPanel into GameCard for MLB, NBA, NHL
+- [x] Build NbaTeamSchedule.tsx — full team schedule page (/nba/team/:slug)
+- [x] Build NhlTeamSchedule.tsx — full team schedule page (/nhl/team/:slug)
+- [x] Register /nba/team/:slug and /nhl/team/:slug routes in App.tsx
+- [x] Build nbaScheduleHistoryScheduler.ts — startup 7-day backfill + every 4h refresh
+- [x] Build nhlScheduleHistoryScheduler.ts — startup 7-day backfill + every 4h refresh
+- [x] Wire NBA + NHL schedulers into server/_core/index.ts
+- [x] TypeScript: 0 errors | Vitest: 458/458 passing
