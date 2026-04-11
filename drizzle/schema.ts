@@ -1491,6 +1491,27 @@ export const mlbScheduleHistory = mysqlTable("mlb_schedule_history", {
   dkAwayML: varchar("dkAwayML", { length: 16 }),
   /** DK NJ home team moneyline in American format, e.g. "-186" */
   dkHomeML: varchar("dkHomeML", { length: 16 }),
+  // ─── DK NJ Closing Odds (captured at first pitch / game start) ─────────────────
+  /** DK NJ closing away run line spread captured at game start, e.g. -1.5 */
+  dkClosingAwayRunLine: decimal("dkClosingAwayRunLine", { precision: 4, scale: 1 }),
+  /** DK NJ closing away run line juice in American format, e.g. "-144" */
+  dkClosingAwayRunLineOdds: varchar("dkClosingAwayRunLineOdds", { length: 16 }),
+  /** DK NJ closing home run line spread captured at game start, e.g. +1.5 */
+  dkClosingHomeRunLine: decimal("dkClosingHomeRunLine", { precision: 4, scale: 1 }),
+  /** DK NJ closing home run line juice in American format, e.g. "+119" */
+  dkClosingHomeRunLineOdds: varchar("dkClosingHomeRunLineOdds", { length: 16 }),
+  /** DK NJ closing game total captured at game start, e.g. 8.5 */
+  dkClosingTotal: decimal("dkClosingTotal", { precision: 5, scale: 1 }),
+  /** DK NJ closing over juice in American format, e.g. "-112" */
+  dkClosingOverOdds: varchar("dkClosingOverOdds", { length: 16 }),
+  /** DK NJ closing under juice in American format, e.g. "-108" */
+  dkClosingUnderOdds: varchar("dkClosingUnderOdds", { length: 16 }),
+  /** DK NJ closing away moneyline in American format, e.g. "+153" */
+  dkClosingAwayML: varchar("dkClosingAwayML", { length: 16 }),
+  /** DK NJ closing home moneyline in American format, e.g. "-186" */
+  dkClosingHomeML: varchar("dkClosingHomeML", { length: 16 }),
+  /** UTC ms timestamp when closing lines were locked (first pitch detected) */
+  closingLineLockedAt: bigint("closingLineLockedAt", { mode: "number" }),
   // ─── Derived Result Columns (populated after game is complete) ───────────────
   /** true = away team covered the run line; false = did not cover; null = game not final or no line */
   awayRunLineCovered: boolean("awayRunLineCovered"),

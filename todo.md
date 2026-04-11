@@ -2335,3 +2335,17 @@
 - [x] Build nhlScheduleHistoryScheduler.ts — startup 7-day backfill + every 4h refresh
 - [x] Wire NBA + NHL schedulers into server/_core/index.ts
 - [x] TypeScript: 0 errors | Vitest: 458/458 passing
+
+## MLB Closing Line Scraper + UI Fixes (2026-04-11)
+- [ ] Build MLB closing-line cron scraper — AN API fires at game start time, stores closing DK NJ lines to mlb_schedule_history
+- [ ] Fix Situational Results "undefined-undefined" bug in W-L record display
+- [ ] Wire Head-to-Head section from mlb_schedule_history DB (now fully populated)
+- [ ] Spell out full team city names in Recent Schedule tabs (e.g., "Pittsburgh" not "PITT")
+- [ ] Remove "DK NJ · RUN LINE · Total · ML" label from Recent Schedule section header
+
+## MLB UI Fixes + Closing Line Scraper (Apr 11 2026)
+- [x] Fix Situational Results "undefined-undefined" — server was returning {w,l} but frontend expected {wins,losses}
+- [ ] Wire Head-to-Head tab in RecentSchedulePanel using mlb_schedule_history DB data
+- [ ] Spell out full city names in RecentSchedulePanel team tabs (e.g. "Pittsburgh" not "PITT")
+- [ ] Remove "DK NJ · RUN LINE · Total · ML" label from Recent Schedule header
+- [ ] Build MLB closing-line cron scraper — AN API fires at game start time, stores closing DK NJ lines

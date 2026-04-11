@@ -384,20 +384,70 @@ function TeamScheduleTable({
   );
 }
 
-// ─── Head-to-Head Placeholder ─────────────────────────────────────────────────
+// ─── Head-to-Head Section ────────────────────────────────────────────────────
 
 function H2HSection({
-  awayAbbr,
-  homeAbbr,
+  games,
+  awaySlug,
+  homeSlug,
+  sport,
+  spreadLabel: spreadLbl,
+  isLoading,
+  error,
 }: {
-  awayAbbr: string;
-  homeAbbr: string;
+  games: ScheduleGame[];
+  awaySlug: string;
+  homeSlug: string;
+  sport: Sport;
+  spreadLabel: string;
+  isLoading: boolean;
+  error: unknown;
 }) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-6">
+        <RefreshCw className="w-4 h-4 text-blue-400 animate-spin mr-2" />
+        <span className="text-[10px] text-gray-500 font-mono">Loading H2H history...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-3 py-3">
+        <p className="text-[10px] text-red-400 font-mono">Failed to load H2H history.</p>
+      </div>
+    );
+  }
+
+  if (games.length === 0) {
+    return (
+      <div className="px-4 py-6 text-center">
+        <p className="text-[11px] text-gray-600 font-mono">
+          No head-to-head history found in the database.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="px-4 py-6 text-center">
-      <p className="text-[11px] text-gray-600 font-mono">
-        Head-to-head history between {awayAbbr} and {homeAbbr} coming soon.
-      </p>
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[360px]">
+        <thead>
+          <tr className="border-b border-white/[0.06]">
+            <th className="px-3 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">DATE</th>
+            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">MATCHUP</th>
+            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">RESULT</th>
+            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">ATS</th>
+            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">O/U</th>
+          </tr>
+        </thead>
+        <tbody>
+          {games.map((g) => (
+            <GameRow key={g.anGameId} game={g} teamSlug={awaySlug} sport={sport} />
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -422,19 +472,25 @@ export default function RecentSchedulePanel({
 
   const enabled = !!awaySlug && !!homeSlug;
 
-  // ── MLB query ────────────────────────────────────────────────────────────
+  // ── MLB query ────────────────────────────────────────────────────────────────────
   const mlbQuery = trpc.mlbSchedule.getLast5ForMatchup.useQuery(
     { awaySlug, homeSlug },
     { enabled: enabled && sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
   );
 
-  // ── NBA query ────────────────────────────────────────────────────────────
+  // ── MLB H2H query ───────────────────────────────────────────────────────────────
+  const mlbH2HQuery = trpc.mlbSchedule.getH2HGames.useQuery(
+    { slugA: awaySlug, slugB: homeSlug, limit: 10 },
+    { enabled: enabled && sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
+  );
+
+  // ── NBA query ────────────────────────────────────────────────────────────────────
   const nbaQuery = trpc.nbaSchedule.getLast5ForMatchup.useQuery(
     { awaySlug, homeSlug },
     { enabled: enabled && sport === "NBA", staleTime: 5 * 60 * 1000, retry: 1 }
   );
 
-  // ── NHL query ────────────────────────────────────────────────────────────
+  // ── NHL query ────────────────────────────────────────────────────────────────────
   const nhlQuery = trpc.nhlSchedule.getLast5ForMatchup.useQuery(
     { awaySlug, homeSlug },
     { enabled: enabled && sport === "NHL", staleTime: 5 * 60 * 1000, retry: 1 }
@@ -448,8 +504,15 @@ export default function RecentSchedulePanel({
   const awayLast5 = (activeQuery.data?.awayLast5 ?? []) as ScheduleGame[];
   const homeLast5 = (activeQuery.data?.homeLast5 ?? []) as ScheduleGame[];
 
+  // H2H games — MLB only for now (NBA/NHL H2H procedures to be added later)
+  const h2hGames = sport === "MLB"
+    ? ((mlbH2HQuery.data?.games ?? []) as ScheduleGame[])
+    : [];
+  const h2hLoading = sport === "MLB" ? mlbH2HQuery.isLoading : false;
+  const h2hError = sport === "MLB" ? mlbH2HQuery.error : null;
+
   const isLoading = activeQuery.isLoading;
-  const isFetching = activeQuery.isFetching;
+  const isFetching = activeQuery.isFetching || (sport === "MLB" && mlbH2HQuery.isFetching);
   const error = activeQuery.error;
 
   const sportRoutePrefix = sport === "MLB" ? "mlb" : sport === "NBA" ? "nba" : "nhl";
@@ -480,9 +543,7 @@ export default function RecentSchedulePanel({
           <span className="text-[10px] font-bold text-gray-400 font-mono tracking-widest uppercase">
             Recent Schedule
           </span>
-          <span className="text-[9px] text-gray-600 font-mono">
-            DK NJ · {sLabel} · Total · ML
-          </span>
+
         </div>
         <div className="flex items-center gap-2">
           {isFetching && <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />}
@@ -516,7 +577,7 @@ export default function RecentSchedulePanel({
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               )}
-              {awayAbbr}
+              {awayName}
             </button>
 
             {/* H2H tab */}
@@ -550,7 +611,7 @@ export default function RecentSchedulePanel({
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               )}
-              {homeAbbr}
+              {homeName}
             </button>
           </div>
 
@@ -587,7 +648,15 @@ export default function RecentSchedulePanel({
                 />
               )}
               {tab === "h2h" && (
-                <H2HSection awayAbbr={awayAbbr} homeAbbr={homeAbbr} />
+                <H2HSection
+                  games={h2hGames}
+                  awaySlug={awaySlug}
+                  homeSlug={homeSlug}
+                  sport={sport}
+                  spreadLabel={sLabel}
+                  isLoading={h2hLoading}
+                  error={h2hError}
+                />
               )}
               {tab === "home" && (
                 <TeamScheduleTable

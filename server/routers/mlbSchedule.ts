@@ -22,6 +22,7 @@ import {
   getLast5ForMatchup,
   getFullScheduleForTeam,
   getMlbSituationalStats,
+  getMlbH2HGames,
   refreshMlbScheduleForDate,
   refreshMlbScheduleLastNDays,
   backfillMlbScheduleHistory,
@@ -147,6 +148,39 @@ export const mlbScheduleRouter = router({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: `Failed to compute MLB situational stats: ${msg}`,
+        });
+      }
+    }),
+
+  /**
+   * Get the last N head-to-head games between two specific MLB teams.
+   * Powers the "Head-to-Head" tab in the Recent Schedule panel.
+   */
+  getH2HGames: publicProcedure
+    .input(
+      z.object({
+        slugA: zodAnSlug,
+        slugB: zodAnSlug,
+        limit: z.number().int().min(1).max(20).default(10),
+      })
+    )
+    .query(async ({ input }) => {
+      console.log(
+        `${TAG}[getH2HGames] Fetching H2H games: "${input.slugA}" vs "${input.slugB}" limit=${input.limit}`
+      );
+      try {
+        const games = await getMlbH2HGames(input.slugA, input.slugB, input.limit);
+        console.log(
+          `${TAG}[getH2HGames] Returning ${games.length} H2H games` +
+          ` between "${input.slugA}" and "${input.slugB}"`
+        );
+        return { games };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`${TAG}[getH2HGames] ERROR: ${msg}`);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Failed to fetch H2H games: ${msg}`,
         });
       }
     }),

@@ -407,6 +407,13 @@
       "when": 1775870525071,
       "tag": "0057_slimy_scream",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "5",
+      "when": 1775895165758,
+      "tag": "0058_amused_captain_universe",
+      "breakpoints": true
     }
   ]
 }

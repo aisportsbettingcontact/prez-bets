@@ -27,6 +27,7 @@
 import {
   refreshMlbScheduleForDate,
   refreshMlbScheduleLastNDays,
+  captureClosingLines,
 } from "./mlbScheduleHistoryService";
 
 const TAG = "[MlbScheduleScheduler]";
@@ -237,4 +238,44 @@ export function startMlbScheduleHistoryScheduler(): void {
       }
     }, INTERVAL_MS);
   }, msToFirst6am);
+
+  // ─── Closing Line Capture — every 5 minutes during game hours ─────────────
+  // Fires every 5 minutes from 10 AM to 2 AM EST (covers all MLB game windows).
+  // Locks closing lines the moment a game transitions to "inprogress" (first pitch).
+  // Idempotent — already-locked games are skipped instantly.
+  const CLOSING_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+  console.log(
+    `${TAG}[STEP] Closing line capture scheduled — every 5 min during 10AM–2AM EST`
+  );
+
+  setInterval(async () => {
+    const h = currentHourEst();
+    // Run from 10 AM to 2 AM EST (h >= 10 OR h < 2)
+    const inGameWindow = h >= 10 || h < 2;
+    if (!inGameWindow) {
+      // Silent skip — no log noise during off-hours
+      return;
+    }
+    console.log(
+      `${TAG}[MlbClosingLine][STEP] 5-min tick — EST hour=${h} — running captureClosingLines`
+    );
+    try {
+      const result = await captureClosingLines();
+      if (result.locked > 0) {
+        console.log(
+          `${TAG}[MlbClosingLine][OUTPUT] Locked ${result.locked} closing lines` +
+          ` | alreadyLocked=${result.alreadyLocked} noOdds=${result.noOdds} errors=${result.errors.length}`
+        );
+      }
+      if (result.errors.length > 0) {
+        console.warn(
+          `${TAG}[MlbClosingLine][WARN] ${result.errors.length} errors during capture:`,
+          result.errors.slice(0, 3)
+        );
+      }
+    } catch (err) {
+      console.error(`${TAG}[MlbClosingLine][ERROR] captureClosingLines threw:`, err);
+    }
+  }, CLOSING_INTERVAL_MS);
 }

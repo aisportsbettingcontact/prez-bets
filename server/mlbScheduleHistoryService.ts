@@ -57,7 +57,7 @@ import {
   type InsertMlbScheduleHistory,
   type MlbScheduleHistoryRow,
 } from "../drizzle/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, or, desc, sql } from "drizzle-orm";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -776,6 +776,56 @@ export async function getLast5ForMatchup(awaySlug: string, homeSlug: string) {
 }
 
 /**
+ * Fetch the last N head-to-head games between two specific teams.
+ * Returns games sorted newest-first where one team was away and the other was home.
+ *
+ * @param slugA - AN url_slug for team A (either away or home)
+ * @param slugB - AN url_slug for team B (either away or home)
+ * @param limit - Max number of H2H games to return (default: 10)
+ */
+export async function getMlbH2HGames(
+  slugA: string,
+  slugB: string,
+  limit = 10
+): Promise<MlbScheduleHistoryRow[]> {
+  console.log(
+    `${TAG}[H2H] Fetching H2H games: "${slugA}" vs "${slugB}" limit=${limit}`
+  );
+
+  const db = await getDb();
+
+  // Fetch all completed games involving either team (broad filter, then narrow in JS)
+  const rows = await db
+    .select()
+    .from(mlbScheduleHistory)
+    .where(
+      and(
+        eq(mlbScheduleHistory.gameStatus, "complete"),
+        or(
+          eq(mlbScheduleHistory.awaySlug, slugA),
+          eq(mlbScheduleHistory.homeSlug, slugA),
+          eq(mlbScheduleHistory.awaySlug, slugB),
+          eq(mlbScheduleHistory.homeSlug, slugB)
+        )
+      )
+    )
+    .orderBy(desc(mlbScheduleHistory.gameDate))
+    .limit(500);
+
+  // Narrow to games where BOTH teams are present
+  const h2h = (rows as MlbScheduleHistoryRow[]).filter((r) => {
+    const teams = new Set([r.awaySlug, r.homeSlug]);
+    return teams.has(slugA) && teams.has(slugB);
+  }).slice(0, limit);
+
+  console.log(
+    `${TAG}[H2H] Found ${h2h.length} H2H games between "${slugA}" and "${slugB}"`
+  );
+
+  return h2h;
+}
+
+/**
  * Compute situational records for an MLB team from their schedule history.
  * Used to power the Situational Results panel (Overall, Last 10, Home/Away, Fav/Dog).
  *
@@ -829,33 +879,33 @@ export async function getMlbSituationalStats(teamSlug: string, limit = 162) {
     games: MlbScheduleHistoryRow[],
     wonFn: (g: MlbScheduleHistoryRow) => boolean | null
   ) => {
-    let w = 0, l = 0;
+    let wins = 0, losses = 0;
     for (const g of games) {
       const won = wonFn(g);
-      if (won === true) w++;
-      else if (won === false) l++;
+      if (won === true) wins++;
+      else if (won === false) losses++;
     }
-    return { w, l };
+    return { wins, losses };
   };
 
   const computeAtsRecord = (games: MlbScheduleHistoryRow[]) => {
-    let w = 0, l = 0;
+    let wins = 0, losses = 0;
     for (const g of games) {
       const cov = teamCovered(g);
-      if (cov === true) w++;
-      else if (cov === false) l++;
+      if (cov === true) wins++;
+      else if (cov === false) losses++;
     }
-    return { w, l };
+    return { wins, losses };
   };
 
   const computeOuRecord = (games: MlbScheduleHistoryRow[]) => {
-    let over = 0, under = 0, push = 0;
+    let wins = 0, losses = 0, pushes = 0;
     for (const g of games) {
-      if (g.totalResult === "OVER") over++;
-      else if (g.totalResult === "UNDER") under++;
-      else if (g.totalResult === "PUSH") push++;
+      if (g.totalResult === "OVER") wins++;
+      else if (g.totalResult === "UNDER") losses++;
+      else if (g.totalResult === "PUSH") pushes++;
     }
-    return { over, under, push };
+    return { wins, losses, pushes };
   };
 
   const last10 = teamGames.slice(0, 10);
@@ -894,10 +944,189 @@ export async function getMlbSituationalStats(teamSlug: string, limit = 162) {
 
   console.log(
     `${TAG}[SITUATIONAL] team="${teamSlug}" analyzed=${teamGames.length} games` +
-    ` | ML overall=${stats.ml.overall.w}-${stats.ml.overall.l}` +
-    ` | ATS overall=${stats.spread.overall.w}-${stats.spread.overall.l}` +
-    ` | O/U overall=${stats.total.overall.over}-${stats.total.overall.under}`
+    ` | ML overall=${stats.ml.overall.wins}-${stats.ml.overall.losses}` +
+    ` | ATS overall=${stats.spread.overall.wins}-${stats.spread.overall.losses}` +
+    ` | O/U overall=${stats.total.overall.wins}-${stats.total.overall.losses}`
   );
 
   return stats;
+}
+
+// ─── Closing Line Capture ─────────────────────────────────────────────────────
+
+/**
+ * captureClosingLines
+ *
+ * Scans all scheduled/in-progress MLB games for today via the AN v1 API.
+ * For any game whose status has just transitioned to "inprogress" (first pitch)
+ * AND whose closing lines have NOT yet been locked (closingLineLockedAt IS NULL),
+ * this function writes the current DK NJ odds into the dkClosing* columns and
+ * stamps closingLineLockedAt with the current UTC ms timestamp.
+ *
+ * ─── Trigger cadence ────────────────────────────────────────────────────────
+ *   Called every 5 minutes from the MLB scheduler during game hours (10AM–2AM EST).
+ *   Only locks closing lines once per game (idempotent — skips already-locked rows).
+ *
+ * ─── Logging standard ───────────────────────────────────────────────────────
+ *   [MlbClosingLine][STEP] description
+ *   [MlbClosingLine][LOCK] game details + closing line values
+ *   [MlbClosingLine][SKIP] reason why a game was skipped
+ *   [MlbClosingLine][VERIFY] pass/fail + counts
+ */
+export async function captureClosingLines(): Promise<{
+  scanned: number;
+  locked: number;
+  alreadyLocked: number;
+  noOdds: number;
+  errors: string[];
+}> {
+  const CTAG = "[MlbClosingLine]";
+  const now = Date.now();
+
+  console.log(`${CTAG}[STEP] Starting closing line capture | utcMs=${now}`);
+
+  // ── Step 1: Fetch today's games from AN API ──────────────────────────────
+  const todayStr = formatAnDate(new Date());
+  const url = `${AN_V1_BASE}?period=game&bookIds=${DK_NJ_BOOK_ID}&date=${todayStr}`;
+
+  console.log(`${CTAG}[FETCH] Requesting AN v1 API | date=${todayStr} | URL: ${url}`);
+
+  let games: AnV1Game[] = [];
+  try {
+    const res = await axios.get<AnV1Response>(url, {
+      headers: AN_HEADERS,
+      timeout: 15_000,
+    });
+    games = res.data.games ?? [];
+    console.log(`${CTAG}[FETCH] AN v1 returned ${games.length} games for date=${todayStr}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${CTAG}[FETCH] AN v1 API request FAILED: ${msg}`);
+    return { scanned: 0, locked: 0, alreadyLocked: 0, noOdds: 0, errors: [msg] };
+  }
+
+  // ── Step 2: Filter to inprogress games only ──────────────────────────────
+  const inProgressGames = games.filter(
+    (g) => g.status === "inprogress" || g.real_status === "inprogress"
+  );
+
+  console.log(
+    `${CTAG}[STEP] ${inProgressGames.length} in-progress games found out of ${games.length} total`
+  );
+
+  const db = await getDb();
+  let locked = 0;
+  let alreadyLocked = 0;
+  let noOdds = 0;
+  const errors: string[] = [];
+
+  // ── Step 3: For each in-progress game, check if closing line is already locked ──
+  for (const game of inProgressGames) {
+    const gameLabel = `anId=${game.id} status=${game.status}`;
+
+    try {
+      // Fetch the existing DB row for this game
+      const rows = await db
+        .select({
+          id: mlbScheduleHistory.id,
+          anGameId: mlbScheduleHistory.anGameId,
+          awayAbbr: mlbScheduleHistory.awayAbbr,
+          homeAbbr: mlbScheduleHistory.homeAbbr,
+          closingLineLockedAt: mlbScheduleHistory.closingLineLockedAt,
+        })
+        .from(mlbScheduleHistory)
+        .where(eq(mlbScheduleHistory.anGameId, game.id))
+        .limit(1);
+
+      if (rows.length === 0) {
+        console.log(`${CTAG}[SKIP] ${gameLabel} — not found in DB (not yet ingested)`);
+        continue;
+      }
+
+      const row = rows[0];
+      const matchLabel = `${row.awayAbbr}@${row.homeAbbr} (anId=${game.id})`;
+
+      // ── Already locked — skip ────────────────────────────────────────────
+      if (row.closingLineLockedAt != null) {
+        console.log(
+          `${CTAG}[SKIP] ${matchLabel} — closing lines already locked at utcMs=${row.closingLineLockedAt}`
+        );
+        alreadyLocked++;
+        continue;
+      }
+
+      // ── Extract current DK NJ odds ───────────────────────────────────────
+      const oddsList = game.odds ?? [];
+      const dk = oddsList.find((o) => o.book_id === DK_NJ_BOOK_ID) ?? null;
+
+      if (!dk) {
+        console.log(`${CTAG}[SKIP] ${matchLabel} — no DK NJ odds entry in API response`);
+        noOdds++;
+        continue;
+      }
+
+      const closingAwayRL   = dk.spread_away ?? null;
+      const closingHomeRL   = dk.spread_home ?? null;
+      const closingAwayRLOdds = dk.spread_away_line ?? null;
+      const closingHomeRLOdds = dk.spread_home_line ?? null;
+      const closingAwayML   = dk.ml_away ?? null;
+      const closingHomeML   = dk.ml_home ?? null;
+      const closingTotal    = dk.total ?? null;
+      const closingOverOdds = dk.over ?? null;
+      const closingUnderOdds = dk.under ?? null;
+
+      const hasFullClosing = closingAwayRL != null && closingAwayML != null && closingTotal != null;
+
+      console.log(
+        `${CTAG}[LOCK] ${matchLabel}` +
+        ` | RL=${fmtLine(closingAwayRL) ?? "—"}(${fmtOdds(closingAwayRLOdds) ?? "—"})` +
+        ` ML=${fmtOdds(closingAwayML) ?? "—"}/${fmtOdds(closingHomeML) ?? "—"}` +
+        ` TOT=${closingTotal ?? "—"}(O:${fmtOdds(closingOverOdds) ?? "—"} U:${fmtOdds(closingUnderOdds) ?? "—"})` +
+        ` | fullOdds=${hasFullClosing}`
+      );
+
+      // ── Write closing lines to DB ────────────────────────────────────────
+      await db
+        .update(mlbScheduleHistory)
+        .set({
+          dkClosingAwayRunLine:     fmtLine(closingAwayRL),
+          dkClosingHomeRunLine:     fmtLine(closingHomeRL),
+          dkClosingAwayRunLineOdds: fmtOdds(closingAwayRLOdds),
+          dkClosingHomeRunLineOdds: fmtOdds(closingHomeRLOdds),
+          dkClosingAwayML:          fmtOdds(closingAwayML),
+          dkClosingHomeML:          fmtOdds(closingHomeML),
+          dkClosingTotal:           closingTotal != null ? String(closingTotal) : null,
+          dkClosingOverOdds:        fmtOdds(closingOverOdds),
+          dkClosingUnderOdds:       fmtOdds(closingUnderOdds),
+          closingLineLockedAt:      now,
+          lastRefreshedAt:          now,
+        })
+        .where(eq(mlbScheduleHistory.anGameId, game.id));
+
+      console.log(
+        `${CTAG}[LOCK] ${matchLabel} — closing lines LOCKED at utcMs=${now}`
+      );
+      locked++;
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`${CTAG}[ERROR] ${gameLabel} — ${msg}`);
+      errors.push(`anId=${game.id}: ${msg}`);
+    }
+  }
+
+  // ── Step 4: Final verification log ──────────────────────────────────────
+  console.log(
+    `${CTAG}[VERIFY] ${locked > 0 ? "✅ PASS" : "ℹ️  INFO"} — ` +
+    `scanned=${inProgressGames.length} locked=${locked} alreadyLocked=${alreadyLocked} ` +
+    `noOdds=${noOdds} errors=${errors.length}`
+  );
+
+  return {
+    scanned: inProgressGames.length,
+    locked,
+    alreadyLocked,
+    noOdds,
+    errors,
+  };
 }
