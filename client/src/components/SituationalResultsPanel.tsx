@@ -77,6 +77,8 @@ export interface SituationalResultsPanelProps {
   borderColor?: string;
   /** When true, the panel starts collapsed. Defaults to false (expanded). */
   defaultCollapsed?: boolean;
+  /** IntersectionObserver gate — only fetch data when card is in viewport */
+  enabled?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -204,6 +206,7 @@ function StatsSection({
   awayLogoUrl,
   homeLogoUrl,
   tab,
+  enabled = true,
 }: {
   sport: Sport;
   awaySlug: string;
@@ -213,25 +216,26 @@ function StatsSection({
   awayLogoUrl?: string;
   homeLogoUrl?: string;
   tab: SitTab;
+  enabled?: boolean;
 }) {
   // ── MLB query ────────────────────────────────────────────────────────────
   const mlbAwayQuery = trpc.mlbSchedule.getSituationalStats.useQuery(
     { teamSlug: awaySlug },
-    { enabled: sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
+    { enabled: (enabled ?? true) && sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
   );
   const mlbHomeQuery = trpc.mlbSchedule.getSituationalStats.useQuery(
     { teamSlug: homeSlug },
-    { enabled: sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
+    { enabled: (enabled ?? true) && sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
   );
 
   // ── NBA query ────────────────────────────────────────────────────────────
   const nbaAwayQuery = trpc.nbaSchedule.getSituationalStats.useQuery(
     { teamSlug: awaySlug },
-    { enabled: sport === "NBA", staleTime: 5 * 60 * 1000, retry: 1 }
+    { enabled: (enabled ?? true) && sport === "NBA", staleTime: 5 * 60 * 1000, retry: 1 }
   );
   const nbaHomeQuery = trpc.nbaSchedule.getSituationalStats.useQuery(
     { teamSlug: homeSlug },
-    { enabled: sport === "NBA", staleTime: 5 * 60 * 1000, retry: 1 }
+    { enabled: (enabled ?? true) && sport === "NBA", staleTime: 5 * 60 * 1000, retry: 1 }
   );
 
   // ── NHL query ────────────────────────────────────────────────────────────
@@ -387,6 +391,7 @@ export default function SituationalResultsPanel({
   homeLogoUrl,
   borderColor = "hsl(var(--border))",
   defaultCollapsed = false,
+  enabled = true,
 }: SituationalResultsPanelProps) {
   const [tab, setTab] = useState<SitTab>("ml");
   const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
@@ -459,6 +464,7 @@ export default function SituationalResultsPanel({
             awayLogoUrl={awayLogoUrl}
             homeLogoUrl={homeLogoUrl}
             tab={tab}
+            enabled={enabled}
           />
         </div>
       )}

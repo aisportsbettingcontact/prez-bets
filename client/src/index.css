@@ -4,6 +4,13 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* ── Custom breakpoints (Tailwind 4 --breakpoint-* syntax) ──────────────── */
+  --breakpoint-xs: 375px;   /* iPhone 14/15 Pro baseline */
+  --breakpoint-sm: 640px;   /* large phone / small tablet */
+  --breakpoint-md: 768px;   /* iPad Mini / small tablet — NEW tier */
+  --breakpoint-lg: 1024px;  /* iPad landscape / small desktop */
+  --breakpoint-xl: 1280px;  /* laptop */
+  --breakpoint-2xl: 1600px; /* Wide desktop — NEW tier */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -215,3 +222,8 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: oklch(0.28 0.01 250); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: oklch(0.38 0.01 250); }
+
+/* ── Fix #9: MLB sub-tab scroll-snap ─────────────────────────────────────── */
+.feed-tabs-scroll::-webkit-scrollbar { display: none; }
+.feed-tabs-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+.feed-tab { scroll-snap-align: start; flex-shrink: 0; }

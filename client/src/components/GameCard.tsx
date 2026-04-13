@@ -28,6 +28,8 @@ import type { AppRouter } from "@/lib/trpc";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 import { NHL_BY_DB_SLUG } from "@shared/nhlTeams";
 import { MLB_BY_ABBREV } from "@shared/mlbTeams";
+import { getGameTeamColorsClient } from "@shared/teamColors";
+import { useVisibility } from "@/hooks/useVisibility";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
@@ -757,12 +759,9 @@ function DesktopMergedPanel({
   onToggleModel,
   game,
 }: DesktopMergedPanelProps) {
-  // ── Team colors for split bars ────────────────────────────────────────────
+  // ── Team colors for split bars (Fix #5: client-side registry, zero round-trips) ──
   const sport = (game.sport ?? 'NBA') as 'MLB' | 'NBA' | 'NHL';
-  const { data: colors } = trpc.teamColors.getForGame.useQuery(
-    { awayTeam: game.awayTeam, homeTeam: game.homeTeam, sport },
-    { staleTime: 1000 * 60 * 60 }
-  );
+  const colors = getGameTeamColorsClient(game.awayTeam, game.homeTeam, sport);
 
   const FALLBACK_AWAY = '#1a4a8a';
   const FALLBACK_HOME = '#c84b0c';
@@ -861,6 +860,7 @@ function DesktopMergedPanel({
   const displayHomeML     = game.homeML ?? '—';
 
   // For NHL/MLB games, append model odds in parentheses
+
   const isNhlGame   = game.sport === 'NHL';
   const isMlbGame   = game.sport === 'MLB';
   const mdlAwayPLOdds = game.modelAwayPLOdds ?? null;
@@ -1978,6 +1978,9 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   }, [isAppAuthed, onToggleFavorite, game.id, toggleFavMutation, isFavorited, onFavoriteNotify]);
   const awayBookSpread = toNum(game.awayBookSpread);
   const homeBookSpread = toNum(game.homeBookSpread);
+  // IntersectionObserver-gated visibility — secondary panels only fetch when card is in viewport
+  const [cardRef, isCardVisible] = useVisibility({ rootMargin: "200px" });
+
   const isNhlGame   = game.sport === 'NHL';
   const isMlbGame   = game.sport === 'MLB';
   // For NHL: use modelAwayPuckLine/modelHomePuckLine (simulation-derived, e.g. "+1.5"/"-1.5")
@@ -2231,6 +2234,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             style={{
               background: "none", border: "none", cursor: "pointer",
               padding: "2px 3px", lineHeight: 1, flexShrink: 0,
+              minWidth: 44, minHeight: 44,
               display: "flex", alignItems: "center", justifyContent: "center",
               color: isFavorited ? "#FFD700" : "rgba(255,255,255,0.65)",
               opacity: 1,
@@ -2349,6 +2353,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               padding: isDesktop ? "3px 4px" : "3px 4px",
               lineHeight: 1,
               flexShrink: 0,
+              minWidth: 44, minHeight: 44,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -2596,6 +2601,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full relative"
+        ref={cardRef}
         style={{
           background: "hsl(var(--card))",
           borderTop: "1px solid hsl(var(--border))",
@@ -2724,6 +2730,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
               <div className="px-3 py-2">
                 <BettingSplitsPanel
                   gameId={game.id}
+            enabled={isCardVisible}
                   game={game}
                   awayLabel={awayName}
                   homeLabel={homeName}
@@ -2764,8 +2771,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {mode === "projections" && (
             <div className="flex flex-col w-full">
               {/* Grid row: fixed score column | scrollable odds column */}
-              {/* Score panel: 160px — wide enough for team name+score, narrow enough to give Odds/Lines full space */}
-              <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", width: "100%" }}>
+              {/* Score panel: clamp(140px,38%,180px) — Fix #7: responsive frozen panel */}
+              <div style={{ display: "grid", gridTemplateColumns: "clamp(140px, 38%, 180px) 1fr", width: "100%" }}>
                 {/* Fixed score panel — NOT inside scroll container */}
                 <div
                   style={{
@@ -3754,6 +3761,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
         >
           <OddsHistoryPanel
             gameId={game.id}
+            enabled={isCardVisible}
             awayTeam={game.awayTeam}
             homeTeam={game.homeTeam}
             activeMarket={activeMarket}
@@ -3771,6 +3779,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
         <>
           <RecentSchedulePanel
             sport="MLB"
+            enabled={isCardVisible}
             awaySlug={awayMlb.anSlug}
             homeSlug={homeMlb.anSlug}
             awayAbbr={awayAbbr}
@@ -3784,6 +3793,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           />
           <SituationalResultsPanel
             sport="MLB"
+            enabled={isCardVisible}
             awaySlug={awayMlb.anSlug}
             homeSlug={homeMlb.anSlug}
             awayAbbr={awayAbbr}

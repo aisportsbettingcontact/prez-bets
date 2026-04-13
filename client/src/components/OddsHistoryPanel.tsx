@@ -60,6 +60,8 @@ interface OddsHistoryPanelProps {
   homeTeam: string;
   /** Mirrors the SPREAD/TOTAL/MONEYLINE toggle from BettingSplitsPanel */
   activeMarket: ActiveMarket;
+  /** IntersectionObserver gate — only fetch data when card is in viewport */
+  enabled?: boolean;
 }
 
 // ── Logging ────────────────────────────────────────────────────────────────────
@@ -347,13 +349,14 @@ export function OddsHistoryPanel({
   awayTeam,
   homeTeam,
   activeMarket,
+  enabled = true,
 }: OddsHistoryPanelProps) {
   const [open, setOpen] = useState(false);
 
   // ── Data fetch (lazy — only when panel is expanded) ────────────────────────
   const { data, isLoading, error } = trpc.oddsHistory.listForGame.useQuery(
     { gameId },
-    { enabled: open, staleTime: 30_000 }
+    { enabled: (enabled ?? true) && open, staleTime: 30_000 }
   );
 
   // ── Team colors + logos (try MLB → NHL → NBA) ──────────────────────────────

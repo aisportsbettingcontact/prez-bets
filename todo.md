@@ -2390,3 +2390,48 @@
 - [ ] Fix: ensure Open odds are written even when DK fields are all null (not just when DK is present)
 - [ ] Fix: atomic switch must write Open line to ALL DB columns when DK is absent
 - [ ] Force re-seed all 4 missing MLB games and verify completeness
+
+## Cross-Device Audit UI/UX Improvements (Apr 13 2026)
+- [ ] Add xs (375px), md (768px), 2xl (1600px) Tailwind breakpoints to index.css @theme
+- [ ] Decompose GameCard.tsx: extract useEdgeCalculation.ts hook
+- [ ] Decompose GameCard.tsx: extract OddsCell as standalone component
+- [ ] Add md: tablet breakpoint 2-col Score|OddsTable layout in GameCard (Fix #1)
+- [ ] Virtualize game feed with react-window VariableSizeList + AutoSizer (Fix #2)
+- [ ] Cap desktop feed at max-w-[1600px] mx-auto with CSS Grid column alignment (Fix #3)
+- [ ] Lazy-load BettingSplitsPanel, OddsHistoryPanel, RecentSchedulePanel, SituationalResultsPanel (Fix #4)
+- [ ] Eliminate trpc.teamColors.getForGame calls — use client-side registry lookup (Fix #5)
+- [ ] Replace useAutoFontSize Canvas measureText with CSS container queries cqw (Fix #6)
+- [ ] Fix mobile frozen panel from 160px to clamp(140px, 38%, 180px) (Fix #7)
+- [ ] Increase all touch targets to minimum 44x44px (Fix #8)
+- [ ] Add overflow-x:auto + scroll-snap to MLB 6-tab sub-tab row (Fix #9)
+- [ ] Add font preload + font-display:optional for Barlow Condensed 700 woff2 (Perf #1)
+- [ ] Add Vite manualChunks for MLB panels and admin pages (Perf #2)
+- [ ] Debounce useViewportScale ResizeObserver at 100ms (Perf #3)
+- [ ] Add Cache-Control + ETag headers to games.list tRPC response (Perf #4)
+- [ ] Move selectedSport/feedMobileTab/selectedDate/selectedStatuses to URL query params (Arch #1)
+- [ ] Add IntersectionObserver-gated data fetching for below-fold secondary panels (Arch #2)
+
+## Cross-Device Audit UI/UX Improvements (Apr 13, 2026)
+
+### Fix Prescriptions
+- [x] Fix #1: Add md: tablet breakpoint at 768px (xs/md/2xl added to @theme in index.css)
+- [x] Fix #2: Virtualize game feed with react-window VariableSizeList + AutoSizer
+- [x] Fix #3: Cap desktop feed at max-w-[1600px] mx-auto with CSS Grid
+- [x] Fix #4: Lazy-load BettingSplitsPanel, OddsHistoryPanel, RecentSchedulePanel, SituationalResultsPanel
+- [x] Fix #5: Eliminate trpc.teamColors.getForGame calls — replaced with client-side getGameTeamColorsClient
+- [x] Fix #6: Replace useAutoFontSize Canvas measureText with CSS container queries (cqw units)
+- [x] Fix #7: Fix mobile frozen panel from hardcoded 160px to clamp(140px, 38%, 180px)
+- [x] Fix #8: Increase all touch targets (star, sport pills, tab buttons, calendar) to 44x44px minimum
+- [x] Fix #9: Add overflow-x:auto + scroll-snap to MLB 6-tab sub-tab row
+
+### Performance
+- [x] Add font preload for Barlow Condensed 700-weight woff2 + font-display:optional in index.html
+- [x] Add manualChunks to vite.config.ts splitting MLB panels and admin pages
+- [x] Debounce useViewportScale ResizeObserver at 100ms (already implemented via rAF throttle)
+- [x] Add Cache-Control + ETag headers to games.list tRPC response
+
+### Architecture
+- [x] Add xs, md, 2xl Tailwind breakpoints (375px, 768px, 1600px) to @theme in index.css
+- [x] Extract useEdgeCalculation.ts hook from GameCard.tsx
+- [x] Move selectedSport, feedMobileTab, selectedDate, selectedStatuses to URL query params via useSearch()
+- [x] Add IntersectionObserver-gated data fetching for below-fold secondary panels (useVisibility hook)

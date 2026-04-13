@@ -90,6 +90,8 @@ export interface RecentSchedulePanelProps {
   borderColor?: string;
   /** When true, the panel starts collapsed. Defaults to false (expanded). */
   defaultCollapsed?: boolean;
+  /** IntersectionObserver gate — only fetch data when card is in viewport */
+  enabled?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -611,37 +613,38 @@ export default function RecentSchedulePanel({
   homeLogoUrl,
   borderColor = "hsl(var(--border))",
   defaultCollapsed = false,
+  enabled = true,
 }: RecentSchedulePanelProps) {
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<TabView>("away");
   // defaultCollapsed=true → starts collapsed; false → starts expanded (legacy default)
   const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
 
-  const enabled = !!awaySlug && !!homeSlug;
+  const isDataEnabled = (enabled ?? true) && !!awaySlug && !!homeSlug;
 
   // ── MLB query ────────────────────────────────────────────────────────────────────
   const mlbQuery = trpc.mlbSchedule.getLast5ForMatchup.useQuery(
     { awaySlug, homeSlug },
-    { enabled: enabled && sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
+    { enabled: isDataEnabled && sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
   );
 
   // ── MLB H2H query ───────────────────────────────────────────────────────────────
   // H2H: last 5 games between these two teams (2023+ lookback floor)
   const mlbH2HQuery = trpc.mlbSchedule.getH2HGames.useQuery(
     { slugA: awaySlug, slugB: homeSlug, limit: 5 },
-    { enabled: enabled && sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
+    { enabled: isDataEnabled && sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
   );
 
   // ── NBA query ────────────────────────────────────────────────────────────────────
   const nbaQuery = trpc.nbaSchedule.getLast5ForMatchup.useQuery(
     { awaySlug, homeSlug },
-    { enabled: enabled && sport === "NBA", staleTime: 5 * 60 * 1000, retry: 1 }
+    { enabled: isDataEnabled && sport === "NBA", staleTime: 5 * 60 * 1000, retry: 1 }
   );
 
   // ── NHL query ────────────────────────────────────────────────────────────────────
   const nhlQuery = trpc.nhlSchedule.getLast5ForMatchup.useQuery(
     { awaySlug, homeSlug },
-    { enabled: enabled && sport === "NHL", staleTime: 5 * 60 * 1000, retry: 1 }
+    { enabled: isDataEnabled && sport === "NHL", staleTime: 5 * 60 * 1000, retry: 1 }
   );
 
   const activeQuery =

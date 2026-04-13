@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
+import { useUrlState, type Sport } from "@/hooks/useUrlState";
 import { User, LogOut, BarChart3, Loader2, Crown, Send, Search, X, Clock, Star, Link2, FlaskConical, ShieldAlert } from "lucide-react";
 import { CalendarPicker, todayUTC } from "@/components/CalendarPicker";
 import { AnimatePresence, motion } from "framer-motion";
@@ -270,7 +271,15 @@ export default function ModelProjections() {
   const [, setLocation] = useLocation();
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [selectedSport, setSelectedSport] = useState<"MLB" | "NBA" | "NHL">("MLB");
+  // Architecture: URL query params for feed state (sport, date, tab, statuses)
+  // Enables browser back/forward and bookmarkable URLs
+  const {
+    selectedSport, setSelectedSport,
+    selectedDate, setSelectedDate,
+    feedMobileTab: urlFeedMobileTab, setFeedMobileTab: setUrlFeedMobileTab,
+    selectedStatuses, setSelectedStatuses,
+    resetFilters: resetUrlFilters,
+  } = useUrlState();
 
   // Query which sports have games today or tomorrow (UTC) — hides pills with no games
   const { data: activeSports } = trpc.games.activeSports.useQuery(undefined, {
@@ -288,8 +297,6 @@ export default function ModelProjections() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSports]);
-  const [selectedStatuses, setSelectedStatuses] = useState<Set<"upcoming" | "live" | "final">>(new Set());
-  const [selectedDate, setSelectedDate] = useState<string>(() => todayUTC());
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -305,19 +312,10 @@ export default function ModelProjections() {
   // Tabs: MODEL PROJECTIONS (dual) | BETTING SPLITS (splits) | LINEUPS (lineups, MLB only)
   //       K PROPS (props, MLB only) | F5/NRFI (f5nrfi, MLB only) | HR PROPS (hrprops, MLB only)
   type FeedMobileTab = 'dual' | 'splits' | 'lineups' | 'props' | 'f5nrfi' | 'hrprops';
-  const FEED_TAB_KEY = 'prez_bets_mobile_tab_v4';
-  const getPersistedFeedTab = (): FeedMobileTab => {
-    try {
-      const stored = localStorage.getItem(FEED_TAB_KEY);
-      const valid: FeedMobileTab[] = ['dual', 'splits', 'lineups', 'props', 'f5nrfi', 'hrprops'];
-      if (valid.includes(stored as FeedMobileTab)) return stored as FeedMobileTab;
-    } catch { /* ignore */ }
-    return 'dual';
-  };
-  const [feedMobileTab, setFeedMobileTab] = useState<FeedMobileTab>(getPersistedFeedTab);
+  // feedMobileTab now comes from URL params (via useUrlState), with localStorage fallback
+  const feedMobileTab = urlFeedMobileTab;
   const handleFeedTabChange = (next: FeedMobileTab) => {
-    setFeedMobileTab(next);
-    try { localStorage.setItem(FEED_TAB_KEY, next); } catch { /* ignore */ }
+    setUrlFeedMobileTab(next);
   };
   const feedIsDual = feedMobileTab === 'dual';
   // Tabs: MODEL PROJECTIONS | BETTING SPLITS | LINEUPS (MLB only) | K PROPS (MLB only) | F5/NRFI (MLB only) | HR PROPS (MLB only)
@@ -461,8 +459,8 @@ export default function ModelProjections() {
   }, []);
 
   useEffect(() => {
-    setSelectedStatuses(new Set());
-    setSelectedDate(todayUTC());
+    resetUrlFilters();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSport]);
 
   const { data: allGames, isLoading: gamesLoading } = trpc.games.list.useQuery(
@@ -550,12 +548,10 @@ export default function ModelProjections() {
   }, [mlbHrPropsRaw]);
 
   const toggleStatus = (status: "upcoming" | "live" | "final") => {
-    setSelectedStatuses(prev => {
-      const next = new Set(prev);
-      if (next.has(status)) next.delete(status); else next.add(status);
-      if (next.size === 3) return new Set();
-      return next;
-    });
+    const next = new Set(selectedStatuses);
+    if (next.has(status)) next.delete(status); else next.add(status);
+    if (next.size === 3) setSelectedStatuses(new Set());
+    else setSelectedStatuses(next);
   };
 
   // All unique dates available for the current sport (sorted ascending)
@@ -959,7 +955,7 @@ export default function ModelProjections() {
 
           {/* MLB pill — only shown when MLB has games today or tomorrow */}
           {(!activeSports || activeSports.MLB) && (
-            <button onClick={() => setSelectedSport("MLB")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+            <button onClick={() => setSelectedSport("MLB")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 min-h-[44px] rounded-full font-bold tracking-wide transition-all flex-shrink-0"
               style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "MLB" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
               <img src="https://www.mlbstatic.com/team-logos/league-on-dark/1.svg" alt="MLB" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "MLB" ? 1 : 0.5, flexShrink: 0 }} />
               MLB
@@ -968,7 +964,7 @@ export default function ModelProjections() {
 
           {/* NHL pill — only shown when NHL has games today or tomorrow */}
           {(!activeSports || activeSports.NHL) && (
-            <button onClick={() => setSelectedSport("NHL")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+            <button onClick={() => setSelectedSport("NHL")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 min-h-[44px] rounded-full font-bold tracking-wide transition-all flex-shrink-0"
               style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NHL" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
               <img src="https://media.d3.nhle.com/image/private/t_q-best/prd/assets/nhl/logos/nhl_shield_wm_on_dark_fqkbph" alt="NHL" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NHL" ? 1 : 0.5, flexShrink: 0 }} />
               NHL
@@ -977,7 +973,7 @@ export default function ModelProjections() {
 
           {/* NBA pill — only shown when NBA has games today or tomorrow */}
           {(!activeSports || activeSports.NBA) && (
-            <button onClick={() => setSelectedSport("NBA")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 rounded-full font-bold tracking-wide transition-all flex-shrink-0"
+            <button onClick={() => setSelectedSport("NBA")} className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 min-h-[44px] rounded-full font-bold tracking-wide transition-all flex-shrink-0"
               style={{ fontSize: 'clamp(10px, 2.5vw, var(--fs-nav, 11px))', ...(selectedSport === "NBA" ? { background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.6)" } : { background: "hsl(var(--card))", color: "rgba(255,255,255,0.45)", border: "1px solid hsl(var(--border))" }) }}>
               <img src={CDN_NBA} alt="NBA" width={10} height={10} style={{ objectFit: "contain", opacity: selectedSport === "NBA" ? 1 : 0.5, flexShrink: 0 }} />
               NBA
@@ -1082,9 +1078,13 @@ export default function ModelProjections() {
         )}
 
         {/* Row 5: Feed-wide mobile tab filter — MODEL PROJECTIONS | BETTING SPLITS | LINEUPS (MLB) */}
-        {/* Tab bar: mobile always shown; desktop shown when MLB is selected (for LINEUPS tab) */}
-        <div className="grid" style={{
-            gridTemplateColumns: `repeat(${FEED_TABS.length}, 1fr)`,
+        {/* Tab bar: Fix #9 — flex + overflow-x:auto + scroll-snap for 6-tab MLB row */}
+        <div className="feed-tabs-scroll" style={{
+            display: 'flex',
+            overflowX: 'auto',
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
             borderBottom: '2px solid hsl(var(--border) / 0.5)',
             background: 'hsl(var(--card))',
           }}>
@@ -1097,8 +1097,12 @@ export default function ModelProjections() {
                 <button
                   key={tab.id}
                   onClick={handleClick}
+                  className="feed-tab"
                   style={{
-                    padding: '7px 2px',
+                    flex: '0 0 auto',
+                    scrollSnapAlign: 'start',
+                    padding: '7px 12px',
+                    minHeight: 44,
                     fontSize: '13px',
                     fontWeight: isActive ? 800 : 500,
                     letterSpacing: '0.06em',
@@ -1111,6 +1115,7 @@ export default function ModelProjections() {
                     transition: 'color 0.15s, border-color 0.15s',
                     textTransform: 'uppercase',
                     lineHeight: 1.2,
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   {tab.label}

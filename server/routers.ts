@@ -53,6 +53,7 @@ import { parseAnAllMarketsHtml, type AnSport } from "./anHtmlParser";
 import { NBA_VALID_DB_SLUGS, NBA_TEAMS } from "@shared/nbaTeams";
 import { NHL_VALID_DB_SLUGS, NHL_TEAMS } from "@shared/nhlTeams";
 import { MLB_BY_ABBREV, MLB_VALID_DB_SLUGS, MLB_VALID_ABBREVS } from "@shared/mlbTeams";
+import { createHash } from 'node:crypto';
 
 /** Returns true if both teams are in the appropriate registry for the given sport */
 function isValidGame(awayTeam: string, homeTeam: string, sport?: string | null): boolean {
@@ -214,13 +215,29 @@ export const appRouter = router({
           })
           .optional()
       )
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         const games = await listGames(input ?? {});
         // Filter by the appropriate registry based on sport
         let filtered = games.filter(g => isValidGame(g.awayTeam, g.homeTeam, g.sport));
         // Filter by game status if provided
         if (input?.gameStatus) {
           filtered = filtered.filter(g => g.gameStatus === input.gameStatus);
+        }
+        // Performance: Cache-Control + ETag for public feed (eliminates redundant DB queries)
+        try {
+          const etag = createHash('md5')
+            .update(JSON.stringify(filtered.map(g => ({ id: g.id, modelRunAt: g.modelRunAt, gameStatus: g.gameStatus }))))
+            .digest('hex')
+            .slice(0, 16);
+          ctx.res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+          ctx.res.setHeader('ETag', `"${etag}"`);
+          const ifNoneMatch = ctx.req.headers['if-none-match'];
+          if (ifNoneMatch === `"${etag}"`) {
+            ctx.res.status(304).end();
+            return [] as typeof filtered;
+          }
+        } catch {
+          // Non-fatal: header setting can fail in some edge cases
         }
         return filtered;
       }),
