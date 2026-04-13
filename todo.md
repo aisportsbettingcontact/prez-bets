@@ -2384,3 +2384,9 @@
 - [x] Backend: completeness gate uses correct field set (runLine/puckLine + total + ML)
 - [x] Frontend: OddsHistoryPanel SOURCE — DK logo image for dk, OPEN text for open, NO PARTIAL badge
 - [x] Frontend: SOURCE column only for MLB/NHL; F5/NRFI/K-Props/HR Props have no source column
+
+## Missing Opening Line Write Fix (Apr 11 v3)
+- [ ] Audit: trace AN API response for PIT@CHC, HOU@SEA, MIN@TOR, CWS@KC — confirm Open fields returned
+- [ ] Fix: ensure Open odds are written even when DK fields are all null (not just when DK is present)
+- [ ] Fix: atomic switch must write Open line to ALL DB columns when DK is absent
+- [ ] Force re-seed all 4 missing MLB games and verify completeness
