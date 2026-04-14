@@ -2472,4 +2472,9 @@
 ## Tab Font Scaling + Smooth Scroll + Apr 12 Model Cycle (Apr 14, 2026 — Session 4)
 - [x] Feed tab bar label md: font scaling — index.css @media 768px font-size: 15px + padding: 10px 20px (math: 6 tabs=640px ≤ 768px)
 - [x] Active tab scroll-into-view smooth behavior — behavior: 'smooth' added to scrollIntoView call
-- [x] Apr 12 MLB model cycle — NO-OP: games purged at 6AM EST Apr 13 per purge schedule; opening lines+publish were correctly set before purge
+- [x] Apr 12 MLB model cycle — CORRECTED: games were NOT purged (false alarm from Drizzle ORM bug); model ran successfully, 15/15 MODEL_OK
+
+## MLB Purge Bug — Full Audit + Fix (Apr 14, 2026 — Session 5)
+- [x] Audit all game delete/purge code paths — cron jobs, tRPC, direct DB calls (RESULT: no purge occurred; dailyPurge.ts is a no-op since 2026-03-25; only 3 delete paths exist: deleteModelFile, deleteGamesByFileId, deleteGameById — all owner-triggered, none automatic)
+- [x] Trace exact purge execution — ROOT CAUSE: check_apr12_model.ts had 2 bugs: (1) gte/lte on string gameDate column returns 0 rows due to Drizzle ORM type coercion; (2) sport='mlb' (lowercase) doesn’t match DB value 'MLB' (uppercase). All 15 Apr 12 games are intact in DB (2,430 total MLB rows: 2026-03-25 → 2026-09-27)
+- [x] Fix: corrected check_apr12_model.ts to use eq() + uppercase 'MLB'; ran MLB model for Apr 12 → 15/15 MODEL_OK (PIT@CHC + HOU@SEA now have full projections); 0 TypeScript errors; 458/458 tests pass

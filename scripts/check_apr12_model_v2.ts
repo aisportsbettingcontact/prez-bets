@@ -1,13 +1,7 @@
 /**
- * check_apr12_model.ts
- * Checks current model projection state for Apr 12 MLB games.
- *
- * BUG FIX (2026-04-14): Original used gte+lte on string gameDate column which
- * returned 0 rows due to Drizzle ORM type coercion on string date columns.
- * Fixed to use eq() for exact string match. Also fixed sport value to "MLB"
- * (uppercase, matching the DB schema enum value).
- *
- * Run: npx tsx scripts/check_apr12_model.ts
+ * check_apr12_model_v2.ts
+ * Checks model projection state for Apr 12 MLB games using exact string match.
+ * Run: npx tsx scripts/check_apr12_model_v2.ts
  */
 import { getDb } from "../server/db";
 import { games } from "../drizzle/schema";
@@ -17,9 +11,7 @@ async function main() {
   const db = await getDb();
   if (!db) { console.error("[ERROR] DB not available"); process.exit(1); }
 
-  // CRITICAL: Use eq() for exact string date match — gte/lte on string columns
-  // causes Drizzle ORM type coercion issues and returns 0 rows incorrectly.
-  // Also: sport is stored as uppercase "MLB" in the DB, not "mlb".
+  // Use exact string equality — no gte/lte to avoid any type coercion issues
   const rows = await db.select({
     id: games.id,
     awayTeam: games.awayTeam,
@@ -40,22 +32,26 @@ async function main() {
   }).from(games).where(
     and(
       eq(games.gameDate, "2026-04-12"),
-      eq(games.sport, "MLB")   // uppercase — DB stores "MLB", not "mlb"
+      eq(games.sport, "MLB")
     )
   );
 
   console.log(`[INPUT] Apr 12 MLB games in DB: ${rows.length}`);
   let modelOk = 0;
   let noModel = 0;
-  let hasPitchersCount = 0;
-  let noPitchersCount = 0;
+  let hasPitchers = 0;
+  let noPitchers = 0;
+  let hasOdds = 0;
+  let noOdds = 0;
 
   for (const r of rows) {
-    const hasModel = r.awayModelSpread && r.homeModelSpread && r.modelTotal;
-    const hasPitchers = r.awayStartingPitcher && r.homeStartingPitcher;
-    const status = hasModel ? "MODEL_OK" : "NO_MODEL";
-    if (hasModel) modelOk++; else noModel++;
-    if (hasPitchers) hasPitchersCount++; else noPitchersCount++;
+    const hasModelData = r.awayModelSpread && r.homeModelSpread && r.modelTotal;
+    const hasPitcherData = r.awayStartingPitcher && r.homeStartingPitcher;
+    const hasOddsData = r.awayML && r.homeML;
+    if (hasModelData) modelOk++; else noModel++;
+    if (hasPitcherData) hasPitchers++; else noPitchers++;
+    if (hasOddsData) hasOdds++; else noOdds++;
+    const status = hasModelData ? "MODEL_OK" : "NO_MODEL";
     console.log(
       `  [${status}] id=${r.id} | ${r.awayTeam}@${r.homeTeam} | ` +
       `ML=${r.awayML ?? "NULL"}/${r.homeML ?? "NULL"} RL=${r.awayRunLine ?? "NULL"} T=${r.bookTotal ?? "NULL"} | ` +
@@ -65,8 +61,10 @@ async function main() {
     );
   }
 
-  console.log(`\n[OUTPUT] MODEL_OK=${modelOk} NO_MODEL=${noModel}`);
-  console.log(`[OUTPUT] HAS_PITCHERS=${hasPitchersCount} NO_PITCHERS=${noPitchersCount}`);
+  console.log(`\n[OUTPUT] Summary:`);
+  console.log(`  MODEL_OK=${modelOk} NO_MODEL=${noModel}`);
+  console.log(`  HAS_PITCHERS=${hasPitchers} NO_PITCHERS=${noPitchers}`);
+  console.log(`  HAS_ODDS=${hasOdds} NO_ODDS=${noOdds}`);
   process.exit(0);
 }
 
