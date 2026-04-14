@@ -4,13 +4,14 @@
  * Access: OWNER, ADMIN, HANDICAPPER only.
  * Unauthorized users are redirected to the main feed.
  *
- * Layout:
- *   - Header: sport tabs (MLB | NHL | NBA | NCAAM) + date picker
- *   - Left panel (desktop) / top (mobile): Bet entry form
- *   - Right panel (desktop) / bottom (mobile): Stats bar + saved bets list
+ * Changes vs v1:
+ *   - Game slate sourced from Action Network v2 scoreboard API (via betTracker.getSlate)
+ *   - $ / Units stake toggle — persisted in localStorage
+ *   - Sportsbook field removed
+ *   - Full responsive layout: mobile-first single column, tablet/desktop side-by-side
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import type { TrackedBet } from "../../../drizzle/schema";
@@ -19,7 +20,7 @@ import { toast } from "sonner";
 import {
   BarChart2, Plus, Trash2, Pencil, Check, X, ChevronDown,
   TrendingUp, TrendingDown, Minus, Clock, ArrowLeft,
-  DollarSign, Target, Activity,
+  DollarSign, Coins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,17 +46,10 @@ const BET_TYPES = [
   { value: "CUSTOM", label: "Custom" },
 ] as const;
 
-const BOOKS = [
-  "DK NJ", "FanDuel NJ", "Caesars NJ", "BetMGM NJ", "BetRivers NJ",
-  "bet365 NJ", "Fanatics NJ", "HardRock NJ", "Borgata", "Betway NJ",
-  "Parx NJ", "UnibetNJ", "Fliff", "Sleeper", "Kalshi", "Prophet",
-  "Tipico NJ", "theScore Bet NJ", "Other",
-];
-
 const RESULT_CONFIG = {
-  PENDING: { label: "PENDING", color: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",  icon: <Clock className="w-3 h-3" /> },
-  WIN:     { label: "WIN",     color: "bg-green-500/15 text-green-400 border-green-500/30", icon: <TrendingUp className="w-3 h-3" /> },
-  LOSS:    { label: "LOSS",    color: "bg-red-500/15 text-red-400 border-red-500/30",       icon: <TrendingDown className="w-3 h-3" /> },
+  PENDING: { label: "PENDING", color: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",    icon: <Clock className="w-3 h-3" /> },
+  WIN:     { label: "WIN",     color: "bg-green-500/15 text-green-400 border-green-500/30",  icon: <TrendingUp className="w-3 h-3" /> },
+  LOSS:    { label: "LOSS",    color: "bg-red-500/15 text-red-400 border-red-500/30",         icon: <TrendingDown className="w-3 h-3" /> },
   PUSH:    { label: "PUSH",    color: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30", icon: <Minus className="w-3 h-3" /> },
   VOID:    { label: "VOID",    color: "bg-purple-500/15 text-purple-400 border-purple-500/30", icon: <X className="w-3 h-3" /> },
 } as const;
@@ -69,19 +63,24 @@ function fmtOdds(odds: number): string {
   return odds > 0 ? `+${odds}` : String(odds);
 }
 
-/** Compute toWin from American odds + risk */
+/** Compute toWin from American odds + risk (in base unit — dollars or units) */
 function calcToWin(odds: number, risk: number): number {
   if (!odds || !risk || isNaN(odds) || isNaN(risk)) return 0;
-  if (odds >= 100) return parseFloat((risk * (odds / 100)).toFixed(2));
-  return parseFloat((risk * (100 / Math.abs(odds))).toFixed(2));
+  if (odds >= 100) return parseFloat((risk * (odds / 100)).toFixed(4));
+  return parseFloat((risk * (100 / Math.abs(odds))).toFixed(4));
 }
 
-/** Format dollars: $12.50 */
+/** Format a dollar value: $12.50 */
 function fmtDollar(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-/** Today's date in YYYY-MM-DD */
+/** Format a units value: 1.23u */
+function fmtUnits(n: number): string {
+  return `${n.toFixed(2)}u`;
+}
+
+/** Today's date in YYYY-MM-DD (local) */
 function todayStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -98,8 +97,7 @@ interface BetForm {
   betType:  string;
   pick:     string;
   odds:     string;
-  risk:     string;
-  book:     string;
+  stake:    string;   // dollar amount OR units (depending on stakeMode)
   notes:    string;
 }
 
@@ -112,19 +110,21 @@ const defaultForm = (sport: Sport): BetForm => ({
   betType:  "ML",
   pick:     "",
   odds:     "",
-  risk:     "",
-  book:     "DK NJ",
+  stake:    "",
   notes:    "",
 });
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
+function StatCard({
+  label, value, sub, color, hidden,
+}: { label: string; value: string | number; sub?: string; color?: string; hidden?: boolean }) {
+  if (hidden) return null;
   return (
-    <div className="bg-white/4 border border-white/8 rounded-lg px-3 py-2.5 flex flex-col gap-0.5">
-      <div className={`text-lg font-bold ${color ?? "text-white"}`}>{value}</div>
-      <div className="text-[10px] text-zinc-500 tracking-wider uppercase">{label}</div>
-      {sub && <div className="text-[10px] text-zinc-600">{sub}</div>}
+    <div className="bg-white/4 border border-white/8 rounded-lg px-3 py-2.5 flex flex-col gap-0.5 min-w-0">
+      <div className={`text-base sm:text-lg font-bold truncate ${color ?? "text-white"}`}>{value}</div>
+      <div className="text-[10px] text-zinc-500 tracking-wider uppercase truncate">{label}</div>
+      {sub && <div className="text-[10px] text-zinc-600 truncate">{sub}</div>}
     </div>
   );
 }
@@ -144,6 +144,21 @@ export default function BetTracker() {
   const [, setLocation] = useLocation();
   const { appUser: user, loading: authLoading } = useAppAuth();
 
+  // ── Stake mode: "$" or "units" — persisted ────────────────────────────────
+  const [stakeMode, setStakeMode] = useState<"$" | "units">(() => {
+    try { return (localStorage.getItem("bt_stakeMode") as "$" | "units") ?? "$"; }
+    catch { return "$"; }
+  });
+
+  const toggleStakeMode = useCallback(() => {
+    setStakeMode(prev => {
+      const next = prev === "$" ? "units" : "$";
+      try { localStorage.setItem("bt_stakeMode", next); } catch {}
+      console.log(`[BetTracker] stakeMode toggled: ${prev} → ${next}`);
+      return next;
+    });
+  }, []);
+
   // ── Access guard ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!authLoading && user) {
@@ -153,26 +168,24 @@ export default function BetTracker() {
         setLocation("/");
       }
     }
-    if (!authLoading && !user) {
-      setLocation("/");
-    }
+    if (!authLoading && !user) setLocation("/");
   }, [authLoading, user, setLocation]);
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [activeSport, setActiveSport] = useState<Sport>("MLB");
-  const [filterDate, setFilterDate] = useState<string>(todayStr());
+  const [filterDate,   setFilterDate]   = useState<string>(todayStr());
   const [filterResult, setFilterResult] = useState<string>("ALL");
-  const [form, setForm] = useState<BetForm>(defaultForm("MLB"));
-  const [editId, setEditId] = useState<number | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [showForm, setShowForm] = useState(true);
+  const [form,         setForm]         = useState<BetForm>(defaultForm("MLB"));
+  const [editId,       setEditId]       = useState<number | null>(null);
+  const [deleteId,     setDeleteId]     = useState<number | null>(null);
+  const [showForm,     setShowForm]     = useState(true);
 
   // Sync form sport when tab changes
   useEffect(() => {
     setForm(prev => ({ ...prev, sport: activeSport }));
   }, [activeSport]);
 
-  // ── tRPC queries ──────────────────────────────────────────────────────────
+  // ── tRPC ──────────────────────────────────────────────────────────────────
   const utils = trpc.useUtils();
 
   const { data: bets = [], isLoading: betsLoading } = trpc.betTracker.list.useQuery(
@@ -187,9 +200,12 @@ export default function BetTracker() {
     { enabled: !!user }
   );
 
-  const { data: slate = [] } = trpc.betTracker.getSlate.useQuery(
+  const { data: slate = [], isLoading: slateLoading } = trpc.betTracker.getSlate.useQuery(
     { sport: activeSport as "MLB" | "NBA" | "NHL" | "NCAAM", gameDate: form.gameDate },
-    { enabled: !!user && ["MLB", "NBA", "NHL", "NCAAM"].includes(activeSport) }
+    {
+      enabled: !!user,
+      staleTime: 5 * 60 * 1000, // cache 5 min — AN API is stable within a session
+    }
   );
 
   // ── Mutations ─────────────────────────────────────────────────────────────
@@ -225,10 +241,10 @@ export default function BetTracker() {
 
   // ── Derived values ────────────────────────────────────────────────────────
   const toWin = useMemo(() => {
-    const odds = parseInt(form.odds, 10);
-    const risk = parseFloat(form.risk);
-    return calcToWin(odds, risk);
-  }, [form.odds, form.risk]);
+    const odds  = parseInt(form.odds, 10);
+    const stake = parseFloat(form.stake);
+    return calcToWin(odds, stake);
+  }, [form.odds, form.stake]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleGameSelect(gameId: string) {
@@ -238,6 +254,7 @@ export default function BetTracker() {
     }
     const game = slate.find(g => String(g.id) === gameId);
     if (game) {
+      console.log(`[BetTracker] game selected: id=${game.id} ${game.awayTeam} @ ${game.homeTeam} time=${game.gameTime}`);
       setForm(prev => ({
         ...prev,
         gameId:   game.id,
@@ -249,13 +266,18 @@ export default function BetTracker() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const odds = parseInt(form.odds, 10);
-    const risk = parseFloat(form.risk);
-    if (isNaN(odds) || odds === 0) { toast.error("Enter valid American odds (e.g. -110, +145)"); return; }
-    if (isNaN(risk) || risk <= 0)  { toast.error("Enter a valid risk amount"); return; }
-    if (!form.pick.trim())          { toast.error("Pick description is required"); return; }
+    const odds  = parseInt(form.odds, 10);
+    const stake = parseFloat(form.stake);
 
-    console.log(`[BetTracker] submit: sport=${form.sport} date=${form.gameDate} betType=${form.betType} pick="${form.pick}" odds=${odds} risk=${risk} toWin=${toWin}`);
+    if (isNaN(odds) || odds === 0)   { toast.error("Enter valid American odds (e.g. -110, +145)"); return; }
+    if (isNaN(stake) || stake <= 0)  { toast.error(`Enter a valid ${stakeMode === "$" ? "risk amount" : "unit size"}`); return; }
+    if (!form.pick.trim())            { toast.error("Pick description is required"); return; }
+
+    // Convert units → dollars for storage (store raw stake value, stakeMode stored separately)
+    const riskVal  = stake;
+    const toWinVal = toWin;
+
+    console.log(`[BetTracker] submit: sport=${form.sport} date=${form.gameDate} betType=${form.betType} pick="${form.pick}" odds=${odds} stake=${stake} stakeMode=${stakeMode} toWin=${toWinVal}`);
 
     createBet.mutate({
       gameId:   form.gameId ?? undefined,
@@ -266,16 +288,29 @@ export default function BetTracker() {
       betType:  form.betType as "ML" | "RL" | "OVER" | "UNDER" | "PROP" | "PARLAY" | "TEASER" | "FUTURE" | "CUSTOM",
       pick:     form.pick.trim(),
       odds,
-      risk,
-      toWin,
-      book:     form.book || undefined,
+      risk:     riskVal,
+      toWin:    toWinVal,
       notes:    form.notes || undefined,
     });
   }
 
   function handleResultUpdate(betId: number, result: BetResult) {
+    console.log(`[BetTracker] quick result update: betId=${betId} result=${result}`);
     updateBet.mutate({ id: betId, result });
   }
+
+  // ── Format helpers (stake-mode-aware) ─────────────────────────────────────
+  const fmtStake = useCallback((val: string | number) => {
+    const n = typeof val === "string" ? parseFloat(val) : val;
+    if (isNaN(n)) return "—";
+    return stakeMode === "$" ? fmtDollar(n) : fmtUnits(n);
+  }, [stakeMode]);
+
+  const fmtWin = useCallback((val: string | number) => {
+    const n = typeof val === "string" ? parseFloat(val) : val;
+    if (isNaN(n)) return "—";
+    return stakeMode === "$" ? fmtDollar(n) : fmtUnits(n);
+  }, [stakeMode]);
 
   // ── Loading / auth guard ──────────────────────────────────────────────────
   if (authLoading) {
@@ -290,23 +325,38 @@ export default function BetTracker() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
 
-      {/* ── Header ──────────────────────────────────────────────────────── */}
+      {/* ── Sticky Header ───────────────────────────────────────────────── */}
       <div className="sticky top-0 z-40 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/8">
+
         {/* Brand bar */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/6">
+        <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 border-b border-white/6">
           <button
             onClick={() => setLocation("/")}
-            className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-sm"
+            className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-sm flex-shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">Feed</span>
+            <span className="hidden sm:inline text-xs">Feed</span>
           </button>
-          <div className="flex items-center gap-2 ml-1">
-            <BarChart2 className="w-5 h-5 text-emerald-400" />
-            <span className="font-bold text-white tracking-tight">BET TRACKER</span>
+
+          <div className="flex items-center gap-2 ml-0.5">
+            <BarChart2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 flex-shrink-0" />
+            <span className="font-bold text-white tracking-tight text-sm sm:text-base">BET TRACKER</span>
           </div>
+
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-[10px] text-zinc-600 uppercase tracking-wider hidden sm:inline">
+            {/* $ / Units toggle */}
+            <button
+              onClick={toggleStakeMode}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-white/10 bg-white/5 hover:bg-white/8 transition-colors text-xs font-semibold"
+              title={`Switch to ${stakeMode === "$" ? "Units" : "Dollars"}`}
+            >
+              {stakeMode === "$"
+                ? <><DollarSign className="w-3 h-3 text-emerald-400" /><span className="text-emerald-400">$</span></>
+                : <><Coins className="w-3 h-3 text-amber-400" /><span className="text-amber-400">Units</span></>
+              }
+            </button>
+
+            <span className="hidden sm:inline text-[10px] text-zinc-600 uppercase tracking-wider">
               {user?.username}
             </span>
             <span className="text-[10px] px-2 py-0.5 rounded border bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-semibold tracking-wider uppercase">
@@ -321,7 +371,7 @@ export default function BetTracker() {
             <button
               key={sport}
               onClick={() => setActiveSport(sport)}
-              className={`px-4 py-2.5 text-[13px] font-semibold tracking-wide whitespace-nowrap transition-colors border-b-2 ${
+              className={`px-3 sm:px-4 py-2.5 text-[12px] sm:text-[13px] font-semibold tracking-wide whitespace-nowrap transition-colors border-b-2 ${
                 activeSport === sport
                   ? "text-white border-emerald-400"
                   : "text-zinc-500 border-transparent hover:text-zinc-300"
@@ -335,40 +385,58 @@ export default function BetTracker() {
 
       {/* ── Stats bar ───────────────────────────────────────────────────── */}
       {stats && (
-        <div className="px-4 py-3 border-b border-white/6">
+        <div className="px-3 sm:px-4 py-3 border-b border-white/6">
           <div className="max-w-6xl mx-auto grid grid-cols-4 sm:grid-cols-7 gap-2">
-            <StatCard label="Total Bets"  value={stats.totalBets} />
-            <StatCard label="Wins"        value={stats.wins}     color="text-green-400" />
-            <StatCard label="Losses"      value={stats.losses}   color="text-red-400" />
-            <StatCard label="Pushes"      value={stats.pushes}   color="text-yellow-400" />
-            <StatCard label="Pending"     value={stats.pending}  color="text-zinc-400" />
+            <StatCard label="Total"   value={stats.totalBets} />
+            <StatCard label="Wins"    value={stats.wins}     color="text-green-400" />
+            <StatCard label="Losses"  value={stats.losses}   color="text-red-400" />
+            <StatCard label="Pushes"  value={stats.pushes}   color="text-yellow-400" />
+            <StatCard label="Pending" value={stats.pending}  color="text-zinc-400" />
             <StatCard
               label="Net P/L"
-              value={fmtDollar(stats.netProfit)}
+              value={stakeMode === "$" ? fmtDollar(stats.netProfit) : fmtUnits(stats.netProfit)}
               color={stats.netProfit >= 0 ? "text-green-400" : "text-red-400"}
             />
             <StatCard
               label="ROI"
               value={`${stats.roi}%`}
               color={stats.roi >= 0 ? "text-green-400" : "text-red-400"}
-              sub={`on ${fmtDollar(stats.totalRisk)} risked`}
+              sub={stakeMode === "$" ? `on ${fmtDollar(stats.totalRisk)} risked` : `on ${fmtUnits(stats.totalRisk)} risked`}
+            />
+          </div>
+          {/* Mobile: show P/L and ROI on second row */}
+          <div className="max-w-6xl mx-auto grid grid-cols-2 gap-2 mt-2 sm:hidden">
+            <StatCard
+              label="Net P/L"
+              value={stakeMode === "$" ? fmtDollar(stats.netProfit) : fmtUnits(stats.netProfit)}
+              color={stats.netProfit >= 0 ? "text-green-400" : "text-red-400"}
+            />
+            <StatCard
+              label="ROI"
+              value={`${stats.roi}%`}
+              color={stats.roi >= 0 ? "text-green-400" : "text-red-400"}
+              sub={stakeMode === "$" ? `on ${fmtDollar(stats.totalRisk)} risked` : `on ${fmtUnits(stats.totalRisk)} risked`}
             />
           </div>
         </div>
       )}
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
-      <div className="max-w-6xl mx-auto px-4 py-4">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4">
         <div className="flex flex-col lg:flex-row gap-4">
 
           {/* ── LEFT: Bet Entry Form ─────────────────────────────────────── */}
-          <div className="lg:w-[380px] lg:flex-shrink-0">
+          <div className="w-full lg:w-[360px] lg:flex-shrink-0">
             <div className="bg-white/3 border border-white/8 rounded-xl overflow-hidden">
+
               {/* Form header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
                 <div className="flex items-center gap-2">
                   <Plus className="w-4 h-4 text-emerald-400" />
                   <span className="text-sm font-semibold text-white">Add Bet</span>
+                  <span className="text-[10px] text-zinc-600 ml-1">
+                    {stakeMode === "$" ? "(dollars)" : "(units)"}
+                  </span>
                 </div>
                 <button
                   onClick={() => setShowForm(v => !v)}
@@ -378,24 +446,37 @@ export default function BetTracker() {
                 </button>
               </div>
 
-              {/* Form body */}
-              {(showForm) && (
+              {showForm && (
                 <form onSubmit={handleSubmit} className="p-4 space-y-3">
 
-                  {/* Date */}
+                  {/* Game Date */}
                   <div className="space-y-1">
                     <Label className="text-zinc-400 text-[10px] tracking-widest uppercase">Game Date</Label>
                     <Input
                       type="date"
                       value={form.gameDate}
-                      onChange={e => setForm(prev => ({ ...prev, gameDate: e.target.value, gameId: null, awayTeam: "", homeTeam: "" }))}
+                      onChange={e => setForm(prev => ({
+                        ...prev,
+                        gameDate: e.target.value,
+                        gameId: null,
+                        awayTeam: "",
+                        homeTeam: "",
+                      }))}
                       className="bg-white/5 border-white/10 text-white text-sm h-9"
                     />
                   </div>
 
-                  {/* Matchup selector */}
+                  {/* Matchup — Action Network slate */}
                   <div className="space-y-1">
-                    <Label className="text-zinc-400 text-[10px] tracking-widest uppercase">Matchup</Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-zinc-400 text-[10px] tracking-widest uppercase">Matchup</Label>
+                      {slateLoading && (
+                        <span className="text-[10px] text-zinc-600 animate-pulse">Loading slate...</span>
+                      )}
+                      {!slateLoading && slate.length > 0 && (
+                        <span className="text-[10px] text-zinc-600">{slate.length} games</span>
+                      )}
+                    </div>
                     <Select
                       value={form.gameId ? String(form.gameId) : "manual"}
                       onValueChange={handleGameSelect}
@@ -403,24 +484,33 @@ export default function BetTracker() {
                       <SelectTrigger className="bg-white/5 border-white/10 text-white text-sm h-9">
                         <SelectValue placeholder="Select game or enter manually" />
                       </SelectTrigger>
-                      <SelectContent className="bg-[#1a1a1a] border-white/10 max-h-60">
+                      <SelectContent className="bg-[#1a1a1a] border-white/10 max-h-72">
                         <SelectItem value="manual">
-                          <span className="text-zinc-400">Manual entry</span>
+                          <span className="text-zinc-400 text-xs">Manual entry</span>
                         </SelectItem>
                         {slate.map(g => (
                           <SelectItem key={g.id} value={String(g.id)}>
-                            <span className="font-mono text-xs">{g.awayTeam} @ {g.homeTeam}</span>
-                            <span className="ml-2 text-zinc-500 text-xs">{g.gameTime}</span>
+                            <div className="flex flex-col gap-0">
+                              <span className="font-mono text-xs font-semibold text-white">
+                                {g.awayTeam} @ {g.homeTeam}
+                              </span>
+                              <span className="text-zinc-500 text-[10px]">
+                                {g.gameTime} EST
+                                {g.status !== "scheduled" && (
+                                  <span className="ml-1.5 text-amber-400 uppercase">{g.status}</span>
+                                )}
+                              </span>
+                            </div>
                           </SelectItem>
                         ))}
-                        {slate.length === 0 && (
-                          <div className="px-3 py-2 text-zinc-500 text-xs">No games found for this date</div>
+                        {!slateLoading && slate.length === 0 && (
+                          <div className="px-3 py-2 text-zinc-500 text-xs">No games on Action Network for this date</div>
                         )}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {/* Away / Home (manual) */}
+                  {/* Away / Home (manual entry only) */}
                   {!form.gameId && (
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
@@ -444,7 +534,7 @@ export default function BetTracker() {
                     </div>
                   )}
 
-                  {/* Bet type */}
+                  {/* Bet Type */}
                   <div className="space-y-1">
                     <Label className="text-zinc-400 text-[10px] tracking-widest uppercase">Bet Type</Label>
                     <Select value={form.betType} onValueChange={v => setForm(prev => ({ ...prev, betType: v }))}>
@@ -476,7 +566,7 @@ export default function BetTracker() {
                     />
                   </div>
 
-                  {/* Odds + Risk + ToWin */}
+                  {/* Odds + Stake + To Win */}
                   <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
                       <Label className="text-zinc-400 text-[10px] tracking-widest uppercase">Odds</Label>
@@ -488,36 +578,30 @@ export default function BetTracker() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-zinc-400 text-[10px] tracking-widest uppercase">Risk $</Label>
+                      <Label className="text-zinc-400 text-[10px] tracking-widest uppercase">
+                        {stakeMode === "$" ? "Risk $" : "Units"}
+                      </Label>
                       <Input
-                        value={form.risk}
-                        onChange={e => setForm(prev => ({ ...prev, risk: e.target.value }))}
-                        placeholder="100"
+                        value={form.stake}
+                        onChange={e => setForm(prev => ({ ...prev, stake: e.target.value }))}
+                        placeholder={stakeMode === "$" ? "100" : "1.0"}
                         type="number"
                         min="0.01"
-                        step="0.01"
+                        step={stakeMode === "$" ? "0.01" : "0.1"}
                         className="bg-white/5 border-white/10 text-white text-sm h-9 font-mono"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-zinc-400 text-[10px] tracking-widest uppercase">To Win $</Label>
+                      <Label className="text-zinc-400 text-[10px] tracking-widest uppercase">
+                        {stakeMode === "$" ? "To Win $" : "To Win u"}
+                      </Label>
                       <div className="h-9 flex items-center px-3 bg-white/3 border border-white/8 rounded-md text-sm font-mono text-emerald-400">
-                        {toWin > 0 ? fmtDollar(toWin) : "—"}
+                        {toWin > 0
+                          ? (stakeMode === "$" ? fmtDollar(toWin) : fmtUnits(toWin))
+                          : "—"
+                        }
                       </div>
                     </div>
-                  </div>
-
-                  {/* Book */}
-                  <div className="space-y-1">
-                    <Label className="text-zinc-400 text-[10px] tracking-widest uppercase">Sportsbook</Label>
-                    <Select value={form.book} onValueChange={v => setForm(prev => ({ ...prev, book: v }))}>
-                      <SelectTrigger className="bg-white/5 border-white/10 text-white text-sm h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#1a1a1a] border-white/10 max-h-60">
-                        {BOOKS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
                   </div>
 
                   {/* Notes */}
@@ -554,7 +638,7 @@ export default function BetTracker() {
                 type="date"
                 value={filterDate}
                 onChange={e => setFilterDate(e.target.value)}
-                className="bg-white/5 border-white/10 text-white text-sm h-8 w-auto"
+                className="bg-white/5 border-white/10 text-white text-sm h-8 w-auto min-w-[130px]"
               />
               <Select value={filterResult} onValueChange={setFilterResult}>
                 <SelectTrigger className="bg-white/5 border-white/10 text-white text-sm h-8 w-32">
@@ -589,6 +673,7 @@ export default function BetTracker() {
                   <BetCard
                     key={bet.id}
                     bet={bet}
+                    stakeMode={stakeMode}
                     editId={editId}
                     deleteId={deleteId}
                     onResultChange={handleResultUpdate}
@@ -614,22 +699,8 @@ export default function BetTracker() {
 // ─── BetCard sub-component ────────────────────────────────────────────────────
 
 interface BetCardProps {
-  bet: {
-    id: number;
-    sport: string;
-    gameDate: string;
-    awayTeam: string | null;
-    homeTeam: string | null;
-    betType: string;
-    pick: string;
-    odds: number;
-    risk: string;
-    toWin: string;
-    book: string | null;
-    notes: string | null;
-    result: string;
-    createdAt: Date;
-  };
+  bet: TrackedBet;
+  stakeMode: "$" | "units";
   editId: number | null;
   deleteId: number | null;
   onResultChange: (id: number, result: BetResult) => void;
@@ -644,22 +715,26 @@ interface BetCardProps {
 }
 
 function BetCard({
-  bet, editId, deleteId,
+  bet, stakeMode, editId, deleteId,
   onResultChange, onEdit, onDelete, onConfirmDelete, onCancelDelete,
   onUpdateBet, onCancelEdit, isUpdating, isDeleting,
 }: BetCardProps) {
-  const isEditing  = editId === bet.id;
+  const isEditing   = editId === bet.id;
   const isDeleting_ = deleteId === bet.id;
-  const [editNotes, setEditNotes] = useState(bet.notes ?? "");
+  const [editNotes,  setEditNotes]  = useState(bet.notes ?? "");
   const [editResult, setEditResult] = useState<BetResult>(bet.result as BetResult);
 
   const risk  = parseFloat(bet.risk);
   const toWin = parseFloat(bet.toWin);
 
+  const fmtStakeVal = (n: number) =>
+    stakeMode === "$" ? fmtDollar(n) : fmtUnits(n);
+
   return (
     <div className={`bg-white/3 border rounded-xl p-3 transition-colors ${
       isDeleting_ ? "border-red-500/40 bg-red-500/5" : "border-white/8 hover:border-white/12"
     }`}>
+
       {/* Top row: matchup + result badge */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
@@ -669,28 +744,32 @@ function BetCard({
               <>
                 <span className="text-zinc-700">·</span>
                 <span className="text-xs text-zinc-400 font-mono">
-                  {bet.awayTeam} {bet.awayTeam && bet.homeTeam ? "@" : ""} {bet.homeTeam}
+                  {bet.awayTeam}{bet.awayTeam && bet.homeTeam ? " @ " : ""}{bet.homeTeam}
                 </span>
               </>
             )}
             <span className="text-zinc-700">·</span>
             <span className="text-[10px] text-zinc-600">{bet.gameDate}</span>
           </div>
-          <div className="text-sm font-semibold text-white mt-0.5 truncate">{bet.pick}</div>
+
+          {/* Pick */}
+          <div className="text-sm font-semibold text-white mt-0.5 break-words">{bet.pick}</div>
+
+          {/* Odds + Risk + To Win */}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="text-[11px] font-mono text-zinc-300">{fmtOdds(bet.odds)}</span>
             <span className="text-zinc-700">·</span>
-            <span className="text-[11px] text-zinc-400">Risk: <span className="text-white font-mono">{fmtDollar(risk)}</span></span>
+            <span className="text-[11px] text-zinc-400">
+              {stakeMode === "$" ? "Risk:" : "Stake:"}{" "}
+              <span className="text-white font-mono">{fmtStakeVal(risk)}</span>
+            </span>
             <span className="text-zinc-700">·</span>
-            <span className="text-[11px] text-zinc-400">To Win: <span className="text-emerald-400 font-mono">{fmtDollar(toWin)}</span></span>
-            {bet.book && (
-              <>
-                <span className="text-zinc-700">·</span>
-                <span className="text-[10px] text-zinc-500">{bet.book}</span>
-              </>
-            )}
+            <span className="text-[11px] text-zinc-400">
+              To Win: <span className="text-emerald-400 font-mono">{fmtStakeVal(toWin)}</span>
+            </span>
           </div>
         </div>
+
         <div className="flex-shrink-0">
           <ResultBadge result={bet.result as BetResult} />
         </div>
@@ -698,7 +777,7 @@ function BetCard({
 
       {/* Notes */}
       {bet.notes && !isEditing && (
-        <div className="text-[11px] text-zinc-500 italic mb-2 pl-1 border-l border-white/8">
+        <div className="text-[11px] text-zinc-500 italic mb-2 pl-2 border-l border-white/8">
           {bet.notes}
         </div>
       )}
@@ -777,10 +856,9 @@ function BetCard({
         </div>
       )}
 
-      {/* Action buttons (bottom row) */}
+      {/* Action row: quick result + edit/delete */}
       {!isEditing && !isDeleting_ && (
         <div className="flex items-center gap-1 mt-2 pt-2 border-t border-white/6">
-          {/* Quick result buttons */}
           <div className="flex gap-1 flex-1 flex-wrap">
             {(["WIN", "LOSS", "PUSH"] as BetResult[]).map(r => (
               <button

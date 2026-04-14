@@ -2520,3 +2520,15 @@
 - [x] Add /bet-tracker route to App.tsx
 - [x] Add "Bet Tracker" link to profile dropdown in ModelProjections.tsx (owner | admin | handicapper)
 - [x] 0 TypeScript errors, 458/458 tests passing
+
+## Session: Bet Tracker v2 — Action Network Slate + $/Units Toggle
+
+- [x] Research Action Network v2 scoreboard API endpoint (confirmed: /web/v2/scoreboard/{sport}?bookIds=...&date=YYYYMMDD&periods=event)
+- [x] Build server/actionNetwork.ts — fetchAnSlate() with full structured logging
+- [x] Update betTracker.getSlate to call fetchAnSlate() instead of internal DB games table
+- [x] Return awayFull, homeFull, status fields from getSlate for richer UI
+- [x] Add $/Units stake toggle to BetTracker.tsx (persisted in localStorage)
+- [x] Remove Sportsbook field from Add Bet form and BetCard display
+- [x] Update game slate dropdown to show AN games with time + status
+- [x] Update stats bar to respect stakeMode ($ vs units formatting)
+- [x] All 458 tests passing, 0 TypeScript errors

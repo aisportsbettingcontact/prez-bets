@@ -19,7 +19,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 import { trackedBets } from "../../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { listGamesByDate } from "../db";
+import { fetchAnSlate } from "../actionNetwork";
 
 // ─── Shared Zod schemas ────────────────────────────────────────────────────────
 
@@ -27,12 +27,7 @@ const BET_TYPES = ["ML", "RL", "OVER", "UNDER", "PROP", "PARLAY", "TEASER", "FUT
 const RESULTS   = ["PENDING", "WIN", "LOSS", "PUSH", "VOID"] as const;
 const SPORTS    = ["MLB", "NBA", "NHL", "NCAAM", "NFL", "CUSTOM"] as const;
 
-const BOOKS = [
-  "DK NJ", "FanDuel NJ", "Caesars NJ", "BetMGM NJ", "BetRivers NJ",
-  "bet365 NJ", "Fanatics NJ", "HardRock NJ", "Borgata", "Betway NJ",
-  "Parx NJ", "UnibetNJ", "Fliff", "Sleeper", "Kalshi", "Prophet",
-  "Tipico NJ", "theScore Bet NJ", "Other",
-] as const;
+
 
 /** Compute toWin from American odds + risk (dollars) */
 function calcToWin(odds: number, risk: number): number {
@@ -222,8 +217,8 @@ export const betTrackerRouter = router({
     }),
 
   /**
-   * getSlate — get games for a given sport + date (for the matchup selector).
-   * Pulls from the existing games table (same data as the main feed).
+   * getSlate — fetch the daily game slate from Action Network v2 scoreboard API.
+   * Returns normalized SlateGame[] sorted by start time ASC.
    */
   getSlate: handicapperProcedure
     .input(z.object({
@@ -231,16 +226,19 @@ export const betTrackerRouter = router({
       gameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     }))
     .query(async ({ ctx, input }) => {
-      console.log(`[BetTracker] getSlate: userId=${ctx.appUser.id} sport=${input.sport} date=${input.gameDate}`);
-      const games = await listGamesByDate(input.gameDate, input.sport);
-      console.log(`[BetTracker] getSlate: ${games.length} games found for ${input.sport} on ${input.gameDate}`);
+      console.log(`[BetTracker] getSlate: userId=${ctx.appUser.id} sport=${input.sport} date=${input.gameDate} source=ActionNetwork`);
+      const games = await fetchAnSlate(input.sport, input.gameDate);
+      console.log(`[BetTracker] getSlate: ${games.length} AN games returned for ${input.sport} on ${input.gameDate}`);
       return games.map(g => ({
         id:       g.id,
         awayTeam: g.awayTeam,
         homeTeam: g.homeTeam,
-        gameTime: g.startTimeEst,
+        awayFull: g.awayFull,
+        homeFull: g.homeFull,
+        gameTime: g.gameTime,
         sport:    g.sport,
         gameDate: g.gameDate,
+        status:   g.status,
       }));
     }),
 
