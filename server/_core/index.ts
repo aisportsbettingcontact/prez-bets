@@ -26,6 +26,7 @@ import { startNbaScheduleHistoryScheduler } from "../nbaScheduleHistoryScheduler
 import { startNhlScheduleHistoryScheduler } from "../nhlScheduleHistoryScheduler";
 import { startMlbNightlyTrendsScheduler } from "../mlbNightlyTrendsRefresh";
 import { prewarmSlateCache } from "../actionNetwork";
+import { startBetAutoGradeScheduler } from "../betAutoGradeScheduler";
 
 // ─── Rate limit event helper ─────────────────────────────────────────────────
 // Fire-and-forget: writes a RATE_LIMIT row to security_events.
@@ -316,6 +317,8 @@ async function startServer() {
     startNhlScheduleHistoryScheduler();
     // Pre-warm Action Network slate cache for today — eliminates cold-start latency on first BetTracker load
     prewarmSlateCache().catch(err => console.error("[AN][PREWARM] Failed:", err));
+    // Automated bet grading — 15-min polling during game hours + nightly 11:30 PM EST sweep
+    startBetAutoGradeScheduler();
     // Security digest — daily at 08:00 EST (13:00 UTC), sends 24h threat summary via notifyOwner()
     startSecurityDigestScheduler();
     // Weekly security threat trend digest — every Sunday at 08:00 EST, 7-day bar chart + top IPs

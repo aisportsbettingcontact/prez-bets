@@ -2556,3 +2556,10 @@
 - [x] $/Units toggle with configurable unit size, persisted in localStorage
 - [x] Sportsbook field fully removed from form and bet cards
 - [x] 0 TypeScript errors, 458/458 tests passing
+
+## Session: Bet Tracker v6 — Auto-Grade Scheduler + Score Display + Social Card Export
+- [ ] Server-side auto-grade scheduler: nightly 11:30 PM EST cron + 15-min polling during game hours (10 AM–2 AM EST)
+- [ ] Persist awayScore/homeScore on settled bets in DB
+- [ ] Score + team logos display on WIN/LOSS/PUSH bet cards
+- [ ] Social media card export: units-sorted (highest to lowest), shareable PNG
+- [ ] TypeScript check, tests, checkpoint

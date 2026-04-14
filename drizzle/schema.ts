@@ -1804,6 +1804,12 @@ export const trackedBets = mysqlTable("tracked_bets", {
   result: mysqlEnum("result", ["PENDING", "WIN", "LOSS", "PUSH", "VOID"])
     .notNull()
     .default("PENDING"),
+  /**
+   * Final score for the graded timeframe — populated by the auto-grade engine.
+   * Stored as varchar to handle decimal scores (e.g. NCAAM) and avoid int precision loss.
+   */
+  awayScore: varchar("awayScore", { length: 16 }),
+  homeScore: varchar("homeScore", { length: 16 }),
   /** UTC timestamp (ms) when this bet was created */
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   /** UTC timestamp (ms) when this bet was last updated */

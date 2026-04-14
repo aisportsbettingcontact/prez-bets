@@ -377,9 +377,13 @@ export const betTrackerRouter = router({
           continue;
         }
 
-        // Update bet result in DB
+        // Update bet result + final scores in DB
         await db.update(trackedBets)
-          .set({ result: gradeOut.result })
+          .set({
+            result:    gradeOut.result,
+            awayScore: gradeOut.awayScore !== null ? String(gradeOut.awayScore) : null,
+            homeScore: gradeOut.homeScore !== null ? String(gradeOut.homeScore) : null,
+          })
           .where(eq(trackedBets.id, bet.id));
 
         graded++;
@@ -445,7 +449,11 @@ export const betTrackerRouter = router({
         if (gradeOut.result === "PENDING") { stillPending++; continue; }
 
         await db.update(trackedBets)
-          .set({ result: gradeOut.result })
+          .set({
+            result:    gradeOut.result,
+            awayScore: gradeOut.awayScore !== null ? String(gradeOut.awayScore) : null,
+            homeScore: gradeOut.homeScore !== null ? String(gradeOut.homeScore) : null,
+          })
           .where(eq(trackedBets.id, bet.id));
 
         graded++;
@@ -453,7 +461,7 @@ export const betTrackerRouter = router({
         if (gradeOut.result === "LOSS") losses++;
         if (gradeOut.result === "PUSH") pushes++;
 
-        console.log(`[BetTracker][OUTPUT] autoGradeAll: betId=${bet.id} userId=${bet.userId} → ${gradeOut.result}`);
+        console.log(`[BetTracker][OUTPUT] autoGradeAll: betId=${bet.id} userId=${bet.userId} → ${gradeOut.result} score=${gradeOut.awayScore}-${gradeOut.homeScore}`);
       }
 
       const summary = { graded, wins, losses, pushes, stillPending, total: pending.length };
