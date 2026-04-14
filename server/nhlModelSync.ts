@@ -322,6 +322,20 @@ export async function syncNhlModelForToday(
       console.log(`[NhlModelSync]${tag}   Away goalie: ${awayGoalieName ?? "TBD"} | GSAx=${awayGoalieStats.gsax.toFixed(2)} SV%=${awayGoalieStats.sv_pct} GP=${awayGoalieStats.gp}`);
       console.log(`[NhlModelSync]${tag}   Home goalie: ${homeGoalieName ?? "TBD"} | GSAx=${homeGoalieStats.gsax.toFixed(2)} SV%=${homeGoalieStats.sv_pct} GP=${homeGoalieStats.gp}`);
 
+      // ── CRITICAL: Require confirmed DK puck line before running model ──────────────────
+      // Missing awayBookSpread causes puck line inversion (model uses goal-diff fallback
+      // which can assign wrong favorite when goals are close to 0).
+      // Also require bookTotal and awayML to ensure all market anchors are present.
+      if (!game.awayBookSpread || !game.bookTotal || !game.awayML || !game.homeML) {
+        const missing: string[] = [];
+        if (!game.awayBookSpread) missing.push('awayBookSpread [PL GATE]');
+        if (!game.bookTotal) missing.push('bookTotal');
+        if (!game.awayML) missing.push('awayML');
+        if (!game.homeML) missing.push('homeML');
+        console.warn(`[NhlModelSync]${tag}   SKIP ${gameLabel} — missing required book lines: ${missing.join(', ')}`);
+        result.skipped++;
+        continue;
+      }
       // Parse book lines from DB
       const mktAwayPLOdds  = game.awaySpreadOdds ? parseInt(game.awaySpreadOdds, 10) : null;
       const mktHomePLOdds  = game.homeSpreadOdds ? parseInt(game.homeSpreadOdds, 10) : null;
@@ -466,8 +480,11 @@ export async function syncNhlModelForToday(
           homeModelSpread:     modelHomePL,
           spreadEdge:          spreadEdge ?? undefined,
           spreadDiff:          spreadDiff ?? undefined,
-          // Total
-          modelTotal:          String(roundToHalf(modelTotalVal)),
+          // Total — ALWAYS anchored to book O/U line (mktTotal), NOT model-derived line
+          // CRITICAL: modelTotal must equal bookTotal so displayed model line matches book line
+          // modelTotalVal = model's own optimal line (may differ from book by 0.5)
+          // mktTotal = the actual book total we must display at
+          modelTotal:          mktTotal !== null ? String(mktTotal) : String(roundToHalf(modelTotalVal)),
           totalEdge:           totalEdge ?? undefined,
           totalDiff:           totalDiff ?? undefined,
           // Moneylines
@@ -527,7 +544,61 @@ export async function syncNhlModelForToday(
     }
   }
 
-  // ── Summary ───────────────────────────────────────────────────────────────────────────────────────
+  // ── Post-write validation gate ──────────────────────────────────────────────────────────────────────────────────
+  if (result.synced > 0) {
+    const db = await getDb();
+    const nhlRows = await db.select({
+      id:              games.id,
+      away:            games.awayTeam,
+      home:            games.homeTeam,
+      bookTotal:       games.bookTotal,
+      modelTotal:      games.modelTotal,
+      awayBookSpread:  games.awayBookSpread,
+      modelAwayPuckLine: games.modelAwayPuckLine,
+    }).from(games)
+      .where(and(
+        eq(games.gameDate, gameDate),
+        eq(games.sport, 'NHL'),
+      ));
+    const nhlIssues: string[] = [];
+    for (const g of nhlRows) {
+      const label = `[${g.id}] ${g.away}@${g.home}`;
+      // 1. Total alignment: modelTotal must equal bookTotal
+      const bookT  = parseFloat(String(g.bookTotal  ?? '0'));
+      const modelT = parseFloat(String(g.modelTotal ?? '0'));
+      if (!isNaN(bookT) && !isNaN(modelT) && Math.abs(bookT - modelT) > 0.01) {
+        nhlIssues.push(`${label}: modelTotal=${modelT} ≠ bookTotal=${bookT} [TOTAL MISMATCH]`);
+      }
+      // 2. Puck line must be exactly ±1.5 or ±2.5 — NHL PL is NEVER 0
+      const awayPL = String(g.modelAwayPuckLine ?? '');
+      const validPL = awayPL === '+1.5' || awayPL === '-1.5' || awayPL === '+2.5' || awayPL === '-2.5';
+      if (awayPL && !validPL) {
+        nhlIssues.push(`${label}: modelAwayPuckLine="${awayPL}" — expected ±1.5 or ±2.5 (NHL PL is never 0)`);
+      }
+      // 3. Puck line sign alignment: model PL must match book spread direction
+      const bookSpreadNum  = parseFloat(String(g.awayBookSpread ?? '0'));
+      const modelPLNum     = parseFloat(awayPL || '0');
+      if (!isNaN(bookSpreadNum) && !isNaN(modelPLNum) && bookSpreadNum !== 0 && awayPL) {
+        const bookSign  = bookSpreadNum < 0 ? -1 : 1;
+        const modelSign = modelPLNum   < 0 ? -1 : 1;
+        if (bookSign !== modelSign) {
+          nhlIssues.push(
+            `${label}: PL INVERSION — awayBookSpread=${bookSpreadNum} (${bookSign > 0 ? 'dog' : 'fav'}) ` +
+            `but modelAwayPuckLine=${awayPL} (${modelSign > 0 ? 'dog' : 'fav'}) — SIGN MISMATCH`
+          );
+        }
+      }
+    }
+    if (nhlIssues.length === 0) {
+      console.log(`[NhlModelSync]${tag} ✅ LINE VALIDATION PASSED — all ${nhlRows.length} NHL games correct`);
+    } else {
+      console.error(`[NhlModelSync]${tag} ❌ LINE VALIDATION FAILED — ${nhlIssues.length} issues:`);
+      for (const issue of nhlIssues) {
+        console.error(`  ✗ ${issue}`);
+      }
+    }
+  }
+  // ── Summary ──────────────────────────────────────────────────────────────────────────────────
   console.log(`\n${"=".repeat(70)}`);
   console.log(`[NhlModelSync]${tag} ✅ DONE — Synced: ${result.synced} | Skipped: ${result.skipped} | Errors: ${result.errors.length}`);
   if (result.errors.length > 0) {

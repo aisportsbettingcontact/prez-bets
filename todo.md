@@ -2563,3 +2563,7 @@
 - [ ] Score + team logos display on WIN/LOSS/PUSH bet cards
 - [ ] Social media card export: units-sorted (highest to lowest), shareable PNG
 - [ ] TypeScript check, tests, checkpoint
+
+- [ ] BUG FIX: O/U model line and odds must always be anchored to book total line (not model-computed line) — ARI/BAL showing o8.5 model vs o9 book
+- [ ] BUG FIX: Run/puck/point line model spread must always match book side — KC/DET showing inverted RL (book KC -1.5 but model showing KC +1.5)
+- [ ] Apply both fixes across MLB, NHL, NBA with deep per-game validation logging

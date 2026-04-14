@@ -135,6 +135,66 @@ PARK_FACTORS = {
     'TOR': {'r': 100, 'hr': 100, 'h': 100}, 'ANA': {'r':  99, 'hr':  98, 'h':  99},
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 3-YEAR BACKTEST CONSTANTS (2024+2025+2026, n=5,109 games, generated 2026-04-14)
+# Source: mlb_3yr_backtest scripts 04_deep_analysis, 06_nrfi_threshold_grid,
+#         07_market_accuracy. These are empirical ground-truth values used as
+#         Bayesian priors and validation gates — not overrides.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Team NRFI rates (3yr empirical, min 50 games) ────────────────────────────
+# Keyed by DB team abbreviation (same as away_abbrev / home_abbrev in project_game)
+TEAM_NRFI_RATES: Dict[str, float] = {
+    'PIT': 0.576, 'NYM': 0.569, 'KC':  0.565, 'STL': 0.554, 'CHC': 0.553,
+    'CLE': 0.547, 'CIN': 0.545, 'BAL': 0.537, 'WSH': 0.535, 'HOU': 0.534,
+    'MIL': 0.531, 'DET': 0.529, 'TOR': 0.523, 'SEA': 0.523, 'ATL': 0.523,
+    'TEX': 0.516, 'SD':  0.512, 'SF':  0.506, 'TB':  0.504, 'CWS': 0.504,
+    'ATH': 0.500, 'MIN': 0.496, 'BOS': 0.488, 'PHI': 0.488, 'LAA': 0.487,
+    'LAD': 0.476, 'MIA': 0.466, 'ARI': 0.459, 'NYY': 0.456, 'COL': 0.456,
+}
+TEAM_NRFI_LEAGUE_MEAN = 0.5154   # 3yr empirical NRFI rate (n=5,109 games)
+
+# ── Team F5 runs scored means (3yr, used for F5 mu calibration) ──────────────
+# Source: 04_deep_analysis.py → TEAM NRFI RANKINGS table (F5 RS column)
+TEAM_F5_RS: Dict[str, float] = {
+    'PIT': 2.191, 'NYM': 2.669, 'KC':  2.303, 'STL': 2.276, 'CHC': 2.709,
+    'CLE': 2.321, 'CIN': 2.557, 'BAL': 2.537, 'WSH': 2.312, 'HOU': 2.493,
+    'MIL': 2.835, 'DET': 2.541, 'TOR': 2.471, 'SEA': 2.459, 'ATL': 2.412,
+    'TEX': 2.390, 'SD':  2.571, 'SF':  2.341, 'TB':  2.313, 'CWS': 2.041,
+    'ATH': 2.379, 'MIN': 2.466, 'BOS': 2.623, 'PHI': 2.621, 'LAA': 2.355,
+    'LAD': 2.926, 'MIA': 2.317, 'ARI': 2.959, 'NYY': 2.959, 'COL': 2.150,
+}
+F5_RS_LEAGUE_MEAN = 2.466   # 3yr empirical mean F5 runs scored per team
+F5_RS_WEIGHT      = 0.10    # max 10% adjustment from team F5 RS tendency
+
+# ── NRFI Bayesian prior weights ───────────────────────────────────────────────
+# Pitcher empirical NRFI rate blended into first-inning mu as a Bayesian prior.
+# Physics (simulation) gets 50%, pitcher rate gets 35%, team tendency gets 15%.
+# Source: 06_nrfi_threshold_grid.py — optimal filter: combined rate >= 0.56
+NRFI_PITCHER_WEIGHT = 0.35   # pitcher 3yr empirical NRFI rate weight
+NRFI_TEAM_WEIGHT    = 0.15   # team 3yr empirical NRFI rate weight
+NRFI_PHYSICS_WEIGHT = 0.50   # simulation physics weight (sum = 1.0)
+# NRFI filter thresholds (from grid search, n=5,109 games)
+NRFI_COMBINED_THRESHOLD = 0.56   # combined (avg) pitcher rate >= 0.56 → filter pass
+NRFI_BOTH_THRESHOLD     = 0.56   # both individual pitchers >= 0.56 → stronger signal
+
+# ── Empirical market priors (3yr, n=5,109 games) ─────────────────────────────
+# Used as validation gates — model should arrive at these through simulation.
+# Source: 07_market_accuracy.py
+EMPIRICAL_PRIORS = {
+    'fg_home_win_rate':   0.5258,   # FG ML home win rate (3yr)
+    'fg_away_win_rate':   0.4742,   # FG ML away win rate (3yr)
+    'f5_home_win_rate':   0.5319,   # F5 ML home win rate (3yr) — HFA stronger in F5
+    'f5_away_win_rate':   0.4681,   # F5 ML away win rate (3yr)
+    'fg_rl_away_cover':   0.3189,   # FG RL away -1.5 cover rate (3yr)
+    'fg_rl_home_cover':   0.5128,   # FG RL home -1.5 cover rate (3yr)
+    'nrfi_rate':          0.5154,   # NRFI rate (3yr)
+    'f5_share':           0.5311,   # F5 runs / FG runs (3yr)
+    'i1_share':           0.1093,   # I1 runs / FG runs (3yr)
+    'fg_mean':            8.895,    # mean FG total (2025 LEAGUE_RPG)
+    'f5_mean':            4.726,    # mean F5 total (3yr: 8.895 * 0.5311)
+}
+
 RE_MATRIX = {
     (0, 0): 0.481, (0, 1): 0.859, (0, 2): 1.100, (0, 3): 1.437,
     (0, 4): 1.350, (0, 5): 1.784, (0, 6): 1.964, (0, 7): 2.292,
@@ -527,7 +587,15 @@ class MonteCarloEngine:
     def simulate(self, home_state: dict, away_state: dict,
                  env: dict, ou_line: Optional[float] = None,
                  rl_spread: float = -1.5,
-                 logger: Optional['EngineLogger'] = None) -> dict:
+                 logger: Optional['EngineLogger'] = None,
+                 # ── 3yr backtest NRFI priors ───────────────────────────────────────────────────
+                 away_pitcher_nrfi: Optional[float] = None,  # away SP 3yr NRFI rate (0-1)
+                 home_pitcher_nrfi: Optional[float] = None,  # home SP 3yr NRFI rate (0-1)
+                 away_team_nrfi: Optional[float] = None,     # away team 3yr NRFI rate (0-1)
+                 home_team_nrfi: Optional[float] = None,     # home team 3yr NRFI rate (0-1)
+                 away_f5_rs: Optional[float] = None,         # away team 3yr F5 RS mean
+                 home_f5_rs: Optional[float] = None,         # home team 3yr F5 RS mean
+                 ) -> dict:
 
         hfa     = env.get('hfa_weight', HFA_BASE_WEIGHT)
         home_mu = home_state['mu'] * (1.0 + hfa * 0.15)
@@ -569,16 +637,133 @@ class MonteCarloEngine:
         home_runs = home_9 + home_xi
         away_runs = away_9 + away_xi
 
-        # ── SPEC: P_NRFI — simulate first inning runs independently ─────────────
-        # First inning: starter at full strength (TTO=0), no bullpen
-        # mu_1st = full-game mu / 9 * inning_1_weight (starter is sharpest in inning 1)
-        # Empirically, inning 1 accounts for ~10.5% of total runs (slightly below 1/9 = 11.1%)
-        # due to lineup cycling and starter freshness effects
-        # ── CALIBRATED 2026-04-14: 3-YR ROLLING BACKTEST (2024+2025+2026, n=5109 games)
-        # Old: 0.1162 | New: 0.1093 | Delta: -0.0069 | Source: 3yr mean(F1_total)/mean(FG_total)
+        # ── SPEC: P_NRFI — simulate first inning runs with Bayesian NRFI priors ──────
+        # ── INTEGRATION 2026-04-14: 3-YEAR BACKTEST REINFORCEMENT ──────────────────────
+        # Architecture: physics (50%) + pitcher NRFI prior (35%) + team NRFI prior (15%)
+        # Physics: mu_1st_physics = full_game_mu * INNING1_RUN_SHARE (calibrated 0.1093)
+        # Pitcher prior: mu_1st_pitcher = -ln(nrfi_rate) converts P(NRFI) → expected runs
+        #   Derivation: if P(X=0|Poisson(λ)) = R, then λ = -ln(R)
+        #   This is the expected runs per inning implied by the pitcher's empirical NRFI rate
+        # Team prior: same Poisson inverse applied to team 3yr NRFI rate
+        # Blending: mu_1st_final = physics*0.50 + pitcher*0.35 + team*0.15
+        # Fallback: if pitcher missing → team*0.50 + physics*0.50
+        #           if both missing  → physics*1.00 (no change)
+        # Source: 06_nrfi_threshold_grid.py (n=5,109 games, optimal threshold=0.56)
+        # ──────────────────────────────────────────────────────────────────────────────────
         INNING1_RUN_SHARE = 0.1093  # 3yr-backtest-calibrated: first inning run share
-        home_mu_1st = home_state['mu'] * INNING1_RUN_SHARE
-        away_mu_1st = away_state['mu'] * INNING1_RUN_SHARE
+        home_mu_1st_physics = home_state['mu'] * INNING1_RUN_SHARE
+        away_mu_1st_physics = away_state['mu'] * INNING1_RUN_SHARE
+
+        if logger:
+            logger.step("NRFI Bayesian Prior Blending (3yr backtest integration)")
+            logger.state(
+                f"[NRFI-PRIOR] Physics mu_1st: home={home_mu_1st_physics:.4f} "
+                f"away={away_mu_1st_physics:.4f} | "
+                f"pitcher_nrfi: home_SP={home_pitcher_nrfi} away_SP={away_pitcher_nrfi} | "
+                f"team_nrfi: home={home_team_nrfi} away={away_team_nrfi}"
+            )
+
+        def _nrfi_to_mu(nrfi_rate: float) -> float:
+            """Convert empirical NRFI rate to expected runs per inning via Poisson inverse.
+            P(X=0 | Poisson(λ)) = exp(-λ) → λ = -ln(P(X=0)) = -ln(nrfi_rate)
+            Clamp: nrfi_rate in [0.01, 0.99] to avoid log(0) and negative mu.
+            """
+            return -math.log(max(min(nrfi_rate, 0.99), 0.01))
+
+        # ── Home team: home lineup faces away SP (home_pitcher_nrfi = away SP's NRFI rate)
+        # Note: home_pitcher_nrfi is the AWAY starter's NRFI rate (they pitch to home lineup)
+        #       home_team_nrfi is the HOME team's tendency as a batting unit
+        if home_pitcher_nrfi is not None and home_team_nrfi is not None:
+            # Full blend: physics 50% + pitcher 35% + team 15%
+            mu_1st_pitcher_home = _nrfi_to_mu(home_pitcher_nrfi)
+            mu_1st_team_home    = _nrfi_to_mu(home_team_nrfi)
+            home_mu_1st = (
+                home_mu_1st_physics * NRFI_PHYSICS_WEIGHT +
+                mu_1st_pitcher_home * NRFI_PITCHER_WEIGHT +
+                mu_1st_team_home    * NRFI_TEAM_WEIGHT
+            )
+            if logger:
+                logger.state(
+                    f"[NRFI-PRIOR] Home I1 mu: physics={home_mu_1st_physics:.4f} "
+                    f"pitcher_prior={mu_1st_pitcher_home:.4f} (nrfi={home_pitcher_nrfi:.4f}) "
+                    f"team_prior={mu_1st_team_home:.4f} (nrfi={home_team_nrfi:.4f}) "
+                    f"blended={home_mu_1st:.4f} "
+                    f"[w: physics={NRFI_PHYSICS_WEIGHT} pitcher={NRFI_PITCHER_WEIGHT} team={NRFI_TEAM_WEIGHT}]"
+                )
+        elif home_pitcher_nrfi is not None:
+            # Pitcher only: physics 65% + pitcher 35%
+            mu_1st_pitcher_home = _nrfi_to_mu(home_pitcher_nrfi)
+            home_mu_1st = home_mu_1st_physics * 0.65 + mu_1st_pitcher_home * 0.35
+            if logger:
+                logger.state(
+                    f"[NRFI-PRIOR] Home I1 mu: physics={home_mu_1st_physics:.4f} "
+                    f"pitcher_prior={mu_1st_pitcher_home:.4f} (nrfi={home_pitcher_nrfi:.4f}) "
+                    f"team=MISSING blended={home_mu_1st:.4f} [w: physics=0.65 pitcher=0.35]"
+                )
+        elif home_team_nrfi is not None:
+            # Team only: physics 50% + team 50%
+            mu_1st_team_home = _nrfi_to_mu(home_team_nrfi)
+            home_mu_1st = home_mu_1st_physics * 0.50 + mu_1st_team_home * 0.50
+            if logger:
+                logger.state(
+                    f"[NRFI-PRIOR] Home I1 mu: physics={home_mu_1st_physics:.4f} "
+                    f"pitcher=MISSING team_prior={mu_1st_team_home:.4f} (nrfi={home_team_nrfi:.4f}) "
+                    f"blended={home_mu_1st:.4f} [w: physics=0.50 team=0.50]"
+                )
+        else:
+            # No priors: physics only
+            home_mu_1st = home_mu_1st_physics
+            if logger:
+                logger.state(
+                    f"[NRFI-PRIOR] Home I1 mu: physics={home_mu_1st_physics:.4f} "
+                    f"pitcher=MISSING team=MISSING blended={home_mu_1st:.4f} [physics only]"
+                )
+
+        # ── Away team: away lineup faces home SP (away_pitcher_nrfi = home SP's NRFI rate)
+        # Note: away_pitcher_nrfi is the HOME starter's NRFI rate (they pitch to away lineup)
+        #       away_team_nrfi is the AWAY team's tendency as a batting unit
+        if away_pitcher_nrfi is not None and away_team_nrfi is not None:
+            mu_1st_pitcher_away = _nrfi_to_mu(away_pitcher_nrfi)
+            mu_1st_team_away    = _nrfi_to_mu(away_team_nrfi)
+            away_mu_1st = (
+                away_mu_1st_physics * NRFI_PHYSICS_WEIGHT +
+                mu_1st_pitcher_away * NRFI_PITCHER_WEIGHT +
+                mu_1st_team_away    * NRFI_TEAM_WEIGHT
+            )
+            if logger:
+                logger.state(
+                    f"[NRFI-PRIOR] Away I1 mu: physics={away_mu_1st_physics:.4f} "
+                    f"pitcher_prior={mu_1st_pitcher_away:.4f} (nrfi={away_pitcher_nrfi:.4f}) "
+                    f"team_prior={mu_1st_team_away:.4f} (nrfi={away_team_nrfi:.4f}) "
+                    f"blended={away_mu_1st:.4f} "
+                    f"[w: physics={NRFI_PHYSICS_WEIGHT} pitcher={NRFI_PITCHER_WEIGHT} team={NRFI_TEAM_WEIGHT}]"
+                )
+        elif away_pitcher_nrfi is not None:
+            mu_1st_pitcher_away = _nrfi_to_mu(away_pitcher_nrfi)
+            away_mu_1st = away_mu_1st_physics * 0.65 + mu_1st_pitcher_away * 0.35
+            if logger:
+                logger.state(
+                    f"[NRFI-PRIOR] Away I1 mu: physics={away_mu_1st_physics:.4f} "
+                    f"pitcher_prior={mu_1st_pitcher_away:.4f} (nrfi={away_pitcher_nrfi:.4f}) "
+                    f"team=MISSING blended={away_mu_1st:.4f} [w: physics=0.65 pitcher=0.35]"
+                )
+        elif away_team_nrfi is not None:
+            mu_1st_team_away = _nrfi_to_mu(away_team_nrfi)
+            away_mu_1st = away_mu_1st_physics * 0.50 + mu_1st_team_away * 0.50
+            if logger:
+                logger.state(
+                    f"[NRFI-PRIOR] Away I1 mu: physics={away_mu_1st_physics:.4f} "
+                    f"pitcher=MISSING team_prior={mu_1st_team_away:.4f} (nrfi={away_team_nrfi:.4f}) "
+                    f"blended={away_mu_1st:.4f} [w: physics=0.50 team=0.50]"
+                )
+        else:
+            away_mu_1st = away_mu_1st_physics
+            if logger:
+                logger.state(
+                    f"[NRFI-PRIOR] Away I1 mu: physics={away_mu_1st_physics:.4f} "
+                    f"pitcher=MISSING team=MISSING blended={away_mu_1st:.4f} [physics only]"
+                )
+
         home_var_1st = max(home_state['variance'] * INNING1_RUN_SHARE, home_mu_1st + 0.01)
         away_var_1st = max(away_state['variance'] * INNING1_RUN_SHARE, away_mu_1st + 0.01)
         home_1st = self.dist.sample(home_mu_1st, home_var_1st, self.n_sims, self.rng)
@@ -590,10 +775,28 @@ class MonteCarloEngine:
         # First-inning total distribution
         first_inn_totals = home_1st + away_1st
         exp_first_inn_total = float(first_inn_totals.mean())
+        # ── NRFI filter signals (both-pitcher gate = stronger signal)
+        nrfi_combined_signal = None
+        nrfi_combined_pass   = False
+        nrfi_both_pass       = False
+        if away_pitcher_nrfi is not None and home_pitcher_nrfi is not None:
+            nrfi_combined_signal = (away_pitcher_nrfi + home_pitcher_nrfi) / 2.0
+            nrfi_combined_pass   = nrfi_combined_signal >= NRFI_COMBINED_THRESHOLD
+            nrfi_both_pass       = (away_pitcher_nrfi >= NRFI_BOTH_THRESHOLD and
+                                    home_pitcher_nrfi >= NRFI_BOTH_THRESHOLD)
         if logger:
-            logger.state(f"NRFI: p_nrfi={p_nrfi:.4f} p_yrfi={p_yrfi:.4f} | "
-                         f"1st-inn total: mean={exp_first_inn_total:.3f} "
-                         f"home_mu_1st={home_mu_1st:.4f} away_mu_1st={away_mu_1st:.4f}")
+            logger.state(
+                f"[NRFI-RESULT] p_nrfi={p_nrfi:.4f} p_yrfi={p_yrfi:.4f} | "
+                f"1st-inn total: mean={exp_first_inn_total:.3f} "
+                f"home_mu_1st={home_mu_1st:.4f} away_mu_1st={away_mu_1st:.4f} | "
+                f"combined_signal={nrfi_combined_signal} "
+                f"combined_pass={nrfi_combined_pass} both_pass={nrfi_both_pass}"
+            )
+            logger.verify(
+                abs(p_nrfi - EMPIRICAL_PRIORS['nrfi_rate']) < 0.12,
+                f"[NRFI-GATE] p_nrfi={p_nrfi:.4f} vs empirical={EMPIRICAL_PRIORS['nrfi_rate']:.4f} "
+                f"delta={p_nrfi - EMPIRICAL_PRIORS['nrfi_rate']:+.4f} (threshold=±0.12)"
+            )
 
         # ── SPEC: HR Props — P(HR >= 1) per team from batter HR rates ───────────
         # hr_rate_per_pa = batter's HR/PA rate (from hr_pct in batter features)
@@ -619,15 +822,51 @@ class MonteCarloEngine:
                          f"P(both HR)={p_both_hr:.4f} | "
                          f"exp_home_hr={exp_home_hr:.3f} exp_away_hr={exp_away_hr:.3f}")
 
-        # ── SPEC: F5 Simulation — First Five Innings ────────────────────────────
-        # F5 run share: innings 1-5 account for ~55% of total runs
-        # Starter ERA is dominant in F5; bullpen effect minimal
-        # F5 mu = full-game mu * F5_RUN_SHARE (scaled by inning count)
-        # ── CALIBRATED 2026-04-14: 3-YR ROLLING BACKTEST (2024+2025+2026, n=5109 games)
-        # Old: 0.5503 | New: 0.5311 | Delta: -0.0192 | Source: 3yr mean(F5_total)/mean(FG_total)
+        # ── SPEC: F5 Simulation — First Five Innings with Team F5 RS Calibration ────────
+        # ── INTEGRATION 2026-04-14: 3-YEAR BACKTEST REINFORCEMENT ──────────────────────
+        # Base: F5_RUN_SHARE = 0.5311 (3yr calibrated, n=5,109 games)
+        # Enhancement: Team F5 RS tendency applied as a secondary mu adjustment
+        # Formula: if team F5 RS > league mean (2.466) → slight upward adjustment
+        #          if team F5 RS < league mean → slight downward adjustment
+        # Scale: max ±10% adjustment (F5_RS_WEIGHT = 0.10)
+        # Adjustment: f5_rs_adj = (team_f5_rs - F5_RS_LEAGUE_MEAN) / F5_RS_LEAGUE_MEAN * F5_RS_WEIGHT
+        # Source: 04_deep_analysis.py → TEAM NRFI RANKINGS table (F5 RS column)
         F5_RUN_SHARE = 0.5311  # 3yr-backtest-calibrated: F5 run share of full game
-        home_mu_f5 = home_state['mu'] * F5_RUN_SHARE
-        away_mu_f5 = away_state['mu'] * F5_RUN_SHARE
+        home_mu_f5_base = home_state['mu'] * F5_RUN_SHARE
+        away_mu_f5_base = away_state['mu'] * F5_RUN_SHARE
+        # Apply team F5 RS adjustment if available
+        if home_f5_rs is not None:
+            home_f5_rs_adj = float(np.clip(
+                (home_f5_rs - F5_RS_LEAGUE_MEAN) / F5_RS_LEAGUE_MEAN * F5_RS_WEIGHT,
+                -F5_RS_WEIGHT, F5_RS_WEIGHT
+            ))
+            home_mu_f5 = home_mu_f5_base * (1.0 + home_f5_rs_adj)
+            if logger:
+                logger.state(
+                    f"[F5-RS] Home F5 mu: base={home_mu_f5_base:.4f} "
+                    f"team_f5_rs={home_f5_rs:.3f} league_mean={F5_RS_LEAGUE_MEAN:.3f} "
+                    f"adj={home_f5_rs_adj:+.4f} final={home_mu_f5:.4f}"
+                )
+        else:
+            home_mu_f5 = home_mu_f5_base
+            if logger:
+                logger.state(f"[F5-RS] Home F5 mu: base={home_mu_f5_base:.4f} team_f5_rs=MISSING (no adj)")
+        if away_f5_rs is not None:
+            away_f5_rs_adj = float(np.clip(
+                (away_f5_rs - F5_RS_LEAGUE_MEAN) / F5_RS_LEAGUE_MEAN * F5_RS_WEIGHT,
+                -F5_RS_WEIGHT, F5_RS_WEIGHT
+            ))
+            away_mu_f5 = away_mu_f5_base * (1.0 + away_f5_rs_adj)
+            if logger:
+                logger.state(
+                    f"[F5-RS] Away F5 mu: base={away_mu_f5_base:.4f} "
+                    f"team_f5_rs={away_f5_rs:.3f} league_mean={F5_RS_LEAGUE_MEAN:.3f} "
+                    f"adj={away_f5_rs_adj:+.4f} final={away_mu_f5:.4f}"
+                )
+        else:
+            away_mu_f5 = away_mu_f5_base
+            if logger:
+                logger.state(f"[F5-RS] Away F5 mu: base={away_mu_f5_base:.4f} team_f5_rs=MISSING (no adj)")
         home_var_f5 = max(home_state['variance'] * F5_RUN_SHARE, home_mu_f5 + 0.05)
         away_var_f5 = max(away_state['variance'] * F5_RUN_SHARE, away_mu_f5 + 0.05)
         home_f5 = self.dist.sample(home_mu_f5, home_var_f5, self.n_sims, self.rng)
@@ -827,10 +1066,14 @@ class MonteCarloEngine:
             'avg_extra_inn':    round(float(n_extra.mean()), 3),
             'tail_stable':      tail_stable,
             'sparse_buckets':   sparse_buckets,
-            # SPEC: NRFI market
+            # SPEC: NRFI market (with 3yr backtest signals)
             'p_nrfi':               round(p_nrfi, 6),
             'p_yrfi':               round(p_yrfi, 6),
             'exp_first_inn_total':  round(exp_first_inn_total, 3),
+            # 3yr backtest NRFI filter signals
+            'nrfi_combined_signal': round(nrfi_combined_signal, 4) if nrfi_combined_signal is not None else None,
+            'nrfi_combined_pass':   nrfi_combined_pass,
+            'nrfi_both_pass':       nrfi_both_pass,
             # SPEC: HR Props per team
             'p_home_hr_any':        round(p_home_hr_any, 6),
             'p_away_hr_any':        round(p_away_hr_any, 6),
@@ -1523,6 +1766,15 @@ def project_game(
     umpire_bb_mod: float = 1.0,        # HP umpire BB-rate modifier
     umpire_name: str = 'UNKNOWN',      # HP umpire name for logging
     mlb_game_pk: Optional[int] = None, # MLB Stats API gamePk for traceability
+    # ── 3yr backtest NRFI/F5 priors (passed from mlbModelRunner via DB lookup) ──────────────────────
+    # Pitcher NRFI rates: away SP's rate used for home lineup; home SP's rate for away lineup
+    # If None: auto-looked up from TEAM_NRFI_RATES / TEAM_F5_RS constants
+    away_pitcher_nrfi: Optional[float] = None,  # away SP 3yr NRFI rate (pitching to home lineup)
+    home_pitcher_nrfi: Optional[float] = None,  # home SP 3yr NRFI rate (pitching to away lineup)
+    away_team_nrfi: Optional[float] = None,     # away team 3yr NRFI rate (as batting unit)
+    home_team_nrfi: Optional[float] = None,     # home team 3yr NRFI rate (as batting unit)
+    away_f5_rs: Optional[float] = None,         # away team 3yr F5 RS mean
+    home_f5_rs: Optional[float] = None,         # home team 3yr F5 RS mean
 ) -> dict:
     t0 = time.time()
     game_label = f"{away_abbrev}@{home_abbrev}"
@@ -1532,6 +1784,24 @@ def project_game(
     logger.input(f"Away stats: rpg={away_team_stats.get('rpg'):.2f} era={away_team_stats.get('era'):.2f}")
     logger.input(f"Home stats: rpg={home_team_stats.get('rpg'):.2f} era={home_team_stats.get('era'):.2f}")
     logger.input(f"Book lines: {book_lines}")
+
+    # ── 3yr Backtest NRFI/F5 Prior Auto-Lookup ─────────────────────────────────────────────────────────────────────────────
+    # Team NRFI rates and F5 RS means are auto-resolved from 3yr backtest constants.
+    # Pitcher NRFI rates must be passed explicitly from mlbModelRunner (DB lookup).
+    # If team rates are not passed, fall back to TEAM_NRFI_RATES / TEAM_F5_RS constants.
+    if away_team_nrfi is None:
+        away_team_nrfi = TEAM_NRFI_RATES.get(away_abbrev, TEAM_NRFI_LEAGUE_MEAN)
+    if home_team_nrfi is None:
+        home_team_nrfi = TEAM_NRFI_RATES.get(home_abbrev, TEAM_NRFI_LEAGUE_MEAN)
+    if away_f5_rs is None:
+        away_f5_rs = TEAM_F5_RS.get(away_abbrev, F5_RS_LEAGUE_MEAN)
+    if home_f5_rs is None:
+        home_f5_rs = TEAM_F5_RS.get(home_abbrev, F5_RS_LEAGUE_MEAN)
+    logger.input(
+        f"[NRFI-PRIORS] away_team_nrfi={away_team_nrfi:.4f} home_team_nrfi={home_team_nrfi:.4f} | "
+        f"away_pitcher_nrfi={away_pitcher_nrfi} home_pitcher_nrfi={home_pitcher_nrfi} | "
+        f"away_f5_rs={away_f5_rs:.3f} home_f5_rs={home_f5_rs:.3f}"
+    )
 
     # Step 1: Build environment features
     logger.step("Step 1: Input Engine — Environment Features")
@@ -1699,7 +1969,22 @@ def project_game(
     logger.step(f"Step 2: Monte Carlo ({SIMULATIONS:,} sims, NB-Gamma Mixture, extra innings)")
     mc = MonteCarloEngine(n_sims=SIMULATIONS, seed=seed)
     sim = mc.simulate(home_state, away_state, env,
-                      ou_line=ou_line, rl_spread=rl_spread, logger=logger)
+                      ou_line=ou_line, rl_spread=rl_spread, logger=logger,
+                      # ── 3yr backtest NRFI/F5 priors ────────────────────────────────────────────────────────────
+                      # NOTE: pitcher NRFI roles are CROSSED:
+                      #   home_pitcher_nrfi = home SP's rate → faces AWAY lineup
+                      #   away_pitcher_nrfi = away SP's rate → faces HOME lineup
+                      # simulate() uses home_pitcher_nrfi to adjust HOME team's I1 mu
+                      # (the pitcher they face is the away SP, but the NRFI rate is the SP's)
+                      # The naming convention in simulate() is:
+                      #   home_pitcher_nrfi = the pitcher facing the home lineup (= away SP)
+                      #   away_pitcher_nrfi = the pitcher facing the away lineup (= home SP)
+                      away_pitcher_nrfi=home_pitcher_nrfi,  # home SP faces away lineup
+                      home_pitcher_nrfi=away_pitcher_nrfi,  # away SP faces home lineup
+                      away_team_nrfi=away_team_nrfi,
+                      home_team_nrfi=home_team_nrfi,
+                      away_f5_rs=away_f5_rs,
+                      home_f5_rs=home_f5_rs)
 
     logger.state(f"Sim results: p_home={sim['p_home_win']:.4f} exp_total={sim['exp_total']:.2f} "
                  f"ties_9inn={sim['n_ties_9inn']} avg_extra={sim['avg_extra_inn']:.3f}")
@@ -1806,6 +2091,10 @@ def project_game(
         'nrfi_odds':           market['nrfi_odds'],                # NRFI fair-value ML (no-vig)
         'yrfi_odds':           market['yrfi_odds'],                # YRFI fair-value ML (no-vig)
         'exp_first_inn_total': sim['exp_first_inn_total'],         # expected 1st inning total
+        # 3yr backtest NRFI filter signals (from simulate() via Bayesian prior blending)
+        'nrfi_combined_signal': sim.get('nrfi_combined_signal'),  # (awayNrfi+homeNrfi)/2, None if missing
+        'nrfi_combined_pass':   sim.get('nrfi_combined_pass'),    # combined >= 0.56
+        'nrfi_both_pass':       sim.get('nrfi_both_pass'),        # both >= 0.56 (stronger gate)
         # SPEC: HR Props per team
         'p_home_hr_any':       round(sim['p_home_hr_any'] * 100, 2),  # P(home team HR>=1) %
         'p_away_hr_any':       round(sim['p_away_hr_any'] * 100, 2),  # P(away team HR>=1) %
