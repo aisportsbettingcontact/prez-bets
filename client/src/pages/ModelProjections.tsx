@@ -1137,9 +1137,17 @@ export default function ModelProjections() {
         <div ref={tabsScrollRef} className="feed-tabs-scroll" style={{
             display: 'flex',
             overflowX: 'auto',
+            overflowY: 'hidden',
             scrollSnapType: 'x mandatory',
             WebkitOverflowScrolling: 'touch',
             scrollbarWidth: 'none',
+            // Prevent vertical scroll from propagating to the page when swiping horizontally.
+            // overscrollBehaviorX: contain — stops the horizontal swipe from triggering
+            // the parent page's vertical scroll chain on iOS/Android.
+            // touchAction: pan-x — tells the browser this element only scrolls horizontally,
+            // so vertical swipes are immediately handed off to the page scroll handler.
+            overscrollBehaviorX: 'contain',
+            touchAction: 'pan-x',
             borderBottom: '2px solid hsl(var(--border) / 0.5)',
             background: 'hsl(var(--card))',
           }}>

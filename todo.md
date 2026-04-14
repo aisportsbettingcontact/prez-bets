@@ -2485,3 +2485,10 @@
 - [x] Verify Apr 13 MLB model cycle — 10/10 MODEL_OK; MLBCycle FAILED(6) is for Apr 14 future games without pitchers (normal, not a bug)
 - [x] Audit team logo visibility/readability — all 3 sports 100% hit rate: MLB_BY_ABBREV(30/30), NHL_BY_DB_SLUG(30/30), getNbaTeamByDbSlug(30/30); logos render via official CDN URLs
 - [x] Audit and fix team abbreviations — nbaTeams.ts: added abbrev field to NbaTeam interface + all 30 official NBA abbreviations (BOS/BKN/NYK/PHI/TOR/CHI/CLE/DET/IND/MIL/ATL/CHA/MIA/ORL/WAS/DEN/MIN/OKC/POR/UTA/GSW/LAC/LAL/PHX/SAC/DAL/HOU/MEM/NOP/SAS); GameCard.tsx: makeCityAbbr now uses NHL→NBA→MLB official abbrev (30/30 MLB fixed: NYY/NYM/LAA/LAD/CWS/CHC/STL/KC/TB/SF/SD etc.)
+
+## 5-Issue Fix: Truncation + A's Logo + Tab Scroll + xl: + Abbrev (Apr 14, 2026 — Session 7)
+- [x] Fix MIN truncation — CompactScorePanel now uses awayAbbr/homeAbbr (official 2-3 char: MIN/ATH/NYY/NYM/LAA/LAD/CWS/CHC); removed truncate class + whiteSpace:nowrap + letterSpacing:0.05em
+- [x] Fix A's logo visibility — brightness(1.25) + drop-shadow(0 0 2px rgba(255,255,255,0.10)) on all TeamLogo imgs; lifts dark-primary-color logos (A's #003831, Pirates/CWS #000000) off dark card bg
+- [x] Fix tab bar vertical scroll bleed — overflowY:hidden + overscrollBehaviorX:contain + touchAction:pan-x on feed-tabs-scroll; prevents iOS/Android vertical scroll chain on horizontal swipe
+- [x] Add xl: tab bar breakpoint — index.css @media 1280px: font-size:18px + padding:12px 24px + letter-spacing:0.09em (math: 6 MLB tabs=721px ≤ 1280px with 559px spare); 4-tier scale complete: 13→15→17→18px
+- [x] Abbrev in mobile ScorePanel — CompactScorePanel (frozen panel) now shows official abbreviations; ScorePanel (desktop) correctly shows city+nickname in 2 lines; no separate label needed

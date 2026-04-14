@@ -191,7 +191,17 @@ function TeamLogo({ slug, name, logoUrl, size = 36 }: { slug: string; name: stri
     <img
       src={logoUrl}
       alt={name}
-      style={{ width: cssSize, height: cssSize, minWidth: Math.round(size * 0.7), minHeight: Math.round(size * 0.7), objectFit: "contain", mixBlendMode: "screen", flexShrink: 0 }}
+      style={{
+        width: cssSize, height: cssSize,
+        minWidth: Math.round(size * 0.7), minHeight: Math.round(size * 0.7),
+        objectFit: "contain",
+        mixBlendMode: "screen",
+        flexShrink: 0,
+        // Brightness boost: lifts dark-primary-color logos (A's #003831, Pirates #000000,
+        // White Sox #000000) off the dark card background. The 1.25 multiplier is subtle
+        // enough to not blow out bright logos (NYY, LAD, etc.) while making dark ones visible.
+        filter: "brightness(1.25) drop-shadow(0 0 2px rgba(255,255,255,0.10))",
+      }}
       onError={() => setError(true)}
     />
   );
@@ -2175,8 +2185,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       <div className="flex items-center justify-between gap-1 w-full">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={22} />
-          <span className="font-bold truncate" style={{ fontSize: 11, color: awayWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))", fontWeight: awayWins ? 800 : 600 }}>
-            {compactAwayLabel}
+          <span className="font-bold" style={{ fontSize: 11, color: awayWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))", fontWeight: awayWins ? 800 : 600, whiteSpace: 'nowrap', letterSpacing: '0.05em' }}>
+            {awayAbbr}
           </span>
         </div>
         {(isLive || isFinal) && hasScores && (
@@ -2193,8 +2203,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
       <div className="flex items-center justify-between gap-1 w-full">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={22} />
-          <span className="font-bold truncate" style={{ fontSize: 11, color: homeWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))", fontWeight: homeWins ? 800 : 600 }}>
-            {compactHomeLabel}
+          <span className="font-bold" style={{ fontSize: 11, color: homeWins ? "hsl(var(--foreground))" : isFinal ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))", fontWeight: homeWins ? 800 : 600, whiteSpace: 'nowrap', letterSpacing: '0.05em' }}>
+            {homeAbbr}
           </span>
         </div>
         {(isLive || isFinal) && hasScores && (

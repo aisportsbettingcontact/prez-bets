@@ -260,3 +260,18 @@
     letter-spacing: 0.08em !important;
   }
 }
+/* ── xl: (1280px+) tab bar scaling ────────────────────────────────────────────────────────────────────────────────
+ * Complete the 4-tier typographic progression: mobile 13 → tablet 15 → desktop 17 → wide 18.
+ * padding: 12px 24px (vs 11px 22px at 1024px — slightly wider for 18px text)
+ * font-size: 18px (vs 17px at 1024px — final step in the scale)
+ *   Math: 6 MLB tabs @ 18px Barlow Condensed + 24px h-padding = 721px ≤ 1280px viewport (559px spare)
+ *   Scroll mechanism handles any overflow if tab count grows beyond 6.
+ * letter-spacing: 0.09em (vs 0.08em at 1024px — slightly wider for 18px readability)
+ * ───────────────────────────────────────────────────────────────────────────────── */
+@media (min-width: 1280px) {
+  .feed-tab {
+    padding: 12px 24px !important;
+    font-size: 18px !important;
+    letter-spacing: 0.09em !important;
+  }
+}
