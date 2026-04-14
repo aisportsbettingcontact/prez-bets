@@ -31,7 +31,7 @@ export interface UrlState {
   selectedDate: string;
   feedMobileTab: FeedMobileTab;
   selectedStatuses: Set<GameStatus>;
-  setSelectedSport: (s: Sport) => void;
+  setSelectedSport: (s: Sport, isAutoSwitch?: boolean) => void;
   setSelectedDate: (d: string) => void;
   setFeedMobileTab: (t: FeedMobileTab) => void;
   setSelectedStatuses: (s: Set<GameStatus>) => void;
@@ -71,8 +71,10 @@ export function useUrlState(): UrlState {
   }, [params]);
 
   // Setter: update a single param, preserve others
+  // replace=true  → filter/auto changes (tab, statuses, auto-sport-switch)
+  // replace=false → user-initiated navigation (sport pill click, date picker)
   const setParam = useCallback(
-    (key: string, value: string | null) => {
+    (key: string, value: string | null, replace = true) => {
       const next = new URLSearchParams(search);
       if (value === null || value === "") {
         next.delete(key);
@@ -80,20 +82,21 @@ export function useUrlState(): UrlState {
         next.set(key, value);
       }
       const qs = next.toString();
-      setLocation(qs ? `?${qs}` : "?", { replace: true });
+      setLocation(qs ? `?${qs}` : "?", { replace });
     },
     [search, setLocation]
   );
 
   const setSelectedSport = useCallback(
-    (s: Sport) => setParam("sport", s),
+    (s: Sport, isAutoSwitch = false) => setParam("sport", s, isAutoSwitch),
     [setParam]
   );
 
   const setSelectedDate = useCallback(
     (d: string) => {
       const today = todayUTC();
-      setParam("date", d === today ? null : d);
+      // Date changes are user-initiated navigation → push to history (replace=false)
+      setParam("date", d === today ? null : d, false);
     },
     [setParam]
   );

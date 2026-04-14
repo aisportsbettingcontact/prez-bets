@@ -293,7 +293,7 @@ export default function ModelProjections() {
     if (!sportActive) {
       // Pick the first active sport in display order: MLB → NHL → NBA
       const fallback = (['MLB', 'NHL', 'NBA'] as const).find(s => activeSports[s]);
-      if (fallback) setSelectedSport(fallback);
+      if (fallback) setSelectedSport(fallback, true); // isAutoSwitch=true → replace, don't push history
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSports]);

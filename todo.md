@@ -2435,3 +2435,11 @@
 - [x] Extract useEdgeCalculation.ts hook from GameCard.tsx
 - [x] Move selectedSport, feedMobileTab, selectedDate, selectedStatuses to URL query params via useSearch()
 - [x] Add IntersectionObserver-gated data fetching for below-fold secondary panels (useVisibility hook)
+
+## Tablet Layout + URL Param Fixes (Apr 13, 2026)
+
+- [x] Switch GameCard desktop layout from lg: (1024px) to md: (768px) breakpoint
+- [x] Update ScorePanel clamp from clamp(200px,16vw,260px) to clamp(170px,22vw,260px) for better tablet proportions
+- [x] Fix URL param persistence: setSelectedSport/setSelectedDate use replace:false (push to history)
+- [x] Auto-sport-switch uses isAutoSwitch=true (replace:true) to not pollute history
+- [x] Update GameCard header comment to reflect 3-tier layout (mobile/tablet/desktop)

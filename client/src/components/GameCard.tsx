@@ -1,22 +1,22 @@
 /**
  * GameCard — Model Projection Card
  *
- * Layout (desktop ≥ lg):
- *   ┌──────────────────┬──────────────────────────────┬──────────────────┐
- *   │  SCORE PANEL     │  ODDS/LINES                  │  BETTING SPLITS  │
- *   │  Clock/Status    │  Column headers              │                  │
- *   │  Away logo+name  │  Away row                    │                  │
- *   │  [score]         │  Home row                    │                  │
- *   │  Home logo+name  │  Edge verdict                │                  │
- *   │  [score]         │                              │                  │
- *   └──────────────────┴──────────────────────────────┴──────────────────┘
+ * 3-tier responsive layout:
  *
- * Layout (mobile < lg):
- *   ┌────────────────────────────────────────────────────────────────────┐
- *   │  SCORE PANEL  (full width, top row)                               │
- *   ├─────────────────────────────┬──────────────────────────────────────┤
- *   │  ODDS/LINES (left)          │  BETTING SPLITS (right)             │
- *   └─────────────────────────────┴──────────────────────────────────────┘
+ * Desktop + Tablet (≥ md / 768px): single horizontal row
+ *   ┌──────────────────┬──────────────────────────────┬──────────────────┐
+ *   │  SCORE PANEL     │  ODDS/LINES (3 SectionCols)  │  EDGE VERDICT    │
+ *   │  Clock/Status    │  SPREAD | TOTAL | ML         │                  │
+ *   │  Away logo+name  │  BOOK | MODEL per col        │                  │
+ *   │  Home logo+name  │  Splits bars below           │                  │
+ *   └──────────────────┴──────────────────────────────┴──────────────────┘
+ *   ScorePanel: clamp(170px,22vw,260px) — scales 170px@768 → 260px@1182+
+ *   EdgeVerdict: clamp(120px,10vw,160px)
+ *
+ * Mobile (< md / 768px): frozen-panel grid + horizontal scroll
+ *   ┌─────────────────────────────────────────────────────────────────────┐
+ *   │  SCORE PANEL (frozen, clamp(140px,38%,180px)) │ ODDS scroll area  │
+ *   └─────────────────────────────────────────────────────────────────────┘
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -2621,12 +2621,13 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
         {/* ── Desktop layout ── */}
         {/* MIN-HEIGHT: ensures a consistent baseline card height while allowing taller content (e.g. OPEN sub-rows) to expand naturally without clipping */}
-        <div className="hidden lg:flex items-stretch w-full" style={{ minHeight: 'clamp(160px,14vw,220px)' }}>
+        {/* ── Desktop + Tablet layout (≥ md / 768px) ── */}
+        <div className="hidden md:flex items-stretch w-full" style={{ minHeight: 'clamp(160px,14vw,220px)' }}>
           {/* Col 1: Score panel — fixed width so all SPREAD/TOTAL/ML/EDGE borders align at same horizontal position */}
           <div
             style={{
-              flex: mode === "splits" ? "1 1 30%" : "0 0 clamp(200px,16vw,260px)",
-              width: mode === "splits" ? undefined : 'clamp(200px,16vw,260px)',
+              flex: mode === "splits" ? "1 1 30%" : "0 0 clamp(170px,22vw,260px)",
+              width: mode === "splits" ? undefined : 'clamp(170px,22vw,260px)',
               borderRight: "1px solid hsl(var(--border) / 0.5)",
             }}
           >
@@ -2765,7 +2766,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           This completely eliminates the z-index bleed issue because the score
           panel and the scroll container are siblings, not parent/child.
         */}
-        <div className="lg:hidden w-full">
+        {/* ── Mobile layout (< md / 768px) ── */}
+        <div className="md:hidden w-full">
 
           {/* Projections mode */}
           {mode === "projections" && (
