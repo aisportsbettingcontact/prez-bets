@@ -470,6 +470,20 @@
       "when": 1776156797505,
       "tag": "0066_productive_firelord",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "5",
+      "when": 1776160408972,
+      "tag": "0067_violet_human_robot",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "5",
+      "when": 1776162064629,
+      "tag": "0068_clammy_kingpin",
+      "breakpoints": true
     }
   ]
 }

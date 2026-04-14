@@ -418,6 +418,18 @@ export const games = mysqlTable("games", {
   nrfiCorrect: tinyint("nrfiCorrect"),
   /** UTC ms when NRFI backtest was last run */
   nrfiBacktestRunAt: bigint("nrfiBacktestRunAt", { mode: "number" }),
+  /**
+   * Combined pitcher NRFI signal = (awayPitcherNrfiRate + homePitcherNrfiRate) / 2
+   * Computed from 3-year empirical NRFI rates (n=5,109 games, seeded 2026-04-14).
+   * Optimal filter threshold: >= 0.56 (grid search: 69.38% win rate, 32.46% ROI)
+   * Null if either pitcher lacks 3yr NRFI data (< 3 starts).
+   */
+  nrfiCombinedSignal: double("nrfiCombinedSignal"),
+  /**
+   * Whether the game passes the 3yr NRFI filter (combinedSignal >= 0.56).
+   * 1 = passes (strong NRFI edge), 0 = fails, null = no data.
+   */
+  nrfiFilterPass: tinyint("nrfiFilterPass"),
 
   // ─── HR Props (team-level from MLBAIModel.py) ────────────────────────────────
   /** Model P(away team hits ≥1 HR) (0-100) */
@@ -980,6 +992,27 @@ export const mlbPitcherStats = mysqlTable("mlb_pitcher_stats", {
   throwsHand: varchar("throwsHand", { length: 1 }),
   /** UTC timestamp (ms) when stats were last fetched */
   lastFetchedAt: bigint("lastFetchedAt", { mode: "number" }),
+
+  // ─── 3-Year Rolling NRFI Calibration Fields (seeded from 3yr backtest) ──────
+  /** Total starts in 3yr NRFI sample (2024+2025+2026) */
+  nrfiStarts: int("nrfiStarts"),
+  /** Number of starts where inning 1 was scoreless (NRFI) */
+  nrfiCount: int("nrfiCount"),
+  /** NRFI rate = nrfiCount / nrfiStarts (0.0–1.0, 4 decimal places) */
+  nrfiRate: double("nrfiRate"),
+  /** Mean F5 runs allowed per start over 3yr sample */
+  f5RunsAllowedMean: double("f5RunsAllowedMean"),
+  /** Mean full-game runs allowed per start over 3yr sample */
+  fgRunsAllowedMean: double("fgRunsAllowedMean"),
+  /** Mean innings pitched per start over 3yr sample */
+  ipMean3yr: double("ipMean3yr"),
+  /** Comma-separated list of seasons included in NRFI sample, e.g. '2024,2025,2026' */
+  nrfiSampleSeasons: varchar("nrfiSampleSeasons", { length: 32 }),
+  /** Calibration version tag, e.g. '2026-04-14-3yr-v1' */
+  nrfiCalibVersion: varchar("nrfiCalibVersion", { length: 32 }),
+  /** UTC ms when 3yr NRFI data was last seeded */
+  nrfiSeededAt: bigint("nrfiSeededAt", { mode: "number" }),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({

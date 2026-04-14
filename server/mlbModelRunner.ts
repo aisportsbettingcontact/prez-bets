@@ -610,6 +610,10 @@ async function batchFetchPitcherStats(
       eraMinus:     mlbPitcherStats.eraMinus,
       war:          mlbPitcherStats.war,
       throwsHand:   mlbPitcherStats.throwsHand,
+      // ── 3-Year NRFI Calibration (seeded 2026-04-14 from 5,109-game backtest) ──
+      nrfiRate:     mlbPitcherStats.nrfiRate,
+      nrfiStarts:   mlbPitcherStats.nrfiStarts,
+      nrfiCount:    mlbPitcherStats.nrfiCount,
     })
     .from(mlbPitcherStats);
 
@@ -705,7 +709,15 @@ async function batchFetchPitcherStats(
   }
 
   // Build name → stats lookup map (includes FIP, xFIP, throwsHand)
-  const dbMap = new Map<string, { stats: Record<string, number>; mlbamId: number }>();
+  // Also build mlbamId → nrfiRate map for NRFI signal computation
+  const nrfiRateByMlbamId = new Map<number, number | null>();
+  for (const row of allRows) {
+    nrfiRateByMlbamId.set(row.mlbamId, row.nrfiRate ?? null);
+  }
+  // Expose nrfiRateByMlbamId on the result map as a side-channel
+  (result as any).__nrfiRates = nrfiRateByMlbamId;
+
+  const dbMap = new Map<string, { stats: Record<string, number>; mlbamId: number; nrfiRate: number | null }>();
   for (const row of allRows) {
     const normName = row.fullName.toLowerCase().trim();
     // Season stats base
@@ -732,7 +744,7 @@ async function batchFetchPitcherStats(
     const blended = blendWithRolling(seasonStats, r5);
     // Store the actual hand string for Python
     blended.throwsHandStr = 0; // unused numeric placeholder
-    const entry = { stats: blended, mlbamId: row.mlbamId };
+    const entry = { stats: blended, mlbamId: row.mlbamId, nrfiRate: row.nrfiRate ?? null };
     // Primary key: "name (TEAM)"
     dbMap.set(`${normName} (${row.teamAbbrev.toUpperCase()})`, entry);
     // Secondary key: name only (team-agnostic, first occurrence wins)
@@ -816,6 +828,12 @@ async function batchFetchPitcherStats(
     // These are stored in the stats dict so the Python engine can use them
     // via team_stats dict (passed separately in engineInputs)
     result.set(`${name}|${teamAbbrev}`, stats);
+
+    // Store nrfiRate in side-channel keyed by "name|team" for NRFI signal computation
+    // Only available for DB-resolved pitchers (not registry/fallback)
+    const nrfiRate = resolvedMlbamId != null ? (dbMap.get(teamKey)?.nrfiRate ?? dbMap.get(normName)?.nrfiRate ?? null) : null;
+    (result as any).__nrfiRateByKey = (result as any).__nrfiRateByKey ?? new Map<string, number | null>();
+    (result as any).__nrfiRateByKey.set(`${name}|${teamAbbrev}`, nrfiRate);
   }
 
   // Also expose battingSplitsLookup so Step 3 can attach to team_stats
@@ -863,6 +881,9 @@ interface EngineInput {
   umpire_bb_mod: number;          // HP umpire BB-rate modifier (1.0 = league avg)
   umpire_name: string;            // HP umpire name for logging
   mlb_game_pk: number | null;     // MLB Stats API gamePk for traceability
+  // ── 3-year NRFI pitcher signal ────────────────────────────────────────────
+  nrfi_combined_signal: number | null;  // (awayNrfiRate + homeNrfiRate) / 2, null if missing
+  nrfi_filter_pass: boolean | null;     // combinedSignal >= 0.56 (optimal threshold, n=5109)
 }
 
 async function runPythonEngine(inputs: EngineInput[]): Promise<MlbModelResult[]> {
@@ -1265,6 +1286,23 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
       umpire_bb_mod:      umpireBBMod,
       umpire_name:        umpireName,
       mlb_game_pk:        g.mlbGamePk ?? null,
+      // ── 3-year NRFI pitcher signal (threshold=0.56, grid-search optimal, n=5109) ──
+      ...(() => {
+        const nrfiRateMap = (pitcherStatsMap as any).__nrfiRateByKey as Map<string, number | null> | undefined;
+        const awayNrfi = nrfiRateMap?.get(`${awayPitcher}|${awayAbbrev}`) ?? null;
+        const homeNrfi = nrfiRateMap?.get(`${homePitcher}|${homeAbbrev}`) ?? null;
+        const NRFI_THRESHOLD = 0.56;
+        const combined = (awayNrfi != null && homeNrfi != null) ? (awayNrfi + homeNrfi) / 2 : null;
+        const filterPass = combined != null ? combined >= NRFI_THRESHOLD : null;
+        console.log(
+          `${TAG} [${g.id}] NRFI SIGNAL: ` +
+          `away=${awayPitcher}=${awayNrfi != null ? awayNrfi.toFixed(4) : 'N/A'} ` +
+          `home=${homePitcher}=${homeNrfi != null ? homeNrfi.toFixed(4) : 'N/A'} ` +
+          `combined=${combined != null ? combined.toFixed(4) : 'N/A'} ` +
+          `filter=${filterPass != null ? (filterPass ? '✅ PASS (>=0.56)' : '❌ FAIL (<0.56)') : 'N/A (missing data)'}`
+        );
+        return { nrfi_combined_signal: combined, nrfi_filter_pass: filterPass };
+      })(),
     };
   });
 
@@ -1283,6 +1321,10 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
   // ── Step 5: Write results to DB (v2 field mapping) ───────────────────────────
   let written = 0;
   let errors  = 0;
+
+  // Build a fast lookup: db_id → engineInput (for NRFI signal retrieval)
+  const engineInputById = new Map<number, EngineInput>();
+  for (const inp of engineInputs) engineInputById.set(inp.db_id, inp);
 
   for (const r of engineResults) {
     if (!r.ok || r.error) {
@@ -1379,6 +1421,11 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
           homePitcherConfirmed: true,
           publishedToFeed:      true,
           publishedModel:       true,
+          // ── 3-year NRFI pitcher signal ──────────────────────────────────────────────────────────────
+          nrfiCombinedSignal:   engineInputById.get(r.db_id)?.nrfi_combined_signal ?? null,
+          nrfiFilterPass:       engineInputById.get(r.db_id)?.nrfi_filter_pass != null
+                                  ? (engineInputById.get(r.db_id)!.nrfi_filter_pass ? 1 : 0)
+                                  : null,
         })
         .where(eq(games.id, r.db_id));
 
