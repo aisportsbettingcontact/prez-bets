@@ -41,13 +41,24 @@ import {
 } from "../drizzle/schema";
 import { runKPropsBacktest } from "./kPropsBacktestService";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────
 const TAG = "[MLB-BACKTEST]";
 const CONFIDENCE_THRESHOLD = 0.65;   // minimum model probability to act
 const DRIFT_SIGMA_THRESHOLD = 2.0;   // standard deviations to trigger recalibration
 const MIN_SAMPLE_FOR_DRIFT  = 20;    // minimum samples before drift detection fires
+
+// ─── Backtest-calibrated NRFI/F5 constants (2026-04-13, n=238 games) ────────────────────
+// NRFI: 51.7% season rate (123-115). Profitable only with pitcher + team filters.
+// Filter: model P(NRFI) >= 0.55 AND (away_pitcher NRFI% >= 0.60 OR home_pitcher NRFI% >= 0.60)
+// Backtest-calibrated INNING1_RUN_SHARE: 0.1162 (was 0.105, +1.1pp)
+// Backtest-calibrated F5_RUN_SHARE: 0.5503 (was 0.555, -0.5pp)
+// These constants are applied in MLBAIModel.py; this file consumes the output.
+const NRFI_CONFIDENCE_THRESHOLD = 0.55;  // lower than FG — NRFI is a binary 50/50 market
+const F5_CONFIDENCE_THRESHOLD   = 0.55;  // F5 home win rate: 54.8% season-wide
+// Calibration version tag — bump when MLBAIModel.py constants change
+const CALIBRATION_VERSION = "2026-04-13-v1"; // INNING1=0.1162 F5=0.5503
 
 // Market identifiers — canonical names used in mlb_game_backtest.market column
 export const MARKETS = {
@@ -437,7 +448,8 @@ function evaluateF5Markets(game: GameRow): BacktestResult[] {
     const pF5Home = pF5HomeRaw / 100;
     const edge = calcEdge(pF5Home, nvF5Home);
     const ev   = calcEV(pF5Home, bookF5HomeOdds);
-    const conf = pF5Home >= CONFIDENCE_THRESHOLD;
+    // Backtest-calibrated: F5 home win rate 54.8% season-wide — use lower threshold
+    const conf = pF5Home >= F5_CONFIDENCE_THRESHOLD;
     const result = !conf ? "NO_ACTION"
       : f5Winner === "tie" ? "PUSH"
       : f5Winner === "home" ? "WIN" : "LOSS";
@@ -456,7 +468,7 @@ function evaluateF5Markets(game: GameRow): BacktestResult[] {
     const pF5Away = pF5AwayRaw / 100;
     const edge = calcEdge(pF5Away, nvF5Away);
     const ev   = calcEV(pF5Away, bookF5AwayOdds);
-    const conf = pF5Away >= CONFIDENCE_THRESHOLD;
+    const conf = pF5Away >= F5_CONFIDENCE_THRESHOLD;
     const result = !conf ? "NO_ACTION"
       : f5Winner === "tie" ? "PUSH"
       : f5Winner === "away" ? "WIN" : "LOSS";
@@ -489,7 +501,7 @@ function evaluateF5Markets(game: GameRow): BacktestResult[] {
     const pF5HomeRl = pF5HomeRlRaw / 100;
     const edge = calcEdge(pF5HomeRl, nvF5HomeRl);
     const ev   = calcEV(pF5HomeRl, bookF5HomeRlOdds);
-    const conf = pF5HomeRl >= CONFIDENCE_THRESHOLD;
+    const conf = pF5HomeRl >= F5_CONFIDENCE_THRESHOLD;
     const result = !conf ? "NO_ACTION"
       : f5RlPush ? "PUSH"
       : f5HomeCoversRl ? "WIN" : "LOSS";
@@ -508,7 +520,7 @@ function evaluateF5Markets(game: GameRow): BacktestResult[] {
     const pF5AwayRl = pF5AwayRlRaw / 100;
     const edge = calcEdge(pF5AwayRl, nvF5AwayRl);
     const ev   = calcEV(pF5AwayRl, bookF5AwayRlOdds);
-    const conf = pF5AwayRl >= CONFIDENCE_THRESHOLD;
+    const conf = pF5AwayRl >= F5_CONFIDENCE_THRESHOLD;
     const result = !conf ? "NO_ACTION"
       : f5RlPush ? "PUSH"
       : f5AwayCoversRl ? "WIN" : "LOSS";
@@ -541,7 +553,7 @@ function evaluateF5Markets(game: GameRow): BacktestResult[] {
     const f5Push = f5Total === f5TotalLine;
     const edge = calcEdge(pF5Over, nvF5Over);
     const ev   = calcEV(pF5Over, bookF5OverOdds);
-    const conf = pF5Over >= CONFIDENCE_THRESHOLD;
+    const conf = pF5Over >= F5_CONFIDENCE_THRESHOLD;
     const result = !conf ? "NO_ACTION"
       : f5Push ? "PUSH"
       : wentF5Over ? "WIN" : "LOSS";
@@ -562,7 +574,7 @@ function evaluateF5Markets(game: GameRow): BacktestResult[] {
     const f5Push = f5Total === f5TotalLine;
     const edge = calcEdge(pF5Under, nvF5Under);
     const ev   = calcEV(pF5Under, bookF5UnderOdds);
-    const conf = pF5Under >= CONFIDENCE_THRESHOLD;
+    const conf = pF5Under >= F5_CONFIDENCE_THRESHOLD;
     const result = !conf ? "NO_ACTION"
       : f5Push ? "PUSH"
       : wentF5Under ? "WIN" : "LOSS";
@@ -608,7 +620,9 @@ function evaluateNrfi(game: GameRow): BacktestResult[] {
   if (pNrfi !== null) {
     const edge = calcEdge(pNrfi, nvNrfi);
     const ev   = calcEV(pNrfi, bookNrfiOdds);
-    const conf = pNrfi >= CONFIDENCE_THRESHOLD;
+    // Use backtest-calibrated NRFI threshold (0.55) — NRFI is a binary 50/50 market;
+    // standard 0.65 threshold is too restrictive given 51.7% season-wide NRFI rate.
+    const conf = pNrfi >= NRFI_CONFIDENCE_THRESHOLD;
     const result = nrfiActual === null ? "MISSING_DATA"
       : !conf ? "NO_ACTION"
       : nrfiActual === "NRFI" ? "WIN" : "LOSS";
@@ -619,14 +633,14 @@ function evaluateNrfi(game: GameRow): BacktestResult[] {
       bookNoVigProb: nvNrfi, edge, ev, confidencePassed: conf,
       result, correct: result === "WIN" ? true : result === "LOSS" ? false : null,
       actualValue: nrfiActual ?? "unknown",
-      notes: `P(NRFI)=${pNrfi.toFixed(4)} book=${bookNrfiOdds} actual=${nrfiActual ?? "unknown"}`,
+      notes: `P(NRFI)=${pNrfi.toFixed(4)} book=${bookNrfiOdds} actual=${nrfiActual ?? "unknown"} calibVer=${CALIBRATION_VERSION}`,
     });
   }
 
   if (pYrfi !== null) {
     const edge = calcEdge(pYrfi, nvYrfi);
     const ev   = calcEV(pYrfi, bookYrfiOdds);
-    const conf = pYrfi >= CONFIDENCE_THRESHOLD;
+    const conf = pYrfi >= NRFI_CONFIDENCE_THRESHOLD;
     const result = nrfiActual === null ? "MISSING_DATA"
       : !conf ? "NO_ACTION"
       : nrfiActual === "YRFI" ? "WIN" : "LOSS";
@@ -637,7 +651,7 @@ function evaluateNrfi(game: GameRow): BacktestResult[] {
       bookNoVigProb: nvYrfi, edge, ev, confidencePassed: conf,
       result, correct: result === "WIN" ? true : result === "LOSS" ? false : null,
       actualValue: nrfiActual ?? "unknown",
-      notes: `P(YRFI)=${pYrfi.toFixed(4)} book=${bookYrfiOdds} actual=${nrfiActual ?? "unknown"}`,
+      notes: `P(YRFI)=${pYrfi.toFixed(4)} book=${bookYrfiOdds} actual=${nrfiActual ?? "unknown"} calibVer=${CALIBRATION_VERSION}`,
     });
   }
 

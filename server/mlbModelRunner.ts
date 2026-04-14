@@ -271,6 +271,13 @@ interface MlbModelResult {
   p_both_hr: number;
   exp_home_hr: number;
   exp_away_hr: number;
+  // Inning-by-Inning projections (I1-I9, backtest-calibrated 2026-04-13)
+  inning_home_exp: number[];       // [I1..I9] expected home runs per inning
+  inning_away_exp: number[];       // [I1..I9] expected away runs per inning
+  inning_total_exp: number[];      // [I1..I9] expected combined runs per inning
+  inning_p_home_scores: number[];  // [I1..I9] P(home scores >= 1)
+  inning_p_away_scores: number[];  // [I1..I9] P(away scores >= 1)
+  inning_p_neither_score: number[];// [I1..I9] P(neither scores) = NRFI per inning
   // Meta
   simulations: number;
   elapsed_sec: number;
@@ -1348,6 +1355,20 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
           modelPBothHr:         String(r.p_both_hr.toFixed(4)),
           modelExpHomeHr:       String(r.exp_home_hr.toFixed(3)),
           modelExpAwayHr:       String(r.exp_away_hr.toFixed(3)),
+          // ── Inning-by-Inning projections (I1-I9, backtest-calibrated 2026-04-13) ──
+          // Stored as JSON arrays: [I1, I2, I3, I4, I5, I6, I7, I8, I9]
+          modelInningHomeExp:        r.inning_home_exp?.length === 9
+            ? JSON.stringify(r.inning_home_exp) : null,
+          modelInningAwayExp:        r.inning_away_exp?.length === 9
+            ? JSON.stringify(r.inning_away_exp) : null,
+          modelInningTotalExp:       r.inning_total_exp?.length === 9
+            ? JSON.stringify(r.inning_total_exp) : null,
+          modelInningPHomeScores:    r.inning_p_home_scores?.length === 9
+            ? JSON.stringify(r.inning_p_home_scores) : null,
+          modelInningPAwayScores:    r.inning_p_away_scores?.length === 9
+            ? JSON.stringify(r.inning_p_away_scores) : null,
+          modelInningPNeitherScores: r.inning_p_neither_score?.length === 9
+            ? JSON.stringify(r.inning_p_neither_score) : null,
           // ── Meta ──────────────────────────────────────────────────────────────────────────
           modelSpreadClamped:   false,
           modelTotalClamped:    false,

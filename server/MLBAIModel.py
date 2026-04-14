@@ -574,7 +574,9 @@ class MonteCarloEngine:
         # mu_1st = full-game mu / 9 * inning_1_weight (starter is sharpest in inning 1)
         # Empirically, inning 1 accounts for ~10.5% of total runs (slightly below 1/9 = 11.1%)
         # due to lineup cycling and starter freshness effects
-        INNING1_RUN_SHARE = 0.105  # empirical: first inning run share
+        # ── CALIBRATED 2026-04-13: 238-game backtest (03/25–04/13/26)
+        # Old: 0.105 | New: 0.1162 | Delta: +0.0112 | Source: mean(F1_total)/mean(FG_total)
+        INNING1_RUN_SHARE = 0.1162  # backtest-calibrated: first inning run share
         home_mu_1st = home_state['mu'] * INNING1_RUN_SHARE
         away_mu_1st = away_state['mu'] * INNING1_RUN_SHARE
         home_var_1st = max(home_state['variance'] * INNING1_RUN_SHARE, home_mu_1st + 0.01)
@@ -621,7 +623,9 @@ class MonteCarloEngine:
         # F5 run share: innings 1-5 account for ~55% of total runs
         # Starter ERA is dominant in F5; bullpen effect minimal
         # F5 mu = full-game mu * F5_RUN_SHARE (scaled by inning count)
-        F5_RUN_SHARE = 0.555  # empirical: F5 run share of full game
+        # ── CALIBRATED 2026-04-13: 238-game backtest (03/25–04/13/26)
+        # Old: 0.555 | New: 0.5503 | Delta: -0.0047 | Source: mean(F5_total)/mean(FG_total)
+        F5_RUN_SHARE = 0.5503  # backtest-calibrated: F5 run share of full game
         home_mu_f5 = home_state['mu'] * F5_RUN_SHARE
         away_mu_f5 = away_state['mu'] * F5_RUN_SHARE
         home_var_f5 = max(home_state['variance'] * F5_RUN_SHARE, home_mu_f5 + 0.05)
@@ -651,6 +655,88 @@ class MonteCarloEngine:
                 f"exp_home={exp_f5_home:.3f} exp_away={exp_f5_away:.3f} exp_total={exp_f5_total:.3f} | "
                 f"P(home win)={p_f5_home_win:.4f} P(away win)={p_f5_away_win:.4f} | "
                 f"P(home RL -0.5)={p_f5_home_rl:.4f} P(away RL -0.5)={p_f5_away_rl:.4f}"
+            )
+
+        # ── SPEC: Inning-by-Inning Simulation (I1-I9) ─────────────────────────
+        # Backtest-calibrated per-inning run share weights (2026-04-13, n=238 games):
+        #   I1:    0.1162  (empirical F1/FG — starter peak, TTO=0, zero-inflated)
+        #   I2-I5: 0.1085 each (starter declining, TTO 1→2, F5 window)
+        #   I6-I9: 0.1124 each (bullpen era, slight regression to mean)
+        # Weights normalized to sum exactly to 1.0.
+        # Consistency check: sum(I1-I5) ≈ F5_RUN_SHARE=0.5503 ✓
+        _INN_WEIGHTS_RAW = [
+            0.1162,  # I1
+            0.1085,  # I2
+            0.1085,  # I3
+            0.1085,  # I4
+            0.1085,  # I5
+            0.1124,  # I6
+            0.1124,  # I7
+            0.1124,  # I8
+            0.1124,  # I9
+        ]
+        _w_sum = sum(_INN_WEIGHTS_RAW)
+        INNING_WEIGHTS = [w / _w_sum for w in _INN_WEIGHTS_RAW]  # exact normalization
+
+        inning_home_exp = []
+        inning_away_exp = []
+        inning_total_exp = []
+        inning_home_std = []
+        inning_away_std = []
+        inning_p_home_scores = []
+        inning_p_away_scores = []
+        inning_p_both_score = []
+        inning_p_neither_score = []
+
+        if logger:
+            logger.step("Inning-by-Inning Simulation (I1-I9)")
+
+        for inn_idx, w in enumerate(INNING_WEIGHTS):
+            inn_num = inn_idx + 1
+            mu_h = home_state['mu'] * w
+            mu_a = away_state['mu'] * w
+            var_h = max(home_state['variance'] * w, mu_h + 0.005)
+            var_a = max(away_state['variance'] * w, mu_a + 0.005)
+            inn_h = self.dist.sample(mu_h, var_h, self.n_sims, self.rng)
+            inn_a = self.dist.sample(mu_a, var_a, self.n_sims, self.rng)
+            _h_exp = round(float(inn_h.mean()), 4)
+            _a_exp = round(float(inn_a.mean()), 4)
+            _t_exp = round(float((inn_h + inn_a).mean()), 4)
+            _h_std = round(float(inn_h.std()), 4)
+            _a_std = round(float(inn_a.std()), 4)
+            _p_h = round(float((inn_h >= 1).mean()), 4)
+            _p_a = round(float((inn_a >= 1).mean()), 4)
+            _p_both = round(float(((inn_h >= 1) & (inn_a >= 1)).mean()), 4)
+            _p_nei = round(float(((inn_h == 0) & (inn_a == 0)).mean()), 4)
+            inning_home_exp.append(_h_exp)
+            inning_away_exp.append(_a_exp)
+            inning_total_exp.append(_t_exp)
+            inning_home_std.append(_h_std)
+            inning_away_std.append(_a_std)
+            inning_p_home_scores.append(_p_h)
+            inning_p_away_scores.append(_p_a)
+            inning_p_both_score.append(_p_both)
+            inning_p_neither_score.append(_p_nei)
+            if logger:
+                logger.state(
+                    f"I{inn_num}: home={_h_exp:.4f} away={_a_exp:.4f} total={_t_exp:.4f} "
+                    f"P(H scores)={_p_h:.4f} P(A scores)={_p_a:.4f} "
+                    f"P(both)={_p_both:.4f} P(neither/NRFI-inn)={_p_nei:.4f}"
+                )
+
+        # Consistency validation: inning-derived F1 and F5 vs direct simulation
+        _inn_f1_total = inning_home_exp[0] + inning_away_exp[0]
+        _inn_f5_total = sum(inning_home_exp[:5]) + sum(inning_away_exp[:5])
+        if logger:
+            logger.verify(
+                abs(_inn_f1_total - exp_first_inn_total) < 0.15,
+                f"I-by-I F1 consistency: inn={_inn_f1_total:.4f} direct={exp_first_inn_total:.4f} "
+                f"delta={_inn_f1_total - exp_first_inn_total:+.4f} (threshold=0.15)"
+            )
+            logger.verify(
+                abs(_inn_f5_total - exp_f5_total) < 0.50,
+                f"I-by-I F5 consistency: inn={_inn_f5_total:.4f} direct={exp_f5_total:.3f} "
+                f"delta={_inn_f5_total - exp_f5_total:+.4f} (threshold=0.50)"
             )
 
         # Final win determination
@@ -755,6 +841,16 @@ class MonteCarloEngine:
             'exp_f5_total':         round(exp_f5_total, 3),
             'p_f5_home_rl':         round(p_f5_home_rl, 6),  # P(home covers -0.5 F5 RL)
             'p_f5_away_rl':         round(p_f5_away_rl, 6),  # P(away covers -0.5 F5 RL)
+            # SPEC: Inning-by-Inning projections (I1-I9, backtest-calibrated 2026-04-13)
+            'inning_home_exp':         inning_home_exp,         # [I1..I9] expected home runs per inning
+            'inning_away_exp':         inning_away_exp,         # [I1..I9] expected away runs per inning
+            'inning_total_exp':        inning_total_exp,        # [I1..I9] expected combined runs per inning
+            'inning_home_std':         inning_home_std,         # [I1..I9] std of home runs per inning
+            'inning_away_std':         inning_away_std,         # [I1..I9] std of away runs per inning
+            'inning_p_home_scores':    inning_p_home_scores,    # [I1..I9] P(home scores >= 1)
+            'inning_p_away_scores':    inning_p_away_scores,    # [I1..I9] P(away scores >= 1)
+            'inning_p_both_score':     inning_p_both_score,     # [I1..I9] P(both teams score)
+            'inning_p_neither_score':  inning_p_neither_score,  # [I1..I9] P(neither scores) = NRFI per inning
             # Raw arrays for downstream steps (not serialized)
             '_totals':          totals,
             '_margins':         margins,

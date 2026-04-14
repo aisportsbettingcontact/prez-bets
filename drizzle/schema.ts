@@ -431,6 +431,40 @@ export const games = mysqlTable("games", {
   /** Model expected HR count for home team */
   modelHomeExpHr: decimal("modelHomeExpHr", { precision: 4, scale: 2 }),
 
+  // ─── Inning-by-Inning Projections (I1-I9, backtest-calibrated 2026-04-13) ────
+  /**
+   * JSON array [I1..I9]: expected home runs per inning from Monte Carlo simulation.
+   * Backtest-calibrated weights: I1=0.1162, I2-I5=0.1085, I6-I9=0.1124 (normalized).
+   * Format: number[9], e.g. [0.52, 0.49, 0.49, 0.49, 0.49, 0.50, 0.51, 0.51, 0.51]
+   */
+  modelInningHomeExp: text("modelInningHomeExp"),
+  /**
+   * JSON array [I1..I9]: expected away runs per inning from Monte Carlo simulation.
+   * Format: number[9]
+   */
+  modelInningAwayExp: text("modelInningAwayExp"),
+  /**
+   * JSON array [I1..I9]: expected combined runs per inning (home + away).
+   * Format: number[9]
+   */
+  modelInningTotalExp: text("modelInningTotalExp"),
+  /**
+   * JSON array [I1..I9]: P(home team scores >= 1 run) per inning.
+   * Format: number[9] in [0,1]
+   */
+  modelInningPHomeScores: text("modelInningPHomeScores"),
+  /**
+   * JSON array [I1..I9]: P(away team scores >= 1 run) per inning.
+   * Format: number[9] in [0,1]
+   */
+  modelInningPAwayScores: text("modelInningPAwayScores"),
+  /**
+   * JSON array [I1..I9]: P(neither team scores) per inning — NRFI probability per inning.
+   * I1 value is the primary NRFI market probability (consistent with modelPNrfi).
+   * Format: number[9] in [0,1]
+   */
+  modelInningPNeitherScores: text("modelInningPNeitherScores"),
+
   /**
    * Tracks the source of the current primary book columns (awayBookSpread, homeBookSpread,
    * bookTotal, awayML, homeML, awaySpreadOdds, homeSpreadOdds, overOdds, underOdds).
