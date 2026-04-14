@@ -387,6 +387,27 @@ export default function ModelProjections() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSport]);
 
+  // ── Scroll active tab into view on sport switch ─────────────────────────────
+  // When selectedSport changes, the FEED_TABS array changes length (MLB=6, NHL/NBA=2).
+  // The active tab (feedMobileTab) may be off-screen if the previous sport had more tabs.
+  // Use requestAnimationFrame to wait for the DOM to reflect the new tab list before scrolling.
+  useEffect(() => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    // rAF: wait one paint cycle so the new tab buttons are rendered before measuring
+    const raf = requestAnimationFrame(() => {
+      const activeBtn = el.querySelector<HTMLElement>('[data-active="true"]');
+      if (activeBtn) {
+        activeBtn.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+      } else {
+        // Fallback: scroll to start when no active tab found (e.g. tab not in new sport)
+        el.scrollTo({ left: 0, behavior: 'smooth' });
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSport]);
+
   // ── Mobile debug logging ──────────────────────────────────────────────────────
   // Logs viewport, scale, safe-area insets, header height, and feed budget
   // on every mount and resize. No-op in production. Filter by [MobileDebug:ModelProjections]
@@ -1050,7 +1071,7 @@ export default function ModelProjections() {
             shrinks proportionally via font-size: clamp(9px, 2.4vw, ...) for the league label.
             sm+ breakpoints are unchanged from the original design. */}
         {!showFavoritesTab && !gamesLoading && sortedDates.length > 0 && (
-          <div className="w-full flex items-center justify-center px-2 py-1 border-b border-border bg-background/95 sm:px-4" style={{ overflow: 'hidden' }}>
+          <div className="w-full flex items-center justify-center px-2 py-1 md:py-2 border-b border-border bg-background/95 sm:px-4" style={{ overflow: 'hidden' }}>
             {/* Single-line pill: all three spans in one nowrap flex row, centered in full width */}
             <div
               className="flex items-center justify-center"
@@ -1086,7 +1107,8 @@ export default function ModelProjections() {
                   color: '#a3a3a3',
                   letterSpacing: '0.04em',
                   /* Mobile: 8px at 375px keeps "MEN'S COLLEGE BASKETBALL" fully visible */
-                  fontSize: 'clamp(8px, 2.1vw, 12px)',
+                  /* Tablet: clamp hits 12px at 571px; bump max to 14px for 768px readability */
+                  fontSize: 'clamp(8px, 2.1vw, 14px)',
                   textTransform: 'uppercase',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
@@ -1098,9 +1120,9 @@ export default function ModelProjections() {
 
         {/* Row 4 (favorites mode): Favorites header */}
         {showFavoritesTab && (
-          <div className="flex items-center px-4 py-1 border-b border-border bg-background/95 gap-2">
+          <div className="flex items-center px-4 py-1 md:py-2 border-b border-border bg-background/95 gap-2">
             <div className="flex-1" />
-            <span className="font-bold tracking-widest uppercase" style={{ fontSize: "clamp(11px, 2vw, 13px)", color: "#FFD700" }}>
+            <span className="font-bold tracking-widest uppercase" style={{ fontSize: "clamp(11px, 2vw, 15px)", color: "#FFD700" }}>
               FAVORITED GAMES
             </span>
             <div className="flex-1" />
@@ -1131,6 +1153,7 @@ export default function ModelProjections() {
                   key={tab.id}
                   onClick={handleClick}
                   className="feed-tab"
+                  data-active={isActive ? "true" : undefined}
                   style={{
                     flex: '0 0 auto',
                     scrollSnapAlign: 'start',

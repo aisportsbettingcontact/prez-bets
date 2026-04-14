@@ -2463,3 +2463,8 @@
 - [x] Search bar md: scaling — md:text-[13px] on input, md:py-2 md:px-3 on container, md:w-4 md:h-4 on Search/X icons
 - [x] Sticky header height md: scaling — Row 1 md:pt-3 md:pb-2, Row 3 md:pt-2 md:pb-1 (auto-height header expands naturally)
 - [x] Tab bar fade-right gradient scroll indicator — tabsScrollRef + tabsShowFade state + ResizeObserver; fade auto-hides when content fits or user scrolls to end
+
+## Tablet Header + Tab UX + Apr 12 Seeding (Apr 13, 2026 — Session 3)
+- [x] Date header Row 4 md: scaling — md:py-2 on container + clamp(8px,2.1vw,14px) league label + favorites header md:py-2 + clamp(11px,2vw,15px)
+- [x] Active tab scroll-into-view on sport switch — useEffect on selectedSport + rAF + data-active attr + querySelector + scrollIntoView inline:nearest
+- [x] Seed Apr 12 MLB games: CWS@KC, PIT@CHC, HOU@SEA — AN API book_id=30 opening lines, patch_apr12_missing.ts, 3/3 patched+verified
