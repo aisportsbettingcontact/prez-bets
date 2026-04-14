@@ -2532,3 +2532,27 @@
 - [x] Update game slate dropdown to show AN games with time + status
 - [x] Update stats bar to respect stakeMode ($ vs units formatting)
 - [x] All 458 tests passing, 0 TypeScript errors
+
+## Session: Bet Tracker v3 — Slate Speed + Structured Dropdowns
+
+- [ ] Add server-side in-memory cache to actionNetwork.ts (5-min TTL per sport+date key)
+- [ ] Pre-warm slate cache on server startup for today's date across all 4 sports
+- [ ] Add timeframe enum to tracked_bets schema (FULL_GAME, FIRST_5, FIRST_INNING)
+- [ ] Add market enum to tracked_bets schema (ML, RL, TOTAL)
+- [ ] Run pnpm db:push to apply schema changes
+- [ ] Update betTracker create/update/list router to include timeframe + market
+- [ ] Replace free-text PICK field with auto-derived string from GAME + TIMEFRAME + MARKET + PICK_TEAM/SIDE
+- [ ] Add TIMEFRAME dropdown (Full Game / First 5 Innings / First Inning)
+- [ ] Add MARKET dropdown (Moneyline / Run Line / Total)
+- [ ] Add PICK dropdown (Away team / Home team / Over / Under — context-aware per market)
+- [ ] Remove manual AWAY/HOME text inputs (game always selected from AN slate)
+- [ ] TypeScript check, 458/458 tests passing, checkpoint
+
+## Session: Bet Tracker v3 — AN Slate + Structured Dropdowns
+- [x] Server-side AN slate cache (5-min TTL, pre-warm on startup, deduplication guard)
+- [x] DB schema: anGameId, timeframe (FULL_GAME/FIRST_5/FIRST_INNING), market (ML/RL/TOTAL), pickSide (AWAY/HOME/OVER/UNDER) columns added + migrated (migration 0062)
+- [x] betTracker router: create/update/list/getSlate updated for structured fields, pick auto-derived server-side
+- [x] BetTracker.tsx: DATE + GAME (AN slate) + TIMEFRAME + MARKET + PICK dropdowns, no free-text
+- [x] $/Units toggle with configurable unit size, persisted in localStorage
+- [x] Sportsbook field fully removed from form and bet cards
+- [x] 0 TypeScript errors, 458/458 tests passing

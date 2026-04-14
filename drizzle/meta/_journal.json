@@ -435,6 +435,13 @@
       "when": 1776131420678,
       "tag": "0061_petite_unus",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "5",
+      "when": 1776136745441,
+      "tag": "0062_lovely_monster_badoon",
+      "breakpoints": true
     }
   ]
 }

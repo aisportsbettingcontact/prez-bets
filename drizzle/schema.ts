@@ -1717,6 +1717,34 @@ export const trackedBets = mysqlTable("tracked_bets", {
   userId: int("userId").notNull(),
   /** FK to games.id — the game this bet is on (null for manual/future bets) */
   gameId: int("gameId"),
+  /** Action Network game id — links to AN scoreboard for slate display */
+  anGameId: int("anGameId"),
+  /**
+   * Timeframe of the bet:
+   *   FULL_GAME    = Full game (default)
+   *   FIRST_5      = First 5 innings (MLB)
+   *   FIRST_INNING = First inning (MLB)
+   */
+  timeframe: mysqlEnum("timeframe", ["FULL_GAME", "FIRST_5", "FIRST_INNING"])
+    .notNull()
+    .default("FULL_GAME"),
+  /**
+   * Market of the bet:
+   *   ML    = Moneyline
+   *   RL    = Run Line / Puck Line / Spread
+   *   TOTAL = Total (Over/Under)
+   */
+  market: mysqlEnum("market", ["ML", "RL", "TOTAL"])
+    .notNull()
+    .default("ML"),
+  /**
+   * Pick side:
+   *   AWAY = Away team
+   *   HOME = Home team
+   *   OVER = Over (totals)
+   *   UNDER = Under (totals)
+   */
+  pickSide: mysqlEnum("pickSide", ["AWAY", "HOME", "OVER", "UNDER"]),
   /** Sport: MLB | NBA | NHL | NCAAM | NFL | CUSTOM */
   sport: varchar("sport", { length: 16 }).notNull().default("MLB"),
   /** Game date in YYYY-MM-DD format */
