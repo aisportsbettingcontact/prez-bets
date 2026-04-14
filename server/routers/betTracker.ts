@@ -35,6 +35,7 @@ import { getDb } from "../db";
 import { trackedBets } from "../../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { fetchAnSlate } from "../actionNetwork";
+import { gradeTrackedBet, fetchScores, type Sport as GraderSport, type Timeframe as GraderTimeframe, type Market as GraderMarket, type PickSide as GraderPickSide } from "../scoreGrader";
 
 // ─── Shared Zod enums ─────────────────────────────────────────────────────────
 
@@ -142,6 +143,7 @@ export const betTrackerRouter = router({
       risk:      z.number().positive().max(1_000_000),
       toWin:     z.number().positive().optional(),
       // Optional
+      line:      z.number().optional(),   // RL spread or Total line value
       notes:     z.string().max(2000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -169,6 +171,7 @@ export const betTrackerRouter = router({
         risk:      String(input.risk),
         toWin:     String(toWin),
         book:      null,
+        line:      input.line !== undefined ? String(input.line) : null,
         notes:     input.notes ?? null,
         result:    "PENDING",
       });
@@ -320,6 +323,142 @@ export const betTrackerRouter = router({
         status:       g.status,
         odds:         g.odds,
       }));
+    }),
+
+  /**
+   * autoGrade — grade all PENDING bets for the current user.
+   * Fetches official league scores and deterministically grades each bet.
+   * Returns a summary of how many bets were graded and their results.
+   */
+  autoGrade: handicapperProcedure
+    .input(z.object({
+      sport:    z.enum(SPORTS).optional(),
+      gameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    }).optional())
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.appUser.id;
+      console.log(`[BetTracker][INPUT] autoGrade: userId=${userId} sport=${input?.sport ?? "ALL"} date=${input?.gameDate ?? "ALL"}`);
+
+      const db = await getDb();
+      const conditions = [
+        eq(trackedBets.userId, userId),
+        eq(trackedBets.result, "PENDING"),
+      ];
+      if (input?.sport)    conditions.push(eq(trackedBets.sport, input.sport));
+      if (input?.gameDate) conditions.push(eq(trackedBets.gameDate, input.gameDate));
+
+      const pending = await db.select().from(trackedBets).where(and(...conditions));
+      console.log(`[BetTracker][STATE] autoGrade: ${pending.length} PENDING bets to grade for userId=${userId}`);
+
+      let graded = 0, wins = 0, losses = 0, pushes = 0, stillPending = 0;
+      const details: Array<{ betId: number; result: string; reason: string }> = [];
+
+      for (const bet of pending) {
+        console.log(`[BetTracker][STEP] autoGrade: grading betId=${bet.id} sport=${bet.sport} date=${bet.gameDate} ${bet.awayTeam}@${bet.homeTeam} timeframe=${bet.timeframe} market=${bet.market} pickSide=${bet.pickSide}`);
+
+        const gradeOut = await gradeTrackedBet({
+          sport:     bet.sport as GraderSport,
+          gameDate:  bet.gameDate,
+          awayTeam:  bet.awayTeam ?? "",
+          homeTeam:  bet.homeTeam ?? "",
+          timeframe: (bet.timeframe ?? "FULL_GAME") as GraderTimeframe,
+          market:    (bet.market ?? "ML") as GraderMarket,
+          pickSide:  (bet.pickSide ?? "AWAY") as GraderPickSide,
+          odds:      bet.odds,
+          line:      bet.line != null ? parseFloat(String(bet.line)) : null,
+          anGameId:  bet.anGameId,
+        });
+
+        details.push({ betId: bet.id, result: gradeOut.result, reason: gradeOut.reason });
+
+        if (gradeOut.result === "PENDING") {
+          stillPending++;
+          console.log(`[BetTracker][STATE] autoGrade: betId=${bet.id} still PENDING — ${gradeOut.reason}`);
+          continue;
+        }
+
+        // Update bet result in DB
+        await db.update(trackedBets)
+          .set({ result: gradeOut.result })
+          .where(eq(trackedBets.id, bet.id));
+
+        graded++;
+        if (gradeOut.result === "WIN")  wins++;
+        if (gradeOut.result === "LOSS") losses++;
+        if (gradeOut.result === "PUSH") pushes++;
+
+        console.log(`[BetTracker][OUTPUT] autoGrade: betId=${bet.id} → ${gradeOut.result} | ${gradeOut.reason}`);
+        console.log(`[BetTracker][VERIFY] autoGrade: PASS — betId=${bet.id} graded=${gradeOut.result}`);
+      }
+
+      const summary = { graded, wins, losses, pushes, stillPending, total: pending.length, details };
+      console.log(`[BetTracker][OUTPUT] autoGrade: COMPLETE userId=${userId} — graded=${graded} wins=${wins} losses=${losses} pushes=${pushes} stillPending=${stillPending}`);
+      return summary;
+    }),
+
+  /**
+   * autoGradeAll — OWNER/ADMIN only: grade ALL users' PENDING bets for a given date.
+   * Used by the scheduled background job.
+   */
+  autoGradeAll: handicapperProcedure
+    .input(z.object({
+      gameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.appUser.role;
+      if (role !== "owner" && role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Owner or Admin required" });
+      }
+      console.log(`[BetTracker][INPUT] autoGradeAll: triggeredBy=${ctx.appUser.username} date=${input.gameDate}`);
+
+      const db = await getDb();
+      const pending = await db.select().from(trackedBets).where(
+        and(
+          eq(trackedBets.result, "PENDING"),
+          eq(trackedBets.gameDate, input.gameDate),
+        )
+      );
+      console.log(`[BetTracker][STATE] autoGradeAll: ${pending.length} PENDING bets across all users for date=${input.gameDate}`);
+
+      // Pre-fetch scores for all sports present in the pending bets (parallel)
+      const sportsNeeded: GraderSport[] = Array.from(new Set(pending.map((b: { sport: string }) => b.sport))) as GraderSport[];
+      console.log(`[BetTracker][STEP] autoGradeAll: pre-fetching scores for sports=${sportsNeeded.join(",")}`);
+      await Promise.all(sportsNeeded.map(s => fetchScores(s, input.gameDate)));
+      console.log(`[BetTracker][STATE] autoGradeAll: scores pre-fetched for ${sportsNeeded.length} sports`);
+
+      let graded = 0, wins = 0, losses = 0, pushes = 0, stillPending = 0;
+
+      for (const bet of pending) {
+        const gradeOut = await gradeTrackedBet({
+          sport:     bet.sport as GraderSport,
+          gameDate:  bet.gameDate,
+          awayTeam:  bet.awayTeam ?? "",
+          homeTeam:  bet.homeTeam ?? "",
+          timeframe: (bet.timeframe ?? "FULL_GAME") as GraderTimeframe,
+          market:    (bet.market ?? "ML") as GraderMarket,
+          pickSide:  (bet.pickSide ?? "AWAY") as GraderPickSide,
+          odds:      bet.odds,
+          line:      bet.line != null ? parseFloat(String(bet.line)) : null,
+          anGameId:  bet.anGameId,
+        });
+
+        if (gradeOut.result === "PENDING") { stillPending++; continue; }
+
+        await db.update(trackedBets)
+          .set({ result: gradeOut.result })
+          .where(eq(trackedBets.id, bet.id));
+
+        graded++;
+        if (gradeOut.result === "WIN")  wins++;
+        if (gradeOut.result === "LOSS") losses++;
+        if (gradeOut.result === "PUSH") pushes++;
+
+        console.log(`[BetTracker][OUTPUT] autoGradeAll: betId=${bet.id} userId=${bet.userId} → ${gradeOut.result}`);
+      }
+
+      const summary = { graded, wins, losses, pushes, stillPending, total: pending.length };
+      console.log(`[BetTracker][OUTPUT] autoGradeAll: COMPLETE date=${input.gameDate} graded=${graded} wins=${wins} losses=${losses} pushes=${pushes} stillPending=${stillPending}`);
+      return summary;
     }),
 
   /**

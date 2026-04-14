@@ -33,7 +33,7 @@ import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import {
   Clock, TrendingUp, Minus, AlertCircle,
   ChevronLeft, Plus, Pencil, Trash2, CheckCircle2,
-  DollarSign, Hash, ChevronDown,
+  DollarSign, Hash, ChevronDown, Zap, RefreshCw,
 } from "lucide-react";
 import type { TrackedBet } from "@shared/types";
 
@@ -592,6 +592,9 @@ export default function BetTracker() {
   const [editResult, setEditResult]     = useState<Result>("PENDING");
   const [deleteId, setDeleteId]         = useState<number | null>(null);
 
+  // Auto-grade toast
+  const [gradeToast, setGradeToast] = useState<{ graded: number; wins: number; losses: number; pushes: number; stillPending: number } | null>(null);
+
   // ── Derived values ────────────────────────────────────────────────────────
   const oddsNum = parseInt(formOdds, 10);
   const riskNum = parseFloat(formRisk);
@@ -682,9 +685,20 @@ export default function BetTracker() {
     utils.betTracker.getStats.invalidate();
   }, [utils]);
 
-  const createMut = trpc.betTracker.create.useMutation({ onSuccess: invalidate });
-  const updateMut = trpc.betTracker.update.useMutation({ onSuccess: invalidate });
-  const deleteMut = trpc.betTracker.delete.useMutation({ onSuccess: invalidate });
+  const createMut    = trpc.betTracker.create.useMutation({ onSuccess: invalidate });
+  const updateMut    = trpc.betTracker.update.useMutation({ onSuccess: invalidate });
+  const deleteMut    = trpc.betTracker.delete.useMutation({ onSuccess: invalidate });
+  const autoGradeMut = trpc.betTracker.autoGrade.useMutation({
+    onSuccess: (data) => {
+      console.log(`[BetTracker][OUTPUT] autoGrade: graded=${data.graded} wins=${data.wins} losses=${data.losses} pushes=${data.pushes} stillPending=${data.stillPending}`);
+      invalidate();
+      setGradeToast(data);
+      setTimeout(() => setGradeToast(null), 6000);
+    },
+    onError: (err) => {
+      console.log(`[BetTracker][ERROR] autoGrade: ${err.message}`);
+    },
+  });
 
   // ── Game selection ────────────────────────────────────────────────────────
   const slateGames = (slateQuery.data ?? []) as SlateGame[];
@@ -782,6 +796,14 @@ export default function BetTracker() {
 
     console.log(`[BetTracker][INPUT] submit: game=${formGame.awayTeam}@${formGame.homeTeam} timeframe=${formTimeframe} market=${formMarket} pickSide=${formPickSide} odds=${oddsNum} risk=${riskNum}${stakeMode}(=$${riskDollars}) toWin=${toWinCalc}${stakeMode}(=$${toWinDollars})`);
 
+    // Derive the line value for RL/Total bets from the AN slate odds
+    let linePick: number | undefined = undefined;
+    if (formGame?.odds) {
+      const lv = getPickLine(formGame.odds, formMarket, formPickSide);
+      if (lv !== null && lv !== undefined) linePick = Math.abs(lv);
+    }
+    console.log(`[BetTracker][STATE] submit: linePick=${linePick ?? "N/A"} (market=${formMarket} side=${formPickSide})`);
+
     await createMut.mutateAsync({
       anGameId:  formGame.id,
       sport:     activeSport,
@@ -794,6 +816,7 @@ export default function BetTracker() {
       odds:      oddsNum,
       risk:      riskDollars,
       toWin:     toWinDollars,
+      line:      linePick,
       notes:     formNotes || undefined,
     });
 
@@ -1149,8 +1172,22 @@ export default function BetTracker() {
                   <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                 </div>
               </div>
-              <div className="ml-auto text-xs text-zinc-500 self-end pb-2">
-                {bets.length} bet{bets.length !== 1 ? "s" : ""}
+              <div className="ml-auto flex items-center gap-2 self-end pb-2">
+                <span className="text-xs text-zinc-500">{bets.length} bet{bets.length !== 1 ? "s" : ""}</span>
+                {/* Grade Bets button — runs autoGrade for current sport + date */}
+                <button
+                  onClick={() => {
+                    console.log(`[BetTracker][INPUT] Grade Bets clicked: sport=${activeSport} date=${filterDate}`);
+                    autoGradeMut.mutate({ sport: activeSport, gameDate: filterDate || undefined });
+                  }}
+                  disabled={autoGradeMut.isPending || bets.filter((b: TrackedBet) => b.result === "PENDING").length === 0}
+                  title="Auto-grade all pending bets using official league scores"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold tracking-wider hover:bg-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  {autoGradeMut.isPending
+                    ? <><RefreshCw size={11} className="animate-spin" /> Grading…</>
+                    : <><Zap size={11} /> GRADE BETS</>}
+                </button>
               </div>
             </div>
 
@@ -1221,6 +1258,42 @@ export default function BetTracker() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Grade toast ─────────────────────────────────────────────────────── */}
+      {gradeToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-zinc-900 border border-emerald-500/40 rounded-2xl shadow-2xl p-4 w-72 animate-in slide-in-from-bottom-4 fade-in">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap size={14} className="text-emerald-400" />
+            <span className="text-sm font-bold text-white tracking-wider">BETS GRADED</span>
+            <button onClick={() => setGradeToast(null)} className="ml-auto text-zinc-500 hover:text-zinc-300 transition-colors">
+              <Minus size={12} />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-zinc-800 rounded-lg px-3 py-2">
+              <div className="text-zinc-500 text-[10px] uppercase tracking-wider">Graded</div>
+              <div className="text-white font-bold">{gradeToast.graded}</div>
+            </div>
+            <div className="bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+              <div className="text-zinc-500 text-[10px] uppercase tracking-wider">Wins</div>
+              <div className="text-green-400 font-bold">{gradeToast.wins}</div>
+            </div>
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              <div className="text-zinc-500 text-[10px] uppercase tracking-wider">Losses</div>
+              <div className="text-red-400 font-bold">{gradeToast.losses}</div>
+            </div>
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
+              <div className="text-zinc-500 text-[10px] uppercase tracking-wider">Pushes</div>
+              <div className="text-yellow-400 font-bold">{gradeToast.pushes}</div>
+            </div>
+          </div>
+          {gradeToast.stillPending > 0 && (
+            <div className="mt-2 text-[10px] text-zinc-500 text-center">
+              {gradeToast.stillPending} bet{gradeToast.stillPending !== 1 ? "s" : ""} still pending (game not final)
+            </div>
+          )}
         </div>
       )}
 

@@ -1778,6 +1778,11 @@ export const trackedBets = mysqlTable("tracked_bets", {
     .default("ML"),
   /** The pick description, e.g. "TEX -125", "OVER 8.5 -110", "NYY ML +145" */
   pick: varchar("pick", { length: 255 }).notNull(),
+  /**
+   * The numeric line value for RL/Total bets (e.g. 1.5 for run line, 8.5 for total).
+   * NULL for ML bets (not needed for grading).
+   */
+  line: decimal("line", { precision: 6, scale: 1 }),
   /** American odds, e.g. -125, +145, -110 */
   odds: int("odds").notNull(),
   /** Risk amount in dollars (decimal, 2 decimal places) */
