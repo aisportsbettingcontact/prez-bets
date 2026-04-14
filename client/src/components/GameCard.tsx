@@ -2109,16 +2109,20 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const compactAwayLabel = isNba ? (awayNickname || awayName) : awayName;
   const compactHomeLabel = isNba ? (homeNickname || homeName) : homeName;
 
-  // Mobile abbreviations: city-based 3-char uppercase label for frozen score panel
-  // NHL: use official abbrev (e.g. "NSH", "EDM"). NBA/MLB: derive from city name.
-  const makeCityAbbr = (nhlEntry: typeof awayNhl, _nbaEntry: typeof awayNba, name: string): string => {
-    if (nhlEntry?.abbrev) return nhlEntry.abbrev;          // NHL: official 3-letter abbrev
-    // NBA / MLB fallback: first word of city/school name, max 4 chars
+  // Mobile abbreviations: official abbreviation for frozen score panel.
+  // Priority: NHL official abbrev → NBA official abbrev → MLB official abbrev → city-derived fallback
+  // [INPUT] nhlEntry: NhlTeam | null, nbaEntry: NbaTeam | null, mlbEntry: MlbTeam | null, name: string
+  // [OUTPUT] 2-3 char official abbreviation (e.g. "NYY", "LAL", "NSH") or city-derived fallback
+  const makeCityAbbr = (nhlEntry: typeof awayNhl, nbaEntry: typeof awayNba, mlbEntry: typeof awayMlb, name: string): string => {
+    if (nhlEntry?.abbrev) return nhlEntry.abbrev;          // NHL: official 3-letter abbrev (e.g. "NSH", "EDM", "TBL")
+    if (nbaEntry?.abbrev) return nbaEntry.abbrev;          // NBA: official 3-letter abbrev (e.g. "NYK", "LAL", "GSW", "OKC")
+    if (mlbEntry?.abbrev) return mlbEntry.abbrev;          // MLB: official 2-3 letter abbrev (e.g. "NYY", "LAD", "CWS", "STL")
+    // Fallback: first word of city/school name, max 4 chars (should never reach here for MLB/NBA/NHL)
     const word = (name || '').split(/\s+/)[0] ?? name;
     return word.slice(0, 4).toUpperCase();
   };
-  const awayAbbr = makeCityAbbr(awayNhl, awayNba, awayName);
-  const homeAbbr = makeCityAbbr(homeNhl, homeNba, homeName);
+  const awayAbbr = makeCityAbbr(awayNhl, awayNba, awayMlb, awayName);
+  const homeAbbr = makeCityAbbr(homeNhl, homeNba, homeMlb, homeName);
 
   const CompactScorePanel = () => (
     <div className="flex flex-col justify-center h-full px-2 py-3 gap-2" style={{ minWidth: 0 }}>

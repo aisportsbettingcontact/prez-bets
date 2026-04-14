@@ -2478,3 +2478,10 @@
 - [x] Audit all game delete/purge code paths — cron jobs, tRPC, direct DB calls (RESULT: no purge occurred; dailyPurge.ts is a no-op since 2026-03-25; only 3 delete paths exist: deleteModelFile, deleteGamesByFileId, deleteGameById — all owner-triggered, none automatic)
 - [x] Trace exact purge execution — ROOT CAUSE: check_apr12_model.ts had 2 bugs: (1) gte/lte on string gameDate column returns 0 rows due to Drizzle ORM type coercion; (2) sport='mlb' (lowercase) doesn’t match DB value 'MLB' (uppercase). All 15 Apr 12 games are intact in DB (2,430 total MLB rows: 2026-03-25 → 2026-09-27)
 - [x] Fix: corrected check_apr12_model.ts to use eq() + uppercase 'MLB'; ran MLB model for Apr 12 → 15/15 MODEL_OK (PIT@CHC + HOU@SEA now have full projections); 0 TypeScript errors; 458/458 tests pass
+
+## lg: Tab Bar + Script Guards + Apr 13 Audit + Logos/Abbrevs (Apr 14, 2026 — Session 6)
+- [x] Add lg: breakpoint to .feed-tab CSS — index.css @media 1024px: font-size: 17px + padding: 11px 22px (math: 6 MLB tabs=712px ≤ 1024px with 312px spare)
+- [x] DB query guard for all diagnostic scripts — fixed 4 lowercase 'mlb' occurrences in 3 scripts; added check_team_keys.ts audit script (MLB_BY_ABBREV/NHL_BY_DB_SLUG/getNbaTeamByDbSlug all 30/30 hits)
+- [x] Verify Apr 13 MLB model cycle — 10/10 MODEL_OK; MLBCycle FAILED(6) is for Apr 14 future games without pitchers (normal, not a bug)
+- [x] Audit team logo visibility/readability — all 3 sports 100% hit rate: MLB_BY_ABBREV(30/30), NHL_BY_DB_SLUG(30/30), getNbaTeamByDbSlug(30/30); logos render via official CDN URLs
+- [x] Audit and fix team abbreviations — nbaTeams.ts: added abbrev field to NbaTeam interface + all 30 official NBA abbreviations (BOS/BKN/NYK/PHI/TOR/CHI/CLE/DET/IND/MIL/ATL/CHA/MIA/ORL/WAS/DEN/MIN/OKC/POR/UTA/GSW/LAC/LAL/PHX/SAC/DAL/HOU/MEM/NOP/SAS); GameCard.tsx: makeCityAbbr now uses NHL→NBA→MLB official abbrev (30/30 MLB fixed: NYY/NYM/LAA/LAD/CWS/CHC/STL/KC/TB/SF/SD etc.)

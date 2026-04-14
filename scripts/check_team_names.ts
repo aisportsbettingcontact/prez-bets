@@ -18,7 +18,7 @@ async function main() {
     and(
       gte(games.gameDate, "2026-04-12"),
       lte(games.gameDate, "2026-04-12"),
-      eq(games.sport, "mlb")
+      eq(games.sport, "MLB")
     )
   );
 

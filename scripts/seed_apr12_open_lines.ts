@@ -144,7 +144,7 @@ async function seedOpenLines() {
     and(
       gte(games.gameDate, "2026-04-12"),
       lte(games.gameDate, "2026-04-12"),
-      eq(games.sport, "mlb")
+      eq(games.sport, "MLB")
     )
   );
 
@@ -239,7 +239,7 @@ async function seedOpenLines() {
     const now = Date.now();
     await db.insert(oddsHistory).values({
       gameId: dbGame.id,
-      sport: "mlb",
+      sport: "MLB",
       timestamp: now,
       awayML: updatePayload.awayML as string | null ?? null,
       homeML: updatePayload.homeML as string | null ?? null,
@@ -288,7 +288,7 @@ async function seedOpenLines() {
     and(
       gte(games.gameDate, "2026-04-12"),
       lte(games.gameDate, "2026-04-12"),
-      eq(games.sport, "mlb")
+      eq(games.sport, "MLB")
     )
   );
 
