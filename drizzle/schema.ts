@@ -1725,7 +1725,15 @@ export const trackedBets = mysqlTable("tracked_bets", {
    *   FIRST_5      = First 5 innings (MLB)
    *   FIRST_INNING = First inning (MLB)
    */
-  timeframe: mysqlEnum("timeframe", ["FULL_GAME", "FIRST_5", "FIRST_INNING"])
+  timeframe: mysqlEnum("timeframe", [
+    "FULL_GAME",
+    "FIRST_5",
+    "FIRST_INNING",
+    "REGULATION",
+    "FIRST_PERIOD",
+    "FIRST_HALF",
+    "FIRST_QUARTER",
+  ])
     .notNull()
     .default("FULL_GAME"),
   /**

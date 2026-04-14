@@ -40,7 +40,15 @@ import { fetchAnSlate } from "../actionNetwork";
 
 const RESULTS    = ["PENDING", "WIN", "LOSS", "PUSH", "VOID"] as const;
 const SPORTS     = ["MLB", "NBA", "NHL", "NCAAM", "NFL", "CUSTOM"] as const;
-const TIMEFRAMES = ["FULL_GAME", "FIRST_5", "FIRST_INNING"] as const;
+const TIMEFRAMES = [
+  "FULL_GAME",
+  "FIRST_5",
+  "FIRST_INNING",
+  "REGULATION",
+  "FIRST_PERIOD",
+  "FIRST_HALF",
+  "FIRST_QUARTER",
+] as const;
 const MARKETS    = ["ML", "RL", "TOTAL"] as const;
 const PICK_SIDES = ["AWAY", "HOME", "OVER", "UNDER"] as const;
 
@@ -295,15 +303,22 @@ export const betTrackerRouter = router({
       console.log(`[BetTracker][OUTPUT] getSlate: ${games.length} games | sport=${input.sport} date=${input.gameDate} | elapsed=${elapsed}ms`);
       console.log(`[BetTracker][VERIFY] getSlate: ${games.length > 0 ? "PASS" : "WARN — 0 games"} | elapsed=${elapsed}ms`);
       return games.map(g => ({
-        id:       g.id,
-        awayTeam: g.awayTeam,
-        homeTeam: g.homeTeam,
-        awayFull: g.awayFull,
-        homeFull: g.homeFull,
-        gameTime: g.gameTime,
-        sport:    g.sport,
-        gameDate: g.gameDate,
-        status:   g.status,
+        id:           g.id,
+        awayTeam:     g.awayTeam,
+        homeTeam:     g.homeTeam,
+        awayFull:     g.awayFull,
+        homeFull:     g.homeFull,
+        awayNickname: g.awayNickname,
+        homeNickname: g.homeNickname,
+        awayLogo:     g.awayLogo,
+        homeLogo:     g.homeLogo,
+        awayColor:    g.awayColor,
+        homeColor:    g.homeColor,
+        gameTime:     g.gameTime,
+        sport:        g.sport,
+        gameDate:     g.gameDate,
+        status:       g.status,
+        odds:         g.odds,
       }));
     }),
 

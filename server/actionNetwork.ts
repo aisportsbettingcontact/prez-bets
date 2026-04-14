@@ -4,6 +4,10 @@
  * Fetches the daily game slate for a given sport + date from:
  *   https://api.actionnetwork.com/web/v2/scoreboard/{sport}?bookIds=...&date=YYYYMMDD&periods=event
  *
+ * Each SlateGame includes:
+ *   - Team abbreviations, full names, logo URLs (MLB.com SVG / ESPN CDN)
+ *   - Live ML / RL (spread) / Total odds from book 123 (Caesars) → fallback 15 (DK) → 30 (FD)
+ *
  * Performance strategy:
  *   1. In-memory cache keyed by "SPORT:YYYY-MM-DD" — 5-minute TTL
  *   2. In-flight deduplication: concurrent requests for the same key share one fetch
@@ -18,6 +22,8 @@
  *   [AN][CACHE]  — cache hit / miss / evict
  *   [AN][ERROR]  — failure with context
  */
+
+import { MLB_BY_ABBREV } from "@shared/mlbTeams";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -34,11 +40,14 @@ const AN_SPORT_SLUG: Record<string, string> = {
 const PREWARM_SPORTS = ["MLB", "NHL", "NBA", "NCAAM"] as const;
 
 /**
- * Book IDs to include in the request.
- * Minimal set: only what we need to confirm game existence.
- * Fewer bookIds = smaller response = faster parse.
+ * Book IDs priority order for odds extraction.
+ * We request all three; pick the first one that has data.
+ *   123 = Caesars (most complete)
+ *    15 = DraftKings NJ
+ *    30 = FanDuel
  */
-const BOOK_IDS = "15,68";  // DK NJ (15) + DK (68) — sufficient for slate population
+const BOOK_IDS = "15,30,123";
+const BOOK_PRIORITY = [123, 15, 30];
 
 const AN_BASE = "https://api.actionnetwork.com/web/v2/scoreboard";
 
@@ -46,6 +55,7 @@ const FETCH_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   Accept: "application/json",
+  Referer: "https://www.actionnetwork.com/",
 };
 
 /** Cache TTL: 5 minutes in ms */
@@ -56,17 +66,48 @@ const FETCH_TIMEOUT_MS = 8_000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/** Odds for a single side (ML, spread side, or total side) */
+export interface OddsEntry {
+  odds:  number;   // American odds, e.g. -155, +130
+  value: number;   // Line value: spread amount or total; 0 for ML
+}
+
+/** Full odds snapshot for one game (consensus from best available book) */
+export interface GameOdds {
+  /** Away team moneyline, e.g. { odds: +130, value: 0 } */
+  awayMl:    OddsEntry | null;
+  /** Home team moneyline, e.g. { odds: -155, value: 0 } */
+  homeMl:    OddsEntry | null;
+  /** Away team run line / puck line / spread, e.g. { odds: -170, value: +1.5 } */
+  awayRl:    OddsEntry | null;
+  /** Home team run line / puck line / spread, e.g. { odds: +143, value: -1.5 } */
+  homeRl:    OddsEntry | null;
+  /** Over total, e.g. { odds: -110, value: 8.5 } */
+  over:      OddsEntry | null;
+  /** Under total, e.g. { odds: -110, value: 8.5 } */
+  under:     OddsEntry | null;
+  /** Which book_id the odds came from */
+  bookId:    number;
+}
+
 export interface SlateGame {
-  id:        number;   // AN game id
-  awayTeam:  string;   // e.g. "ARI"
-  homeTeam:  string;   // e.g. "BAL"
-  awayFull:  string;   // e.g. "Arizona Diamondbacks"
-  homeFull:  string;   // e.g. "Baltimore Orioles"
-  gameTime:  string;   // e.g. "6:35 PM" (EST)
-  startUtc:  string;   // ISO UTC string
-  sport:     string;   // "MLB" | "NHL" | "NBA" | "NCAAM"
-  gameDate:  string;   // "YYYY-MM-DD" (EST date)
-  status:    string;   // "scheduled" | "in_progress" | "complete" | etc.
+  id:           number;   // AN game id
+  awayTeam:     string;   // e.g. "ARI"
+  homeTeam:     string;   // e.g. "BAL"
+  awayFull:     string;   // e.g. "Arizona Diamondbacks"
+  homeFull:     string;   // e.g. "Baltimore Orioles"
+  awayNickname: string;   // e.g. "Diamondbacks"
+  homeNickname: string;   // e.g. "Orioles"
+  awayLogo:     string;   // Logo URL (MLB.com SVG or ESPN CDN)
+  homeLogo:     string;   // Logo URL
+  awayColor:    string;   // Primary brand hex, e.g. "#A71930"
+  homeColor:    string;   // Primary brand hex, e.g. "#DF4601"
+  gameTime:     string;   // e.g. "6:35 PM" (EST)
+  startUtc:     string;   // ISO UTC string
+  sport:        string;   // "MLB" | "NHL" | "NBA" | "NCAAM"
+  gameDate:     string;   // "YYYY-MM-DD" (EST date)
+  status:       string;   // "scheduled" | "in_progress" | "complete" | etc.
+  odds:         GameOdds; // Live ML/RL/Total odds
 }
 
 interface CacheEntry {
@@ -142,6 +183,134 @@ export function todayEstDate(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
+/**
+ * Resolve logo URL for a team.
+ * For MLB: use MLB.com SVG via mlbId from MLB_BY_ABBREV.
+ * For other sports: use the AN-provided logo URL as fallback.
+ */
+function resolveLogoUrl(sport: string, abbrev: string, anLogoUrl: string): string {
+  if (sport === "MLB") {
+    const team = MLB_BY_ABBREV.get(abbrev);
+    if (team?.logoUrl) {
+      console.log(`[AN][STEP]  Logo resolved: sport=MLB abbrev=${abbrev} → mlbId=${team.mlbId} url=${team.logoUrl}`);
+      return team.logoUrl;
+    }
+    console.warn(`[AN][STATE] Logo fallback: sport=MLB abbrev=${abbrev} not in MLB_BY_ABBREV — using AN logo`);
+  }
+  return anLogoUrl;
+}
+
+/**
+ * Resolve team nickname from MLB_BY_ABBREV.
+ * Returns the team's nickname (e.g. "Diamondbacks") or falls back to display_name.
+ */
+function resolveNickname(sport: string, abbrev: string, anDisplayName: string): string {
+  if (sport === "MLB") {
+    const team = MLB_BY_ABBREV.get(abbrev);
+    if (team?.nickname) return team.nickname;
+  }
+  return anDisplayName;
+}
+
+/**
+ * Resolve primary brand color from MLB_BY_ABBREV.
+ * Falls back to AN primary_color hex.
+ */
+function resolveColor(sport: string, abbrev: string, anColor: string): string {
+  if (sport === "MLB") {
+    const team = MLB_BY_ABBREV.get(abbrev);
+    if (team?.primaryColor) return team.primaryColor;
+  }
+  return anColor ? `#${anColor}` : "#888888";
+}
+
+/**
+ * Extract ML / RL / Total odds from the AN markets object.
+ * markets = { [bookId]: { event: { moneyline: [...], spread: [...], total: [...] } } }
+ *
+ * Priority: BOOK_PRIORITY[0] → BOOK_PRIORITY[1] → BOOK_PRIORITY[2]
+ * For each market type, pick the first book that has entries.
+ */
+function extractOdds(
+  markets: Record<string, Record<string, Record<string, unknown[]>>>,
+  awayTeamId: number,
+  homeTeamId: number,
+  gameId: number,
+): GameOdds {
+  const emptyOdds: GameOdds = {
+    awayMl: null, homeMl: null,
+    awayRl: null, homeRl: null,
+    over:   null, under:  null,
+    bookId: 0,
+  };
+
+  if (!markets || typeof markets !== "object") {
+    console.warn(`[AN][STATE] game=${gameId}: markets field missing or invalid`);
+    return emptyOdds;
+  }
+
+  // Find the best book that has at least moneyline data
+  let bestBookId = 0;
+  let bestEvent: Record<string, unknown[]> | null = null;
+
+  for (const bookId of BOOK_PRIORITY) {
+    const bookData = markets[String(bookId)];
+    if (!bookData) continue;
+    const eventData = bookData["event"] as Record<string, unknown[]> | undefined;
+    if (!eventData) continue;
+    const ml = eventData["moneyline"];
+    if (Array.isArray(ml) && ml.length > 0) {
+      bestBookId = bookId;
+      bestEvent = eventData;
+      console.log(`[AN][STATE] game=${gameId}: using book_id=${bookId} for odds`);
+      break;
+    }
+  }
+
+  if (!bestEvent) {
+    console.warn(`[AN][STATE] game=${gameId}: no book with moneyline data found in books=${Object.keys(markets).join(",")}`);
+    return emptyOdds;
+  }
+
+  type RawOutcome = { side: string; team_id?: number; odds: number; value: number };
+
+  const mlList  = (bestEvent["moneyline"] ?? []) as RawOutcome[];
+  const rlList  = (bestEvent["spread"]    ?? []) as RawOutcome[];
+  const totList = (bestEvent["total"]     ?? []) as RawOutcome[];
+
+  // ── Moneyline ──────────────────────────────────────────────────────────────
+  const awayMlRaw = mlList.find(m => m.side === "away" || m.team_id === awayTeamId);
+  const homeMlRaw = mlList.find(m => m.side === "home" || m.team_id === homeTeamId);
+
+  // ── Run Line / Spread ──────────────────────────────────────────────────────
+  // AN spread: away side has positive value (e.g. +1.5), home has negative (e.g. -1.5)
+  const awayRlRaw = rlList.find(m => m.side === "away" || m.team_id === awayTeamId);
+  const homeRlRaw = rlList.find(m => m.side === "home" || m.team_id === homeTeamId);
+
+  // ── Total ──────────────────────────────────────────────────────────────────
+  const overRaw  = totList.find(m => m.side === "over");
+  const underRaw = totList.find(m => m.side === "under");
+
+  const result: GameOdds = {
+    awayMl: awayMlRaw ? { odds: awayMlRaw.odds, value: 0 }                 : null,
+    homeMl: homeMlRaw ? { odds: homeMlRaw.odds, value: 0 }                 : null,
+    awayRl: awayRlRaw ? { odds: awayRlRaw.odds, value: awayRlRaw.value }   : null,
+    homeRl: homeRlRaw ? { odds: homeRlRaw.odds, value: homeRlRaw.value }   : null,
+    over:   overRaw   ? { odds: overRaw.odds,   value: overRaw.value }     : null,
+    under:  underRaw  ? { odds: underRaw.odds,  value: underRaw.value }    : null,
+    bookId: bestBookId,
+  };
+
+  console.log(
+    `[AN][STATE] game=${gameId} odds: ` +
+    `ML away=${result.awayMl?.odds ?? "N/A"} home=${result.homeMl?.odds ?? "N/A"} | ` +
+    `RL away=${result.awayRl?.value ?? "N/A"}(${result.awayRl?.odds ?? "N/A"}) home=${result.homeRl?.value ?? "N/A"}(${result.homeRl?.odds ?? "N/A"}) | ` +
+    `Total O${result.over?.value ?? "N/A"}(${result.over?.odds ?? "N/A"}) U${result.under?.value ?? "N/A"}(${result.under?.odds ?? "N/A"})`
+  );
+
+  return result;
+}
+
 // ─── Core fetch (no cache) ────────────────────────────────────────────────────
 
 async function fetchAnSlateRaw(sport: string, dateStr: string): Promise<SlateGame[]> {
@@ -154,6 +323,7 @@ async function fetchAnSlateRaw(sport: string, dateStr: string): Promise<SlateGam
   const anDate = dateStr.replace(/-/g, "");
   const url = `${AN_BASE}/${slug}?bookIds=${BOOK_IDS}&date=${anDate}&periods=event`;
 
+  console.log(`[AN][INPUT] fetchAnSlateRaw: sport=${sport} date=${dateStr}`);
   console.log(`[AN][STEP]  Fetching: ${url}`);
 
   let raw: Record<string, unknown>;
@@ -193,6 +363,7 @@ async function fetchAnSlateRaw(sport: string, dateStr: string): Promise<SlateGam
   // ── Parse ─────────────────────────────────────────────────────────────────
   const result: SlateGame[] = [];
   let parseErrors = 0;
+  let oddsFound   = 0;
 
   for (const g of games) {
     try {
@@ -215,17 +386,36 @@ async function fetchAnSlateRaw(sport: string, dateStr: string): Promise<SlateGam
         continue;
       }
 
+      const awayAbbr = (away.abbr as string) || (away.short_name as string) || "?";
+      const homeAbbr = (home.abbr as string) || (home.short_name as string) || "?";
+      const awayAnLogo = (away.logo as string) || "";
+      const homeAnLogo = (home.logo as string) || "";
+      const awayAnColor = (away.primary_color as string) || "";
+      const homeAnColor = (home.primary_color as string) || "";
+
+      // Extract odds from markets
+      const markets = g.markets as Record<string, Record<string, Record<string, unknown[]>>>;
+      const odds = extractOdds(markets, awayTeamId, homeTeamId, id);
+      if (odds.awayMl) oddsFound++;
+
       result.push({
         id,
-        awayTeam: (away.abbr as string) || (away.short_name as string) || "?",
-        homeTeam: (home.abbr as string) || (home.short_name as string) || "?",
-        awayFull: (away.full_name as string) || (away.abbr as string) || "?",
-        homeFull: (home.full_name as string) || (home.abbr as string) || "?",
-        gameTime: utcToEstTime(startUtc),
+        awayTeam:     awayAbbr,
+        homeTeam:     homeAbbr,
+        awayFull:     (away.full_name as string) || awayAbbr,
+        homeFull:     (home.full_name as string) || homeAbbr,
+        awayNickname: resolveNickname(sport, awayAbbr, (away.display_name as string) || awayAbbr),
+        homeNickname: resolveNickname(sport, homeAbbr, (home.display_name as string) || homeAbbr),
+        awayLogo:     resolveLogoUrl(sport, awayAbbr, awayAnLogo),
+        homeLogo:     resolveLogoUrl(sport, homeAbbr, homeAnLogo),
+        awayColor:    resolveColor(sport, awayAbbr, awayAnColor),
+        homeColor:    resolveColor(sport, homeAbbr, homeAnColor),
+        gameTime:     utcToEstTime(startUtc),
         startUtc,
-        sport:    sport.toUpperCase(),
-        gameDate: utcToEstDate(startUtc),
+        sport:        sport.toUpperCase(),
+        gameDate:     utcToEstDate(startUtc),
         status,
+        odds,
       });
     } catch (err) {
       console.error(`[AN][ERROR] Parse error on game: ${err}`);
@@ -235,11 +425,16 @@ async function fetchAnSlateRaw(sport: string, dateStr: string): Promise<SlateGam
 
   result.sort((a, b) => a.startUtc.localeCompare(b.startUtc));
 
-  console.log(`[AN][OUTPUT] Parsed ${result.length} games | sport=${sport} date=${dateStr} | errors=${parseErrors}`);
+  console.log(`[AN][OUTPUT] Parsed ${result.length} games | sport=${sport} date=${dateStr} | oddsFound=${oddsFound}/${result.length} | errors=${parseErrors}`);
   console.log(`[AN][VERIFY] ${parseErrors === 0 ? "PASS" : "WARN"} — ${parseErrors} parse errors`);
 
   result.forEach((g, i) => {
-    console.log(`[AN][OUTPUT]   [${i + 1}] id=${g.id} ${g.awayTeam} @ ${g.homeTeam} | ${g.gameTime} ET | status=${g.status}`);
+    console.log(
+      `[AN][OUTPUT]   [${i + 1}] id=${g.id} ${g.awayTeam} @ ${g.homeTeam} | ${g.gameTime} ET | ` +
+      `ML: ${g.odds.awayMl?.odds ?? "N/A"}/${g.odds.homeMl?.odds ?? "N/A"} | ` +
+      `RL: ${g.odds.awayRl?.value ?? "N/A"}(${g.odds.awayRl?.odds ?? "N/A"}) | ` +
+      `Total: ${g.odds.over?.value ?? "N/A"}`
+    );
   });
 
   return result;
