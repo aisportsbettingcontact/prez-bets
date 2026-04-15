@@ -31,6 +31,9 @@ import {
 import { runMlbNightlyTrendsRefresh } from "../mlbNightlyTrendsRefresh";
 import { ingestMlbOutcomes } from "../mlbOutcomeIngestor";
 import { checkF5ShareDrift, triggerRecalibration } from "../mlbDriftDetector";
+import { getDb } from "../db";
+import { games as gamesTable, type Game } from "../../drizzle/schema";
+import { and, eq, isNotNull, asc } from "drizzle-orm";
 
 const TAG = "[MlbScheduleRouter]";
 
@@ -417,6 +420,137 @@ export const mlbScheduleRouter = router({
         console.error(`${tag} ERROR: ${msg}`);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Drift check failed: ${msg}` });
       }
+    }),
+
+  /**
+   * Owner-only: Rolling Brier score trend for the Admin Brier chart.
+   *
+   * Returns per-game Brier scores (FG ML, F5 ML, NRFI, FG Total, F5 Total)
+   * plus rolling N-game averages, ordered chronologically by gameDate.
+   *
+   * Only includes games with outcomeIngestedAt IS NOT NULL.
+   * Games missing a specific Brier field have null for that market.
+   *
+   * Output:
+   *   games:   Array<{ gameIndex, gameDate, matchup, brierFgMl, brierF5Ml, brierNrfi, brierFgTotal, brierF5Total }>
+   *   rolling: Array<{ gameIndex, rollFgMl, rollF5Ml, rollNrfi, rollFgTotal, rollF5Total }>
+   *   summary: { totalGames, avgFgMl, avgF5Ml, avgNrfi, windowSize }
+   */
+  getBrierTrend: ownerProcedure
+    .input(
+      z.object({
+        windowSize: z.number().int().min(5).max(100).optional().default(20),
+        sport: z.enum(["MLB"]).optional().default("MLB"),
+      })
+    )
+    .query(async ({ input }) => {
+      const tag = `${TAG}[getBrierTrend]`;
+      console.log(`${tag} [INPUT] windowSize=${input.windowSize} sport=${input.sport}`);
+      const db = await getDb();
+
+      // ── Step 1: Fetch all outcome-ingested games with Brier scores, ordered chronologically
+      const rows = await db
+        .select({
+          id:                gamesTable.id,
+          gameDate:          gamesTable.gameDate,
+          awayTeam:          gamesTable.awayTeam,
+          homeTeam:          gamesTable.homeTeam,
+          brierFgMl:         gamesTable.brierFgMl,
+          brierF5Ml:         gamesTable.brierF5Ml,
+          brierNrfi:         gamesTable.brierNrfi,
+          brierFgTotal:      gamesTable.brierFgTotal,
+          brierF5Total:      gamesTable.brierF5Total,
+          outcomeIngestedAt: gamesTable.outcomeIngestedAt,
+        })
+        .from(gamesTable)
+        .where(
+          and(
+            eq(gamesTable.sport, input.sport),
+            isNotNull(gamesTable.outcomeIngestedAt),
+          )
+        )
+        .orderBy(asc(gamesTable.gameDate), asc(gamesTable.id));
+
+      console.log(`${tag} [STATE] ingested rows: ${rows.length}`);
+
+      if (rows.length === 0) {
+        console.log(`${tag} [OUTPUT] No ingested games found`);
+        return {
+          games: [] as Array<{
+            gameIndex: number; gameDate: string; matchup: string;
+            brierFgMl: number | null; brierF5Ml: number | null; brierNrfi: number | null;
+            brierFgTotal: number | null; brierF5Total: number | null;
+          }>,
+          rolling: [] as Array<{
+            gameIndex: number;
+            rollFgMl: number | null; rollF5Ml: number | null; rollNrfi: number | null;
+            rollFgTotal: number | null; rollF5Total: number | null;
+          }>,
+          summary: { totalGames: 0, avgFgMl: null as number | null, avgF5Ml: null as number | null, avgNrfi: null as number | null, windowSize: input.windowSize },
+        };
+      }
+
+      // ── Step 2: Build per-game array with sequential index
+      type GamePoint = {
+        gameIndex: number; gameDate: string; matchup: string;
+        brierFgMl: number | null; brierF5Ml: number | null; brierNrfi: number | null;
+        brierFgTotal: number | null; brierF5Total: number | null;
+      };
+      type BrierRow = Pick<Game, "id" | "gameDate" | "awayTeam" | "homeTeam" | "brierFgMl" | "brierF5Ml" | "brierNrfi" | "brierFgTotal" | "brierF5Total" | "outcomeIngestedAt">;
+      const gamePoints: GamePoint[] = (rows as BrierRow[]).map((r: BrierRow, i: number) => ({
+        gameIndex:    i + 1,
+        gameDate:     r.gameDate ?? "",
+        matchup:      `${r.awayTeam}@${r.homeTeam}`,
+        brierFgMl:    r.brierFgMl    !== null ? parseFloat(String(r.brierFgMl))    : null,
+        brierF5Ml:    r.brierF5Ml    !== null ? parseFloat(String(r.brierF5Ml))    : null,
+        brierNrfi:    r.brierNrfi    !== null ? parseFloat(String(r.brierNrfi))    : null,
+        brierFgTotal: r.brierFgTotal !== null ? parseFloat(String(r.brierFgTotal)) : null,
+        brierF5Total: r.brierF5Total !== null ? parseFloat(String(r.brierF5Total)) : null,
+      }));
+
+      // ── Step 3: Compute rolling averages (window = last N games including current)
+      const W = input.windowSize;
+      type BrierField = "brierFgMl" | "brierF5Ml" | "brierNrfi" | "brierFgTotal" | "brierF5Total";
+      const rolling = gamePoints.map((_: GamePoint, i: number) => {
+        const window = gamePoints.slice(Math.max(0, i - W + 1), i + 1);
+        const avg = (field: BrierField): number | null => {
+          const vals = window.map((g: GamePoint) => g[field]).filter((v: number | null): v is number => v !== null);
+          return vals.length > 0
+            ? parseFloat((vals.reduce((s: number, v: number) => s + v, 0) / vals.length).toFixed(6))
+            : null;
+        };
+        return {
+          gameIndex:   gamePoints[i].gameIndex,
+          rollFgMl:    avg("brierFgMl"),
+          rollF5Ml:    avg("brierF5Ml"),
+          rollNrfi:    avg("brierNrfi"),
+          rollFgTotal: avg("brierFgTotal"),
+          rollF5Total: avg("brierF5Total"),
+        };
+      });
+
+      // ── Step 4: All-time averages for summary cards
+      const allAvg = (field: BrierField): number | null => {
+        const vals = gamePoints.map((g: GamePoint) => g[field]).filter((v: number | null): v is number => v !== null);
+        return vals.length > 0
+          ? parseFloat((vals.reduce((s: number, v: number) => s + v, 0) / vals.length).toFixed(6))
+          : null;
+      };
+      const summary = {
+        totalGames: gamePoints.length,
+        avgFgMl:    allAvg("brierFgMl"),
+        avgF5Ml:    allAvg("brierF5Ml"),
+        avgNrfi:    allAvg("brierNrfi"),
+        windowSize: W,
+      };
+
+      console.log(
+        `${tag} [OUTPUT] games=${gamePoints.length} ` +
+        `avgFgMl=${summary.avgFgMl ?? "null"} ` +
+        `avgF5Ml=${summary.avgF5Ml ?? "null"} ` +
+        `avgNrfi=${summary.avgNrfi ?? "null"}`
+      );
+      return { games: gamePoints, rolling, summary };
     }),
 
   /**

@@ -9,7 +9,11 @@
  * Access: owner role only — non-owners are immediately redirected to /feed.
  * Backend: all procedures use ownerProcedure (server-side owner check enforced).
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, ReferenceLine,
+} from "recharts";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
@@ -426,8 +430,9 @@ export default function ModelResults() {
   const { appUser, isOwner, loading: authLoading } = useAppAuth();
   const [gameDate, setGameDate] = useState(() => todayPst());
   const [isRunningBacktest, setIsRunningBacktest] = useState(false);
-  // 'daily' | 'last7'
-  const [viewMode, setViewMode] = useState<'daily' | 'last7'>('daily');
+  // 'daily' | 'last7' | 'brier'
+  const [viewMode, setViewMode] = useState<'daily' | 'last7' | 'brier'>('daily');
+  const [brierWindow, setBrierWindow] = useState<number>(20);
 
   // ── Strict owner-only guard ─────────────────────────────────────────────────
   useEffect(() => {
@@ -456,7 +461,7 @@ export default function ModelResults() {
     { enabled: !!appUser && isOwner && viewMode === 'daily', refetchOnWindowFocus: false }
   );
 
-  // ── Last 7 Days aggregate ────────────────────────────────────────────────────
+  // ── Last 7 Days aggregate ────────────────────────────────────────────
   const {
     data: last7Data,
     isLoading: last7Loading,
@@ -466,13 +471,35 @@ export default function ModelResults() {
     { enabled: !!appUser && isOwner && viewMode === 'last7', refetchOnWindowFocus: false }
   );
 
+  // ── Brier Score Trend ───────────────────────────────────────────────
+  const {
+    data: brierData,
+    isLoading: brierLoading,
+    refetch: refetchBrier,
+  } = trpc.mlbSchedule.getBrierTrend.useQuery(
+    { windowSize: brierWindow, sport: 'MLB' },
+    { enabled: !!appUser && isOwner && viewMode === 'brier', refetchOnWindowFocus: false }
+  );
+
+  // Merge per-game and rolling arrays for recharts (keyed by gameIndex)
+  const brierChartData = useMemo(() => {
+    if (!brierData) return [];
+    const rollingMap = new Map(brierData.rolling.map(r => [r.gameIndex, r]));
+    return brierData.games.map(g => ({
+      ...g,
+      ...(rollingMap.get(g.gameIndex) ?? {}),
+    }));
+  }, [brierData]);
+
   const handleRefresh = async () => {
     setIsRunningBacktest(true);
     try {
       if (viewMode === 'daily') {
         await Promise.all([refetchDaily(), refetchCalibration()]);
-      } else {
+      } else if (viewMode === 'last7') {
         await refetchLast7();
+      } else {
+        await refetchBrier();
       }
       toast.success("Results refreshed");
     } catch (err) {
@@ -567,6 +594,40 @@ export default function ModelResults() {
             <CalendarDays size={11} />
             LAST 7 DAYS
           </button>
+          <button
+            onClick={() => setViewMode('brier')}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors"
+            style={{
+              background: viewMode === 'brier' ? 'rgba(255,165,0,0.12)' : 'rgba(255,255,255,0.04)',
+              color: viewMode === 'brier' ? '#FFA500' : 'rgba(255,255,255,0.45)',
+              border: `1px solid ${viewMode === 'brier' ? 'rgba(255,165,0,0.35)' : 'rgba(255,255,255,0.10)'}`,
+              fontFamily: '"Barlow Condensed", sans-serif',
+              letterSpacing: '0.08em',
+            }}
+          >
+            <TrendingUp size={11} />
+            BRIER TREND
+          </button>
+          {/* Brier window selector — only visible in brier mode */}
+          {viewMode === 'brier' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '.08em', textTransform: 'uppercase' }}>Window</span>
+              {[10, 20, 30, 50].map(w => (
+                <button
+                  key={w}
+                  onClick={() => setBrierWindow(w)}
+                  style={{
+                    fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                    background: brierWindow === w ? 'rgba(255,165,0,0.15)' : 'rgba(255,255,255,0.04)',
+                    color: brierWindow === w ? '#FFA500' : 'rgba(255,255,255,0.35)',
+                    border: `1px solid ${brierWindow === w ? 'rgba(255,165,0,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                    cursor: 'pointer', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '.06em',
+                  }}
+                >{w}G</button>
+              ))}
+            </div>
+          )}
+
           {/* Date nav — only visible in daily mode */}
           {viewMode === 'daily' && (
             <>
@@ -596,8 +657,189 @@ export default function ModelResults() {
         </div>
       </header>
 
-      {/* ── Main content ──────────────────────────────────────────────────── */}
+      {/* ── Main content ───────────────────────────────────────────────────── */}
       <main className="max-w-5xl mx-auto px-4 py-4 pb-16">
+
+        {/* ── BRIER TREND VIEW ────────────────────────────────────────────────── */}
+        {viewMode === 'brier' && (
+          brierLoading ? (
+            <div className="flex items-center justify-center py-12 gap-3">
+              <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#FFA500' }} />
+              <span className="text-sm text-muted-foreground">Loading Brier score trend…</span>
+            </div>
+          ) : !brierData || brierData.summary.totalGames === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+              <TrendingUp className="w-10 h-10 text-muted-foreground/30" />
+              <div>
+                <p className="text-sm font-semibold text-foreground mb-1">No Brier score data yet</p>
+                <p className="text-xs text-muted-foreground">Outcome ingestion must run first to populate Brier scores.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* ── Summary stat cards ──────────────────────────────────────────── */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase',
+                  color: 'rgba(255,255,255,0.35)', fontFamily: '"Barlow Condensed", sans-serif',
+                  marginBottom: 10,
+                }}>
+                  BRIER SCORE CALIBRATION — {brierData.summary.totalGames} INGESTED GAMES
+                  <span style={{ marginLeft: 8, color: 'rgba(255,165,0,0.6)', fontSize: 8 }}>
+                    (lower = better | perfect = 0.000 | random = 0.250)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {([
+                    { label: 'FG ML', value: brierData.summary.avgFgMl, color: '#39FF14' },
+                    { label: 'F5 ML', value: brierData.summary.avgF5Ml, color: '#FFA500' },
+                    { label: 'NRFI', value: brierData.summary.avgNrfi, color: '#00BFFF' },
+                  ] as Array<{ label: string; value: number | null; color: string }>).map(({ label, value, color }) => (
+                    <StatCard
+                      key={label}
+                      label={`AVG BRIER — ${label}`}
+                      value={value != null ? value.toFixed(4) : 'N/A'}
+                      sub={`${brierWindow}-game rolling window`}
+                      color={
+                        value == null ? '#4a5048'
+                          : value <= 0.15 ? '#39FF14'
+                          : value <= 0.22 ? '#FFD700'
+                          : '#FF2244'
+                      }
+                    />
+                  ))}
+                  <StatCard
+                    label="WINDOW SIZE"
+                    value={`${brierWindow}G`}
+                    sub={`${brierData.summary.totalGames} total ingested`}
+                    color="#FFA500"
+                  />
+                </div>
+              </div>
+
+              {/* ── Rolling Brier chart ────────────────────────────────────────────── */}
+              <div style={{
+                background: '#0a0d0b',
+                border: '1px solid #1a1d1b',
+                borderRadius: 10,
+                padding: '16px 12px 12px',
+                marginBottom: 20,
+              }}>
+                <div style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase',
+                  color: 'rgba(255,255,255,0.35)', fontFamily: '"Barlow Condensed", sans-serif',
+                  marginBottom: 16,
+                }}>
+                  ROLLING {brierWindow}-GAME BRIER SCORE — FG ML / F5 ML / NRFI
+                </div>
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={brierChartData} margin={{ top: 4, right: 16, left: -20, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1a1d1b" />
+                    <XAxis
+                      dataKey="gameIndex"
+                      tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.25)', fontFamily: '"Barlow Condensed", sans-serif' }}
+                      tickLine={false}
+                      axisLine={{ stroke: '#1a1d1b' }}
+                      label={{ value: 'Game #', position: 'insideBottomRight', offset: -4, fontSize: 9, fill: 'rgba(255,255,255,0.2)' }}
+                    />
+                    <YAxis
+                      domain={[0, 0.35]}
+                      tickCount={8}
+                      tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.25)', fontFamily: '"Barlow Condensed", sans-serif' }}
+                      tickLine={false}
+                      axisLine={{ stroke: '#1a1d1b' }}
+                      tickFormatter={(v: number) => v.toFixed(2)}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#0e1110', border: '1px solid #1e2320',
+                        borderRadius: 8, fontSize: 11, fontFamily: '"Barlow Condensed", sans-serif',
+                      }}
+                      labelStyle={{ color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}
+                      formatter={(value: number, name: string) => [
+                        value != null ? value.toFixed(4) : 'N/A',
+                        name,
+                      ]}
+                      labelFormatter={(label: number) => {
+                        const g = brierChartData.find(d => d.gameIndex === label);
+                        return g ? `Game ${label}: ${g.matchup} (${g.gameDate})` : `Game ${label}`;
+                      }}
+                    />
+                    <Legend
+                      wrapperStyle={{ fontSize: 10, fontFamily: '"Barlow Condensed", sans-serif', paddingTop: 8 }}
+                    />
+                    {/* Reference line at 0.25 (random baseline) */}
+                    <ReferenceLine y={0.25} stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4"
+                      label={{ value: 'Random (0.25)', position: 'right', fontSize: 8, fill: 'rgba(255,255,255,0.2)' }}
+                    />
+                    {/* Reference line at 0.20 (good calibration target) */}
+                    <ReferenceLine y={0.20} stroke="rgba(57,255,20,0.15)" strokeDasharray="4 4"
+                      label={{ value: 'Target (0.20)', position: 'right', fontSize: 8, fill: 'rgba(57,255,20,0.3)' }}
+                    />
+                    <Line
+                      type="monotone" dataKey="rollFgMl" name="FG ML"
+                      stroke="#39FF14" strokeWidth={2} dot={false}
+                      connectNulls activeDot={{ r: 4, fill: '#39FF14' }}
+                    />
+                    <Line
+                      type="monotone" dataKey="rollF5Ml" name="F5 ML"
+                      stroke="#FFA500" strokeWidth={2} dot={false}
+                      connectNulls activeDot={{ r: 4, fill: '#FFA500' }}
+                    />
+                    <Line
+                      type="monotone" dataKey="rollNrfi" name="NRFI"
+                      stroke="#00BFFF" strokeWidth={2} dot={false}
+                      connectNulls activeDot={{ r: 4, fill: '#00BFFF' }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* ── Per-game Brier table ────────────────────────────────────────────── */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase',
+                  color: 'rgba(255,255,255,0.35)', fontFamily: '"Barlow Condensed", sans-serif',
+                  marginBottom: 10,
+                }}>
+                  PER-GAME BRIER SCORES ({brierData.games.length} games, newest first)
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: '"Barlow Condensed", sans-serif' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #1a1d1b' }}>
+                        {['#', 'DATE', 'MATCHUP', 'FG ML', 'F5 ML', 'NRFI', 'FG TOT', 'F5 TOT'].map(h => (
+                          <th key={h} style={{ padding: '4px 8px', textAlign: h === '#' || h === 'DATE' || h === 'MATCHUP' ? 'left' : 'right', color: 'rgba(255,255,255,0.3)', fontWeight: 700, letterSpacing: '.08em', fontSize: 9 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...brierData.games].reverse().map(g => {
+                        const brierColor = (v: number | null) =>
+                          v == null ? 'rgba(255,255,255,0.15)'
+                            : v <= 0.15 ? '#39FF14'
+                            : v <= 0.22 ? '#FFD700'
+                            : '#FF2244';
+                        return (
+                          <tr key={g.gameIndex} style={{ borderBottom: '1px solid #0e1110' }}>
+                            <td style={{ padding: '4px 8px', color: 'rgba(255,255,255,0.25)', fontSize: 9 }}>{g.gameIndex}</td>
+                            <td style={{ padding: '4px 8px', color: 'rgba(255,255,255,0.4)', fontSize: 9 }}>{g.gameDate}</td>
+                            <td style={{ padding: '4px 8px', color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{g.matchup}</td>
+                            {(['brierFgMl', 'brierF5Ml', 'brierNrfi', 'brierFgTotal', 'brierF5Total'] as const).map(field => (
+                              <td key={field} style={{ padding: '4px 8px', textAlign: 'right', color: brierColor(g[field]), fontWeight: 600 }}>
+                                {g[field] != null ? (g[field] as number).toFixed(4) : <span style={{ color: 'rgba(255,255,255,0.12)' }}>—</span>}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )
+        )}
 
         {/* ── LAST 7 DAYS VIEW ──────────────────────────────────────────────── */}
         {viewMode === 'last7' && (

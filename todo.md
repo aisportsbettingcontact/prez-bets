@@ -2583,3 +2583,6 @@
 - [x] Trigger outcome ingestion for 2026-04-14 — confirmed already ingested at 07:30 UTC (15/15 games, 0 errors)
 - [x] Add modelF5HomeWinPct + modelF5AwayWinPct to CheatSheet F5 card CENTER section (Away Win% | Push% | Home Win% row, neon green on leader)
 - [x] Build and launch backfillF5WinPct.mts — re-runs Python engine for all 256 modeled games (2026-03-26 → 2026-04-14) with per-game VERIFY logging
+- [x] Wire checkDrift post-backfill — call checkF5ShareDrift() after all 256 games populated, log rolling 50-game window result
+- [x] Add F5 ML edge display to CheatSheet F5 card — no-vig implied prob from book F5 ML vs modelF5HomeWinPct/modelF5AwayWinPct, show edge delta
+- [x] Build rolling Brier score trend chart on Admin page — 20-game rolling window, 3 markets (FG ML, F5 ML, NRFI)

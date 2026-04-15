@@ -1296,6 +1296,33 @@ function F5GameCardV3({ game, lineup }: { game: CheatSheetGame; lineup?: CheatSh
     ? Math.max(0, 100 - f5AwayWinPct - f5HomeWinPct)
     : null;
 
+  // ── F5 ML No-Vig Edge Display ─────────────────────────────────────────────
+  // Remove vig from both sides: noVig = rawSide / (rawAway + rawHome)
+  // This gives the fair (vig-free) book probability to compare against the model.
+  const _f5AwayMLNum = game.f5AwayML ? parseFloat(game.f5AwayML) : null;
+  const _f5HomeMLNum = game.f5HomeML ? parseFloat(game.f5HomeML) : null;
+  let noVigAwayImplied: number | null = null; // 0-100
+  let noVigHomeImplied: number | null = null; // 0-100
+  if (_f5AwayMLNum != null && !isNaN(_f5AwayMLNum) && _f5HomeMLNum != null && !isNaN(_f5HomeMLNum)) {
+    const rawAway = americanToImplied(_f5AwayMLNum); // vig-inclusive 0-1
+    const rawHome = americanToImplied(_f5HomeMLNum); // vig-inclusive 0-1
+    const vigTotal = rawAway + rawHome;
+    if (vigTotal > 0) {
+      noVigAwayImplied = (rawAway / vigTotal) * 100;
+      noVigHomeImplied = (rawHome / vigTotal) * 100;
+    }
+  }
+  // Edge delta: model% - no-vig book% (positive = model favors this side vs book)
+  const f5AwayMlEdgeDelta = (f5AwayWinPct != null && noVigAwayImplied != null)
+    ? parseFloat((f5AwayWinPct - noVigAwayImplied).toFixed(2))
+    : null;
+  const f5HomeMlEdgeDelta = (f5HomeWinPct != null && noVigHomeImplied != null)
+    ? parseFloat((f5HomeWinPct - noVigHomeImplied).toFixed(2))
+    : null;
+  const f5AwayHasEdge = f5AwayMlEdgeDelta != null && Math.abs(f5AwayMlEdgeDelta) >= 3.0;
+  const f5HomeHasEdge = f5HomeMlEdgeDelta != null && Math.abs(f5HomeMlEdgeDelta) >= 3.0;
+  const hasF5MlEdgeData = noVigAwayImplied != null && (f5AwayWinPct != null || f5HomeWinPct != null);
+
   let ouEdge: EdgeV3 | null = null;
   let ouLabel = '';
   if (modelF5Total != null && bookTotalNum != null) {
@@ -1448,6 +1475,63 @@ function F5GameCardV3({ game, lineup }: { game: CheatSheetGame; lineup?: CheatSh
                   {f5HomeWinPct != null ? `${f5HomeWinPct.toFixed(1)}%` : '—'}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* F5 ML Edge Row: Model% vs No-Vig Book% → delta */}
+          {/* Shown when both F5 ML odds and at least one model win pct are available */}
+          {hasF5MlEdgeData && (
+            <div style={{
+              width: '100%',
+              background: '#0a0d0b',
+              border: '1px solid #1a1d1b',
+              borderRadius: 6,
+              padding: '6px 8px',
+              display: 'flex',
+              flexDirection: 'column' as const,
+              gap: 4,
+            }}>
+              <div style={{ fontSize: 7, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' as const, color: '#2e3330', textAlign: 'center', marginBottom: 2 }}>F5 ML Edge</div>
+              {/* Away row */}
+              {f5AwayWinPct != null && noVigAwayImplied != null && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                  <span style={{ fontSize: 9, fontWeight: 500, color: '#7a8078', minWidth: 28 }}>{game.awayTeam}</span>
+                  <span style={{ fontSize: 9, color: '#4a5048' }}>
+                    Model {f5AwayWinPct.toFixed(1)}% vs Book {noVigAwayImplied.toFixed(1)}%
+                  </span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, lineHeight: 1,
+                    color: f5AwayHasEdge
+                      ? (f5AwayMlEdgeDelta! > 0 ? '#39FF14' : '#ff5555')
+                      : '#2e3330',
+                    minWidth: 36, textAlign: 'right',
+                  }}>
+                    {f5AwayMlEdgeDelta != null
+                      ? `${f5AwayMlEdgeDelta > 0 ? '+' : ''}${f5AwayMlEdgeDelta.toFixed(1)}%`
+                      : '—'}
+                  </span>
+                </div>
+              )}
+              {/* Home row */}
+              {f5HomeWinPct != null && noVigHomeImplied != null && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                  <span style={{ fontSize: 9, fontWeight: 500, color: '#7a8078', minWidth: 28 }}>{game.homeTeam}</span>
+                  <span style={{ fontSize: 9, color: '#4a5048' }}>
+                    Model {f5HomeWinPct.toFixed(1)}% vs Book {noVigHomeImplied.toFixed(1)}%
+                  </span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, lineHeight: 1,
+                    color: f5HomeHasEdge
+                      ? (f5HomeMlEdgeDelta! > 0 ? '#39FF14' : '#ff5555')
+                      : '#2e3330',
+                    minWidth: 36, textAlign: 'right',
+                  }}>
+                    {f5HomeMlEdgeDelta != null
+                      ? `${f5HomeMlEdgeDelta > 0 ? '+' : ''}${f5HomeMlEdgeDelta.toFixed(1)}%`
+                      : '—'}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>
