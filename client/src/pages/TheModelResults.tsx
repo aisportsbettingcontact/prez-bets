@@ -1055,6 +1055,64 @@ export default function TheModelResults() {
   });
 
   // Brier chart data (merged rolling + per-game)
+  // ─── HR props flat list for selected date ─────────────────────────────────
+  // MUST be above early returns — React Error #310 fix
+  const hrPropsList = useMemo(() => {
+    if (!hrPropsData?.propsByGame) return [];
+    const games = hrGamesData ?? [];
+    const list: Array<HrPropRow & { awayTeam: string; homeTeam: string }> = [];
+    for (const [gameIdStr, props] of Object.entries(hrPropsData.propsByGame)) {
+      const gameId = parseInt(gameIdStr, 10);
+      const game = games.find((g: { id: number }) => g.id === gameId);
+      for (const p of props as HrPropRow[]) {
+        list.push({ ...p, awayTeam: game?.awayTeam ?? "?", homeTeam: game?.homeTeam ?? "?" });
+      }
+    }
+    return list.sort((a, b) => {
+      const edgeA = a.edgeOver ? parseFloat(a.edgeOver) : -999;
+      const edgeB = b.edgeOver ? parseFloat(b.edgeOver) : -999;
+      return edgeB - edgeA;
+    });
+  }, [hrPropsData, hrGamesData]);
+
+  // ─── FG edge rows — MUST be above early returns — React Error #310 fix ────
+  const fgRows: EdgeRow[] = useMemo(() => (fgEdgeData?.rows ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as number,
+    gameDate: r.gameDate as string | null,
+    awayTeam: r.awayTeam as string,
+    homeTeam: r.homeTeam as string,
+    side: r.side as string,
+    modelWinPct: r.modelWinPct as number,
+    bookImpliedPct: r.bookImpliedPct as number,
+    edgePct: r.edgePct as number,
+    awayML: r.awayML as string | null,
+    homeML: r.homeML as string | null,
+    actualAwayScore: r.actualAwayScore as number | null,
+    actualHomeScore: r.actualHomeScore as number | null,
+    fgMlResult: r.fgMlResult as string | null,
+    fgMlCorrect: r.fgMlCorrect as number | null,
+    brierFgMl: r.brierFgMl as string | null,
+  })), [fgEdgeData]);
+
+  // ─── F5 edge rows — MUST be above early returns — React Error #310 fix ────
+  const f5Rows: EdgeRow[] = useMemo(() => (f5EdgeData?.rows ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as number,
+    gameDate: r.gameDate as string | null,
+    awayTeam: r.awayTeam as string,
+    homeTeam: r.homeTeam as string,
+    side: r.side as string,
+    modelWinPct: r.modelWinPct as number,
+    bookImpliedPct: r.bookImpliedPct as number,
+    edgePct: r.edgePct as number,
+    f5AwayML: r.f5AwayML as string | null,
+    f5HomeML: r.f5HomeML as string | null,
+    actualF5AwayScore: r.actualF5AwayScore as number | null,
+    actualF5HomeScore: r.actualF5HomeScore as number | null,
+    f5MlResult: r.f5MlResult as string | null,
+    f5MlCorrect: r.f5MlCorrect as number | null,
+    brierF5Ml: r.brierF5Ml as string | null,
+  })), [f5EdgeData]);
+
   const brierChartData = useMemo(() => {
     if (!brierData) return [];
     const rollingMap = new Map(brierData.rolling.map((r: Record<string, unknown>) => [r.gameIndex, r]));
@@ -1093,63 +1151,6 @@ export default function TheModelResults() {
     { id: "hrprops",     label: "HR PROPS",         color: "#FF6B35" },
   ];
   const activeTab = MARKET_TABS.find(t => t.id === marketTab)!;
-
-  // ─── HR props flat list for selected date ─────────────────────────────────
-  const hrPropsList = useMemo(() => {
-    if (!hrPropsData?.propsByGame) return [];
-    const games = hrGamesData ?? [];
-    const list: Array<HrPropRow & { awayTeam: string; homeTeam: string }> = [];
-    for (const [gameIdStr, props] of Object.entries(hrPropsData.propsByGame)) {
-      const gameId = parseInt(gameIdStr, 10);
-      const game = games.find((g: { id: number }) => g.id === gameId);
-      for (const p of props as HrPropRow[]) {
-        list.push({ ...p, awayTeam: game?.awayTeam ?? "?", homeTeam: game?.homeTeam ?? "?" });
-      }
-    }
-    return list.sort((a, b) => {
-      const edgeA = a.edgeOver ? parseFloat(a.edgeOver) : -999;
-      const edgeB = b.edgeOver ? parseFloat(b.edgeOver) : -999;
-      return edgeB - edgeA;
-    });
-  }, [hrPropsData, hrGamesData]);
-
-  // ─── FG edge rows — getFgEdgeLeaderboard returns FG ML fields directly ─────────────────────
-  // Fields: modelWinPct, bookImpliedPct, edgePct, awayML, homeML, fgMlResult, fgMlCorrect, brierFgMl
-  const fgRows: EdgeRow[] = useMemo(() => (fgEdgeData?.rows ?? []).map((r: Record<string, unknown>) => ({
-    id: r.id as number,
-    gameDate: r.gameDate as string | null,
-    awayTeam: r.awayTeam as string,
-    homeTeam: r.homeTeam as string,
-    side: r.side as string,
-    modelWinPct: r.modelWinPct as number,
-    bookImpliedPct: r.bookImpliedPct as number,
-    edgePct: r.edgePct as number,
-    awayML: r.awayML as string | null,
-    homeML: r.homeML as string | null,
-    actualAwayScore: r.actualAwayScore as number | null,
-    actualHomeScore: r.actualHomeScore as number | null,
-    fgMlResult: r.fgMlResult as string | null,
-    fgMlCorrect: r.fgMlCorrect as number | null,
-    brierFgMl: r.brierFgMl as string | null,
-  })), [fgEdgeData]);
-
-  const f5Rows: EdgeRow[] = useMemo(() => (f5EdgeData?.rows ?? []).map((r: Record<string, unknown>) => ({
-    id: r.id as number,
-    gameDate: r.gameDate as string | null,
-    awayTeam: r.awayTeam as string,
-    homeTeam: r.homeTeam as string,
-    side: r.side as string,
-    modelWinPct: r.modelWinPct as number,
-    bookImpliedPct: r.bookImpliedPct as number,
-    edgePct: r.edgePct as number,
-    f5AwayML: r.f5AwayML as string | null,
-    f5HomeML: r.f5HomeML as string | null,
-    actualF5AwayScore: r.actualF5AwayScore as number | null,
-    actualF5HomeScore: r.actualF5HomeScore as number | null,
-    f5MlResult: r.f5MlResult as string | null,
-    f5MlCorrect: r.f5MlCorrect as number | null,
-    brierF5Ml: r.brierF5Ml as string | null,
-  })), [f5EdgeData]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1675,8 +1676,7 @@ export default function TheModelResults() {
 
             {/* Daily HR Props */}
             <div>
-              <SectionLabel sub={`Date: ${formatDateNav(gameDate)}`}>DAILY HR PROP
-S</SectionLabel>
+              <SectionLabel sub={`Date: ${formatDateNav(gameDate)}`}>DAILY HR PROPS</SectionLabel>
 
               {hrPropsLoading ? (
                 <div className="flex items-center justify-center py-12 gap-3">
