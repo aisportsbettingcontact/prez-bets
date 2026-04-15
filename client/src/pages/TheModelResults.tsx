@@ -704,8 +704,11 @@ function BrierHeatmap({ heatmapData, selectedCell, setSelectedCell, drilldownDat
 }
 
 // ─── Rolling Accuracy Panel ────────────────────────────────────────────────────
-function RollingAccuracyPanel({ days }: { days: number }) {
-  const { data, isLoading } = trpc.mlbBacktest.getRollingAccuracy.useQuery({ days }, { refetchOnWindowFocus: false });
+function RollingAccuracyPanel({ days, appUser }: { days: number; appUser: { id: number } | null }) {
+  const { data, isLoading } = trpc.mlbBacktest.getRollingAccuracy.useQuery(
+    { days },
+    { enabled: !!appUser, refetchOnWindowFocus: false, staleTime: 5 * 60 * 1000 }
+  );
   if (isLoading) return <div style={{ fontSize: 11, color: "#555", padding: "8px 0" }}>Loading rolling accuracy…</div>;
   if (!data || data.length === 0) return <div style={{ fontSize: 11, color: "#555", padding: "8px 0" }}>No backtest data yet.</div>;
   return (
@@ -1274,7 +1277,7 @@ export default function TheModelResults() {
             {/* Rolling Accuracy */}
             <div>
               <SectionLabel sub={`Last 30 days · mlb_game_backtest table`}>ROLLING ACCURACY — FULL GAME MARKETS</SectionLabel>
-              <RollingAccuracyPanel days={30} />
+              <RollingAccuracyPanel days={30} appUser={appUser} />
             </div>
 
             {/* Brier Summary Cards */}
@@ -1388,7 +1391,7 @@ export default function TheModelResults() {
             {/* Rolling Accuracy */}
             <div>
               <SectionLabel sub="Last 30 days · mlb_game_backtest table">ROLLING ACCURACY — F5 MARKETS</SectionLabel>
-              <RollingAccuracyPanel days={30} />
+              <RollingAccuracyPanel days={30} appUser={appUser} />
             </div>
 
             {/* Brier Summary */}
@@ -1501,7 +1504,7 @@ export default function TheModelResults() {
             {/* Rolling Accuracy */}
             <div>
               <SectionLabel sub="Last 30 days · mlb_game_backtest table">ROLLING ACCURACY — NRFI/YRFI</SectionLabel>
-              <RollingAccuracyPanel days={30} />
+              <RollingAccuracyPanel days={30} appUser={appUser} />
             </div>
 
             {/* Brier Summary */}
@@ -1670,7 +1673,7 @@ export default function TheModelResults() {
             {/* Rolling Accuracy */}
             <div>
               <SectionLabel sub="Last 30 days · mlb_game_backtest table">ROLLING ACCURACY — HR PROPS</SectionLabel>
-              <RollingAccuracyPanel days={30} />
+              <RollingAccuracyPanel days={30} appUser={appUser} />
             </div>
 
             {/* Daily HR Props */}
