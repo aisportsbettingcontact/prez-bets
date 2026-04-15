@@ -33,7 +33,7 @@ import { ingestMlbOutcomes } from "../mlbOutcomeIngestor";
 import { checkF5ShareDrift, triggerRecalibration } from "../mlbDriftDetector";
 import { getDb } from "../db";
 import { games as gamesTable, type Game } from "../../drizzle/schema";
-import { and, eq, isNotNull, asc } from "drizzle-orm";
+import { and, eq, isNotNull, asc, desc, sql } from "drizzle-orm";
 
 const TAG = "[MlbScheduleRouter]";
 
@@ -676,9 +676,285 @@ export const mlbScheduleRouter = router({
         });
       }
 
-      console.log(`${tag} [OUTPUT] heatmap rows: ${heatmap.length}`);
+       console.log(`${tag} [OUTPUT] heatmap rows: ${heatmap.length}`);
       return { heatmap };
     }),
-});
 
+  /**
+   * Owner-only: F5 ML Edge Leaderboard.
+   *
+   * Returns all historical games with modelF5AwayWinPct and f5AwayML populated,
+   * sorted by absolute edge descending.
+   *
+   * Edge = model win% (0–100) − no-vig implied prob (0–100)
+   * No-vig implied = raw_side / (raw_away + raw_home) where
+   *   raw = odds < 0 ? (-odds) / (-odds + 100) : 100 / (odds + 100)
+   */
+  getF5EdgeLeaderboard: ownerProcedure
+    .input(z.object({
+      minEdge:     z.number().optional().default(0),
+      side:        z.enum(['away', 'home', 'both']).optional().default('both'),
+      withOutcome: z.boolean().optional().default(false),
+      limit:       z.number().min(1).max(500).optional().default(200),
+    }))
+    .query(async ({ input }) => {
+      const tag = `${TAG}[getF5EdgeLeaderboard]`;
+      console.log(`${tag} [INPUT] minEdge=${input.minEdge} side=${input.side} withOutcome=${input.withOutcome} limit=${input.limit}`);
+
+      const db = await getDb();
+      const rows = await db
+        .select({
+          id:                  gamesTable.id,
+          gameDate:            gamesTable.gameDate,
+          awayTeam:            gamesTable.awayTeam,
+          homeTeam:            gamesTable.homeTeam,
+          f5AwayML:            gamesTable.f5AwayML,
+          f5HomeML:            gamesTable.f5HomeML,
+          modelF5AwayWinPct:   gamesTable.modelF5AwayWinPct,
+          modelF5HomeWinPct:   gamesTable.modelF5HomeWinPct,
+          f5MlResult:          gamesTable.f5MlResult,
+          f5MlCorrect:         gamesTable.f5MlCorrect,
+          actualF5AwayScore:   gamesTable.actualF5AwayScore,
+          actualF5HomeScore:   gamesTable.actualF5HomeScore,
+          brierF5Ml:           gamesTable.brierF5Ml,
+        })
+        .from(gamesTable)
+        .where(
+          and(
+            isNotNull(gamesTable.modelF5AwayWinPct),
+            isNotNull(gamesTable.f5AwayML),
+            isNotNull(gamesTable.f5HomeML),
+          )
+        )
+        .orderBy(asc(gamesTable.gameDate));
+
+      console.log(`${tag} [STATE] raw rows with model+odds: ${rows.length}`);
+
+      // ─ No-vig implied probability helper ─────────────────────────────────────
+      const americanToRaw = (ml: string | null): number | null => {
+        if (!ml) return null;
+        const n = parseFloat(ml);
+        if (isNaN(n)) return null;
+        return n < 0 ? (-n) / (-n + 100) : 100 / (n + 100);
+      };
+
+      type EdgeRow = {
+        id: number;
+        gameDate: string;
+        awayTeam: string;
+        homeTeam: string;
+        side: 'away' | 'home';
+        modelWinPct: number;
+        bookImpliedPct: number;
+        edgePct: number;
+        f5AwayML: string | null;
+        f5HomeML: string | null;
+        f5MlResult: string | null;
+        f5MlCorrect: number | null;
+        actualF5AwayScore: number | null;
+        actualF5HomeScore: number | null;
+        brierF5Ml: string | null;
+      };
+
+      const edgeRows: EdgeRow[] = [];
+
+      for (const row of rows) {
+        const rawAway = americanToRaw(row.f5AwayML);
+        const rawHome = americanToRaw(row.f5HomeML);
+        if (rawAway == null || rawHome == null) continue;
+        const total = rawAway + rawHome;
+        if (total <= 0) continue;
+
+        const noVigAway = (rawAway / total) * 100;
+        const noVigHome = (rawHome / total) * 100;
+
+        const modelAway = row.modelF5AwayWinPct != null ? parseFloat(String(row.modelF5AwayWinPct)) : null;
+        const modelHome = row.modelF5HomeWinPct != null ? parseFloat(String(row.modelF5HomeWinPct)) : null;
+
+        if (modelAway != null && (input.side === 'away' || input.side === 'both')) {
+          const edge = modelAway - noVigAway;
+          if (Math.abs(edge) >= input.minEdge) {
+            edgeRows.push({
+              id: row.id,
+              gameDate: row.gameDate ?? '',
+              awayTeam: row.awayTeam,
+              homeTeam: row.homeTeam,
+              side: 'away',
+              modelWinPct: modelAway,
+              bookImpliedPct: noVigAway,
+              edgePct: edge,
+              f5AwayML: row.f5AwayML,
+              f5HomeML: row.f5HomeML,
+              f5MlResult: row.f5MlResult,
+              f5MlCorrect: row.f5MlCorrect,
+              actualF5AwayScore: row.actualF5AwayScore,
+              actualF5HomeScore: row.actualF5HomeScore,
+              brierF5Ml: row.brierF5Ml != null ? String(row.brierF5Ml) : null,
+            });
+          }
+        }
+
+        if (modelHome != null && (input.side === 'home' || input.side === 'both')) {
+          const edge = modelHome - noVigHome;
+          if (Math.abs(edge) >= input.minEdge) {
+            edgeRows.push({
+              id: row.id,
+              gameDate: row.gameDate ?? '',
+              awayTeam: row.awayTeam,
+              homeTeam: row.homeTeam,
+              side: 'home',
+              modelWinPct: modelHome,
+              bookImpliedPct: noVigHome,
+              edgePct: edge,
+              f5AwayML: row.f5AwayML,
+              f5HomeML: row.f5HomeML,
+              f5MlResult: row.f5MlResult,
+              f5MlCorrect: row.f5MlCorrect,
+              actualF5AwayScore: row.actualF5AwayScore,
+              actualF5HomeScore: row.actualF5HomeScore,
+              brierF5Ml: row.brierF5Ml != null ? String(row.brierF5Ml) : null,
+            });
+          }
+        }
+      }
+
+      // Sort by absolute edge descending
+      edgeRows.sort((a, b) => Math.abs(b.edgePct) - Math.abs(a.edgePct));
+      const limited = edgeRows.slice(0, input.limit);
+
+      // ─ Summary stats ─────────────────────────────────────────────────────────
+      const withOutcome = edgeRows.filter(r => r.f5MlResult != null && r.f5MlResult !== '');
+      const wins = withOutcome.filter(r => r.edgePct > 0 && r.f5MlCorrect === 1).length;
+      const losses = withOutcome.filter(r => r.edgePct > 0 && r.f5MlCorrect === 0).length;
+      const positiveEdge = edgeRows.filter(r => r.edgePct > 0);
+      const negativeEdge = edgeRows.filter(r => r.edgePct < 0);
+      const avgPositiveEdge = positiveEdge.length > 0
+        ? positiveEdge.reduce((s, r) => s + r.edgePct, 0) / positiveEdge.length
+        : 0;
+      const avgNegativeEdge = negativeEdge.length > 0
+        ? negativeEdge.reduce((s, r) => s + r.edgePct, 0) / negativeEdge.length
+        : 0;
+
+      const summary = {
+        totalGames:      rows.length,
+        edgeRows:        edgeRows.length,
+        positiveEdge:    positiveEdge.length,
+        negativeEdge:    negativeEdge.length,
+        avgPositiveEdge: parseFloat(avgPositiveEdge.toFixed(2)),
+        avgNegativeEdge: parseFloat(avgNegativeEdge.toFixed(2)),
+        winsOnPositiveEdge:   wins,
+        lossesOnPositiveEdge: losses,
+        winRateOnPositiveEdge: withOutcome.length > 0 && (wins + losses) > 0
+          ? parseFloat((wins / (wins + losses) * 100).toFixed(1))
+          : null,
+      };
+
+      console.log(`${tag} [OUTPUT] edgeRows=${edgeRows.length} positiveEdge=${positiveEdge.length} negativeEdge=${negativeEdge.length} wins=${wins} losses=${losses}`);
+      console.log(`${tag} [VERIFY] ${summary.winRateOnPositiveEdge != null ? `PASS — win rate on positive edge: ${summary.winRateOnPositiveEdge}%` : 'PENDING — no outcomes yet'}`);
+
+      return { rows: limited, summary };
+    }),
+
+  /**
+   * Owner-only: Brier Heatmap Drill-Down.
+   *
+   * Returns individual game rows for a specific date, with all 5 Brier fields.
+   * Used when clicking a cell in the Brier Heatmap.
+   */
+  getBrierDrilldown: ownerProcedure
+    .input(z.object({
+      date:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD'),
+      market: z.enum(['fgMl', 'f5Ml', 'nrfi', 'fgTotal', 'f5Total']),
+    }))
+    .query(async ({ input }) => {
+      const tag = `${TAG}[getBrierDrilldown]`;
+      console.log(`${tag} [INPUT] date=${input.date} market=${input.market}`);
+      const db = await getDb();
+
+      const rows = await db
+        .select({
+          id:                 gamesTable.id,
+          gameDate:           gamesTable.gameDate,
+          awayTeam:           gamesTable.awayTeam,
+          homeTeam:           gamesTable.homeTeam,
+          startTimeEst:       gamesTable.startTimeEst,
+          brierFgMl:          gamesTable.brierFgMl,
+          brierF5Ml:          gamesTable.brierF5Ml,
+          brierNrfi:          gamesTable.brierNrfi,
+          brierFgTotal:       gamesTable.brierFgTotal,
+          brierF5Total:       gamesTable.brierF5Total,
+          modelAwayWinPct:    gamesTable.modelAwayWinPct,
+          modelHomeWinPct:    gamesTable.modelHomeWinPct,
+          modelF5AwayWinPct:  gamesTable.modelF5AwayWinPct,
+          modelF5HomeWinPct:  gamesTable.modelF5HomeWinPct,
+          awayML:             gamesTable.awayML,
+          homeML:             gamesTable.homeML,
+          f5AwayML:           gamesTable.f5AwayML,
+          f5HomeML:           gamesTable.f5HomeML,
+          actualAwayScore:    gamesTable.actualAwayScore,
+          actualHomeScore:    gamesTable.actualHomeScore,
+          actualF5AwayScore:  gamesTable.actualF5AwayScore,
+          actualF5HomeScore:  gamesTable.actualF5HomeScore,
+          fgMlResult:         gamesTable.fgMlResult,
+          f5MlResult:         gamesTable.f5MlResult,
+          fgMlCorrect:        gamesTable.fgMlCorrect,
+          f5MlCorrect:        gamesTable.f5MlCorrect,
+          nrfiCorrect:        gamesTable.nrfiCorrect,
+        })
+        .from(gamesTable)
+        .where(
+          and(
+            eq(gamesTable.gameDate, input.date),
+            isNotNull(gamesTable.outcomeIngestedAt),
+          )
+        )
+        .orderBy(asc(gamesTable.id));
+
+      console.log(`${tag} [STATE] games on ${input.date}: ${rows.length}`);
+
+      // Map market field name to brier column
+      const marketToBrierField: Record<string, keyof typeof rows[0]> = {
+        fgMl:    'brierFgMl',
+        f5Ml:    'brierF5Ml',
+        nrfi:    'brierNrfi',
+        fgTotal: 'brierFgTotal',
+        f5Total: 'brierF5Total',
+      };
+      const brierField = marketToBrierField[input.market];
+
+      type DrillRow = typeof rows[number];
+      const result = rows.map((r: DrillRow) => ({
+        id:                r.id,
+        awayTeam:          r.awayTeam,
+        homeTeam:          r.homeTeam,
+        startTimeEst:      r.startTimeEst,
+        brierFgMl:         r.brierFgMl != null ? Number(r.brierFgMl) : null,
+        brierF5Ml:         r.brierF5Ml != null ? Number(r.brierF5Ml) : null,
+        brierNrfi:         r.brierNrfi != null ? Number(r.brierNrfi) : null,
+        brierFgTotal:      r.brierFgTotal != null ? Number(r.brierFgTotal) : null,
+        brierF5Total:      r.brierF5Total != null ? Number(r.brierF5Total) : null,
+        focusBrier:        r[brierField] != null ? Number(r[brierField]) : null,
+        modelAwayWinPct:   r.modelAwayWinPct != null ? Number(r.modelAwayWinPct) : null,
+        modelHomeWinPct:   r.modelHomeWinPct != null ? Number(r.modelHomeWinPct) : null,
+        modelF5AwayWinPct: r.modelF5AwayWinPct != null ? Number(r.modelF5AwayWinPct) : null,
+        modelF5HomeWinPct: r.modelF5HomeWinPct != null ? Number(r.modelF5HomeWinPct) : null,
+        awayML:            r.awayML,
+        homeML:            r.homeML,
+        f5AwayML:          r.f5AwayML,
+        f5HomeML:          r.f5HomeML,
+        actualAwayScore:   r.actualAwayScore,
+        actualHomeScore:   r.actualHomeScore,
+        actualF5AwayScore: r.actualF5AwayScore,
+        actualF5HomeScore: r.actualF5HomeScore,
+        fgMlResult:        r.fgMlResult,
+        f5MlResult:        r.f5MlResult,
+        fgMlCorrect:       r.fgMlCorrect,
+        f5MlCorrect:       r.f5MlCorrect,
+        nrfiCorrect:       r.nrfiCorrect,
+      }));
+
+      console.log(`${tag} [OUTPUT] drilldown rows: ${result.length} for ${input.date} / ${input.market}`);
+      return { date: input.date, market: input.market, games: result };
+    }),
+});
 export type MlbScheduleRouter = typeof mlbScheduleRouter;

@@ -84,6 +84,22 @@ export interface CheatSheetGame {
   // NRFI filter signals
   nrfiCombinedSignal: number | null;
   nrfiFilterPass: number | null;
+  // Full-game (FG) book odds — for FG Total and FG ML edge display
+  total: string | null;           // book O/U total line (e.g. "8.5")
+  overOdds: string | null;        // book over odds (e.g. "-110")
+  underOdds: string | null;       // book under odds (e.g. "-110")
+  awayML: string | null;          // book full-game away ML
+  homeML: string | null;          // book full-game home ML
+  // Full-game model projections
+  modelTotal: string | null;      // model projected total
+  modelOverRate: string | null;   // model over% (0-100 scale)
+  modelUnderRate: string | null;  // model under% (0-100 scale)
+  modelAwayWinPct: string | null; // model away win% (0-100 scale)
+  modelHomeWinPct: string | null; // model home win% (0-100 scale)
+  modelOverOdds: string | null;   // model over odds
+  modelUnderOdds: string | null;  // model under odds
+  modelAwayML: string | null;     // model full-game away ML
+  modelHomeML: string | null;     // model full-game home ML
 }
 
 interface MlbCheatSheetCardProps {
@@ -1335,6 +1351,55 @@ function F5GameCardV3({ game, lineup }: { game: CheatSheetGame; lineup?: CheatSh
     }
   }
 
+  // ── FG Total Edge Display ─────────────────────────────────────────────────
+  const fgModelTotal = parseNumV3(game.modelTotal);
+  const fgBookTotal = parseNumV3(game.total);
+  const fgModelOverRate = parseNumV3(game.modelOverRate);   // 0-100
+  const fgModelUnderRate = parseNumV3(game.modelUnderRate); // 0-100
+  let fgOuEdge: EdgeV3 | null = null;
+  let fgOuLabel = '';
+  let fgOuModelPct: number | null = null;
+  let fgOuBookOdds: string | null = null;
+  if (fgModelTotal != null && fgBookTotal != null) {
+    if (fgModelTotal > fgBookTotal) {
+      fgOuEdge = computeEdgeV3(fgModelOverRate, game.overOdds);
+      fgOuLabel = 'O';
+      fgOuModelPct = fgModelOverRate;
+      fgOuBookOdds = game.overOdds;
+    } else {
+      fgOuEdge = computeEdgeV3(fgModelUnderRate, game.underOdds);
+      fgOuLabel = 'U';
+      fgOuModelPct = fgModelUnderRate;
+      fgOuBookOdds = game.underOdds;
+    }
+  }
+  const hasFgTotalData = fgModelTotal != null && fgBookTotal != null;
+  // ── FG ML Edge Display ───────────────────────────────────────────────────────
+  const fgAwayWinPct = parseNumV3(game.modelAwayWinPct);  // 0-100
+  const fgHomeWinPct = parseNumV3(game.modelHomeWinPct);  // 0-100
+  const _fgAwayMLNum = game.awayML ? parseFloat(game.awayML) : null;
+  const _fgHomeMLNum = game.homeML ? parseFloat(game.homeML) : null;
+  let fgNoVigAwayImplied: number | null = null; // 0-100
+  let fgNoVigHomeImplied: number | null = null; // 0-100
+  if (_fgAwayMLNum != null && !isNaN(_fgAwayMLNum) && _fgHomeMLNum != null && !isNaN(_fgHomeMLNum)) {
+    const rawAway = americanToImplied(_fgAwayMLNum);
+    const rawHome = americanToImplied(_fgHomeMLNum);
+    const vigTotal = rawAway + rawHome;
+    if (vigTotal > 0) {
+      fgNoVigAwayImplied = (rawAway / vigTotal) * 100;
+      fgNoVigHomeImplied = (rawHome / vigTotal) * 100;
+    }
+  }
+  const fgAwayMlEdgeDelta = (fgAwayWinPct != null && fgNoVigAwayImplied != null)
+    ? parseFloat((fgAwayWinPct - fgNoVigAwayImplied).toFixed(2))
+    : null;
+  const fgHomeMlEdgeDelta = (fgHomeWinPct != null && fgNoVigHomeImplied != null)
+    ? parseFloat((fgHomeWinPct - fgNoVigHomeImplied).toFixed(2))
+    : null;
+  const fgAwayHasEdge = fgAwayMlEdgeDelta != null && Math.abs(fgAwayMlEdgeDelta) >= 3.0;
+  const fgHomeHasEdge = fgHomeMlEdgeDelta != null && Math.abs(fgHomeMlEdgeDelta) >= 3.0;
+  const hasFgMlEdgeData = fgNoVigAwayImplied != null && (fgAwayWinPct != null || fgHomeWinPct != null);
+
   const pitcherLine = [awayPitcherName, homePitcherName].filter(Boolean).join(' vs ');
 
   return (
@@ -1528,6 +1593,86 @@ function F5GameCardV3({ game, lineup }: { game: CheatSheetGame; lineup?: CheatSh
                   }}>
                     {f5HomeMlEdgeDelta != null
                       ? `${f5HomeMlEdgeDelta > 0 ? '+' : ''}${f5HomeMlEdgeDelta.toFixed(1)}%`
+                      : '—'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* FG Total Edge Row: Model total vs Book total → O/U edge */}
+          {hasFgTotalData && (
+            <div style={{
+              marginTop: 6,
+              padding: '6px 8px',
+              background: '#0d100e',
+              border: '1px solid #1a1d1b',
+              borderRadius: 5,
+            }}>
+              <div style={{ fontSize: 7, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' as const, color: '#2e3330', textAlign: 'center', marginBottom: 4 }}>FG Total Edge</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                <span style={{ fontSize: 9, fontWeight: 500, color: '#7a8078' }}>
+                  Model {fgModelTotal!.toFixed(1)} vs Book {fgBookTotal!.toFixed(1)}
+                </span>
+                <span style={{
+                  fontSize: 10, fontWeight: 700,
+                  color: fgOuEdge?.hasEdge ? '#39FF14' : '#2e3330',
+                }}>
+                  {fgOuLabel && fgOuEdge ? `${fgOuLabel} ${fgOuEdge.isPositive ? '+' : ''}${fgOuEdge.roiPct.toFixed(1)}%` : '—'}
+                </span>
+              </div>
+              {fgOuModelPct != null && fgOuBookOdds && (
+                <div style={{ fontSize: 8, color: '#3a3f3c', marginTop: 2, textAlign: 'right' }}>
+                  {fgOuModelPct.toFixed(1)}% model · {fmtOddsV3(fgOuBookOdds)} book
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* FG ML Edge Row: Model win% vs No-Vig Book% → delta */}
+          {hasFgMlEdgeData && (
+            <div style={{
+              marginTop: 6,
+              padding: '6px 8px',
+              background: '#0d100e',
+              border: '1px solid #1a1d1b',
+              borderRadius: 5,
+            }}>
+              <div style={{ fontSize: 7, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' as const, color: '#2e3330', textAlign: 'center', marginBottom: 4 }}>FG ML Edge</div>
+              {fgAwayWinPct != null && fgNoVigAwayImplied != null && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                  <span style={{ fontSize: 9, fontWeight: 500, color: '#7a8078', minWidth: 28 }}>{game.awayTeam}</span>
+                  <span style={{ fontSize: 9, color: '#4a5048' }}>
+                    Model {fgAwayWinPct.toFixed(1)}% vs Book {fgNoVigAwayImplied.toFixed(1)}%
+                  </span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, lineHeight: 1,
+                    color: fgAwayHasEdge
+                      ? (fgAwayMlEdgeDelta! > 0 ? '#39FF14' : '#ff5555')
+                      : '#2e3330',
+                    minWidth: 36, textAlign: 'right',
+                  }}>
+                    {fgAwayMlEdgeDelta != null
+                      ? `${fgAwayMlEdgeDelta > 0 ? '+' : ''}${fgAwayMlEdgeDelta.toFixed(1)}%`
+                      : '—'}
+                  </span>
+                </div>
+              )}
+              {fgHomeWinPct != null && fgNoVigHomeImplied != null && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginTop: 2 }}>
+                  <span style={{ fontSize: 9, fontWeight: 500, color: '#7a8078', minWidth: 28 }}>{game.homeTeam}</span>
+                  <span style={{ fontSize: 9, color: '#4a5048' }}>
+                    Model {fgHomeWinPct.toFixed(1)}% vs Book {fgNoVigHomeImplied.toFixed(1)}%
+                  </span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, lineHeight: 1,
+                    color: fgHomeHasEdge
+                      ? (fgHomeMlEdgeDelta! > 0 ? '#39FF14' : '#ff5555')
+                      : '#2e3330',
+                    minWidth: 36, textAlign: 'right',
+                  }}>
+                    {fgHomeMlEdgeDelta != null
+                      ? `${fgHomeMlEdgeDelta > 0 ? '+' : ''}${fgHomeMlEdgeDelta.toFixed(1)}%`
                       : '—'}
                   </span>
                 </div>

@@ -10,6 +10,7 @@ import PublishProjections from "./pages/PublishProjections";
 import IngestAnOdds from "./pages/IngestAnOdds";
 import ModelProjections from "./pages/ModelProjections";
 import ModelResults from "./pages/ModelResults";
+import F5EdgeLeaderboard from "./pages/F5EdgeLeaderboard";
 import SecurityEvents from "./pages/SecurityEvents";
 import MlbTeamSchedule from "./pages/MlbTeamSchedule";
 import NbaTeamSchedule from "./pages/NbaTeamSchedule";
@@ -41,6 +42,8 @@ function Router() {
       <Route path="/nhl/team/:slug" component={NhlTeamSchedule} />
       {/* Owner-only: K-Props model backtest results */}
       <Route path="/admin/model-results" component={ModelResults} />
+      {/* Owner-only: F5 ML Edge Leaderboard */}
+      <Route path="/admin/f5-edge" component={F5EdgeLeaderboard} />
       {/* Owner-only: Security Events dashboard */}
       <Route path="/admin/security" component={SecurityEvents} />
       <Route path="/bet-tracker" component={BetTracker} />

@@ -435,6 +435,8 @@ export default function ModelResults() {
   const [brierWindow, setBrierWindow] = useState<number>(20);
   // 'trend' | 'heatmap' — sub-tab within the BRIER view
   const [brierSubTab, setBrierSubTab] = useState<'trend' | 'heatmap'>('trend');
+  // Heatmap drill-down: selected cell {date, market}
+  const [selectedCell, setSelectedCell] = useState<{ date: string; market: 'fgMl' | 'f5Ml' | 'nrfi' | 'fgTotal' | 'f5Total' } | null>(null);
 
   // ── Strict owner-only guard ─────────────────────────────────────────────────
   useEffect(() => {
@@ -492,7 +494,26 @@ export default function ModelResults() {
     { enabled: !!appUser && isOwner && viewMode === 'brier' && brierSubTab === 'heatmap', refetchOnWindowFocus: false }
   );
 
-  // ── Re-ingest mutation (force=true per date) ───────────────────────────────────────
+  // ── Drift detector status query ──────────────────────────────────────────────────
+  const {
+    data: driftData,
+    isLoading: driftLoading,
+    refetch: refetchDrift,
+  } = trpc.mlbSchedule.checkDrift.useQuery(
+    { triggerRecal: false },
+    { enabled: !!appUser && isOwner && viewMode === 'brier', refetchOnWindowFocus: false, staleTime: 5 * 60 * 1000 }
+  );
+
+  // ── Brier Heatmap Drill-Down ─────────────────────────────────────────────────
+  const {
+    data: drilldownData,
+    isLoading: drilldownLoading,
+  } = trpc.mlbSchedule.getBrierDrilldown.useQuery(
+    selectedCell ?? { date: '2026-01-01', market: 'fgMl' },
+    { enabled: !!appUser && isOwner && selectedCell != null, refetchOnWindowFocus: false }
+  );
+
+  // ── Re-ingest mutation (force=true per date) ───────────────────────────────────
   const [reingestingDate, setReingestingDate] = useState<string | null>(null);
   const reingestMutation = trpc.mlbSchedule.triggerOutcomeIngestion.useMutation({
     onSuccess: (data, vars) => {
@@ -530,8 +551,11 @@ export default function ModelResults() {
       } else if (viewMode === 'last7') {
         await refetchLast7();
       } else {
-        await refetchBrier();
-        if (brierSubTab === 'heatmap') await refetchHeatmap();
+        await Promise.all([
+          refetchBrier(),
+          refetchDrift(),
+          brierSubTab === 'heatmap' ? refetchHeatmap() : Promise.resolve(),
+        ]);
       }
       toast.success("Results refreshed");
     } catch (err) {
@@ -709,7 +733,37 @@ export default function ModelResults() {
             </div>
           ) : (
             <>
-              {/* ── Sub-tab toggle: TREND / HEATMAP ────────────────────────────────────────── */}
+              {/* ── Drift Detector Banner ────────────────────────────────────────────────────────────────────────────── */}
+              {driftLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', marginBottom: 12 }}>
+                  <Loader2 style={{ width: 12, height: 12, color: '#FFA500' }} className="animate-spin" />
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '1px' }}>CHECKING DRIFT...</span>
+                </div>
+              ) : driftData ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 6, marginBottom: 12,
+                  background: driftData.driftDetected ? 'rgba(255,80,80,0.12)' : driftData.rollingF5Share !== null ? 'rgba(0,229,100,0.08)' : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${driftData.driftDetected ? 'rgba(255,80,80,0.3)' : driftData.rollingF5Share !== null ? 'rgba(0,229,100,0.2)' : 'rgba(255,255,255,0.08)'}`,
+                }}>
+                  <span style={{ fontSize: 13 }}>{driftData.driftDetected ? '⚠️' : driftData.rollingF5Share !== null ? '✅' : '⏳'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: driftData.driftDetected ? '#FF5050' : driftData.rollingF5Share !== null ? '#00E564' : 'rgba(255,255,255,0.35)', fontFamily: '"Barlow Condensed", sans-serif', marginBottom: 2 }}>
+                      {driftData.driftDetected ? 'DRIFT DETECTED — RECALIBRATION RECOMMENDED' : driftData.rollingF5Share !== null ? 'DRIFT DETECTOR — NOMINAL' : 'DRIFT DETECTOR — INSUFFICIENT DATA'}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.45)', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '0.5px' }}>
+                      {driftData.rollingF5Share !== null
+                        ? `Rolling F5 Share: ${(driftData.rollingF5Share * 100).toFixed(2)}% | Baseline: ${(driftData.baselineF5Share * 100).toFixed(2)}% | Delta: ${((driftData.delta ?? 0) * 100).toFixed(2)}pp | Window: ${driftData.windowSize} games${driftData.recalibrationTriggered ? ' | ✅ Recalibrated' : ''}`
+                        : driftData.message
+                      }
+                    </div>
+                  </div>
+                  {driftData.driftDetected && !driftData.recalibrationTriggered && (
+                    <span style={{ fontSize: 9, color: '#FF5050', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '1px', fontWeight: 700 }}>NEEDS RECAL</span>
+                  )}
+                </div>
+              ) : null}
+
+              {/* ── Sub-tab toggle: TREND / HEATMAP ──────────────────────────────────────── */}
               <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
                 {(['trend', 'heatmap'] as const).map(tab => (
                   <button
@@ -986,13 +1040,23 @@ export default function ModelResults() {
                               {(['avgFgMl', 'avgF5Ml', 'avgNrfi', 'avgFgTotal', 'avgF5Total'] as const).map(field => {
                                 const v = row[field];
                                 const nullCount = row[field.replace('avg', 'null') as keyof typeof row] as number;
+                                // Map avg field to market key
+                                const marketKey = (
+                                  field === 'avgFgMl' ? 'fgMl' :
+                                  field === 'avgF5Ml' ? 'f5Ml' :
+                                  field === 'avgNrfi' ? 'nrfi' :
+                                  field === 'avgFgTotal' ? 'fgTotal' : 'f5Total'
+                                ) as 'fgMl' | 'f5Ml' | 'nrfi' | 'fgTotal' | 'f5Total';
+                                const isSelected = selectedCell?.date === row.date && selectedCell?.market === marketKey;
                                 return (
-                                  <td key={field} style={{
+                                  <td key={field} onClick={() => setSelectedCell(isSelected ? null : { date: row.date, market: marketKey })} style={{
                                     padding: '5px 10px', textAlign: 'right',
-                                    background: cellBg(v),
-                                    color: cellColor(v),
+                                    background: isSelected ? 'rgba(0,191,255,0.25)' : cellBg(v),
+                                    color: isSelected ? '#00BFFF' : cellColor(v),
                                     fontWeight: 700,
                                     position: 'relative',
+                                    cursor: 'pointer',
+                                    outline: isSelected ? '1px solid rgba(0,191,255,0.5)' : 'none',
                                   }}>
                                     {v != null ? v.toFixed(4) : <span style={{ color: 'rgba(255,255,255,0.1)' }}>—</span>}
                                     {nullCount > 0 && (
@@ -1010,6 +1074,68 @@ export default function ModelResults() {
                     </table>
                   </div>
                 )
+              )}
+
+              {/* ── HEATMAP DRILL-DOWN PANEL ─────────────────────────────────────────────────────────────────────────── */}
+              {selectedCell && (
+                <div style={{
+                  marginTop: 20, padding: '16px 20px',
+                  background: 'rgba(0,191,255,0.06)',
+                  border: '1px solid rgba(0,191,255,0.2)',
+                  borderRadius: 8,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '2px', color: '#00BFFF', fontFamily: '"Barlow Condensed", sans-serif' }}>
+                      DRILL-DOWN — {selectedCell.date} / {selectedCell.market.toUpperCase()}
+                    </div>
+                    <button onClick={() => setSelectedCell(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 14 }}>×</button>
+                  </div>
+                  {drilldownLoading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0' }}>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Loading games…</span>
+                    </div>
+                  ) : !drilldownData || drilldownData.games.length === 0 ? (
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', padding: '8px 0' }}>No games found for this date.</div>
+                  ) : (
+                    <table style={{ borderCollapse: 'collapse', fontSize: 10, fontFamily: '"Barlow Condensed", sans-serif', width: '100%' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(0,191,255,0.15)' }}>
+                          {['MATCHUP', 'BRIER', 'MODEL AWAY%', 'MODEL HOME%', 'BOOK ML', 'SCORE', 'RESULT'].map(h => (
+                            <th key={h} style={{ padding: '4px 8px', textAlign: h === 'MATCHUP' ? 'left' : 'right', color: 'rgba(255,255,255,0.3)', fontWeight: 700, letterSpacing: '.08em', fontSize: 9 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {drilldownData.games.map((g: typeof drilldownData.games[number]) => {
+                          const brier = g.focusBrier;
+                          const brierColor = brier == null ? 'rgba(255,255,255,0.15)' : brier <= 0.15 ? '#39FF14' : brier <= 0.22 ? '#FFD700' : '#FF4466';
+                          const mktKey = selectedCell.market;
+                          const modelAway = (mktKey === 'f5Ml' || mktKey === 'f5Total') ? g.modelF5AwayWinPct : g.modelAwayWinPct;
+                          const modelHome = (mktKey === 'f5Ml' || mktKey === 'f5Total') ? g.modelF5HomeWinPct : g.modelHomeWinPct;
+                          const bookAway = (mktKey === 'f5Ml' || mktKey === 'f5Total') ? g.f5AwayML : g.awayML;
+                          const bookHome = (mktKey === 'f5Ml' || mktKey === 'f5Total') ? g.f5HomeML : g.homeML;
+                          const result = mktKey === 'f5Ml' ? g.f5MlResult : mktKey === 'fgMl' ? g.fgMlResult : null;
+                          const correct = mktKey === 'f5Ml' ? g.f5MlCorrect : mktKey === 'fgMl' ? g.fgMlCorrect : mktKey === 'nrfi' ? g.nrfiCorrect : null;
+                          const scoreAway = mktKey.startsWith('f5') ? g.actualF5AwayScore : g.actualAwayScore;
+                          const scoreHome = mktKey.startsWith('f5') ? g.actualF5HomeScore : g.actualHomeScore;
+                          return (
+                            <tr key={g.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                              <td style={{ padding: '5px 8px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, whiteSpace: 'nowrap' }}>{g.awayTeam} @ {g.homeTeam}</td>
+                              <td style={{ padding: '5px 8px', textAlign: 'right', color: brierColor, fontWeight: 700 }}>{brier != null ? brier.toFixed(4) : <span style={{ color: 'rgba(255,255,255,0.1)' }}>—</span>}</td>
+                              <td style={{ padding: '5px 8px', textAlign: 'right', color: 'rgba(255,255,255,0.5)' }}>{modelAway != null ? modelAway.toFixed(1) + '%' : '—'}</td>
+                              <td style={{ padding: '5px 8px', textAlign: 'right', color: 'rgba(255,255,255,0.5)' }}>{modelHome != null ? modelHome.toFixed(1) + '%' : '—'}</td>
+                              <td style={{ padding: '5px 8px', textAlign: 'right', color: 'rgba(255,255,255,0.35)', fontSize: 9 }}>{bookAway ?? '—'} / {bookHome ?? '—'}</td>
+                              <td style={{ padding: '5px 8px', textAlign: 'right', color: 'rgba(255,255,255,0.4)' }}>{scoreAway != null && scoreHome != null ? `${scoreAway}–${scoreHome}` : '—'}</td>
+                              <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: correct === 1 ? '#39FF14' : correct === 0 ? '#FF4466' : 'rgba(255,255,255,0.2)' }}>
+                                {correct === 1 ? '✓' : correct === 0 ? '✗' : result ?? '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               )}
             </>
           )

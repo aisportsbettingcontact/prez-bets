@@ -2593,3 +2593,23 @@
 - [x] Re-ingest 2026-04-14 with force=true after backfill completes — recompute correct brierF5Ml for 15 games
 - [x] Add Re-ingest button to Admin Brier Trend per-game table (force=true per date row)
 - [x] Build 5-market Brier heatmap by date (date x market grid: FG ML / F5 ML / NRFI / FG Total / F5 Total)
+
+## 7-Task Sprint (April 15, 2026)
+- [ ] Verify April 15 nightly pipeline end-to-end — model runner, outcome ingestor, Brier scoring, notifyOwner push notification
+- [ ] Fix 3 NULL brierF5Ml games (CHC@PHI id=2250235, CLE@STL id=2250241, NYM@LAD id=2250245) — audit f5AwayML/f5HomeML NULL root cause and backfill odds
+- [ ] Backfill F5 ML odds for all historical games with NULL f5AwayML (games with modelF5AwayWinPct populated but no book F5 ML odds)
+- [ ] Add daily F5 ML odds scraper coverage audit — count games where modelF5AwayWinPct IS NOT NULL AND f5AwayML IS NULL, surface in morning notifyOwner
+- [ ] Wire drift detector minimum threshold — set configurable minimum (default 20 games), tune 0.02 delta threshold against actual variance
+- [ ] Build F5 ML edge leaderboard — tRPC procedure + UI page ranking all historical games by F5 ML edge (model win% vs no-vig book implied%)
+- [ ] Build Brier heatmap date × market drill-down — click-through from heatmap cell to per-game list for that date × market combination
+- [ ] Deep-dive AN API for historical F5 ML odds — recover 9 missing games (2026-03-31: 8 games, 2026-04-03: 1 game) and backfill into DB
+
+## 8-Task Sprint (April 15, 2026 — Evening)
+- [ ] Task 1: Verify April 15 nightly ingest fires correctly (12:30 AM PST cron, notifyOwner, Brier scores)
+- [ ] Task 2: Wire drift detector to Admin UI — banner on BRIER TREND page showing latest drift result
+- [ ] Task 3: Build F5 ML edge leaderboard — tRPC procedure + UI page (model win% vs no-vig book implied%, ranked by edge)
+- [ ] Task 4: Add daily F5 ML coverage audit to notifyOwner — count modelF5AwayWinPct IS NOT NULL AND f5AwayML IS NULL
+- [ ] Task 5: Wire checkF5ShareDrift() to nightly ingest — call after ingestMlbOutcomes, include result in notifyOwner
+- [ ] Task 6: Build Brier heatmap drill-down — click cell to see individual game list for that date x market
+- [ ] Task 7: Build F5 edge vs outcome scatter plot — model edge (x) vs actual outcome (y) for all 256 historical games
+- [ ] Task 8: Add FG Total and F5 Total edge display to CheatSheet card (no-vig implied vs model projected total)

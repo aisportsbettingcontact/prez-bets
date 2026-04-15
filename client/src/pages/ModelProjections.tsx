@@ -8,7 +8,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useUrlState, type Sport } from "@/hooks/useUrlState";
-import { User, LogOut, BarChart3, Loader2, Crown, Send, Search, X, Clock, Star, Link2, FlaskConical, ShieldAlert, BarChart2 } from "lucide-react";
+import { User, LogOut, BarChart3, Loader2, Crown, Send, Search, X, Clock, Star, Link2, FlaskConical, ShieldAlert, BarChart2, TrendingUp } from "lucide-react";
 import { CalendarPicker, todayUTC } from "@/components/CalendarPicker";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -950,6 +950,9 @@ export default function ModelProjections() {
                           </button>
                           <button onClick={() => { setShowUserMenu(false); setLocation("/admin/model-results"); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
                             <FlaskConical className="w-3.5 h-3.5 text-blue-400" /> THE MODEL
+                          </button>
+                          <button onClick={() => { setShowUserMenu(false); setLocation("/admin/f5-edge"); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                            <TrendingUp className="w-3.5 h-3.5 text-orange-400" /> F5 EDGE BOARD
                           </button>
                           <button onClick={() => { setShowUserMenu(false); setLocation("/admin/security"); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
                             <ShieldAlert className="w-3.5 h-3.5 text-red-400" /> Security Events

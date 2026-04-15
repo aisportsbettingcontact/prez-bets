@@ -52,6 +52,7 @@ import { and, eq, isNull, isNotNull, sql, or } from "drizzle-orm";
 import { getDb } from "./db";
 import { games } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
+import { checkF5ShareDrift } from "./mlbDriftDetector";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -692,7 +693,50 @@ export async function ingestMlbOutcomes(
   console.log(`${TAG} [SUMMARY] elapsed=${elapsed}s`);
   console.log(`${TAG} ══════════════════════════════════════════════════════\n`);
 
-  // ── notifyOwner: push Brier calibration summary to owner after each nightly ingest ────────────
+  // ── Drift detector: run rolling f5_share check (before notifyOwner so result is included) ─────────
+  let driftSummaryLine = 'Drift check: skipped (insufficient data)';
+  try {
+    console.log(`${TAG} [STEP] Running drift detector (rolling f5_share check)...`);
+    const driftResult = await checkF5ShareDrift();
+    console.log(`${TAG} [OUTPUT] driftDetected=${driftResult.driftDetected} | delta=${driftResult.delta?.toFixed(4) ?? 'N/A'} | rollingF5Share=${driftResult.rollingF5Share?.toFixed(4) ?? 'N/A'} | windowSize=${driftResult.windowSize}`);
+    console.log(`${TAG} [OUTPUT] drift message: ${driftResult.message}`);
+    if (driftResult.driftDetected) {
+      console.warn(`${TAG} [VERIFY] DRIFT DETECTED — delta=${driftResult.delta?.toFixed(4)} exceeds threshold. recalibrationTriggered=${driftResult.recalibrationTriggered}`);
+      driftSummaryLine = `⚠️ DRIFT DETECTED — delta=${driftResult.delta?.toFixed(4)} | rolling=${driftResult.rollingF5Share?.toFixed(4)} | baseline=${driftResult.baselineF5Share.toFixed(4)} | recalibrated=${driftResult.recalibrationTriggered}`;
+    } else if (driftResult.rollingF5Share !== null) {
+      console.log(`${TAG} [VERIFY] PASS — no drift detected (delta=${driftResult.delta?.toFixed(4) ?? 'N/A'})`);
+      driftSummaryLine = `✅ No drift — delta=${driftResult.delta?.toFixed(4)} | rolling=${driftResult.rollingF5Share?.toFixed(4)} | baseline=${driftResult.baselineF5Share.toFixed(4)} | window=${driftResult.windowSize}`;
+    } else {
+      driftSummaryLine = `Drift check: insufficient data (${driftResult.windowSize} games, need 20+)`;
+    }
+  } catch (driftErr) {
+    const driftMsg = driftErr instanceof Error ? driftErr.message : String(driftErr);
+    console.error(`${TAG} [ERROR] drift detector failed (non-fatal): ${driftMsg}`);
+    driftSummaryLine = `Drift check: error — ${driftMsg.slice(0, 80)}`;
+  }
+
+  // ── F5 ML coverage audit: count games with model but no book F5 ML odds ──────────────────
+  let coverageLine = '';
+  try {
+    const db = await getDb();
+    const coverageGap = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(games)
+      .where(and(
+        isNotNull(games.modelF5AwayWinPct),
+        isNull(games.f5AwayML),
+      ));
+    const gapCount = Number(coverageGap[0]?.count ?? 0);
+    coverageLine = gapCount > 0
+      ? `⚠️ F5 ML coverage gap: ${gapCount} game${gapCount !== 1 ? 's' : ''} have model but no book F5 ML odds`
+      : `✅ F5 ML coverage: no gaps detected`;
+    console.log(`${TAG} [OUTPUT] F5 ML coverage audit: ${coverageLine}`);
+  } catch (covErr) {
+    coverageLine = 'F5 ML coverage audit: error (non-fatal)';
+    console.error(`${TAG} [ERROR] F5 ML coverage audit failed: ${covErr instanceof Error ? covErr.message : String(covErr)}`);
+  }
+
+  // ── notifyOwner: push Brier calibration summary + drift result to owner ──────────────────
   if (written > 0) {
     try {
       const ingestedResults = results.filter(r => r.status === 'written');
@@ -719,8 +763,14 @@ export async function ingestMlbOutcomes(
         `  F5 Total: ${brierAvg('brierF5Total')}`,
         ``,
         `(lower = better | perfect = 0.0000 | random = 0.2500)`,
+        ``,
+        `Drift Detector:`,
+        `  ${driftSummaryLine}`,
+        ``,
+        `Coverage Audit:`,
+        `  ${coverageLine}`,
       ].join('\n');
-      console.log(`${TAG} [STEP] Sending owner notification with Brier calibration summary...`);
+      console.log(`${TAG} [STEP] Sending owner notification with Brier calibration summary + drift result...`);
       const notifOk = await notifyOwner({ title: notifTitle, content: notifContent });
       console.log(`${TAG} [OUTPUT] notifyOwner: ${notifOk ? 'sent' : 'failed (non-fatal)'}`);
     } catch (notifErr) {
