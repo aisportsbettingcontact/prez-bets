@@ -57,6 +57,17 @@ ROUNDING_RULES            = "HALF_RUN_ONLY"
 NO_VIG_OUTPUT             = True
 INVERSE_SYMMETRY          = True
 
+# ─── NRFI / BAYESIAN SHRINKAGE CONSTANTS ─────────────────────────────────────
+# Promoted to module-level for auditability and override without touching simulation logic.
+# Source: 3yr backtest (n=5,103 games, 2024-2026). Updated 2026-04-14 (v2 calibration).
+INNING1_RUN_SHARE         = 0.1166   # 3yr empirical first-inning run share (was 0.1093)
+                                      # Used as: mu_1st_physics = game_mu * INNING1_RUN_SHARE
+LEAGUE_NRFI_PRIOR         = 0.8899   # exp(-INNING1_RUN_SHARE) = exp(-0.1166) = 0.8899
+                                      # Bayesian prior: league-average P(NRFI) implied by I1 share
+NRFI_SHRINKAGE_K          = 10       # Bayesian shrinkage confidence constant
+                                      # w = starts / (starts + K): at 3 starts w=0.23, at 10 starts w=0.50
+NRFI_MIN_STARTS_FULL      = 20       # starts needed for full weight (w >= 0.67 at K=10)
+
 # ─── 2025 MLB LEAGUE AVERAGES (source: MLB Stats API, season=2025 team aggregates)
 # PA=182,926 | R/team/G=4.447 | RPG(both)=8.895
 # Last updated: 2026-03-31
@@ -671,20 +682,19 @@ class MonteCarloEngine:
         #           if both missing  → physics*1.00 (no change)
         # Source: 06_nrfi_threshold_grid.py (n=5,109 games, optimal threshold=0.56)
         # ──────────────────────────────────────────────────────────────────────────────────
-        INNING1_RUN_SHARE = 0.1166  # 3yr-backtest-calibrated: first inning run share (was 0.1093, updated 2026-04-14)
+        # Module-level constants used here (auditable, overridable without touching simulation):
+        #   INNING1_RUN_SHARE=0.1166, LEAGUE_NRFI_PRIOR=0.8899, NRFI_SHRINKAGE_K=10, NRFI_MIN_STARTS_FULL=20
         home_mu_1st_physics = home_state['mu'] * INNING1_RUN_SHARE
         away_mu_1st_physics = away_state['mu'] * INNING1_RUN_SHARE
 
         # ── Bayesian shrinkage for low-sample pitchers ──────────────────────────────────
         # SPEC: For pitchers with < NRFI_MIN_STARTS_FULL starts, shrink their raw NRFI rate
-        #       toward the league I1 prior (INNING1_RUN_SHARE=0.1166 → NRFI=exp(-0.1166)=0.8899)
+        #       toward LEAGUE_NRFI_PRIOR (0.8899 = exp(-INNING1_RUN_SHARE))
         #       Shrinkage formula: rate_adj = w * raw_rate + (1-w) * LEAGUE_NRFI_PRIOR
         #       where w = starts / (starts + NRFI_SHRINKAGE_K)
         #       K=10: at 3 starts w=0.23 (77% prior), at 5 starts w=0.33, at 10 starts w=0.50
         # This prevents extreme rates (0.000, 1.000 from 3 starts) from dominating the signal.
-        NRFI_SHRINKAGE_K       = 10    # confidence constant for Bayesian shrinkage
-        NRFI_MIN_STARTS_FULL   = 20    # starts needed for full weight (w >= 0.67)
-        LEAGUE_NRFI_PRIOR      = math.exp(-INNING1_RUN_SHARE)  # = 0.8899 (implied from I1 share)
+        # All four constants are module-level — see lines 60-69 of this file.
 
         def _apply_nrfi_shrinkage(raw_rate: Optional[float], starts: Optional[int]) -> Optional[float]:
             """Apply Bayesian shrinkage to pitcher NRFI rate based on sample size.
@@ -2200,6 +2210,8 @@ def project_game(
         # SPEC: F5 (First Five Innings) Markets — pulled from market dict (derive_markets output)
         'p_f5_home_win':   market['p_f5_home_win'],
         'p_f5_away_win':   market['p_f5_away_win'],
+        'p_f5_push':       market.get('p_f5_push'),       # THREE-WAY: Bayesian-blended P(F5 push/tie)
+        'p_f5_push_raw':   market.get('p_f5_push_raw'),   # raw simulation push rate (diagnostic)
         'f5_ml_home':      market['f5_ml_home'],
         'f5_ml_away':      market['f5_ml_away'],
         'p_f5_home_rl':    market['p_f5_home_rl'],

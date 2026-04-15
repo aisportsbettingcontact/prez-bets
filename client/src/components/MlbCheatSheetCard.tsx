@@ -66,6 +66,8 @@ export interface CheatSheetGame {
   modelF5HomeRlOdds: string | null;
   modelF5OverOdds: string | null;
   modelF5UnderOdds: string | null;
+  modelF5PushPct: string | null;     // THREE-WAY: Bayesian-blended P(F5 push/tie) 0-1
+  modelF5PushRaw: string | null;     // raw simulation push rate (diagnostic)
   // NRFI/YRFI book odds (Action Network / FanDuel NJ)
   nrfiOverOdds: string | null;
   yrfiUnderOdds: string | null;
@@ -737,6 +739,9 @@ export default function MlbCheatSheetCard({ game }: MlbCheatSheetCardProps) {
   const modelF5HomeWinPct = parseNum(game.modelF5HomeWinPct); // 0–100 scale
   const modelF5AwayRLCoverPct = parseNum(game.modelF5AwayRLCoverPct); // 0–100 scale
   const modelF5HomeRLCoverPct = parseNum(game.modelF5HomeRLCoverPct); // 0–100 scale
+  // F5 push: stored as raw decimal 0-1 (e.g. 0.1507 = 15.07%)
+  const modelF5PushPct = parseNum(game.modelF5PushPct);  // raw 0-1
+  const modelF5PushRaw = parseNum(game.modelF5PushRaw);  // raw 0-1 (diagnostic)
 
   // CRITICAL: modelPNrfi is stored as raw decimal (0.48 = 48%) — multiply by 100
   const modelPNrfiRaw = parseNum(game.modelPNrfi);
@@ -879,6 +884,37 @@ export default function MlbCheatSheetCard({ game }: MlbCheatSheetCardProps) {
             awayEdge={awayF5MlEdge}
             homeEdge={homeF5MlEdge}
           />
+
+          {/* F5 Push — three-way pricing (v2.1) */}
+          {modelF5PushPct != null && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "4px 10px",
+              borderBottom: "1px solid rgba(255,255,255,0.04)",
+              background: "rgba(255,165,0,0.04)",
+            }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,165,0,0.75)", letterSpacing: "0.08em", minWidth: 36 }}>PUSH</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>
+                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.40)", letterSpacing: "0.04em" }}>P(TIE)</span>
+                <span style={{
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: "rgba(255,165,0,0.92)",
+                  fontVariantNumeric: "tabular-nums",
+                }}>
+                  {(modelF5PushPct * 100).toFixed(1)}%
+                </span>
+                {modelF5PushRaw != null && (
+                  <span style={{ fontSize: 9, color: "rgba(255,255,255,0.22)", marginLeft: 2 }}>
+                    (sim: {(modelF5PushRaw * 100).toFixed(1)}%)
+                  </span>
+                )}
+              </div>
+              <span style={{ fontSize: 9, color: "rgba(255,165,0,0.40)", letterSpacing: "0.06em" }}>3-WAY</span>
+            </div>
+          )}
 
           <MarketRow
             label="RL"

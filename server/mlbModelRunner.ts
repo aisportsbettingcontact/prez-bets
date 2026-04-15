@@ -256,6 +256,8 @@ interface MlbModelResult {
   f5_under_odds: number;
   p_f5_over: number;
   p_f5_under: number;
+  p_f5_push: number | null;        // THREE-WAY: Bayesian-blended P(F5 push/tie)
+  p_f5_push_raw: number | null;    // raw simulation push rate (diagnostic)
   exp_f5_home_runs: number;
   exp_f5_away_runs: number;
   exp_f5_total: number;
@@ -1411,6 +1413,8 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
     console.log(`  RL: ${r.away_run_line} (${fmtMl(r.away_rl_odds)}) / ${r.home_run_line} (${fmtMl(r.home_rl_odds)})`);
     console.log(`  Cover%: away=${r.away_rl_cover_pct.toFixed(2)}% home=${r.home_rl_cover_pct.toFixed(2)}%`);
     console.log(`  Model spread: ${r.model_spread.toFixed(3)} | Sims: ${r.simulations} | Elapsed: ${r.elapsed_sec}s`);
+    // [DEBUG v2.1] Trace F5 push values before DB write
+    console.log(`  [DEBUG-F5PUSH] p_f5_push=${r.p_f5_push} p_f5_push_raw=${r.p_f5_push_raw} | type=${typeof r.p_f5_push}`);
 
     try {
       await db.update(games)
@@ -1456,6 +1460,9 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
           modelF5UnderOdds:     fmtMl(r.f5_under_odds),
           modelF5OverRate:      String(r.p_f5_over.toFixed(4)),
           modelF5UnderRate:     String(r.p_f5_under.toFixed(4)),
+          // ── F5 push three-way pricing (v2.1 — 2026-04-14) ─────────────────
+          modelF5PushPct:       r.p_f5_push != null ? String(r.p_f5_push.toFixed(4)) : null,
+          modelF5PushRaw:       r.p_f5_push_raw != null ? String(r.p_f5_push_raw.toFixed(4)) : null,
           modelF5AwayRunLine:   '-0.5',
           modelF5HomeRunLine:   '+0.5',
           modelF5AwayRlOdds:    fmtMl(r.f5_rl_away_odds),

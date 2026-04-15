@@ -384,6 +384,10 @@ export const games = mysqlTable("games", {
   modelF5OverOdds: varchar("modelF5OverOdds", { length: 16 }),
   /** Model F5 under fair value odds, e.g. "+108" */
   modelF5UnderOdds: varchar("modelF5UnderOdds", { length: 16 }),
+  /** Model P(F5 push/tie) — three-way Bayesian-blended push probability (0-100) */
+  modelF5PushPct: decimal("modelF5PushPct", { precision: 6, scale: 4 }),
+  /** Raw simulation P(F5 push/tie) before Bayesian blending with empirical 15.07% (0-100, diagnostic) */
+  modelF5PushRaw: decimal("modelF5PushRaw", { precision: 6, scale: 4 }),
   /** Actual away team score through 5 innings (populated after game) */
   actualF5AwayScore: int("actualF5AwayScore"),
   /** Actual home team score through 5 innings (populated after game) */
