@@ -2625,3 +2625,20 @@
 - [ ] Single sidebar entry "THE MODEL RESULTS" with FlaskConical icon (replace both old entries)
 - [ ] Remove /admin/f5-edge route (redirect to /admin/model-results)
 - [ ] TypeScript 0 errors, 487/487 tests passing
+
+## MLB Headshot Backfill + Responsive UI (Session: Apr 15, 2026 — Continuation)
+- [x] Fix React Error #310 (hooks violation) — moved hrPropsList, fgRows, f5Rows useMemo above early returns
+- [x] Fix OAuth redirect on scatter button click — added enabled:!!appUser guard to RollingAccuracyPanel, /admin/* path guard in main.tsx, 14 OPTIONAL_AUTH_PATHS
+- [x] Add type="button" to all 140 buttons across 20 files (including shadcn Button default + SidebarRail)
+- [x] StatGrid responsive grid component (repeat(auto-fill, minmax(110px, 1fr)))
+- [x] StatCard label wrapping (removed nowrap/ellipsis), value font 22px
+- [x] MiniStatCard label wrapping + overflow hidden for responsive fit
+- [x] KPropPitcherRow stats flexWrap for mobile layout
+- [x] HrPropRow stats section flexWrap + minWidth:0 for mobile layout
+- [x] MiniStatCard grids in FG/F5 edge summary sections wrapped in StatGrid (minColWidth=120)
+- [x] Add fetchMlbamIdMap() to mlbKPropsModelService.ts (mirrors mlbHrPropsModelService pattern)
+- [x] Add backfillAllKPropsMlbamIds() export to mlbKPropsModelService.ts
+- [x] Fix TypeScript implicit any on filter callback (KPropsRow type cast)
+- [x] Add backfillKPropsMlbamIds ownerProcedure to server/routers.ts (mlbBacktest router)
+- [x] Add MLB HEADSHOT BACKFILL button to K-PROPS tab in TheModelResults admin UI
+- [x] TypeScript 0 errors, 487/487 tests passing

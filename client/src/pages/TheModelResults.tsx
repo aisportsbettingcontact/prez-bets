@@ -224,9 +224,9 @@ function StatCard({ label, value, sub, color }: { label: string; value: string; 
 
 function MiniStatCard({ label, value, color }: { label: string; value: string | number; color?: string }) {
   return (
-    <div style={{ background: "#111", border: "1px solid #1e2320", borderRadius: 6, padding: "8px 12px", minWidth: 0 }}>
-      <div style={{ fontSize: 9, color: "#555", letterSpacing: 1, marginBottom: 2, fontFamily: '"Barlow Condensed", sans-serif' }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: color ?? "#ccc", fontFamily: '"Barlow Condensed", sans-serif' }}>{value}</div>
+    <div style={{ background: "#111", border: "1px solid #1e2320", borderRadius: 6, padding: "8px 12px", minWidth: 0, overflow: "hidden" }}>
+      <div style={{ fontSize: 9, color: "#555", letterSpacing: 1, marginBottom: 2, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1.2, wordBreak: "break-word" }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: color ?? "#ccc", fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{value}</div>
     </div>
   );
 }
@@ -811,7 +811,7 @@ function HrPropRow({ prop, awayTeam, homeTeam }: { prop: HrPropRow; awayTeam: st
           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: '"Barlow Condensed", sans-serif' }}>{awayTeam} @ {homeTeam}</div>
         </div>
         {/* Model vs Book */}
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", minWidth: 0 }}>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 8, color: "rgba(255,255,255,0.3)", letterSpacing: 1, fontFamily: '"Barlow Condensed", sans-serif' }}>MODEL P(HR)</div>
             <div style={{ fontSize: 18, fontWeight: 800, color: "#FFFFFF", fontFamily: '"Barlow Condensed", sans-serif' }}>
@@ -1079,6 +1079,21 @@ export default function TheModelResults() {
     { gameIds: hrGameIds },
     { enabled: !!appUser && isOwner && marketTab === "hrprops" && hrGameIds.length > 0, refetchOnWindowFocus: false }
   );
+
+  // K-Props mlbamId backfill mutation
+  const [backfillStatus, setBackfillStatus] = useState<string | null>(null);
+  const backfillMutation = trpc.mlbBacktest.backfillKPropsMlbamIds.useMutation({
+    onSuccess: (data) => {
+      const msg = `Backfill complete: ${data.resolved} resolved, ${data.alreadyHad} already had ID, ${data.unresolved} unresolved, ${data.errors} errors`;
+      setBackfillStatus(msg);
+      toast.success(msg);
+      refetchKDaily();
+    },
+    onError: (err) => {
+      toast.error(`Backfill failed: ${err.message}`);
+      setBackfillStatus(`Error: ${err.message}`);
+    },
+  });
 
   // Re-ingest mutation
   const reingestMutation = trpc.mlbSchedule.triggerOutcomeIngestion.useMutation({
@@ -1388,7 +1403,7 @@ export default function TheModelResults() {
 
               {/* FG edge summary */}
               {fgEdgeData?.summary && (
-                <StatGrid>
+                <StatGrid minColWidth={120}>
                   {[
                     { label: "TOTAL GAMES", value: fgEdgeData.summary.totalGames, color: "#888" },
                     { label: "POSITIVE EDGE", value: fgEdgeData.summary.positiveEdge, color: "#00ff88" },
@@ -1500,7 +1515,7 @@ export default function TheModelResults() {
               </div>
 
               {f5EdgeData?.summary && (
-                <StatGrid>
+                <StatGrid minColWidth={120}>
                   {[
                     { label: "TOTAL GAMES", value: f5EdgeData.summary.totalGames, color: "#888" },
                     { label: "POSITIVE EDGE", value: f5EdgeData.summary.positiveEdge, color: "#00ff88" },
@@ -1619,6 +1634,24 @@ export default function TheModelResults() {
                   {v === "daily" ? "DAILY" : "LAST 7 DAYS"}
                 </button>
               ))}
+            </div>
+
+            {/* MLB Headshot Backfill Tool */}
+            <div style={{ padding: "10px 14px", background: "rgba(255,105,180,0.04)", border: "1px solid rgba(255,105,180,0.15)", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", color: "rgba(255,105,180,0.7)", fontFamily: '"Barlow Condensed", sans-serif', marginBottom: 2 }}>MLB HEADSHOT BACKFILL</div>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: '"Barlow Condensed", sans-serif' }}>
+                  {backfillStatus ?? "Resolves MLBAM IDs for all K-Props pitchers missing headshots. Calls MLB Stats API."}
+                </div>
+              </div>
+              <Button size="sm" variant="outline"
+                disabled={backfillMutation.isPending}
+                onClick={() => { setBackfillStatus(null); backfillMutation.mutate(); }}
+                style={{ borderColor: "rgba(255,105,180,0.35)", color: "#FF69B4", flexShrink: 0 }}
+                className="gap-1.5 text-xs h-7">
+                {backfillMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                BACKFILL IDs
+              </Button>
             </div>
 
             {/* Calibration metrics (always shown) */}

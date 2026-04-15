@@ -992,6 +992,15 @@ export const appRouter = router({
           .limit(200);
         return rows;
       }),
+    /**
+     * Owner-only: backfill mlbamId for all K-Props rows where it is null.
+     * Calls MLB Stats API to resolve pitcher IDs for headshot display.
+     */
+    backfillKPropsMlbamIds: ownerProcedure
+      .mutation(async () => {
+        const { backfillAllKPropsMlbamIds } = await import('./mlbKPropsModelService');
+        return backfillAllKPropsMlbamIds();
+      }),
   }),
 
   // ─── March Madness Bracket ───────────────────────────────────────────────────────────────────────────────────────

@@ -387,3 +387,83 @@ export async function modelKPropsForDate(gameDate: string): Promise<KPropsModelR
 
   return { date: gameDate, modeled, edges, errors, skipped };
 }
+
+// ─── MLB Stats API: fetch all active player IDs ───────────────────────────────
+async function fetchMlbamIdMap(): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  try {
+    const url = `https://statsapi.mlb.com/api/v1/sports/1/players?season=2025&gameType=R`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json() as { people?: Array<{ id: number; fullName: string }> };
+    for (const p of data.people ?? []) {
+      map.set(normalizeName(p.fullName), p.id);
+    }
+    console.log(`${TAG} [STATE] MLB Stats API: loaded ${map.size} players`);
+  } catch (err) {
+    console.error(`${TAG} [ERROR] MLB Stats API fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return map;
+}
+
+// ─── Backfill mlbamId for all K-Props rows missing it ────────────────────────
+export async function backfillAllKPropsMlbamIds(): Promise<{
+  resolved: number;
+  alreadyHad: number;
+  unresolved: number;
+  errors: number;
+}> {
+  console.log(`\n${TAG} ============================================================`);
+  console.log(`${TAG} [INPUT] backfillAllKPropsMlbamIds`);
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  let resolved = 0, alreadyHad = 0, unresolved = 0, errors = 0;
+
+  const allRows = await db
+    .select({ id: mlbStrikeoutProps.id, pitcherName: mlbStrikeoutProps.pitcherName, mlbamId: mlbStrikeoutProps.mlbamId })
+    .from(mlbStrikeoutProps);
+
+  type KPropsRow = { id: number; pitcherName: string; mlbamId: number | null };
+  const needsResolution = (allRows as KPropsRow[]).filter(r => r.mlbamId == null);
+  alreadyHad = allRows.length - needsResolution.length;
+  console.log(`${TAG} [STATE] Total=${allRows.length} alreadyHad=${alreadyHad} needsResolution=${needsResolution.length}`);
+
+  if (needsResolution.length === 0) {
+    return { resolved: 0, alreadyHad, unresolved: 0, errors: 0 };
+  }
+
+  const apiMap = await fetchMlbamIdMap();
+  if (apiMap.size === 0) {
+    return { resolved: 0, alreadyHad, unresolved: needsResolution.length, errors: 1 };
+  }
+
+  // Deduplicate by name to minimize API calls
+  const nameToId = new Map<string, number | null>();
+  for (const row of needsResolution) {
+    const key = normalizeName(row.pitcherName);
+    if (!nameToId.has(key)) nameToId.set(key, apiMap.get(key) ?? null);
+  }
+
+  for (const row of needsResolution) {
+    const key = normalizeName(row.pitcherName);
+    const mlbamId = nameToId.get(key) ?? null;
+    if (mlbamId != null) {
+      try {
+        await db.update(mlbStrikeoutProps).set({ mlbamId }).where(eq(mlbStrikeoutProps.id, row.id));
+        resolved++;
+        console.log(`${TAG} [OUTPUT] Resolved ${row.pitcherName} -> mlbamId=${mlbamId}`);
+      } catch (err) {
+        console.error(`${TAG} [ERROR] DB update failed for ${row.pitcherName}: ${err instanceof Error ? err.message : String(err)}`);
+        errors++;
+      }
+    } else {
+      console.warn(`${TAG} [WARN] Could not resolve mlbamId for "${row.pitcherName}"`);
+      unresolved++;
+    }
+  }
+
+  console.log(`${TAG} [OUTPUT] resolved=${resolved} alreadyHad=${alreadyHad} unresolved=${unresolved} errors=${errors}`);
+  console.log(`${TAG} ============================================================\n`);
+  return { resolved, alreadyHad, unresolved, errors };
+}
