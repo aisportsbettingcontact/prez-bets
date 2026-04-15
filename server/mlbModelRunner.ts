@@ -1502,6 +1502,8 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
           modelF5UnderOdds:     fmtMl(r.f5_under_odds),
           modelF5OverRate:      String(r.p_f5_over.toFixed(4)),
           modelF5UnderRate:     String(r.p_f5_under.toFixed(4)),
+          modelF5HomeWinPct:    String((r.p_f5_home_win * 100).toFixed(2)),
+          modelF5AwayWinPct:    String((r.p_f5_away_win * 100).toFixed(2)),
           // ── F5 push three-way pricing (v2.1 — 2026-04-14) ─────────────────
           modelF5PushPct:       r.p_f5_push != null ? String(r.p_f5_push.toFixed(4)) : null,
           modelF5PushRaw:       r.p_f5_push_raw != null ? String(r.p_f5_push_raw.toFixed(4)) : null,
