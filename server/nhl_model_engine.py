@@ -130,11 +130,6 @@ PUCK_LINE_EDGE_THRESHOLD = 0.06   # 6pp probability edge for puck line
 ML_EDGE_THRESHOLD        = 0.05   # 5pp probability edge for moneyline
 TOTAL_EDGE_THRESHOLD     = 0.08   # 8pp probability edge for totals (half-point lines need more separation)
 
-# Market blend (anchor model to market to reduce clamping)
-# 25% market weight keeps totals realistic while preserving model signal (max 0.30 per spec)
-MARKET_WEIGHT       = 0.25
-MODEL_WEIGHT        = 0.75
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SECTION 2 — TEAM STRENGTH ESTIMATION
@@ -320,15 +315,13 @@ def project_goals(
     home_goalie_gp: int,
     away_rest_days: int | None,
     home_rest_days: int | None,
-    mkt_away_ml: int | None = None,
-    mkt_home_ml: int | None = None,
-    mkt_total: float | None = None,
 ) -> tuple[float, float]:
     """
-    Section 4 — Expected Goals Model.
+    Section 4 — Pure Expected Goals Model.
 
-    mu_home = league_goal_rate * OFF_home * DEF_away * goalie_multiplier_away_goalie * home_ice * fatigue_home * pace
-    mu_away = league_goal_rate * OFF_away * DEF_home * goalie_multiplier_home_goalie * fatigue_away * pace
+    No market anchoring. The model stands on its own math:
+      mu_home = league_goal_rate * OFF_home * DEF_away * goalie_multiplier_away_goalie * home_ice * fatigue_home * pace
+      mu_away = league_goal_rate * OFF_away * DEF_home * goalie_multiplier_home_goalie * fatigue_away * pace
 
     Note: goalie_multiplier for the HOME team's expected goals is the AWAY goalie's multiplier
     (the away goalie is defending against home team shots), and vice versa.
@@ -371,16 +364,6 @@ def project_goals(
     # Ensure non-negative minimums
     mu_away = max(0.50, mu_away)
     mu_home = max(0.50, mu_home)
-
-    # Market blend: anchor model to market to reduce clamping
-    if mkt_away_ml is not None and mkt_home_ml is not None and mkt_total is not None:
-        away_win_prob = ml_to_prob(mkt_away_ml)
-        home_win_prob = 1.0 - away_win_prob
-        ratio = home_win_prob / max(away_win_prob, 0.001)
-        mkt_home_goals = mkt_total * ratio / (1.0 + ratio)
-        mkt_away_goals = mkt_total - mkt_home_goals
-        mu_away = MODEL_WEIGHT * mu_away + MARKET_WEIGHT * mkt_away_goals
-        mu_home = MODEL_WEIGHT * mu_home + MARKET_WEIGHT * mkt_home_goals
 
     return round(mu_away, 4), round(mu_home, 4)
 
@@ -1142,7 +1125,6 @@ def originate_game(inp: dict) -> dict:
         away_goalie_gsax, away_goalie_shots_faced, away_goalie_gp,
         home_goalie_gsax, home_goalie_shots_faced, home_goalie_gp,
         away_rest_days, home_rest_days,
-        mkt_away_ml, mkt_home_ml, mkt_total,
     )
     print(f"[NHLModel]   μ_away={mu_away:.4f}  μ_home={mu_home:.4f}  E_total={mu_away+mu_home:.4f}", file=sys.stderr)
     print(f"[NHLModel]   Fatigue: away={compute_fatigue_factor(away_rest_days):.2f} home={compute_fatigue_factor(home_rest_days):.2f}", file=sys.stderr)
@@ -1291,8 +1273,13 @@ def originate_game(inp: dict) -> dict:
         "puck_line_spread":     probs["puck_line_spread"],  # 1.5 or 2.5 (absolute)
         # Model fair odds AT the BOOK's ±1.5 puck line (for side-by-side display)
         # These are the odds to show next to the book's +1.5/-1.5 line
-        "mkt_pl_away_odds":     mkt_pl_model_away_odds,
-        "mkt_pl_home_odds":     mkt_pl_model_home_odds,
+        "mkt_pl_away_odds":         mkt_pl_model_away_odds,
+        "mkt_pl_home_odds":         mkt_pl_model_home_odds,
+        # Model cover% AT the BOOK's ±1.5 puck line (must match mkt_pl_away/home_odds)
+        # p_away_pl_at_mkt = P(away covers the book's away spread)
+        # p_home_pl_at_mkt = P(home covers the book's home spread)
+        "mkt_pl_away_cover_pct":    round(p_away_pl_at_mkt * 100, 2),
+        "mkt_pl_home_cover_pct":    round(p_home_pl_at_mkt * 100, 2),
         # Moneylines (Section 8)
         "away_ml":              model_away_ml,
         "home_ml":              model_home_ml,

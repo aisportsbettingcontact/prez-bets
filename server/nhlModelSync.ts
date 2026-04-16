@@ -469,7 +469,8 @@ export async function syncNhlModelForToday(
         spreadDiff = String(bestPLEdge.edge_vs_be);  // probability edge in pp
       } else if (mktAwayPLOdds !== null) {
         // No edge but market odds exist — compute raw probability diff for display
-        const awayPLCoverPct = modelResult.away_pl_cover_pct / 100;
+        // Use book-line cover% (mkt_pl_away_cover_pct) to match the book-line odds in mkt_pl_away_odds
+        const awayPLCoverPct = ((modelResult.mkt_pl_away_cover_pct ?? modelResult.away_pl_cover_pct)) / 100;
         const mktAwayBreakEven = americanOddsToBreakEven(mktAwayPLOdds);
         if (mktAwayBreakEven !== null) {
           const diff = awayPLCoverPct - mktAwayBreakEven;
@@ -498,7 +499,9 @@ export async function syncNhlModelForToday(
 
       console.log(`[NhlModelSync]${tag}   Model result: Goals=${modelResult.proj_away_goals}/${modelResult.proj_home_goals} | PL=${modelAwayPL}/${modelHomePL} (edge=${spreadEdge ?? "NONE"}) | Total=${modelTotalVal} (edge=${totalEdge ?? "NONE"})`);
       console.log(`[NhlModelSync]${tag}   PL odds: ${modelResult.away_puck_line_odds}/${modelResult.home_puck_line_odds} | ML: ${modelResult.away_ml}/${modelResult.home_ml} | O/U odds: ${modelResult.over_odds}/${modelResult.under_odds}`);
-      console.log(`[NhlModelSync]${tag}   Win%: away=${modelResult.away_win_pct}% home=${modelResult.home_win_pct}% | PL cover%: away=${modelResult.away_pl_cover_pct}% home=${modelResult.home_pl_cover_pct}%`);
+      const mktPLAwayCover = modelResult.mkt_pl_away_cover_pct ?? modelResult.away_pl_cover_pct;
+      const mktPLHomeCover = modelResult.mkt_pl_home_cover_pct ?? modelResult.home_pl_cover_pct;
+      console.log(`[NhlModelSync]${tag}   Win%: away=${modelResult.away_win_pct}% home=${modelResult.home_win_pct}% | PL cover% (book line): away=${mktPLAwayCover}% home=${mktPLHomeCover}%`);
       if (modelResult.edges.length > 0) {
         console.log(`[NhlModelSync]${tag}   Edges: ${modelResult.edges.map(e => `${e.type}:${e.side}(${e.classification}, EV=${e.ev?.toFixed(1)}%, edge=${e.edge_vs_be}pp)`).join(" | ")}`);
       } else {
@@ -533,8 +536,12 @@ export async function syncNhlModelForToday(
           modelHomeWinPct:     String(modelResult.home_win_pct),
           modelOverRate:       String(modelResult.over_pct),
           modelUnderRate:      String(modelResult.under_pct),
-          modelAwayPLCoverPct: String(modelResult.away_pl_cover_pct),
-          modelHomePLCoverPct: String(modelResult.home_pl_cover_pct),
+          // CRITICAL: use mkt_pl_*_cover_pct (cover% AT the book's line) to match mkt_pl_*_odds.
+          // away_pl_cover_pct is the model's own origination line cover% — a DIFFERENT line when
+          // model and book disagree on the favorite. Using the book-line cover% ensures
+          // modelAwayPLCoverPct and modelAwayPLOdds are always for the same line.
+          modelAwayPLCoverPct: String(modelResult.mkt_pl_away_cover_pct ?? modelResult.away_pl_cover_pct),
+          modelHomePLCoverPct: String(modelResult.mkt_pl_home_cover_pct ?? modelResult.home_pl_cover_pct),
           // Puck line spread for MODEL column must MIRROR the BOOK's spread (not model's own origination).
           // e.g. if book has STL +1.5 (away underdog), model must show +1.5 (not -1.5).
           // The model's fair odds for that side are mkt_pl_away_odds / mkt_pl_home_odds.

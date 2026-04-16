@@ -107,15 +107,17 @@ export interface NhlModelResult {
   under_odds:          number;
   // Model fair odds AT the BOOK's lines (for side-by-side display)
   // These are the key fields for edge detection: same line, different odds
-  mkt_pl_away_odds:    number;   // model fair odds at book's +1.5 puck line
-  mkt_pl_home_odds:    number;   // model fair odds at book's -1.5 puck line
-  mkt_total_over_odds: number;   // model fair odds at book's total line (over)
-  mkt_total_under_odds: number;  // model fair odds at book's total line (under)
-  // Probabilities
-  away_win_pct:        number;
-  home_win_pct:        number;
-  away_pl_cover_pct:   number;
-  home_pl_cover_pct:   number;
+  mkt_pl_away_odds:        number;   // model fair odds at book's away puck line
+  mkt_pl_home_odds:        number;   // model fair odds at book's home puck line
+  mkt_pl_away_cover_pct:   number;   // P(away covers book's away spread) — matches mkt_pl_away_odds
+  mkt_pl_home_cover_pct:   number;   // P(home covers book's home spread) — matches mkt_pl_home_odds
+  mkt_total_over_odds:     number;   // model fair odds at book's total line (over)
+  mkt_total_under_odds:    number;   // model fair odds at book's total line (under)
+  // Probabilities (model's own origination line)
+  away_win_pct:            number;
+  home_win_pct:            number;
+  away_pl_cover_pct:       number;   // P(away covers model's own PL line)
+  home_pl_cover_pct:       number;   // P(home covers model's own PL line)
   over_pct:            number;
   under_pct:           number;
   // Edges
@@ -178,6 +180,7 @@ export async function runNhlModelForGame(input: NhlModelEngineInput): Promise<Nh
         away_ml: 0, home_ml: 0,
         total_line: 0, over_odds: 0, under_odds: 0,
         mkt_pl_away_odds: 0, mkt_pl_home_odds: 0,
+        mkt_pl_away_cover_pct: 0, mkt_pl_home_cover_pct: 0,
         mkt_total_over_odds: 0, mkt_total_under_odds: 0,
         away_win_pct: 0, home_win_pct: 0,
         away_pl_cover_pct: 0, home_pl_cover_pct: 0,
@@ -208,6 +211,7 @@ export async function runNhlModelForGame(input: NhlModelEngineInput): Promise<Nh
         away_ml: 0, home_ml: 0,
         total_line: 0, over_odds: 0, under_odds: 0,
         mkt_pl_away_odds: 0, mkt_pl_home_odds: 0,
+        mkt_pl_away_cover_pct: 0, mkt_pl_home_cover_pct: 0,
         mkt_total_over_odds: 0, mkt_total_under_odds: 0,
         away_win_pct: 0, home_win_pct: 0,
         away_pl_cover_pct: 0, home_pl_cover_pct: 0,
@@ -255,6 +259,7 @@ export async function runNhlModelForGame(input: NhlModelEngineInput): Promise<Nh
         away_ml: 0, home_ml: 0,
         total_line: 0, over_odds: 0, under_odds: 0,
         mkt_pl_away_odds: 0, mkt_pl_home_odds: 0,
+        mkt_pl_away_cover_pct: 0, mkt_pl_home_cover_pct: 0,
         mkt_total_over_odds: 0, mkt_total_under_odds: 0,
         away_win_pct: 0, home_win_pct: 0,
         away_pl_cover_pct: 0, home_pl_cover_pct: 0,
@@ -283,6 +288,7 @@ export async function runNhlModelForGame(input: NhlModelEngineInput): Promise<Nh
         away_ml: 0, home_ml: 0,
         total_line: 0, over_odds: 0, under_odds: 0,
         mkt_pl_away_odds: 0, mkt_pl_home_odds: 0,
+        mkt_pl_away_cover_pct: 0, mkt_pl_home_cover_pct: 0,
         mkt_total_over_odds: 0, mkt_total_under_odds: 0,
         away_win_pct: 0, home_win_pct: 0,
         away_pl_cover_pct: 0, home_pl_cover_pct: 0,
