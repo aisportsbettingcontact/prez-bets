@@ -1904,34 +1904,13 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   }, [isAppAuthed, onToggleFavorite, game.id, toggleFavMutation, isFavorited, onFavoriteNotify]);
   const isNhlGame   = game.sport === 'NHL';
   const isMlbGame   = game.sport === 'MLB';
-  // CRITICAL NHL CORRECTION: awayBookSpread in DB can have wrong sign (AN API stores from home perspective).
-  // Use awaySpreadOdds as the authoritative source: dog odds (+) → +1.5, fav odds (-) → -1.5.
-  // We reassign awayBookSpread/homeBookSpread here so ALL downstream rendering paths use the corrected value.
-  const _rawAwayBookSpread = toNum(game.awayBookSpread);
-  const _rawHomeBookSpread = toNum(game.homeBookSpread);
-  const awayBookSpread = (() => {
-    if (!isNhlGame || isNaN(_rawAwayBookSpread)) return _rawAwayBookSpread;
-    const awayOddsNum = game.awaySpreadOdds ? parseInt(game.awaySpreadOdds, 10) : NaN;
-    if (isNaN(awayOddsNum) || awayOddsNum === 0) return _rawAwayBookSpread;
-    const correctSign = awayOddsNum > 0 ? 1 : -1; // dog=+1, fav=-1
-    const currentSign = _rawAwayBookSpread > 0 ? 1 : -1;
-    if (correctSign !== currentSign) {
-      console.log(`[GameCard][NHL PL SIGN FIX] ${game.awayTeam}@${game.homeTeam}: awayBookSpread=${_rawAwayBookSpread}→${correctSign * Math.abs(_rawAwayBookSpread)} (awayOdds=${awayOddsNum})`);
-      return correctSign * Math.abs(_rawAwayBookSpread);
-    }
-    return _rawAwayBookSpread;
-  })();
-  const homeBookSpread = (() => {
-    if (!isNhlGame || isNaN(_rawHomeBookSpread)) return _rawHomeBookSpread;
-    const homeOddsNum = game.homeSpreadOdds ? parseInt(game.homeSpreadOdds, 10) : NaN;
-    if (isNaN(homeOddsNum) || homeOddsNum === 0) return _rawHomeBookSpread;
-    const correctSign = homeOddsNum > 0 ? 1 : -1;
-    const currentSign = _rawHomeBookSpread > 0 ? 1 : -1;
-    if (correctSign !== currentSign) {
-      return correctSign * Math.abs(_rawHomeBookSpread);
-    }
-    return _rawHomeBookSpread;
-  })();
+  // NHL puck line spread: trust the AN API spread value directly.
+  // The spread value itself is authoritative: +1.5 = dog, -1.5 = fav.
+  // The odds sign is NOT reliable for determining fav/dog in NHL puck lines because
+  // the dog at +1.5 often has negative odds (e.g., -155) since covering +1.5 is easier.
+  // DO NOT apply any odds-based sign correction — awayBookSpread from DB is correct.
+  const awayBookSpread = toNum(game.awayBookSpread);
+  const homeBookSpread = toNum(game.homeBookSpread);
   // IntersectionObserver-gated visibility — secondary panels only fetch when card is in viewport
   const [cardRef, isCardVisible] = useVisibility({ rootMargin: "200px" });
   // For NHL: use modelAwayPuckLine/modelHomePuckLine (simulation-derived, e.g. "+1.5"/"-1.5")
