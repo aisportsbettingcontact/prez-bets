@@ -122,10 +122,10 @@ LEAGUE_HDCA_60      = 11.453  # High-Danger Corsi Against per 60
 LEAGUE_SCF_60       = 26.975  # Scoring Chances For per 60
 LEAGUE_SCA_60       = 26.952  # Scoring Chances Against per 60
 LEAGUE_CF_60        = 57.171  # Corsi For per 60 (pace proxy)
-LEAGUE_CA_60        = 57.132  # Corsi Against per 60 (pace proxy)
+# LEAGUE_CA_60 removed — Corsi Against is the mirror of CF_60 and is not used in any
+# compute_off_rating / compute_def_rating / compute_pace_factor formula.
 
-# Edge detection thresholds — only flag genuine disagreements with the book
-# Raised from 5pp to reduce noise; model must meaningfully disagree to flag an edge
+# Edge detection thresholds — referenced by classify_edge() and detect_edges() conf bands
 PUCK_LINE_EDGE_THRESHOLD = 0.06   # 6pp probability edge for puck line
 ML_EDGE_THRESHOLD        = 0.05   # 5pp probability edge for moneyline
 TOTAL_EDGE_THRESHOLD     = 0.08   # 8pp probability edge for totals (half-point lines need more separation)
@@ -373,7 +373,8 @@ def project_goals(
 # Correlated Negative Binomial: G ~ NB(mu, k), with goal correlation rho≈0.15
 # ─────────────────────────────────────────────────────────────────────────────
 
-def sample_correlated_nb(mu_away: float, mu_home: float, n: int) -> tuple[np.ndarray, np.ndarray]:
+def sample_correlated_nb(mu_away: float, mu_home: float, n: int,
+                         rng: np.random.Generator | None = None) -> tuple[np.ndarray, np.ndarray]:
     """
     Section 5 — Correlated Negative Binomial goal distributions.
 
@@ -392,20 +393,21 @@ def sample_correlated_nb(mu_away: float, mu_home: float, n: int) -> tuple[np.nda
     """
     k = NB_K
     rho = GOAL_CORRELATION
+    _rng = rng if rng is not None else np.random.default_rng()
 
     # Shared pace multiplier (introduces correlation between teams)
     # Gamma(shape=1/rho, scale=rho) has mean=1, variance=rho
     pace_shape = 1.0 / rho
-    pace_mult = np.random.gamma(pace_shape, rho, size=n)  # mean=1, var=rho
+    pace_mult = _rng.gamma(pace_shape, rho, size=n)  # mean=1, var=rho
 
     # NB via Gamma-Poisson mixture for away team
     # lambda_away ~ Gamma(k, mu_away/k)  →  mean=mu_away, var=mu_away²/k
-    lambda_away = np.random.gamma(k, mu_away / k, size=n) * pace_mult
-    goals_away  = np.random.poisson(lambda_away)
+    lambda_away = _rng.gamma(k, mu_away / k, size=n) * pace_mult
+    goals_away  = _rng.poisson(lambda_away)
 
     # NB via Gamma-Poisson mixture for home team
-    lambda_home = np.random.gamma(k, mu_home / k, size=n) * pace_mult
-    goals_home  = np.random.poisson(lambda_home)
+    lambda_home = _rng.gamma(k, mu_home / k, size=n) * pace_mult
+    goals_home  = _rng.poisson(lambda_home)
 
     return goals_away, goals_home
 
@@ -414,12 +416,14 @@ def sample_correlated_nb(mu_away: float, mu_home: float, n: int) -> tuple[np.nda
 # SECTION 6 — MONTE CARLO SIMULATION
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_simulation(mu_away: float, mu_home: float) -> tuple[np.ndarray, np.ndarray]:
+def run_simulation(mu_away: float, mu_home: float,
+                   rng: np.random.Generator | None = None) -> tuple[np.ndarray, np.ndarray]:
     """
     Section 6: Run N=200,000 correlated NB simulations.
+    Pass a seeded rng for deterministic output; omit for non-deterministic (legacy).
     Returns (away_scores, home_scores) arrays of length SIMULATIONS.
     """
-    return sample_correlated_nb(mu_away, mu_home, SIMULATIONS)
+    return sample_correlated_nb(mu_away, mu_home, SIMULATIONS, rng=rng)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -669,13 +673,13 @@ def expected_value(probability: float, odds: int) -> float:
 
 def classify_edge(prob_edge: float) -> str:
     """Edge classification. Section 12 of spec."""
-    if prob_edge >= 0.08:
+    if prob_edge >= TOTAL_EDGE_THRESHOLD:   # 0.08 — ELITE
         return "ELITE EDGE"
-    if prob_edge >= 0.05:
+    if prob_edge >= ML_EDGE_THRESHOLD:      # 0.05 — STRONG
         return "STRONG EDGE"
-    if prob_edge >= 0.03:
+    if prob_edge >= 0.03:                   # 0.03 — PLAYABLE
         return "PLAYABLE EDGE"
-    if prob_edge >= 0.015:
+    if prob_edge >= 0.015:                  # 0.015 — SMALL
         return "SMALL EDGE"
     return "NO EDGE"
 
@@ -691,6 +695,7 @@ def detect_edges(
     mkt_away_ml: int | None,
     mkt_home_ml: int | None,
     mkt_total: float | None,
+    mkt_away_spread: float | None = None,
 ) -> list[dict]:
     """
     Industry-grade Sharp Edge Detection Engine.
@@ -788,7 +793,7 @@ def detect_edges(
                 "fair_odds":      fair_over_odds,
                 "price_edge":     round(price_edge_over, 0),
                 "classification": classification_over,
-                "conf":           "HIGH" if edge_over >= 0.08 else ("MOD" if edge_over >= 0.05 else "LOW"),
+                "conf":           "HIGH" if edge_over >= TOTAL_EDGE_THRESHOLD else ("MOD" if edge_over >= ML_EDGE_THRESHOLD else "LOW"),
             })
 
         if edge_under >= 0.015:
@@ -803,7 +808,7 @@ def detect_edges(
                 "fair_odds":      fair_under_odds,
                 "price_edge":     round(price_edge_under, 0),
                 "classification": classification_under,
-                "conf":           "HIGH" if edge_under >= 0.08 else ("MOD" if edge_under >= 0.05 else "LOW"),
+                "conf":           "HIGH" if edge_under >= TOTAL_EDGE_THRESHOLD else ("MOD" if edge_under >= ML_EDGE_THRESHOLD else "LOW"),
             })
 
     # ── PUCK LINE MARKET ───────────────────────────────────────────────────────────────────
@@ -830,7 +835,7 @@ def detect_edges(
         # mkt_away_spread < 0 means away is at -1.5 (favorite) → away is the -1.5 favorite.
         # NEVER use odds to determine this: underdog's +1.5 odds can be more negative than
         # favorite's -1.5 odds (e.g. STL +1.5 at -290 vs WPG -1.5 at +100).
-        mkt_away_spread = inp.get("mkt_away_spread")
+        # mkt_away_spread is passed explicitly as a parameter (not from module-level inp)
         if mkt_away_spread is not None:
             book_fav_is_home = float(mkt_away_spread) > 0  # away at +1.5 → home is -1.5 fav
         else:
@@ -897,7 +902,7 @@ def detect_edges(
                 "fair_odds":      fair_away_pl_odds,
                 "price_edge":     round(price_edge_away_pl, 0),
                 "classification": class_away_pl,
-                "conf":           "HIGH" if edge_away_pl >= 0.08 else ("MOD" if edge_away_pl >= 0.05 else "LOW"),
+                "conf":           "HIGH" if edge_away_pl >= PUCK_LINE_EDGE_THRESHOLD else ("MOD" if edge_away_pl >= ML_EDGE_THRESHOLD else "LOW"),
             })
 
         if edge_home_pl >= 0.015:
@@ -912,7 +917,7 @@ def detect_edges(
                 "fair_odds":      fair_home_pl_odds,
                 "price_edge":     round(price_edge_home_pl, 0),
                 "classification": class_home_pl,
-                "conf":           "HIGH" if edge_home_pl >= 0.08 else ("MOD" if edge_home_pl >= 0.05 else "LOW"),
+                "conf":           "HIGH" if edge_home_pl >= PUCK_LINE_EDGE_THRESHOLD else ("MOD" if edge_home_pl >= ML_EDGE_THRESHOLD else "LOW"),
             })
 
     # ── MONEYLINE MARKET ─────────────────────────────────────────────────────
@@ -975,7 +980,7 @@ def detect_edges(
                 "fair_odds":      fair_away_ml_odds,
                 "price_edge":     round(price_edge_away_ml, 0),
                 "classification": class_away_ml,
-                "conf":           "HIGH" if edge_away_ml >= 0.08 else ("MOD" if edge_away_ml >= 0.05 else "LOW"),
+                "conf":           "HIGH" if edge_away_ml >= TOTAL_EDGE_THRESHOLD else ("MOD" if edge_away_ml >= ML_EDGE_THRESHOLD else "LOW"),
             })
 
         if edge_home_ml >= 0.015:
@@ -990,7 +995,7 @@ def detect_edges(
                 "fair_odds":      fair_home_ml_odds,
                 "price_edge":     round(price_edge_home_ml, 0),
                 "classification": class_home_ml,
-                "conf":           "HIGH" if edge_home_ml >= 0.08 else ("MOD" if edge_home_ml >= 0.05 else "LOW"),
+                "conf":           "HIGH" if edge_home_ml >= TOTAL_EDGE_THRESHOLD else ("MOD" if edge_home_ml >= ML_EDGE_THRESHOLD else "LOW"),
             })
 
     # ── FINAL EDGE SUMMARY ──
@@ -1065,6 +1070,12 @@ def originate_game(inp: dict) -> dict:
     away_abbrev = inp.get("away_abbrev", "AWAY")
     home_abbrev = inp.get("home_abbrev", "HOME")
 
+    # Deterministic seeded RNG: seed derived from game identity so identical inputs
+    # always produce identical outputs. Seed = hash(away_abbrev + home_abbrev + game_date).
+    _game_key = f"{away_abbrev}@{home_abbrev}:{inp.get('game_date', '')}"
+    _seed = int(abs(hash(_game_key))) % (2**31)
+    _rng = np.random.default_rng(_seed)
+
     team_stats = inp.get("team_stats", {})
     away_stats = team_stats.get(away_abbrev) or team_stats.get(away_name)
     home_stats = team_stats.get(home_abbrev) or team_stats.get(home_name)
@@ -1132,7 +1143,7 @@ def originate_game(inp: dict) -> dict:
 
     # ── Steps 5–6: Monte Carlo simulation ────────────────────────────────────
     print(f"[NHLModel]   Running {SIMULATIONS:,} correlated NB simulations (k={NB_K}, rho={GOAL_CORRELATION})...", file=sys.stderr)
-    away_scores, home_scores = run_simulation(mu_away, mu_home)
+    away_scores, home_scores = run_simulation(mu_away, mu_home, rng=_rng)
 
     # ── Step 7: Probabilities ─────────────────────────────────────────────────
     probs = calculate_probs(away_scores, home_scores)
@@ -1187,6 +1198,7 @@ def originate_game(inp: dict) -> dict:
         mkt_over_odds, mkt_under_odds,
         mkt_away_ml, mkt_home_ml,
         mkt_total,
+        mkt_away_spread=inp.get("mkt_away_spread"),
     )
 
     # ── Step 10: Compute model fair odds AT the BOOK's lines ─────────────────
@@ -1317,7 +1329,23 @@ if __name__ == "__main__":
             result = {"ok": False, "error": "Empty input"}
         else:
             inp = json.loads(raw)
-            result = originate_game(inp)
+            # Batch mode: if input is a list, process all games and return list of results.
+            # Single-game mode: if input is a dict, process one game and return one result.
+            if isinstance(inp, list):
+                result = []
+                for game_inp in inp:
+                    try:
+                        result.append(originate_game(game_inp))
+                    except Exception as ge:
+                        import traceback
+                        result.append({
+                            "ok": False,
+                            "error": str(ge),
+                            "traceback": traceback.format_exc(),
+                            "game": f"{game_inp.get('away_abbrev','?')} @ {game_inp.get('home_abbrev','?')}",
+                        })
+            else:
+                result = originate_game(inp)
     except json.JSONDecodeError as e:
         result = {"ok": False, "error": f"JSON parse error: {e}"}
     except Exception as e:

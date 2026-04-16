@@ -304,6 +304,144 @@ export async function runNhlModelForGame(input: NhlModelEngineInput): Promise<Nh
   });
 }
 
+/**
+ * Batch runner — spawns ONE Python process for all games.
+ * Eliminates per-game process spawn overhead (~50–100ms per spawn).
+ * Returns results in the same order as inputs.
+ */
+export async function runNhlModelBatch(inputs: NhlModelEngineInput[]): Promise<NhlModelResult[]> {
+  if (inputs.length === 0) return [];
+  if (inputs.length === 1) {
+    const r = await runNhlModelForGame(inputs[0]);
+    return [r];
+  }
+
+  const enginePath = path.join(__dirname, "nhl_model_engine.py");
+  const inputJson  = JSON.stringify(inputs);
+
+  console.log(`[NhlModelEngine] ► Batch spawning Python engine for ${inputs.length} game(s)`);
+
+  return new Promise<NhlModelResult[]>((resolve) => {
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.PYTHONHOME;
+    delete cleanEnv.PYTHONPATH;
+
+    const proc = spawn("/usr/bin/python3.11", [enginePath], {
+      cwd: __dirname,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: cleanEnv,
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    proc.stderr.on("data", (chunk: Buffer) => {
+      const line = chunk.toString();
+      stderr += line;
+      process.stdout.write(`[NhlModelEngine][py] ${line}`);
+    });
+
+    const batchTimeout = inputs.length * PYTHON_TIMEOUT_MS;
+    const timeout = setTimeout(() => {
+      proc.kill("SIGTERM");
+      resolve(inputs.map(inp => ({
+        ok: false,
+        game: `${inp.away_team} @ ${inp.home_team}`,
+        away_name: inp.away_team, home_name: inp.home_team,
+        away_abbrev: inp.away_abbrev, home_abbrev: inp.home_abbrev,
+        away_goalie: inp.away_goalie, home_goalie: inp.home_goalie,
+        proj_away_goals: 0, proj_home_goals: 0,
+        away_puck_line: "+1.5", away_puck_line_odds: 0,
+        home_puck_line: "-1.5", home_puck_line_odds: 0,
+        away_ml: 0, home_ml: 0, total_line: 0, over_odds: 0, under_odds: 0,
+        mkt_pl_away_odds: 0, mkt_pl_home_odds: 0,
+        mkt_pl_away_cover_pct: 0, mkt_pl_home_cover_pct: 0,
+        mkt_total_over_odds: 0, mkt_total_under_odds: 0,
+        away_win_pct: 0, home_win_pct: 0,
+        away_pl_cover_pct: 0, home_pl_cover_pct: 0,
+        over_pct: 0, under_pct: 0, edges: [],
+        error: `Batch timeout after ${batchTimeout}ms`,
+      } as NhlModelResult)));
+    }, batchTimeout);
+
+    proc.on("close", (code) => {
+      clearTimeout(timeout);
+      if (code !== 0) {
+        console.error(`[NhlModelEngine] ✗ Batch Python exited with code ${code}`);
+        resolve(inputs.map(inp => ({
+          ok: false, game: `${inp.away_team} @ ${inp.home_team}`,
+          away_name: inp.away_team, home_name: inp.home_team,
+          away_abbrev: inp.away_abbrev, home_abbrev: inp.home_abbrev,
+          away_goalie: inp.away_goalie, home_goalie: inp.home_goalie,
+          proj_away_goals: 0, proj_home_goals: 0,
+          away_puck_line: "+1.5", away_puck_line_odds: 0,
+          home_puck_line: "-1.5", home_puck_line_odds: 0,
+          away_ml: 0, home_ml: 0, total_line: 0, over_odds: 0, under_odds: 0,
+          mkt_pl_away_odds: 0, mkt_pl_home_odds: 0,
+          mkt_pl_away_cover_pct: 0, mkt_pl_home_cover_pct: 0,
+          mkt_total_over_odds: 0, mkt_total_under_odds: 0,
+          away_win_pct: 0, home_win_pct: 0,
+          away_pl_cover_pct: 0, home_pl_cover_pct: 0,
+          over_pct: 0, under_pct: 0, edges: [],
+          error: `Python exited with code ${code}: ${stderr.slice(-200)}`,
+        } as NhlModelResult)));
+        return;
+      }
+      const lines = stdout.trim().split("\n").filter(l => l.trim());
+      const lastLine = lines[lines.length - 1] ?? "";
+      try {
+        const results = JSON.parse(lastLine) as NhlModelResult[];
+        console.log(`[NhlModelEngine] ✅ Batch complete: ${results.filter(r => r.ok).length}/${results.length} games succeeded`);
+        resolve(results);
+      } catch (parseErr) {
+        console.error(`[NhlModelEngine] ✗ Batch JSON parse error: ${parseErr}`);
+        resolve(inputs.map(inp => ({
+          ok: false, game: `${inp.away_team} @ ${inp.home_team}`,
+          away_name: inp.away_team, home_name: inp.home_team,
+          away_abbrev: inp.away_abbrev, home_abbrev: inp.home_abbrev,
+          away_goalie: inp.away_goalie, home_goalie: inp.home_goalie,
+          proj_away_goals: 0, proj_home_goals: 0,
+          away_puck_line: "+1.5", away_puck_line_odds: 0,
+          home_puck_line: "-1.5", home_puck_line_odds: 0,
+          away_ml: 0, home_ml: 0, total_line: 0, over_odds: 0, under_odds: 0,
+          mkt_pl_away_odds: 0, mkt_pl_home_odds: 0,
+          mkt_pl_away_cover_pct: 0, mkt_pl_home_cover_pct: 0,
+          mkt_total_over_odds: 0, mkt_total_under_odds: 0,
+          away_win_pct: 0, home_win_pct: 0,
+          away_pl_cover_pct: 0, home_pl_cover_pct: 0,
+          over_pct: 0, under_pct: 0, edges: [],
+          error: `Batch JSON parse error: ${parseErr}`,
+        } as NhlModelResult)));
+      }
+    });
+
+    proc.on("error", (err) => {
+      clearTimeout(timeout);
+      resolve(inputs.map(inp => ({
+        ok: false, game: `${inp.away_team} @ ${inp.home_team}`,
+        away_name: inp.away_team, home_name: inp.home_team,
+        away_abbrev: inp.away_abbrev, home_abbrev: inp.home_abbrev,
+        away_goalie: inp.away_goalie, home_goalie: inp.home_goalie,
+        proj_away_goals: 0, proj_home_goals: 0,
+        away_puck_line: "+1.5", away_puck_line_odds: 0,
+        home_puck_line: "-1.5", home_puck_line_odds: 0,
+        away_ml: 0, home_ml: 0, total_line: 0, over_odds: 0, under_odds: 0,
+        mkt_pl_away_odds: 0, mkt_pl_home_odds: 0,
+        mkt_pl_away_cover_pct: 0, mkt_pl_home_cover_pct: 0,
+        mkt_total_over_odds: 0, mkt_total_under_odds: 0,
+        away_win_pct: 0, home_win_pct: 0,
+        away_pl_cover_pct: 0, home_pl_cover_pct: 0,
+        over_pct: 0, under_pct: 0, edges: [],
+        error: `Process spawn error: ${err.message}`,
+      } as NhlModelResult)));
+    });
+
+    proc.stdin.write(inputJson);
+    proc.stdin.end();
+  });
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Format ML as string with sign (e.g. "+135", "-155") */

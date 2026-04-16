@@ -27,7 +27,7 @@ import { scrapeNhlTeamStats, scrapeNhlGoalieStats, getDefaultGoalieStats } from 
 import { scrapeNhlTeamStatsFromHockeyRef } from "./nhlHockeyRefTeamStats.js";
 import { scrapeNhlTeamStatsFromMoneyPuck, scrapeNhlGoalieStatsFromMoneyPuck } from "./nhlMoneyPuckFallback.js";
 import { scrapeNhlStartingGoalies, matchGoalieName } from "./nhlRotoWireScraper.js";
-import { runNhlModelForGame, buildTeamStatsDict, formatNhlML } from "./nhlModelEngine.js";
+import { runNhlModelForGame, runNhlModelBatch, buildTeamStatsDict, formatNhlML } from "./nhlModelEngine.js";
 import type { NhlModelEngineInput } from "./nhlModelEngine.js";
 import { NHL_BY_DB_SLUG } from "../shared/nhlTeams.js";
 import { computeNhlRestDays } from "./nhlHockeyRefScraper.js";
@@ -278,11 +278,50 @@ export async function syncNhlModelForToday(
   // ── Step 4: Run model for each unmodeled game ─────────────────────────────
   console.log(`\n[NhlModelSync]${tag} Step 4: Running NHL model for ${unmodeled.length} game(s)...`);
 
+  // ── Phase A0: Pre-fetch all rest days in parallel ─────────────────────────────────────────
+  // computeNhlRestDays makes a network call to Hockey Reference per game.
+  // Running them sequentially would take N×30s. Run all in parallel first.
+  console.log(`[NhlModelSync]${tag} Step 4A0: Pre-fetching rest days for ${unmodeled.length} game(s) in parallel...`);
+  const restDaysMap = new Map<number, { awayRestDays: number; homeRestDays: number }>();
+  await Promise.allSettled(
+    unmodeled.map(async (game: typeof unmodeled[number]) => {
+      try {
+        const rd = await computeNhlRestDays(game.awayTeam, game.homeTeam, gameDate);
+        restDaysMap.set(game.id, rd);
+      } catch (e) {
+        // Default to 2 rest days (mid-week) if scrape fails — non-fatal
+        restDaysMap.set(game.id, { awayRestDays: 2, homeRestDays: 2 });
+        console.warn(`[NhlModelSync]${tag}   [REST DAYS] Failed for game ${game.id}: ${e instanceof Error ? e.message : String(e)} — defaulting to 2/2`);
+      }
+    })
+  );
+  console.log(`[NhlModelSync]${tag}   Rest days pre-fetched for ${restDaysMap.size}/${unmodeled.length} games`);
+
+  // ── Phase A: Build all engine inputs (async: rest days, goalie resolution) ──────────────
+  // Collect validated game contexts. Games that fail validation are skipped immediately.
+  type GameContext = {
+    game:                  typeof unmodeled[number];
+    gameLabel:             string;
+    awayAbbrev:            string;
+    homeAbbrev:            string;
+    awayGoalieName:        string | null;
+    homeGoalieName:        string | null;
+    awayGoalieInfo:        { name: string; confirmed: boolean } | null;
+    homeGoalieInfo:        { name: string; confirmed: boolean } | null;
+    mktAwayPLOdds:         number | null;
+    mktHomePLOdds:         number | null;
+    mktTotal:              number | null;
+    correctedAwaySpread:   number | null;
+    correctedAwaySpreadStr: string | null;
+    correctedHomeSpreadStr: string | null;
+    engineInput:           NhlModelEngineInput;
+  };
+  const gameContexts: GameContext[] = [];
+
   for (let i = 0; i < unmodeled.length; i++) {
     const game = unmodeled[i];
 
     // Resolve 3-letter abbrev from dbSlug (e.g. "boston_bruins" → "BOS")
-    // The teamStatsMap from NaturalStatTrick is keyed by 3-letter abbrev.
     const awayTeamEntry = NHL_BY_DB_SLUG.get(game.awayTeam);
     const homeTeamEntry = NHL_BY_DB_SLUG.get(game.homeTeam);
     const awayAbbrev = awayTeamEntry?.abbrev ?? game.awayTeam.toUpperCase();
@@ -303,10 +342,9 @@ export async function syncNhlModelForToday(
       console.log(`[NhlModelSync]${tag}   Away (${awayAbbrev}): xGF%=${awayStats.xGF_pct} xGF/60=${awayStats.xGF_60} HDCF/60=${awayStats.HDCF_60} SCF/60=${awayStats.SCF_60} CF/60=${awayStats.CF_60}`);
       console.log(`[NhlModelSync]${tag}   Home (${homeAbbrev}): xGF%=${homeStats.xGF_pct} xGF/60=${homeStats.xGF_60} HDCF/60=${homeStats.HDCF_60} SCF/60=${homeStats.SCF_60} CF/60=${homeStats.CF_60}`);
 
-      // Resolve starting goalies (keyed by 3-letter abbrev from RotoWire scraper)
+      // Resolve starting goalies
       const awayGoalieInfo = goalieByTeam.get(awayAbbrev) ?? null;
       const homeGoalieInfo = goalieByTeam.get(homeAbbrev) ?? null;
-
       const awayGoalieName = awayGoalieInfo?.name ?? null;
       const homeGoalieName = homeGoalieInfo?.name ?? null;
 
@@ -314,7 +352,6 @@ export async function syncNhlModelForToday(
       const awayGoalieStats = awayGoalieName
         ? (matchGoalieName(awayGoalieName, goalieStatsMap) ?? getDefaultGoalieStats(awayGoalieName, awayAbbrev))
         : getDefaultGoalieStats("TBD", awayAbbrev);
-
       const homeGoalieStats = homeGoalieName
         ? (matchGoalieName(homeGoalieName, goalieStatsMap) ?? getDefaultGoalieStats(homeGoalieName, homeAbbrev))
         : getDefaultGoalieStats("TBD", homeAbbrev);
@@ -323,9 +360,6 @@ export async function syncNhlModelForToday(
       console.log(`[NhlModelSync]${tag}   Home goalie: ${homeGoalieName ?? "TBD"} | GSAx=${homeGoalieStats.gsax.toFixed(2)} SV%=${homeGoalieStats.sv_pct} GP=${homeGoalieStats.gp}`);
 
       // ── CRITICAL: Require confirmed DK puck line before running model ──────────────────
-      // Missing awayBookSpread causes puck line inversion (model uses goal-diff fallback
-      // which can assign wrong favorite when goals are close to 0).
-      // Also require bookTotal and awayML to ensure all market anchors are present.
       if (!game.awayBookSpread || !game.bookTotal || !game.awayML || !game.homeML) {
         const missing: string[] = [];
         if (!game.awayBookSpread) missing.push('awayBookSpread [PL GATE]');
@@ -336,6 +370,7 @@ export async function syncNhlModelForToday(
         result.skipped++;
         continue;
       }
+
       // Parse book lines from DB
       const mktAwayPLOdds  = game.awaySpreadOdds ? parseInt(game.awaySpreadOdds, 10) : null;
       const mktHomePLOdds  = game.homeSpreadOdds ? parseInt(game.homeSpreadOdds, 10) : null;
@@ -346,21 +381,10 @@ export async function syncNhlModelForToday(
       const mktHomeML      = game.homeML ? parseInt(game.homeML, 10) : null;
 
       // ── PUCK LINE SIGN CORRECTION (odds-authoritative) ─────────────────────────────────
-      // The awayBookSpread column can have the wrong sign when the AN API stores the spread
-      // from the home team's perspective (e.g. STL@UTA: awayBookSpread=-1.5 but STL is the
-      // dog at +200 odds). The spread ODDS are always correct — use them to determine the
-      // authoritative sign. Dog odds are positive; favorite odds are negative.
-      //
-      // Rule: if awaySpreadOdds > 0 → away is the dog → awayBookSpread MUST be +1.5
-      //       if awaySpreadOdds < 0 → away is the fav → awayBookSpread MUST be -1.5
-      //
-      // When the sign is corrected, Python's mkt_pl_away_odds/mkt_pl_home_odds will also
-      // be correct (they are computed from the corrected mkt_away_spread input).
       const rawAwaySpread = game.awayBookSpread != null ? parseFloat(String(game.awayBookSpread)) : null;
       let correctedAwaySpread = rawAwaySpread;
       let plSignCorrected = false;
       if (rawAwaySpread !== null && mktAwayPLOdds !== null) {
-        // Determine correct sign from odds: dog odds are positive, favorite odds are negative
         const awayIsDog = mktAwayPLOdds > 0;
         const spreadAbs = Math.abs(rawAwaySpread);
         const correctAwaySpread = awayIsDog ? spreadAbs : -spreadAbs;
@@ -383,8 +407,8 @@ export async function syncNhlModelForToday(
         console.log(`[NhlModelSync]${tag}   [INPUT] correctedAwaySpread=${correctedAwaySpread} (was ${rawAwaySpread}) — passing corrected value to Python engine`);
       }
 
-      // Compute real rest days from Hockey Reference schedule
-      const restDays = await computeNhlRestDays(game.awayTeam, game.homeTeam, gameDate);
+      // Use pre-fetched rest days (fetched in parallel in Phase A0)
+      const restDays = restDaysMap.get(game.id) ?? { awayRestDays: 2, homeRestDays: 2 };
       console.log(`[NhlModelSync]${tag}   Rest days: away=${restDays.awayRestDays}d home=${restDays.homeRestDays}d`);
 
       // Build engine input
@@ -399,15 +423,11 @@ export async function syncNhlModelForToday(
         home_goalie_gp:           homeGoalieStats.gp,
         away_goalie_gsax:         awayGoalieStats.gsax,
         home_goalie_gsax:         homeGoalieStats.gsax,
-        // Shots faced (for workload/fatigue goalie multiplier)
         away_goalie_shots_faced:  awayGoalieStats.shots ?? undefined,
         home_goalie_shots_faced:  homeGoalieStats.shots ?? undefined,
-        // Rest days from Hockey Reference schedule (back-to-back detection)
         away_rest_days:           restDays.awayRestDays,
         home_rest_days:           restDays.homeRestDays,
         mkt_puck_line:            1.5,
-        // Book's signed spread for away team: +1.5 if home is the -1.5 favorite, -1.5 if away is the -1.5 favorite.
-        // CORRECTED by odds-authoritative sign detection above (plSignCorrected flag).
         mkt_away_spread:          correctedAwaySpread,
         mkt_away_pl_odds:         mktAwayPLOdds,
         mkt_home_pl_odds:         mktHomePLOdds,
@@ -419,8 +439,44 @@ export async function syncNhlModelForToday(
         team_stats:               buildTeamStatsDict(awayAbbrev, homeAbbrev, teamStatsMap),
       };
 
+      gameContexts.push({
+        game, gameLabel, awayAbbrev, homeAbbrev,
+        awayGoalieName, homeGoalieName, awayGoalieInfo, homeGoalieInfo,
+        mktAwayPLOdds, mktHomePLOdds, mktTotal,
+        correctedAwaySpread, correctedAwaySpreadStr, correctedHomeSpreadStr,
+        engineInput,
+      });
+
+    } catch (err) {
+      const awayTeamEntry2 = NHL_BY_DB_SLUG.get(game.awayTeam);
+      const homeTeamEntry2 = NHL_BY_DB_SLUG.get(game.homeTeam);
+      const awayAbbrev2 = awayTeamEntry2?.abbrev ?? game.awayTeam.toUpperCase();
+      const homeAbbrev2 = homeTeamEntry2?.abbrev ?? game.homeTeam.toUpperCase();
+      const gameLabel2 = `${awayAbbrev2} @ ${homeAbbrev2}`;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[NhlModelSync]${tag}   ✗ Error building input for ${gameLabel2}: ${msg}`);
+      result.errors.push(`${gameLabel2}: ${msg}`);
+      result.skipped++;
+    }
+  }
+
+  // ── Phase B: Batch dispatch — ONE Python process for all validated games ─────────────────
+  console.log(`\n[NhlModelSync]${tag} Step 4B: Dispatching batch Python engine for ${gameContexts.length} game(s)...`);
+  const batchResults = gameContexts.length > 0
+    ? await runNhlModelBatch(gameContexts.map(ctx => ctx.engineInput))
+    : [];
+
+  // ── Phase C: Process results + write DB per game ─────────────────────────────────────────
+  for (let i = 0; i < gameContexts.length; i++) {
+    const ctx = gameContexts[i];
+    const { game, gameLabel, awayAbbrev, homeAbbrev, awayGoalieName, homeGoalieName,
+            awayGoalieInfo, homeGoalieInfo, mktAwayPLOdds, mktHomePLOdds, mktTotal,
+            correctedAwaySpread, correctedAwaySpreadStr, correctedHomeSpreadStr } = ctx;
+    const modelResult = batchResults[i];
+
+    try {
       // Run the Python model
-      const modelResult = await runNhlModelForGame(engineInput);
+      // (result already computed in batch above)
 
       if (!modelResult.ok) {
         console.error(`[NhlModelSync]${tag}   ✗ Model failed for ${gameLabel}: ${modelResult.error}`);
