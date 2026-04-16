@@ -20,9 +20,9 @@
  *   - Timezone is implied by the TIME (EST) column header — not repeated per row
  *   - Uses America/New_York for correct EDT/EST conversion
  *
- * Deduplication: consecutive rows with identical values for the active market
- * are collapsed — only the first occurrence of each unique state is shown.
- * A footer note shows "X consecutive duplicates hidden" when applicable.
+ * Deduplication: consecutive rows with identical values for the active market are hidden —
+ * only the first occurrence of each unique state is shown.
+ * Duplicate count is logged server-side only — not shown in the UI.
  * The snapshot count badge is NOT shown in the toggle header.
  *
  * Responsive scaling:
@@ -356,7 +356,11 @@ export function OddsHistoryPanel({
   // ── Data fetch (lazy — only when panel is expanded) ────────────────────────
   const { data, isLoading, error } = trpc.oddsHistory.listForGame.useQuery(
     { gameId },
-    { enabled: (enabled ?? true) && open, staleTime: 30_000 }
+    {
+      enabled: (enabled ?? true) && open,
+      staleTime: 30_000,
+      refetchInterval: 30_000, // auto-poll every 30s when panel is open — keeps odds history current
+    }
   );
 
   // ── Team colors + logos (try MLB → NHL → NBA) ──────────────────────────────
@@ -692,20 +696,7 @@ export function OddsHistoryPanel({
                 </tbody>
               </table>
 
-              {/* ── Footer: hidden duplicates note ── */}
-              {hiddenCount > 0 && (
-                <div
-                  style={{
-                    padding: "4px 10px",
-                    textAlign: "right",
-                    fontSize: 9,
-                    color: "rgba(255,255,255,0.28)",
-                    borderTop: "1px solid rgba(57,255,20,0.07)",
-                  }}
-                >
-                  {hiddenCount} consecutive duplicate{hiddenCount !== 1 ? "s" : ""} hidden
-                </div>
-              )}
+              {/* Duplicate suppression count is logged server-side only — no UI noise */}
             </div>
           )}
         </div>

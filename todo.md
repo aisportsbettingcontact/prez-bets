@@ -2649,3 +2649,10 @@
 - [x] Wire MLBAM backfill into server startup (alongside existing 60-day schedule backfill)
 - [x] Add structured logging: [MLBAM_BACKFILL] resolved/alreadyHad/unresolved/errors at every trigger point
 - [x] TypeScript 0 errors, all tests passing
+
+## MLB Betting Splits — 5-Issue Fix (Session: Apr 15, 2026)
+- [x] Fix MLB team logos not loading in betting splits (root cause audit)
+- [x] Fix Trends table — not updating in real time, always current
+- [x] Fix Last 5 Games table — not updating in real time, always current
+- [x] Remove "169 consecutive duplicates hidden" from frontend UI (backend-only logging)
+- [x] Add OPEN line display to betting splits

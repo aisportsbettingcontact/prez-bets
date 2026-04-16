@@ -221,11 +221,21 @@ function StatsSection({
   // ── MLB query ────────────────────────────────────────────────────────────
   const mlbAwayQuery = trpc.mlbSchedule.getSituationalStats.useQuery(
     { teamSlug: awaySlug },
-    { enabled: (enabled ?? true) && sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
+    {
+      enabled: (enabled ?? true) && sport === "MLB",
+      staleTime: 4 * 60 * 1000,       // 4 min — matches schedule history refresh cadence
+      refetchInterval: 4 * 60 * 1000, // auto-poll every 4 min for real-time record updates
+      retry: 1,
+    }
   );
   const mlbHomeQuery = trpc.mlbSchedule.getSituationalStats.useQuery(
     { teamSlug: homeSlug },
-    { enabled: (enabled ?? true) && sport === "MLB", staleTime: 5 * 60 * 1000, retry: 1 }
+    {
+      enabled: (enabled ?? true) && sport === "MLB",
+      staleTime: 4 * 60 * 1000,
+      refetchInterval: 4 * 60 * 1000,
+      retry: 1,
+    }
   );
 
   // ── NBA query ────────────────────────────────────────────────────────────

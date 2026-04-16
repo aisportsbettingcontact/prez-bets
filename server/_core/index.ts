@@ -328,6 +328,12 @@ async function startServer() {
     startSecurityDigestScheduler();
     // Weekly security threat trend digest — every Sunday at 08:00 EST, 7-day bar chart + top IPs
     startWeeklySecurityDigestScheduler();
+    // OddsHistory lineSource backfill — sets lineSource on historical rows where it is NULL
+    // Uses game.oddsSource as ground truth. Runs once at startup, no-ops if all rows already set.
+    import('../db').then(({ backfillOddsHistoryLineSource }) => {
+      backfillOddsHistoryLineSource()
+        .catch((err: unknown) => console.warn('[Startup] [OddsHistory][BACKFILL] lineSource backfill failed (non-fatal):', err));
+    }).catch((err: unknown) => console.warn('[Startup] [OddsHistory][BACKFILL] Import failed (non-fatal):', err));
     // K-Props MLBAM ID startup backfill — resolves all historical rows missing pitcher headshot IDs
     // Runs once on server start, non-fatal, no-ops if all rows already resolved
     import('../mlbKPropsModelService').then(({ backfillAllKPropsMlbamIds }) => {

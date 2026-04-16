@@ -1134,6 +1134,86 @@ export async function listOddsHistory(gameId: number): Promise<OddsHistoryRow[]>
   }
 }
 
+/**
+ * Backfill lineSource for historical oddsHistory rows that have lineSource = NULL.
+ * Uses the game's oddsSource field as the ground truth.
+ * Runs once at server startup; no-ops if all rows already have lineSource populated.
+ */
+export async function backfillOddsHistoryLineSource(): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn('[OddsHistory][BACKFILL] SKIP — DB not available');
+    return;
+  }
+  try {
+    // [STEP] Count rows needing backfill
+    const nullRows = await db
+      .select({ id: oddsHistory.id, gameId: oddsHistory.gameId })
+      .from(oddsHistory)
+      .where(isNull(oddsHistory.lineSource))
+      .limit(5000);
+
+    if (nullRows.length === 0) {
+      console.log('[OddsHistory][BACKFILL] SKIP — all rows already have lineSource populated');
+      return;
+    }
+
+    console.log(`[OddsHistory][BACKFILL][INPUT] Found ${nullRows.length} rows with null lineSource — resolving via game.oddsSource`);
+
+    // [STEP] Get unique gameIds from null rows
+    const gameIds = Array.from(new Set(nullRows.map((r: { id: number; gameId: number }) => r.gameId)));
+
+    // [STEP] Fetch oddsSource for all affected games in one query
+    const gameOddsSources = await db
+      .select({ id: games.id, oddsSource: games.oddsSource })
+      .from(games)
+      .where(sql`${games.id} IN (${sql.join(gameIds.map(id => sql`${id}`), sql`, `)})`);
+
+    const sourceMap = new Map<number, 'open' | 'dk' | null>();
+    for (const g of gameOddsSources) {
+      sourceMap.set(g.id, g.oddsSource as 'open' | 'dk' | null);
+    }
+
+    // [STEP] Batch update: group rows by resolved lineSource
+    let updated = 0;
+    let skipped = 0;
+    const dkIds: number[] = [];
+    const openIds: number[] = [];
+
+    for (const row of nullRows) {
+      const src = sourceMap.get(row.gameId);
+      if (src === 'dk') dkIds.push(row.id);
+      else if (src === 'open') openIds.push(row.id);
+      else skipped++;
+    }
+
+    // Batch update DK rows
+    if (dkIds.length > 0) {
+      await db
+        .update(oddsHistory)
+        .set({ lineSource: 'dk' })
+        .where(sql`${oddsHistory.id} IN (${sql.join(dkIds.map(id => sql`${id}`), sql`, `)})`);
+      updated += dkIds.length;
+    }
+
+    // Batch update OPEN rows
+    if (openIds.length > 0) {
+      await db
+        .update(oddsHistory)
+        .set({ lineSource: 'open' })
+        .where(sql`${oddsHistory.id} IN (${sql.join(openIds.map(id => sql`${id}`), sql`, `)})`);
+      updated += openIds.length;
+    }
+
+    console.log(
+      `[OddsHistory][BACKFILL][OUTPUT] COMPLETE — updated=${updated} skipped=${skipped} ` +
+      `(dk=${dkIds.length} open=${openIds.length}) total_null_rows=${nullRows.length}`
+    );
+  } catch (err) {
+    console.error('[OddsHistory][BACKFILL][VERIFY] FAIL:', err);
+  }
+}
+
 // ─── March Madness Bracket ────────────────────────────────────────────────────
 
 export interface BracketGameRow {

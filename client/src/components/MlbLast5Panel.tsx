@@ -389,7 +389,8 @@ export default function MlbLast5Panel({
       { awaySlug, homeSlug },
       {
         enabled,
-        staleTime: 5 * 60 * 1000, // 5 min
+        staleTime: 4 * 60 * 1000,       // 4 min — matches refresh interval
+        refetchInterval: 4 * 60 * 1000, // auto-poll every 4 min (keeps pace with schedule history scheduler)
         retry: 1,
       }
     );
