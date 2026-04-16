@@ -1735,11 +1735,20 @@ export function startVsinAutoRefresh() {
           `[MLBCycle] K-Props upsert: inserted=${upsertResult.inserted} updated=${upsertResult.updated} skipped=${upsertResult.skipped} errors=${upsertResult.errors}`
         );
         // Run K-Props model EV after upsert
-        const { modelKPropsForDate } = await import('./mlbKPropsModelService');
+        const { modelKPropsForDate, resolveKPropsMlbamIdsForDate } = await import('./mlbKPropsModelService');
         const kModelResult = await modelKPropsForDate(todayStr);
         console.log(
           `[MLBCycle] K-Props model EV: modeled=${kModelResult.modeled} edges=${kModelResult.edges} skipped=${kModelResult.skipped} errors=${kModelResult.errors}`
         );
+        // Auto-resolve MLBAM IDs for pitcher headshots — fires every cycle, no-ops if all IDs present
+        try {
+          const mlbamResult = await resolveKPropsMlbamIdsForDate(todayStr);
+          console.log(
+            `[MLBCycle] [MLBAM_BACKFILL] resolved=${mlbamResult.resolved} alreadyHad=${mlbamResult.alreadyHad} unresolved=${mlbamResult.unresolved} errors=${mlbamResult.errors}`
+          );
+        } catch (mlbamErr) {
+          console.warn('[MLBCycle] [MLBAM_BACKFILL] MLBAM ID resolution failed (non-fatal):', mlbamErr);
+        }
       }
 
       // 3. Run backtest for today's completed games

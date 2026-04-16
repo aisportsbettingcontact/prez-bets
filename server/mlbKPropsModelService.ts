@@ -388,6 +388,78 @@ export async function modelKPropsForDate(gameDate: string): Promise<KPropsModelR
   return { date: gameDate, modeled, edges, errors, skipped };
 }
 
+// ─── Resolve mlbamId for K-Props rows on a specific date (fast, targeted) ────
+/**
+ * Resolves MLBAM IDs only for K-Props rows on a given date that are missing
+ * their mlbamId. Called automatically after every modelKPropsForDate run.
+ * Fetches the MLB Stats API once per call; no-ops if all IDs already present.
+ */
+export async function resolveKPropsMlbamIdsForDate(gameDate: string): Promise<{
+  resolved: number;
+  alreadyHad: number;
+  unresolved: number;
+  errors: number;
+}> {
+  const RTAG = "[MLBAM_BACKFILL]";
+  const db = await getDb();
+  if (!db) return { resolved: 0, alreadyHad: 0, unresolved: 0, errors: 1 };
+
+  // Load only rows for this date that are missing mlbamId
+  const rows = await db
+    .select({ id: mlbStrikeoutProps.id, pitcherName: mlbStrikeoutProps.pitcherName, mlbamId: mlbStrikeoutProps.mlbamId })
+    .from(mlbStrikeoutProps)
+    .innerJoin(games, eq(mlbStrikeoutProps.gameId, games.id))
+    .where(eq(games.gameDate, gameDate));
+
+  type Row = { id: number; pitcherName: string; mlbamId: number | null };
+  const allRows = rows as Row[];
+  const alreadyHad = allRows.filter(r => r.mlbamId != null).length;
+  const needsResolution = allRows.filter(r => r.mlbamId == null);
+
+  console.log(`${RTAG} [INPUT] date=${gameDate} total=${allRows.length} alreadyHad=${alreadyHad} needsResolution=${needsResolution.length}`);
+
+  if (needsResolution.length === 0) {
+    console.log(`${RTAG} [VERIFY] PASS — all ${alreadyHad} rows already have mlbamId`);
+    return { resolved: 0, alreadyHad, unresolved: 0, errors: 0 };
+  }
+
+  const apiMap = await fetchMlbamIdMap();
+  if (apiMap.size === 0) {
+    console.error(`${RTAG} [ERROR] MLB Stats API returned 0 players — skipping`);
+    return { resolved: 0, alreadyHad, unresolved: needsResolution.length, errors: 1 };
+  }
+
+  let resolved = 0, unresolved = 0, errors = 0;
+
+  // Deduplicate by name
+  const nameToId = new Map<string, number | null>();
+  for (const row of needsResolution) {
+    const key = normalizeName(row.pitcherName);
+    if (!nameToId.has(key)) nameToId.set(key, apiMap.get(key) ?? null);
+  }
+
+  for (const row of needsResolution) {
+    const key = normalizeName(row.pitcherName);
+    const mlbamId = nameToId.get(key) ?? null;
+    if (mlbamId != null) {
+      try {
+        await db.update(mlbStrikeoutProps).set({ mlbamId }).where(eq(mlbStrikeoutProps.id, row.id));
+        resolved++;
+        console.log(`${RTAG} [OUTPUT] Resolved "${row.pitcherName}" -> mlbamId=${mlbamId}`);
+      } catch (err) {
+        console.error(`${RTAG} [ERROR] DB update failed for "${row.pitcherName}": ${err instanceof Error ? err.message : String(err)}`);
+        errors++;
+      }
+    } else {
+      console.warn(`${RTAG} [WARN] Could not resolve mlbamId for "${row.pitcherName}" (not in MLB Stats API 2025 roster)`);
+      unresolved++;
+    }
+  }
+
+  console.log(`${RTAG} [VERIFY] ${errors === 0 ? "PASS" : "WARN"} — resolved=${resolved} alreadyHad=${alreadyHad} unresolved=${unresolved} errors=${errors}`);
+  return { resolved, alreadyHad, unresolved, errors };
+}
+
 // ─── MLB Stats API: fetch all active player IDs ───────────────────────────────
 async function fetchMlbamIdMap(): Promise<Map<string, number>> {
   const map = new Map<string, number>();

@@ -328,6 +328,15 @@ async function startServer() {
     startSecurityDigestScheduler();
     // Weekly security threat trend digest — every Sunday at 08:00 EST, 7-day bar chart + top IPs
     startWeeklySecurityDigestScheduler();
+    // K-Props MLBAM ID startup backfill — resolves all historical rows missing pitcher headshot IDs
+    // Runs once on server start, non-fatal, no-ops if all rows already resolved
+    import('../mlbKPropsModelService').then(({ backfillAllKPropsMlbamIds }) => {
+      backfillAllKPropsMlbamIds()
+        .then((r: { resolved: number; alreadyHad: number; unresolved: number; errors: number }) =>
+          console.log(`[Startup] [MLBAM_BACKFILL] K-Props: resolved=${r.resolved} alreadyHad=${r.alreadyHad} unresolved=${r.unresolved} errors=${r.errors}`)
+        )
+        .catch((err: unknown) => console.warn('[Startup] [MLBAM_BACKFILL] K-Props startup backfill failed (non-fatal):', err));
+    }).catch((err: unknown) => console.warn('[Startup] [MLBAM_BACKFILL] Import failed (non-fatal):', err));
   });
 }
 

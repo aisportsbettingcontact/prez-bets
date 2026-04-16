@@ -2642,3 +2642,10 @@
 - [x] Add backfillKPropsMlbamIds ownerProcedure to server/routers.ts (mlbBacktest router)
 - [x] Add MLB HEADSHOT BACKFILL button to K-PROPS tab in TheModelResults admin UI
 - [x] TypeScript 0 errors, 487/487 tests passing
+
+## Auto-Populate MLBAM IDs — Full Pipeline Automation (Session: Apr 15, 2026)
+- [x] Auto-resolve MLBAM IDs immediately after K-Props rows are written (upsertStrikeoutProps pipeline)
+- [x] Wire MLBAM backfill into nightly K-Props cron (after model run, before DB write completes)
+- [x] Wire MLBAM backfill into server startup (alongside existing 60-day schedule backfill)
+- [x] Add structured logging: [MLBAM_BACKFILL] resolved/alreadyHad/unresolved/errors at every trigger point
+- [x] TypeScript 0 errors, all tests passing
