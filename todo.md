@@ -2707,3 +2707,10 @@
 - [x] Add [VERIFY] log after every NHL DB write confirming PL sign and total match
 - [x] Re-run NHL model for April 16: 6/6 games PASS (STL, ANA, SJS, LAK, VAN, SEA all corrected)
 - [x] 487/487 tests passing, 0 TypeScript errors
+
+## Session: 2026-04-16 - NHL PL Book Sign Fix (GameCard)
+
+- [x] Root cause: awayBookSpread in DB has wrong sign from AN API (5 of 6 April 16 games affected)
+- [x] Fix: GameCard odds-authoritative correction for NHL book spread display (_correctedAwaySpread/_correctedHomeSpread)
+- [x] DB audit: modelAwayPuckLine signs are 100% correct for all 6 April 16 NHL games
+- [x] 487/487 tests passing, 0 TypeScript errors

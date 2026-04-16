@@ -1959,11 +1959,40 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   const openHomeMlStr     = game.openHomeML ?? null;
   // ── Display strings: use awayBookSpread (DK line from AN HTML ingest) ─────
   const _spreadSign = (n: number) => n > 0 ? `+${n}` : String(n);
-  const _bkAwaySpreadStr = !isNaN(awayBookSpread)
-    ? (game.awaySpreadOdds ? `${_spreadSign(awayBookSpread)} (${game.awaySpreadOdds})` : _spreadSign(awayBookSpread))
+  // CRITICAL: For NHL, awayBookSpread in DB can have wrong sign (AN API stores from home perspective).
+  // Use awaySpreadOdds as the authoritative source for sign determination:
+  //   awaySpreadOdds > 0 (dog odds like +200) → away team is the dog → book spread must be +1.5
+  //   awaySpreadOdds < 0 (fav odds like -245) → away team is the fav → book spread must be -1.5
+  // This correction applies ONLY to the display label — the odds themselves are always correct.
+  const _correctedAwaySpread = (() => {
+    if (!isNhlGame || isNaN(awayBookSpread)) return awayBookSpread;
+    const awayOddsNum = game.awaySpreadOdds ? parseInt(game.awaySpreadOdds, 10) : NaN;
+    if (isNaN(awayOddsNum) || awayOddsNum === 0) return awayBookSpread;
+    // Dog odds are positive → spread must be +1.5; Fav odds are negative → spread must be -1.5
+    const correctSign = awayOddsNum > 0 ? 1 : -1;
+    const currentSign = awayBookSpread > 0 ? 1 : -1;
+    if (correctSign !== currentSign) {
+      console.log(`[GameCard][PL SIGN FIX] ${game.awayTeam}@${game.homeTeam}: awayBookSpread=${awayBookSpread} corrected to ${correctSign * 1.5} (awaySpreadOdds=${awayOddsNum})`);
+      return correctSign * Math.abs(awayBookSpread); // flip sign, keep magnitude
+    }
+    return awayBookSpread;
+  })();
+  const _correctedHomeSpread = (() => {
+    if (!isNhlGame || isNaN(homeBookSpread)) return homeBookSpread;
+    const homeOddsNum = game.homeSpreadOdds ? parseInt(game.homeSpreadOdds, 10) : NaN;
+    if (isNaN(homeOddsNum) || homeOddsNum === 0) return homeBookSpread;
+    const correctSign = homeOddsNum > 0 ? 1 : -1;
+    const currentSign = homeBookSpread > 0 ? 1 : -1;
+    if (correctSign !== currentSign) {
+      return correctSign * Math.abs(homeBookSpread);
+    }
+    return homeBookSpread;
+  })();
+  const _bkAwaySpreadStr = !isNaN(_correctedAwaySpread)
+    ? (game.awaySpreadOdds ? `${_spreadSign(_correctedAwaySpread)} (${game.awaySpreadOdds})` : _spreadSign(_correctedAwaySpread))
     : '—';
-  const _bkHomeSpreadStr = !isNaN(homeBookSpread)
-    ? (game.homeSpreadOdds ? `${_spreadSign(homeBookSpread)} (${game.homeSpreadOdds})` : _spreadSign(homeBookSpread))
+  const _bkHomeSpreadStr = !isNaN(_correctedHomeSpread)
+    ? (game.homeSpreadOdds ? `${_spreadSign(_correctedHomeSpread)} (${game.homeSpreadOdds})` : _spreadSign(_correctedHomeSpread))
     : '—';
   const _bkOver  = !isNaN(bookTotal)
     ? (game.overOdds  ? `${bookTotal} (${game.overOdds})`  : String(bookTotal))
