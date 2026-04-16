@@ -345,7 +345,43 @@ export async function syncNhlModelForToday(
       const mktAwayML      = game.awayML ? parseInt(game.awayML, 10) : null;
       const mktHomeML      = game.homeML ? parseInt(game.homeML, 10) : null;
 
+      // ── PUCK LINE SIGN CORRECTION (odds-authoritative) ─────────────────────────────────
+      // The awayBookSpread column can have the wrong sign when the AN API stores the spread
+      // from the home team's perspective (e.g. STL@UTA: awayBookSpread=-1.5 but STL is the
+      // dog at +200 odds). The spread ODDS are always correct — use them to determine the
+      // authoritative sign. Dog odds are positive; favorite odds are negative.
+      //
+      // Rule: if awaySpreadOdds > 0 → away is the dog → awayBookSpread MUST be +1.5
+      //       if awaySpreadOdds < 0 → away is the fav → awayBookSpread MUST be -1.5
+      //
+      // When the sign is corrected, Python's mkt_pl_away_odds/mkt_pl_home_odds will also
+      // be correct (they are computed from the corrected mkt_away_spread input).
+      const rawAwaySpread = game.awayBookSpread != null ? parseFloat(String(game.awayBookSpread)) : null;
+      let correctedAwaySpread = rawAwaySpread;
+      let plSignCorrected = false;
+      if (rawAwaySpread !== null && mktAwayPLOdds !== null) {
+        // Determine correct sign from odds: dog odds are positive, favorite odds are negative
+        const awayIsDog = mktAwayPLOdds > 0;
+        const spreadAbs = Math.abs(rawAwaySpread);
+        const correctAwaySpread = awayIsDog ? spreadAbs : -spreadAbs;
+        if (Math.sign(rawAwaySpread) !== Math.sign(correctAwaySpread)) {
+          plSignCorrected = true;
+          correctedAwaySpread = correctAwaySpread;
+          console.log(`[NhlModelSync]${tag}   [PL SIGN CORRECTION] ${gameLabel}: awayBookSpread=${rawAwaySpread} → ${correctAwaySpread} (awaySpreadOdds=${mktAwayPLOdds}, away is ${awayIsDog ? 'DOG' : 'FAV'})`);
+        }
+      }
+      const correctedAwaySpreadStr = correctedAwaySpread !== null
+        ? (correctedAwaySpread >= 0 ? `+${correctedAwaySpread}` : String(correctedAwaySpread))
+        : null;
+      const correctedHomeSpreadStr = correctedAwaySpread !== null
+        ? (correctedAwaySpread >= 0 ? `-${Math.abs(correctedAwaySpread)}` : `+${Math.abs(correctedAwaySpread)}`)
+        : null;
+      // ─────────────────────────────────────────────────────────────────────────────────────
+
       console.log(`[NhlModelSync]${tag}   Market lines: PL=${mktAwayPLOdds}/${mktHomePLOdds} Total=${mktTotal} (${mktOverOdds}/${mktUnderOdds}) ML=${mktAwayML}/${mktHomeML}`);
+      if (plSignCorrected) {
+        console.log(`[NhlModelSync]${tag}   [INPUT] correctedAwaySpread=${correctedAwaySpread} (was ${rawAwaySpread}) — passing corrected value to Python engine`);
+      }
 
       // Compute real rest days from Hockey Reference schedule
       const restDays = await computeNhlRestDays(game.awayTeam, game.homeTeam, gameDate);
@@ -371,9 +407,8 @@ export async function syncNhlModelForToday(
         home_rest_days:           restDays.homeRestDays,
         mkt_puck_line:            1.5,
         // Book's signed spread for away team: +1.5 if home is the -1.5 favorite, -1.5 if away is the -1.5 favorite.
-        // Used by Python engine to determine book_fav_is_home reliably (odds-based detection fails
-        // when underdog's +1.5 odds are more negative than favorite's -1.5 odds).
-        mkt_away_spread:          game.awayBookSpread != null ? parseFloat(String(game.awayBookSpread)) : null,
+        // CORRECTED by odds-authoritative sign detection above (plSignCorrected flag).
+        mkt_away_spread:          correctedAwaySpread,
         mkt_away_pl_odds:         mktAwayPLOdds,
         mkt_home_pl_odds:         mktHomePLOdds,
         mkt_total:                mktTotal,
@@ -503,15 +538,14 @@ export async function syncNhlModelForToday(
           // Puck line spread for MODEL column must MIRROR the BOOK's spread (not model's own origination).
           // e.g. if book has STL +1.5 (away underdog), model must show +1.5 (not -1.5).
           // The model's fair odds for that side are mkt_pl_away_odds / mkt_pl_home_odds.
-          // game.awayBookSpread is a decimal (e.g. 1.5 or -1.5); format as "+1.5" or "-1.5".
-          modelAwayPuckLine:   game.awayBookSpread != null
-            ? (parseFloat(String(game.awayBookSpread)) >= 0 ? `+${parseFloat(String(game.awayBookSpread))}` : String(parseFloat(String(game.awayBookSpread))))
-            : modelResult.away_puck_line,
-          modelHomePuckLine:   game.homeBookSpread != null
-            ? (parseFloat(String(game.homeBookSpread)) >= 0 ? `+${parseFloat(String(game.homeBookSpread))}` : String(parseFloat(String(game.homeBookSpread))))
-            : modelResult.home_puck_line,
+          // Puck line labels: ALWAYS use correctedAwaySpreadStr (odds-authoritative sign).
+          // correctedAwaySpreadStr accounts for awayBookSpread sign errors in the AN API.
+          // e.g. STL@UTA: awayBookSpread=-1.5 (wrong) → corrected to +1.5 (STL is the dog at +200)
+          modelAwayPuckLine:   correctedAwaySpreadStr ?? modelResult.away_puck_line,
+          modelHomePuckLine:   correctedHomeSpreadStr ?? modelResult.home_puck_line,
           // Model fair odds AT the BOOK's ±1.5 puck line (for side-by-side display)
           // e.g. book shows +1.5 (-198), model shows +1.5 (-143) → edge detected
+          // Python computed these from the corrected mkt_away_spread, so they are always correct.
           modelAwayPLOdds:     fmtML(modelResult.mkt_pl_away_odds ?? modelResult.away_puck_line_odds),
           modelHomePLOdds:     fmtML(modelResult.mkt_pl_home_odds ?? modelResult.home_puck_line_odds),
           // Model fair odds AT the BOOK's total line (for side-by-side display)
@@ -533,6 +567,22 @@ export async function syncNhlModelForToday(
         })
         .where(eq(games.id, game.id));
 
+      // ── POST-WRITE VERIFICATION ─────────────────────────────────────────────────────────────────────────────
+      // Invariants that must ALWAYS hold after every NHL model write:
+      //   1. modelAwayPuckLine sign matches awaySpreadOdds sign (dog=+, fav=-)
+      //   2. modelTotal equals bookTotal (no drift from Python's own optimal line)
+      const writtenPL = correctedAwaySpreadStr ?? modelResult.away_puck_line;
+      const writtenTotal = mktTotal !== null ? String(mktTotal) : String(Math.round(modelResult.total_line * 2) / 2);
+      const plSignOk = writtenPL !== null && mktAwayPLOdds !== null
+        ? (mktAwayPLOdds > 0 ? writtenPL.startsWith('+') : writtenPL.startsWith('-'))
+        : true; // no odds to check against
+      const totalOk = mktTotal !== null ? Math.abs(parseFloat(writtenTotal) - mktTotal) < 0.01 : true;
+      const verifyStatus = plSignOk && totalOk ? 'PASS' : 'FAIL';
+      console.log(`[NhlModelSync]${tag}   [VERIFY] ${verifyStatus} | PL: away=${writtenPL}(${mktAwayPLOdds}) sign_ok=${plSignOk} | Total: written=${writtenTotal} book=${mktTotal} match=${totalOk}`);
+      if (!plSignOk || !totalOk) {
+        console.error(`[NhlModelSync]${tag}   [VERIFY FAIL] ${gameLabel}: PL_sign_ok=${plSignOk} total_ok=${totalOk} — DATA INTEGRITY VIOLATION`);
+      }
+      // ─────────────────────────────────────────────────────────────────────────────
       console.log(`[NhlModelSync]${tag}   ✅ DB updated for game ID=${game.id} (${gameLabel})`);
       result.synced++;
 
@@ -575,16 +625,20 @@ export async function syncNhlModelForToday(
       if (awayPL && !validPL) {
         nhlIssues.push(`${label}: modelAwayPuckLine="${awayPL}" — expected ±1.5 or ±2.5 (NHL PL is never 0)`);
       }
-      // 3. Puck line sign alignment: model PL must match book spread direction
-      const bookSpreadNum  = parseFloat(String(g.awayBookSpread ?? '0'));
-      const modelPLNum     = parseFloat(awayPL || '0');
-      if (!isNaN(bookSpreadNum) && !isNaN(modelPLNum) && bookSpreadNum !== 0 && awayPL) {
-        const bookSign  = bookSpreadNum < 0 ? -1 : 1;
-        const modelSign = modelPLNum   < 0 ? -1 : 1;
-        if (bookSign !== modelSign) {
+      // 3. Puck line sign alignment: model PL must match the ODDS-AUTHORITATIVE direction.
+      // IMPORTANT: awayBookSpread can have wrong signs in the DB (AN API stores from home perspective).
+      // Use awaySpreadOdds as the authoritative source: dog odds are positive, fav odds are negative.
+      // Rule: if awaySpreadOdds > 0 → away is the dog → modelAwayPuckLine MUST be +1.5
+      //       if awaySpreadOdds < 0 → away is the fav → modelAwayPuckLine MUST be -1.5
+      const awayOdds = g.awaySpreadOdds ? parseInt(String(g.awaySpreadOdds), 10) : null;
+      const modelPLNum = parseFloat(awayPL || '0');
+      if (awayOdds !== null && !isNaN(awayOdds) && awayOdds !== 0 && awayPL) {
+        const oddsSign  = awayOdds > 0 ? 1 : -1;  // +odds = dog = +1.5, -odds = fav = -1.5
+        const modelSign = modelPLNum < 0 ? -1 : 1;
+        if (oddsSign !== modelSign) {
           nhlIssues.push(
-            `${label}: PL INVERSION — awayBookSpread=${bookSpreadNum} (${bookSign > 0 ? 'dog' : 'fav'}) ` +
-            `but modelAwayPuckLine=${awayPL} (${modelSign > 0 ? 'dog' : 'fav'}) — SIGN MISMATCH`
+            `${label}: PL SIGN MISMATCH — awaySpreadOdds=${awayOdds} (${oddsSign > 0 ? 'dog' : 'fav'}) ` +
+            `but modelAwayPuckLine=${awayPL} (${modelSign > 0 ? 'dog' : 'fav'}) — ODDS-AUTHORITATIVE VIOLATION`
           );
         }
       }

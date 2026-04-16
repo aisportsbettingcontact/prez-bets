@@ -27,6 +27,29 @@ import sys
 import math
 import time
 import warnings
+import subprocess
+import importlib
+
+# ── DEPENDENCY GUARD: scipy must always be present ────────────────────────────
+def _ensure_scipy() -> None:
+    """Auto-install scipy if missing. Prevents ModuleNotFoundError at runtime."""
+    try:
+        importlib.import_module('scipy')
+    except ModuleNotFoundError:
+        print('[STARTUP] scipy not found — auto-installing...', flush=True)
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', 'scipy', '-q'],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            print(f'[STARTUP] FATAL: scipy install failed: {result.stderr}', flush=True)
+            sys.exit(1)
+        print('[STARTUP] scipy installed successfully', flush=True)
+        importlib.invalidate_caches()
+
+_ensure_scipy()
+# ─────────────────────────────────────────────────────────────────────────────
+
 import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple

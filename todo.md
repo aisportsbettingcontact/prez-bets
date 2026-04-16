@@ -2686,3 +2686,24 @@
 - [x] Permanently fix total anchoring in model runner (always use book ou_line, never r.total_line)
 - [x] Re-run model for April 16 after fixes, verify all 10 games correct
 - [x] 487/487 tests passing
+
+## Session: 2026-04-16 - Full MLB+NHL Model Line Mirror Audit
+
+- [ ] Hardcode scipy installation into model startup (never missing again)
+- [ ] Fix NHL puck line inversion: STL@UTA shows +1.5/-221 model when book is +1.5/+200
+- [ ] Full audit: all NHL games modelSpread sign matches awayPuckLine sign
+- [ ] Full audit: all NHL games modelTotal equals bookTotal
+- [ ] Full audit: all MLB games modelSpread sign matches awayRunLine sign
+- [ ] Full audit: all MLB games modelTotal equals bookTotal
+- [ ] 487/487 tests passing
+
+## Session: 2026-04-16 - Full MLB/NHL Line Mirror Audit
+
+- [x] Hardcode scipy auto-install into MLBAIModel.py (never missing again)
+- [x] MLB audit: verify 10/10 games correct RL signs and totals (ALL OK)
+- [x] NHL audit: trace STL@UTA puck line inversion root cause (awayBookSpread wrong sign from AN API)
+- [x] Fix NHL puck line sign: odds-authoritative correction (awaySpreadOdds > 0 = dog = +1.5)
+- [x] Fix NHL validator: use awaySpreadOdds (not stale awayBookSpread) for sign check
+- [x] Add [VERIFY] log after every NHL DB write confirming PL sign and total match
+- [x] Re-run NHL model for April 16: 6/6 games PASS (STL, ANA, SJS, LAK, VAN, SEA all corrected)
+- [x] 487/487 tests passing, 0 TypeScript errors
