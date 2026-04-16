@@ -26,7 +26,7 @@ import { toast } from "sonner";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/lib/trpc";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
-import { NHL_BY_DB_SLUG } from "@shared/nhlTeams";
+import { NHL_BY_DB_SLUG, NHL_BY_ABBREV } from "@shared/nhlTeams";
 import { MLB_BY_ABBREV } from "@shared/mlbTeams";
 import { getGameTeamColorsClient } from "@shared/teamColors";
 import { useVisibility } from "@/hooks/useVisibility";
@@ -156,13 +156,57 @@ function parseSideFromLabel(label: string | null | undefined): string | null {
 }
 
 // ── Normalize edge label ──────────────────────────────────────────────────────
+// Strips bracket classification tags like [ELITE EDGE], [STRONG EDGE], [SMALL EDGE], etc.
+// Also resolves NBA db slugs (e.g. "los_angeles_lakers") to display names.
+// NHL labels: "UTA +1.5 [ELITE EDGE]" → "UTA +1.5"
+// NBA labels: "los_angeles_lakers (+2.5)" → "Los Angeles Lakers (+2.5)"
 function normalizeEdgeLabel(label: string | null | undefined): string {
   if (!label || label.toUpperCase() === "PASS") return "PASS";
-  return label.replace(/^([a-z][a-z0-9_]*)(\s+\()/i, (_, slug, rest) => {
+  // Strip bracket classification tags: [ELITE EDGE], [STRONG EDGE], [PLAYABLE EDGE], [SMALL EDGE], [LEAN], etc.
+  let normalized = label.replace(/\s*\[[^\]]*\]/g, '').trim();
+  // Resolve NBA db slugs (e.g. "los_angeles_lakers (+2.5)")
+  normalized = normalized.replace(/^([a-z][a-z0-9_]*)(\s+\()/i, (_, slug, rest) => {
     const nba = getNbaTeamByDbSlug(slug);
     if (nba) return nba.name + rest;
     return slug.replace(/_/g, " ") + rest;
   });
+  return normalized;
+}
+
+// ── Parse team abbreviation from edge label ───────────────────────────────────
+// NHL edge labels: "UTA +1.5 [ELITE EDGE]" → "UTA"
+// NBA edge labels: "los_angeles_lakers (+2.5)" → null (uses slug matching)
+// Returns the 2-3 char uppercase abbreviation if present, otherwise null.
+function parseAbbrFromEdgeLabel(label: string | null | undefined): string | null {
+  if (!label || label.toUpperCase() === 'PASS') return null;
+  // Match 2-4 uppercase letters at the start of the label (e.g. "UTA", "STL", "NSH")
+  const m = label.match(/^([A-Z]{2,4})\s/);
+  return m ? m[1] : null;
+}
+
+// ── Determine if edge label refers to the away team ───────────────────────────
+// AUTHORITATIVE for NHL: parse abbrev from label, compare to awayAbbr.
+// Fallback for NBA/MLB: use normalizeEdgeLabel().startsWith(awayDisplayName).
+// This replaces the flawed "+1.5" string check which fails for home favorites.
+function edgeLabelIsAway(
+  label: string | null | undefined,
+  awayAbbr: string,
+  awayDisplayName: string | undefined,
+  sport: string
+): boolean {
+  if (!label || label.toUpperCase() === 'PASS') return false;
+  if (sport === 'NHL' || sport === 'MLB') {
+    const abbr = parseAbbrFromEdgeLabel(label);
+    if (abbr) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`%c[edgeLabelIsAway] sport=${sport} label="${label}" abbr=${abbr} awayAbbr=${awayAbbr} → ${abbr === awayAbbr}`, 'color:#FF9900;font-size:9px');
+      }
+      return abbr === awayAbbr;
+    }
+  }
+  // NBA fallback: display name match
+  const normalized = normalizeEdgeLabel(label);
+  return awayDisplayName ? normalized.toLowerCase().startsWith(awayDisplayName.toLowerCase()) : false;
 }
 
 // ── TeamLogo ──────────────────────────────────────────────────────────────────
@@ -379,9 +423,12 @@ function EdgeVerdict({
   const spreadIsStronger = (spreadDiff ?? 0) >= (totalDiff ?? 0);
 
   // Determine which team logo to show for the spread edge
-  // The spread edge label starts with the team's display name
-  const spreadEdgeIsAway = spreadEdge && awayDisplayName
-    ? normalizeEdgeLabel(spreadEdge).toLowerCase().startsWith(awayDisplayName.toLowerCase())
+  // Use edgeLabelIsAway: for NHL/MLB parses abbrev from label; for NBA uses display name match.
+  // Resolve official abbreviation from DB slug via NHL_BY_DB_SLUG (e.g. "utah_mammoth" → "UTA").
+  // [VERIFY] This replaces the flawed "+1.5" check and the startsWith(displayName) check.
+  const awayAbbrForVerdict = (awaySlug ? (NHL_BY_DB_SLUG.get(awaySlug)?.abbrev ?? awaySlug.split('_').map(w=>w[0]?.toUpperCase()||'').join('')) : '');
+  const spreadEdgeIsAway = spreadEdge
+    ? edgeLabelIsAway(spreadEdge, awayAbbrForVerdict, awayDisplayName, 'NHL')
     : false;
   const spreadLogoUrl = spreadEdgeIsAway ? awayLogoUrl : homeLogoUrl;
   const spreadSlug = spreadEdgeIsAway ? awaySlug : homeSlug;
@@ -822,16 +869,19 @@ function DesktopMergedPanel({
   // For NHL: puck line is always ±1.5 or ±2.5 from the simulation.
   // Comparing mdlAwaySpread < awaySpread is meaningless (both are ±1.5).
   // Edge direction is determined by the Python engine and stored in computedSpreadEdge.
+  // AUTHORITATIVE: parse team abbreviation from the edge label, compare to awayAbbr.
+  // This replaces the flawed "+1.5" string check (fails for home favorites like "COL -1.5 [STRONG EDGE]").
+  const awayAbbrDesktop = awayAbbr; // awayAbbr is resolved from NHL_BY_DB_SLUG via getGameTeamColorsClient
   const spreadEdgeIsAway = (() => {
     if (isNaN(spreadDiff) || spreadDiff <= 0) return null;
     if (isNhlGame) {
-      // For NHL: parse edge direction from computedSpreadEdge string (e.g. "MTL +1.5 [LEAN]")
-      // The Python engine sets spreadEdge to the team that has the probability edge.
-      // We detect away by checking if the edge string contains the away team name.
       if (!computedSpreadEdge || computedSpreadEdge === 'PASS') return null;
-      // computedSpreadEdge format: "TEAM_NAME +1.5 [CLASS]" or "TEAM_NAME -1.5 [CLASS]"
-      // Away edge = contains "+1.5" (away is always the underdog getting +1.5)
-      return computedSpreadEdge.includes('+1.5') || computedSpreadEdge.includes('+2.5');
+      // Use edgeLabelIsAway: parses abbrev from label (e.g. "UTA" from "UTA +1.5 [ELITE EDGE]")
+      // and compares to awayAbbr (e.g. "STL" for st_louis_blues).
+      // [VERIFY] "COL -1.5 [STRONG EDGE]" → abbr="COL", awayAbbr="SEA" → false (home edge) ✅
+      // [VERIFY] "UTA +1.5 [ELITE EDGE]" → abbr="UTA", awayAbbr="STL" → false (home edge) ✅
+      // [VERIFY] "SJS +1.5 [STRONG EDGE]" → abbr="SJS", awayAbbr="SJS" → true (away edge) ✅
+      return edgeLabelIsAway(computedSpreadEdge, awayAbbrDesktop, awayDisplayName, sport);
     }
     if (!isNaN(mdlAwaySpread) && !isNaN(awaySpread)) return mdlAwaySpread < awaySpread;
     return null;
@@ -882,8 +932,40 @@ function DesktopMergedPanel({
   const homeSpreadModelStyle = showModel ? (hasSpreadEdge && !spreadEdgeIsAway ? modelGreen : modelWhite) : dimCell;
   const overTotalModelStyle  = showModel ? (hasTotalEdge  && totalEdgeIsOver   ? modelGreen : modelWhite) : dimCell;
   const underTotalModelStyle = showModel ? (hasTotalEdge  && !totalEdgeIsOver  ? modelGreen : modelWhite) : dimCell;
-  const awayMlModelStyle     = showModel ? (hasSpreadEdge && spreadEdgeIsAway  ? modelGreen : modelWhite) : dimCell;
-  const homeMlModelStyle     = showModel ? (hasSpreadEdge && !spreadEdgeIsAway ? modelGreen : modelWhite) : dimCell;
+
+  // ── ML edge detection ──────────────────────────────────────────────────────
+  // ML edge direction must match spread edge direction (same team that covers the spread
+  // is also the team to back on the ML).
+  // Compute ML edge pp independently from book/model ML odds.
+  const bkAwayMlNum = toNum(awayMl);
+  const bkHomeMlNum = toNum(homeMl);
+  const mdlAwayMlNum = toNum(modelAwayML);
+  const mdlHomeMlNum = toNum(modelHomeML);
+  const awayMlEdgePP = calculateEdge(bkAwayMlNum, mdlAwayMlNum);
+  const homeMlEdgePP = calculateEdge(bkHomeMlNum, mdlHomeMlNum);
+  // ML edge exists when the model-favored side (matching spread edge direction) has positive pp
+  const mlEdgePP = spreadEdgeIsAway === true ? awayMlEdgePP
+    : spreadEdgeIsAway === false ? homeMlEdgePP
+    : NaN;
+  const hasMlEdge = !isNaN(mlEdgePP) && mlEdgePP > 0.5;
+  // ML edge display label: "TEAM ABBR ML" (e.g. "UTA ML" or "STL ML")
+  const mlEdgeLabel = spreadEdgeIsAway === true ? `${awayAbbr} ML`
+    : spreadEdgeIsAway === false ? `${homeAbbr} ML`
+    : null;
+  const mlEdgeLogoUrl = spreadEdgeIsAway === true ? awayLogoUrl : homeLogoUrl;
+  const mlEdgeSlug    = spreadEdgeIsAway === true ? awaySlug : homeSlug;
+  const mlEdgeTeam    = spreadEdgeIsAway === true ? awayDisplayName : homeDisplayName;
+  if (process.env.NODE_ENV === 'development' && (!isNaN(awayMlEdgePP) || !isNaN(homeMlEdgePP))) {
+    console.log(
+      `%c[ML EDGE] ${game.awayTeam}@${game.homeTeam} spreadEdgeIsAway=${spreadEdgeIsAway} ` +
+      `awayMlEdgePP=${isNaN(awayMlEdgePP)?'NaN':awayMlEdgePP.toFixed(2)} ` +
+      `homeMlEdgePP=${isNaN(homeMlEdgePP)?'NaN':homeMlEdgePP.toFixed(2)} ` +
+      `mlEdgePP=${isNaN(mlEdgePP)?'NaN':mlEdgePP.toFixed(2)} hasMlEdge=${hasMlEdge}`,
+      'color:#00BFFF;font-size:9px'
+    );
+  }
+  const awayMlModelStyle     = showModel ? (hasMlEdge && spreadEdgeIsAway === true  ? modelGreen : modelWhite) : dimCell;
+  const homeMlModelStyle     = showModel ? (hasMlEdge && spreadEdgeIsAway === false ? modelGreen : modelWhite) : dimCell;
 
   // ── Splits data ───────────────────────────────────────────────────────────
   const awaySpreadLabel = !isNaN(awaySpread) ? `${awayAbbr} (${spreadSign(awaySpread)})` : awayAbbr;
@@ -1096,8 +1178,10 @@ function DesktopMergedPanel({
   const spreadPass = normalizeEdgeLabel(computedSpreadEdge) === 'PASS' || (spreadDiff ?? 0) <= 0;
   const totalPass  = normalizeEdgeLabel(computedTotalEdge)  === 'PASS' || (totalDiff  ?? 0) <= 0;
   const spreadIsStronger = (spreadDiff ?? 0) >= (totalDiff ?? 0);
-  const spreadEdgeIsAwayForVerdict = computedSpreadEdge && awayDisplayName
-    ? normalizeEdgeLabel(computedSpreadEdge).toLowerCase().startsWith(awayDisplayName.toLowerCase())
+  // Use edgeLabelIsAway for the edge panel logo — same authoritative abbrev-based detection.
+  // awayAbbr is already resolved from NHL_BY_DB_SLUG via getGameTeamColorsClient above.
+  const spreadEdgeIsAwayForVerdict = computedSpreadEdge
+    ? edgeLabelIsAway(computedSpreadEdge, awayAbbr, awayDisplayName, sport)
     : false;
   const spreadLogoUrl = spreadEdgeIsAwayForVerdict ? awayLogoUrl : homeLogoUrl;
   const spreadVerdictSlug = spreadEdgeIsAwayForVerdict ? awaySlug : homeSlug;
@@ -1151,38 +1235,41 @@ function DesktopMergedPanel({
       <div style={{ width: 1, background: 'rgba(255,255,255,0.12)', flexShrink: 0, alignSelf: 'stretch' }} />
       {/* EdgeVerdict column */}
       {showModel ? (
-        <div className="flex flex-col items-start justify-center" style={{ flex: '0 0 clamp(120px,11.5vw,190px)', width: 'clamp(120px,11.5vw,190px)', padding: '10px 12px', gap: 0 }}>
+        <div className="flex flex-col items-start justify-center" style={{ flex: '0 0 clamp(148px,13vw,210px)', width: 'clamp(148px,13vw,210px)', padding: '10px 10px', gap: 0 }}>
           {/* EDGE header */}
           <span style={{ fontSize: 'clamp(9px,0.7vw,11px)', fontWeight: 800, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8, alignSelf: 'center' }}>EDGE</span>
-          {spreadPass && totalPass ? (
+          {spreadPass && totalPass && !hasMlEdge ? (
             <div style={{ alignSelf: 'center', padding: '4px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 600, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.1em' }}>PASS</span>
             </div>
           ) : (
             <div className="flex flex-col w-full" style={{ gap: 6 }}>
+              {/* ── Spread / Puck Line / Run Line edge row ────────────────────────────── */}
               {!spreadPass && (() => {
                 const diff = isNaN(spreadDiff) ? null : spreadDiff;
                 const edgeColor = getEdgeColor(diff ?? 0);
                 const normalized = normalizeEdgeLabel(computedSpreadEdge);
                 const showArrow = (diff ?? 0) >= 3;
+                const mktLabel = sport === 'NHL' ? 'PUCK LINE' : sport === 'MLB' ? 'RUN LINE' : 'SPREAD';
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '5px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: `1px solid ${edgeColor}33` }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
                       {(spreadLogoUrl || spreadVerdictSlug) && (
                         <TeamLogo slug={spreadVerdictSlug ?? ''} name={spreadVerdictTeam ?? ''} logoUrl={spreadLogoUrl} size={16} />
                       )}
-                      <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 700, color: 'hsl(var(--foreground))', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span style={{ fontSize: 'clamp(9px,0.78vw,12px)', fontWeight: 700, color: 'hsl(var(--foreground))', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
                         {showArrow && <span style={{ color: edgeColor, marginRight: 2, fontSize: '0.8em' }}>▲</span>}
                         {normalized}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 'clamp(8px,0.65vw,10px)', color: 'rgba(255,255,255,0.35)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Spread</span>
-                      <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff}{diff === 1 ? 'PT' : 'PTS'}</span>
+                      <span style={{ fontSize: 'clamp(8px,0.65vw,10px)', color: 'rgba(255,255,255,0.35)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{mktLabel}</span>
+                      <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff !== null ? `${diff}${diff === 1 ? 'PT' : 'PTS'}` : '—'}</span>
                     </div>
                   </div>
                 );
               })()}
+              {/* ── Total edge row ──────────────────────────────────────────────────────── */}
               {!totalPass && (() => {
                 const diff = isNaN(totalDiff) ? null : totalDiff;
                 const edgeColor = getEdgeColor(diff ?? 0);
@@ -1190,14 +1277,37 @@ function DesktopMergedPanel({
                 const showArrow = (diff ?? 0) >= 3;
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '5px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: `1px solid ${edgeColor}33` }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 700, color: 'hsl(var(--foreground))', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                      <span style={{ fontSize: 'clamp(9px,0.78vw,12px)', fontWeight: 700, color: 'hsl(var(--foreground))', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
                         {showArrow && <span style={{ color: edgeColor, marginRight: 2, fontSize: '0.8em' }}>▲</span>}
                         {normalized}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 'clamp(8px,0.65vw,10px)', color: 'rgba(255,255,255,0.35)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Total</span>
+                      <span style={{ fontSize: 'clamp(8px,0.65vw,10px)', color: 'rgba(255,255,255,0.35)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>TOTAL</span>
+                      <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff !== null ? `${diff}${diff === 1 ? 'PT' : 'PTS'}` : '—'}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* ── ML edge row (shown when spread edge exists and ML edge pp > 0.5) ─────────── */}
+              {hasMlEdge && mlEdgeLabel && (() => {
+                const diff = Math.round(mlEdgePP * 10) / 10;
+                const edgeColor = getEdgeColor(diff);
+                const showArrow = diff >= 3;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '5px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: `1px solid ${edgeColor}33` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                      {(mlEdgeLogoUrl || mlEdgeSlug) && (
+                        <TeamLogo slug={mlEdgeSlug ?? ''} name={mlEdgeTeam ?? ''} logoUrl={mlEdgeLogoUrl} size={16} />
+                      )}
+                      <span style={{ fontSize: 'clamp(9px,0.78vw,12px)', fontWeight: 700, color: 'hsl(var(--foreground))', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
+                        {showArrow && <span style={{ color: edgeColor, marginRight: 2, fontSize: '0.8em' }}>▲</span>}
+                        {mlEdgeLabel}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 'clamp(8px,0.65vw,10px)', color: 'rgba(255,255,255,0.35)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>MONEYLINE</span>
                       <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff}{diff === 1 ? 'PT' : 'PTS'}</span>
                     </div>
                   </div>
@@ -3037,13 +3147,17 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
             }
 
                // ── Edge direction helpers ────────────────────────────────────
+            // AUTHORITATIVE: use edgeLabelIsAway for NHL/MLB — parses abbrev from label.
+            // awayAbbr is resolved from NHL_BY_DB_SLUG via makeCityAbbr (see above).
             const spreadEdgeIsAway = (() => {
               if (isNaN(spreadDiff) || spreadDiff <= 0) return null;
               // For NHL: puck line is always ±1.5/±2.5 from simulation.
               // Line arithmetic is invalid — use computedSpreadEdge (from Python engine P(margin>=2)).
               if (isNhlGame) {
                 if (!computedSpreadEdge || computedSpreadEdge === 'PASS') return null;
-                return computedSpreadEdge.includes('+1.5') || computedSpreadEdge.includes('+2.5');
+                // [FIX] Replace flawed '+1.5' string check with abbrev-based detection.
+                // '+1.5' check fails for home favorites (e.g. 'COL -1.5 [STRONG EDGE]' is home edge).
+                return edgeLabelIsAway(computedSpreadEdge, awayAbbr, awayDisplayName, 'NHL');
               }
               if (!isNaN(awayModelSpread) && !isNaN(awayBookSpread)) return awayModelSpread < awayBookSpread;
               return null;
