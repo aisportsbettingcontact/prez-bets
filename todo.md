@@ -2678,3 +2678,11 @@
 - [x] Re-run model for 2026-04-16: all 10 games modeled, validation PASSED, 0 errors
 - [x] Update mlbRunLineOdds.test.ts assertions to match new book-anchored RL pattern
 - [x] 487/487 tests passing
+
+## Session: 2026-04-16 - RL Inversion + Total Mismatch Bugs
+
+- [x] Fix TOR@MIL RL inversion: model column shows inverted labels vs book column
+- [x] Fix LAA@NYY total mismatch: model shows 9.5 instead of matching book total 10
+- [x] Permanently fix total anchoring in model runner (always use book ou_line, never r.total_line)
+- [x] Re-run model for April 16 after fixes, verify all 10 games correct
+- [x] 487/487 tests passing

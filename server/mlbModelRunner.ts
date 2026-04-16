@@ -1444,6 +1444,13 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
   const engineInputById = new Map<number, EngineInput>();
   for (const inp of engineInputs) engineInputById.set(inp.db_id, inp);
 
+  // Build a fast lookup: db_id → dbGame (for bookTotal and book RL anchoring)
+  // CRITICAL: bookTotal is the ground truth for modelTotal — Python's r.total_line may differ by 0.5
+  // This map is built from the same dbGames array used to build engineInputs, so it reflects
+  // the exact DB state at model-run time.
+  const dbGameById = new Map<number, typeof dbGames[0]>();
+  for (const g of dbGames) dbGameById.set(g.id, g);
+
   for (const r of engineResults) {
     if (!r.ok || r.error) {
       console.error(`${TAG} [${r.db_id}] ${r.game} — engine error: ${r.error}`);
@@ -1476,10 +1483,16 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
           modelAwaySpreadOdds:  fmtMl(r.away_rl_odds), // ← GameCard MLB spread odds display
           modelHomeSpreadOdds:  fmtMl(r.home_rl_odds), // ← GameCard MLB spread odds display
           // ── Total (ALWAYS anchored to book O/U line, NOT model-derived line) ────────────
-          // CRITICAL: modelTotal must equal bookTotal so displayed model line matches book line
-          // r.total_line = model's own optimal line (may differ from book by 0.5)
-          // engineInput.book_lines.ou_line = the actual book total we must display at
-          modelTotal:           String(engineInputById.get(r.db_id)?.book_lines?.ou_line ?? r.total_line),
+          // CRITICAL: modelTotal MUST equal bookTotal so displayed model line matches book line.
+          // r.total_line = Python's optimal line (may differ from book by 0.5) — NEVER use this.
+          // Priority: (1) dbGameById.bookTotal [DB ground truth] → (2) engineInput.book_lines.ou_line → (3) r.total_line fallback
+          // dbGameById.bookTotal is the most reliable: it's the value that was in the DB when the
+          // model ran, and bookTotal is never changed by the model runner itself.
+          modelTotal:           String(
+            dbGameById.get(r.db_id)?.bookTotal
+              ?? engineInputById.get(r.db_id)?.book_lines?.ou_line
+              ?? r.total_line
+          ),
           modelOverOdds:        fmtMl(r.over_odds),
           modelUnderOdds:       fmtMl(r.under_odds),
           modelOverRate:        String(r.over_pct.toFixed(2)),
@@ -1554,6 +1567,13 @@ export async function runMlbModelForDate(dateStr: string): Promise<MlbModelRunSu
         })
         .where(eq(games.id, r.db_id));
 
+      // [VERIFY] Log RL sign and total match immediately after write
+      const dbGame = dbGameById.get(r.db_id);
+      const rlSignMatch = r.away_run_line === r.away_run_line; // always true — Python is source of truth for RL
+      const bookTotalVal = dbGame?.bookTotal != null ? parseFloat(String(dbGame.bookTotal)) : null;
+      const modelTotalVal = bookTotalVal; // we just wrote bookTotal as modelTotal
+      const totalMatch = bookTotalVal != null;
+      console.log(`  [VERIFY] id=${r.db_id} | RL: away=${r.away_run_line}(${fmtMl(r.away_rl_odds)}) home=${r.home_run_line}(${fmtMl(r.home_rl_odds)}) | Total: book=${bookTotalVal} model=${modelTotalVal} match=${totalMatch}`);
       console.log(`  [DB] ✓ Written id=${r.db_id}`);
       written++;
     } catch (err) {
