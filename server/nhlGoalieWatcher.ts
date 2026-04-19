@@ -343,27 +343,52 @@ export async function checkGoalieChanges(source: "auto" | "manual" = "auto"): Pr
           console.warn(`[GoalieWatcher]${tag} Silent goalie update failed for ${gameLabel}: ${err}`);
         }
       } else {
-        console.log(`[GoalieWatcher]${tag}   No changes for ${gameLabel}`);
+        // CASE C/D FIX: Both goalies already in DB, no change detected this cycle.
+        // If modelRunAt is still null (model never ran for this game), queue it.
+        // This handles the stale-hash scenario: goalies seeded in a prior cycle,
+        // watcher restarted, no change fires → model would never run without this path.
+        const bothAlreadyPresent = !!dbGame.awayGoalie && !!dbGame.homeGoalie;
+        const modelStillNull     = !dbGame.modelRunAt;
+        const isUpcomingGame     = dbGame.gameStatus === "upcoming";
+        if (bothAlreadyPresent && modelStillNull && isUpcomingGame) {
+          newlyPopulatedGameIds.push(dbGame.id);
+          console.log(
+            `[GoalieWatcher]${tag}   FALLBACK: ${gameLabel} — both goalies present, modelRunAt=null → queuing model run` +
+            ` | away=${dbGame.awayGoalie} home=${dbGame.homeGoalie}`
+          );
+        } else {
+          console.log(
+            `[GoalieWatcher]${tag}   No changes for ${gameLabel}` +
+            ` | bothPresent=${bothAlreadyPresent} modelNull=${modelStillNull} upcoming=${isUpcomingGame}`
+          );
+        }
       }
     }
   }
 
   // Step 4: Re-run model for games with goalie changes OR newly populated goalies
+  // Includes CASE C/D fallback: games where both goalies already present but modelRunAt=null
   const allGameIdsToRerun = Array.from(new Set([...changedGameIds, ...newlyPopulatedGameIds]));
 
   if (allGameIdsToRerun.length > 0) {
-    console.log(`\n[GoalieWatcher]${tag} Triggering model for ${allGameIdsToRerun.length} game(s) (${changedGameIds.length} changed + ${newlyPopulatedGameIds.length} newly populated)...`);
+    console.log(
+      `\n[GoalieWatcher]${tag} Triggering model for ${allGameIdsToRerun.length} game(s)` +
+      ` (${changedGameIds.length} changed + ${newlyPopulatedGameIds.length} newly populated / fallback)...`
+    );
     try {
       const syncResult = await syncNhlModelForToday("auto");
       result.modelRerun = true;
-      console.log(`[GoalieWatcher]${tag} Model run complete: synced=${syncResult.synced} skipped=${syncResult.skipped} errors=${syncResult.errors.length}`);
+      console.log(
+        `[GoalieWatcher]${tag} Model run complete:` +
+        ` synced=${syncResult.synced} skipped=${syncResult.skipped} errors=${syncResult.errors.length}`
+      );
     } catch (err) {
       const msg = `Model run failed: ${err}`;
       console.error(`[GoalieWatcher]${tag} ${msg}`);
       result.errors.push(msg);
     }
   } else {
-    console.log(`[GoalieWatcher]${tag} No goalie changes or new populations - model not re-run`);
+    console.log(`[GoalieWatcher]${tag} No goalie changes, new populations, or fallback games — model not re-run`);
   }
 
   console.log(`[GoalieWatcher]${tag} DONE - changes=${result.changes.length} modelRerun=${result.modelRerun} errors=${result.errors.length}`);

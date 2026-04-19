@@ -908,6 +908,154 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Admin Model Status ─────────────────────────────────────────────────────────────────────────────────────────
+  adminModelStatus: router({
+    /**
+     * Owner-only: real-time MLB model pipeline status for today + tomorrow.
+     * Returns per-game modelRunAt, pitchers, model scores, lineup status, and odds.
+     * Use this to diagnose automation gaps without querying the DB manually.
+     */
+    mlb: ownerProcedure
+      .input(z.object({ date: zodGameDate.optional() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db.js');
+        const { games: gamesTable, mlbLineups } = await import('../drizzle/schema.js');
+        const { and, eq, or } = await import('drizzle-orm');
+        const db = await getDb();
+        const etStr = new Date().toLocaleDateString('en-US', {
+          timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+        });
+        const [m, d, y] = etStr.split('/');
+        const todayStr = `${y}-${m}-${d}`;
+        const tomorrowDate = new Date(Number(y), Number(m) - 1, Number(d) + 1);
+        const tomorrowStr = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getDate()).padStart(2, '0')}`;
+        const targetDate = input.date ?? todayStr;
+        const dates = targetDate === todayStr ? [todayStr, tomorrowStr] : [targetDate];
+        const allRows: unknown[] = [];
+        for (const gameDate of dates) {
+          const rows = await db
+            .select({
+              id: gamesTable.id,
+              gameDate: gamesTable.gameDate,
+              awayTeam: gamesTable.awayTeam,
+              homeTeam: gamesTable.homeTeam,
+              gameStatus: gamesTable.gameStatus,
+              awayStartingPitcher: gamesTable.awayStartingPitcher,
+              homeStartingPitcher: gamesTable.homeStartingPitcher,
+              awayML: gamesTable.awayML,
+              homeML: gamesTable.homeML,
+              bookTotal: gamesTable.bookTotal,
+              modelRunAt: gamesTable.modelRunAt,
+              modelAwayScore: gamesTable.modelAwayScore,
+              modelHomeScore: gamesTable.modelHomeScore,
+              modelAwayML: gamesTable.modelAwayML,
+              modelHomeML: gamesTable.modelHomeML,
+              modelTotal: gamesTable.modelTotal,
+              publishedModel: gamesTable.publishedModel,
+            })
+            .from(gamesTable)
+            .where(and(eq(gamesTable.gameDate, gameDate), eq(gamesTable.sport, 'MLB')))
+            .orderBy(gamesTable.awayTeam);
+          // Attach lineup status from mlb_lineups for each game
+          const gameIds = rows.map((r: { id: number }) => r.id);
+          const lineupMap = new Map<number, { awayPitcherName: string | null; homePitcherName: string | null; awayLineupConfirmed: boolean | null; homeLineupConfirmed: boolean | null; lineupModeledAt: Date | null }>();
+          if (gameIds.length > 0) {
+            const lineupRows = await db
+              .select({
+                gameId: mlbLineups.gameId,
+                awayPitcherName: mlbLineups.awayPitcherName,
+                homePitcherName: mlbLineups.homePitcherName,
+                awayLineupConfirmed: mlbLineups.awayLineupConfirmed,
+                homeLineupConfirmed: mlbLineups.homeLineupConfirmed,
+                lineupModeledAt: mlbLineups.lineupModeledAt,
+              })
+              .from(mlbLineups)
+              .where(or(...gameIds.map((id: number) => eq(mlbLineups.gameId, id))));
+            for (const lr of lineupRows) {
+              lineupMap.set(lr.gameId, lr);
+            }
+          }
+          const enriched = rows.map((r: typeof rows[0]) => ({
+            ...r,
+            lineup: lineupMap.get(r.id) ?? null,
+            modeled: r.modelRunAt !== null,
+            published: r.publishedModel,
+          }));
+          allRows.push(...enriched);
+        }
+        const total     = allRows.length;
+        const modeled   = (allRows as any[]).filter(r => r.modeled).length;
+        const unmodeled = total - modeled;
+        console.log(
+          `[tRPC][adminModelStatus.mlb] dates=${dates.join(',')} total=${total}` +
+          ` modeled=${modeled} unmodeled=${unmodeled}`
+        );
+        return { dates, total, modeled, unmodeled, games: allRows };
+      }),
+    /**
+     * Owner-only: real-time NHL model pipeline status for today + tomorrow.
+     * Returns per-game modelRunAt, goalies, model scores, and odds.
+     */
+    nhl: ownerProcedure
+      .input(z.object({ date: zodGameDate.optional() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db.js');
+        const { games: gamesTable } = await import('../drizzle/schema.js');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        const etStr = new Date().toLocaleDateString('en-US', {
+          timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+        });
+        const [m, d, y] = etStr.split('/');
+        const todayStr = `${y}-${m}-${d}`;
+        const tomorrowDate = new Date(Number(y), Number(m) - 1, Number(d) + 1);
+        const tomorrowStr = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getDate()).padStart(2, '0')}`;
+        const targetDate = input.date ?? todayStr;
+        const dates = targetDate === todayStr ? [todayStr, tomorrowStr] : [targetDate];
+        const allRows: unknown[] = [];
+        for (const gameDate of dates) {
+          const rows = await db
+            .select({
+              id: gamesTable.id,
+              gameDate: gamesTable.gameDate,
+              awayTeam: gamesTable.awayTeam,
+              homeTeam: gamesTable.homeTeam,
+              gameStatus: gamesTable.gameStatus,
+              awayGoalie: gamesTable.awayGoalie,
+              homeGoalie: gamesTable.homeGoalie,
+              awayML: gamesTable.awayML,
+              homeML: gamesTable.homeML,
+              bookTotal: gamesTable.bookTotal,
+              modelRunAt: gamesTable.modelRunAt,
+              modelAwayScore: gamesTable.modelAwayScore,
+              modelHomeScore: gamesTable.modelHomeScore,
+              modelAwayML: gamesTable.modelAwayML,
+              modelHomeML: gamesTable.modelHomeML,
+              modelTotal: gamesTable.modelTotal,
+              publishedModel: gamesTable.publishedModel,
+            })
+            .from(gamesTable)
+            .where(and(eq(gamesTable.gameDate, gameDate), eq(gamesTable.sport, 'NHL')))
+            .orderBy(gamesTable.awayTeam);
+          const enriched = rows.map((r: typeof rows[0]) => ({
+            ...r,
+            modeled: r.modelRunAt !== null,
+            bothGoalies: !!r.awayGoalie && !!r.homeGoalie,
+            published: r.publishedModel,
+          }));
+          allRows.push(...enriched);
+        }
+        const total     = allRows.length;
+        const modeled   = (allRows as any[]).filter(r => r.modeled).length;
+        const unmodeled = total - modeled;
+        console.log(
+          `[tRPC][adminModelStatus.nhl] dates=${dates.join(',')} total=${total}` +
+          ` modeled=${modeled} unmodeled=${unmodeled}`
+        );
+        return { dates, total, modeled, unmodeled, games: allRows };
+      }),
+  }),
+
   // ─── MLB HR Props ─────────────────────────────────────────────────────────────────────────────────────────────────
   hrProps: router({
     /**

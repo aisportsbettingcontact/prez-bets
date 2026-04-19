@@ -741,25 +741,77 @@ export async function syncNhlModelForToday(
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
 
+// ─── Tomorrow Date Helper ──────────────────────────────────────────────────────────────────
+/** Returns tomorrow's date in YYYY-MM-DD format (ET-based, same as getTodayDate). */
+function getNhlTomorrowDate(): string {
+  const now = new Date();
+  const etStr = now.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  const [m, d, y] = etStr.split("/");
+  // Add 1 day using Date arithmetic to handle month/year rollover correctly
+  const tomorrow = new Date(Number(y), Number(m) - 1, Number(d) + 1);
+  const ty = tomorrow.getFullYear();
+  const tm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+  const td = String(tomorrow.getDate()).padStart(2, '0');
+  return `${ty}-${tm}-${td}`;
+}
+
 export function startNhlModelSyncScheduler(): void {
   if (syncInterval) return;
 
   const FIVE_MIN_MS = 5 * 60 * 1000; // 24/7 — no time gate
 
+  /**
+   * Run today + tomorrow in sequence.
+   * TODAY:    syncNhlModelForToday() — handles all upcoming games with modelRunAt=null
+   * TOMORROW: syncNhlModelForToday(dateOverride=tomorrow) — catch-all for tomorrow games
+   *           seeded by GoalieTomorrowSeeder but not yet modeled.
+   *           The modelRunAt IS NULL guard prevents re-running already-modeled games.
+   */
+  async function runBothDates(trigger: string): Promise<void> {
+    const today    = getTodayDate();
+    const tomorrow = getNhlTomorrowDate();
+    console.log(`[NhlModelSync] ${trigger} — today=${today} tomorrow=${tomorrow}`);
+
+    // 1. Today
+    try {
+      await syncNhlModelForToday("auto");
+    } catch (err) {
+      console.error(`[NhlModelSync] ${trigger} today sync error:`, err);
+    }
+
+    // 2. Tomorrow — modelRunAt IS NULL guard prevents re-running already-modeled games
+    try {
+      const tomorrowResult = await syncNhlModelForToday("auto", false, false, tomorrow);
+      if (tomorrowResult.synced > 0) {
+        console.log(
+          `[NhlModelSync] ${trigger} TOMORROW (${tomorrow}):` +
+          ` synced=${tomorrowResult.synced} skipped=${tomorrowResult.skipped}` +
+          ` errors=${tomorrowResult.errors.length}`
+        );
+      } else {
+        console.log(`[NhlModelSync] ${trigger} TOMORROW (${tomorrow}): no unmodeled games — skipping`);
+      }
+    } catch (err) {
+      console.error(`[NhlModelSync] ${trigger} tomorrow sync error:`, err);
+    }
+  }
+
   // Run immediately on startup
-  console.log("[NhlModelSync] Starting initial sync (24/7, no time gate)...");
-  syncNhlModelForToday("auto").catch(err =>
-    console.error("[NhlModelSync] Initial sync error:", err)
+  console.log("[NhlModelSync] Starting initial sync (24/7, no time gate, today+tomorrow)...");
+  runBothDates("STARTUP").catch(err =>
+    console.error("[NhlModelSync] Initial startup error:", err)
   );
 
   syncInterval = setInterval(() => {
-    console.log("[NhlModelSync] Scheduled 5-min sync triggered...");
-    syncNhlModelForToday("auto").catch(err =>
+    runBothDates("SCHEDULED").catch(err =>
       console.error("[NhlModelSync] Scheduled sync error:", err)
     );
   }, FIVE_MIN_MS);
 
-  console.log("[NhlModelSync] Scheduler started (every 5 min, 24/7).");
+  console.log("[NhlModelSync] Scheduler started (every 5 min, 24/7, today+tomorrow).");
 }
 
 export function stopNhlModelSyncScheduler(): void {

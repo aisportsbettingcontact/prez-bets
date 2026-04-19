@@ -1744,21 +1744,25 @@ export function startVsinAutoRefresh() {
         console.log(
           `[MLBCycle] K-Props upsert: inserted=${upsertResult.inserted} updated=${upsertResult.updated} skipped=${upsertResult.skipped} errors=${upsertResult.errors}`
         );
-        // Run K-Props model EV after upsert
-        const { modelKPropsForDate, resolveKPropsMlbamIdsForDate } = await import('./mlbKPropsModelService');
-        const kModelResult = await modelKPropsForDate(todayStr);
+      } else {
+        console.log(`[MLBCycle] K-Props upsert: skipped (0 AN props fetched)`);
+      }
+      // Run K-Props model EV unconditionally every cycle — not gated on AN scrape success.
+      // This ensures EV is recalculated even when AN returns 0 props (network error, empty slate).
+      // modelKPropsForDate is idempotent: it re-scores existing mlb_strikeout_props rows.
+      const { modelKPropsForDate, resolveKPropsMlbamIdsForDate } = await import('./mlbKPropsModelService');
+      const kModelResult = await modelKPropsForDate(todayStr);
+      console.log(
+        `[MLBCycle] K-Props model EV: modeled=${kModelResult.modeled} edges=${kModelResult.edges} skipped=${kModelResult.skipped} errors=${kModelResult.errors}`
+      );
+      // Auto-resolve MLBAM IDs for pitcher headshots — fires every cycle, no-ops if all IDs present
+      try {
+        const mlbamResult = await resolveKPropsMlbamIdsForDate(todayStr);
         console.log(
-          `[MLBCycle] K-Props model EV: modeled=${kModelResult.modeled} edges=${kModelResult.edges} skipped=${kModelResult.skipped} errors=${kModelResult.errors}`
+          `[MLBCycle] [MLBAM_BACKFILL] resolved=${mlbamResult.resolved} alreadyHad=${mlbamResult.alreadyHad} unresolved=${mlbamResult.unresolved} errors=${mlbamResult.errors}`
         );
-        // Auto-resolve MLBAM IDs for pitcher headshots — fires every cycle, no-ops if all IDs present
-        try {
-          const mlbamResult = await resolveKPropsMlbamIdsForDate(todayStr);
-          console.log(
-            `[MLBCycle] [MLBAM_BACKFILL] resolved=${mlbamResult.resolved} alreadyHad=${mlbamResult.alreadyHad} unresolved=${mlbamResult.unresolved} errors=${mlbamResult.errors}`
-          );
-        } catch (mlbamErr) {
-          console.warn('[MLBCycle] [MLBAM_BACKFILL] MLBAM ID resolution failed (non-fatal):', mlbamErr);
-        }
+      } catch (mlbamErr) {
+        console.warn('[MLBCycle] [MLBAM_BACKFILL] MLBAM ID resolution failed (non-fatal):', mlbamErr);
       }
 
       // 3. Run backtest for today's completed games
