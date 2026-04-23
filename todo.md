@@ -2763,3 +2763,11 @@
 - [ ] Run full re-backtest once TiDB recovers
 - [ ] Run diagnostic SQL queries and grade all markets
 - [ ] Deliver Market-by-Market A-grade diagnostic report
+
+## Session: 2026-04-23 - Model Line Mirroring + SD@COL Fix
+
+- [ ] Fix model total line to always mirror book total line exactly (same number, model odds only)
+- [ ] Fix model F5 total line to always mirror book F5 total line exactly
+- [ ] Fix SD@COL (and any game) skip condition — diagnose why SD@COL was not modeled
+- [ ] Re-run production model for April 23 2026 after fixes
+- [ ] Verify all games on feed show matching book/model lines with correct odds

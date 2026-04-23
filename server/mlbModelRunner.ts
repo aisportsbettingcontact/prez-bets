@@ -1266,9 +1266,17 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
     // If targetGameIds specified, only run those specific games
     if (opts?.targetGameIds && !opts.targetGameIds.includes(g.id)) return false;
     // Skip already-modeled games unless forceRerun is explicitly set
-    // Prevents the 5-min fallback cycle from re-running games already done
+    // Prevents the 5-min fallback cycle from re-running games already done.
+    // CRITICAL FIX: only skip if modelRunAt was set on the SAME calendar date as the game.
+    // If modelRunAt was set on a different date (e.g., yesterday's run wrote to today's game record),
+    // the game must be re-modeled — the previous model run used stale data for a different date.
     if (!opts?.forceRerun && g.modelRunAt !== null && g.modelRunAt !== undefined) {
-      return false;
+      const modelRunDate = new Date(Number(g.modelRunAt)).toISOString().slice(0, 10);
+      if (modelRunDate === dateStr) {
+        return false; // already modeled today — skip
+      }
+      // modelRunAt was set on a different date — clear it and re-model
+      console.warn(`${TAG} [STALE-MODEL] id=${g.id} ${g.awayTeam}@${g.homeTeam} — modelRunAt=${modelRunDate} ≠ gameDate=${dateStr} — re-modeling`);
     }
     // CRITICAL: require confirmed DK run line — never fall back to ML-derived RL direction
     // Missing awayRunLine causes RL inversion when ML is even-money (e.g. +100 treated as dog)

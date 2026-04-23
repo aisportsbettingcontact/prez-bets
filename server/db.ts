@@ -518,7 +518,13 @@ export async function updateBookOdds(
   const updateData: Record<string, unknown> = {};
   if (data.awayBookSpread !== undefined) updateData.awayBookSpread = data.awayBookSpread !== null ? String(data.awayBookSpread) : null;
   if (data.homeBookSpread !== undefined) updateData.homeBookSpread = data.homeBookSpread !== null ? String(data.homeBookSpread) : null;
-  if (data.bookTotal !== undefined) updateData.bookTotal = data.bookTotal !== null ? String(data.bookTotal) : null;
+  if (data.bookTotal !== undefined) {
+    updateData.bookTotal = data.bookTotal !== null ? String(data.bookTotal) : null;
+    // CRITICAL: modelTotal must always mirror bookTotal (same line, model odds only).
+    // Whenever bookTotal changes (line move from AN API refresh), modelTotal must stay in sync.
+    // This prevents the feed from showing mismatched book/model lines after odds refresh.
+    if (data.bookTotal !== null) updateData.modelTotal = String(data.bookTotal);
+  }
   if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
   if (data.startTimeEst !== undefined) updateData.startTimeEst = data.startTimeEst;
   // Splits — only write non-undefined values (null = explicitly clear, undefined = skip)
