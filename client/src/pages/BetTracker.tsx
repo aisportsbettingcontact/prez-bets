@@ -1,13 +1,17 @@
-/**
- * BetTracker.tsx — Handicapper Bet Tracker v7
+/*
+ * BetTracker.tsx — Handicapper Bet Tracker v8
  *
- * New in v7:
- *   - BetCard full redesign: large team logos, 9-inning linescore grid (MLB),
- *     live/final scores, start time for upcoming games
- *   - getLinescores tRPC procedure used for per-inning MLB data
- *   - Real-time auto-grade polling: 60s interval when PENDING bets exist,
- *     fires immediately when gameStatus transitions to "Final"
- *   - RL fix: line value embedded inline in pick string, no duplicate field
+ * Changes in v8:
+ *   - Default handicapper selector = logged-in user (not "All Handicappers")
+ *   - All-Time toggle ON by default
+ *   - PREGAME / LIVE wager type toggle in the add-bet form
+ *   - Custom line field for RL and TOTAL bets (editable, overrides API value)
+ *   - TO WIN is now a fully editable/typable field (not auto-read-only)
+ *   - LOGS tab: owner/admin/sippi can view all bets created + all edit requests
+ *   - Porter/Hank bets are IMMUTABLE: edit/delete shows "Submit Request" modal
+ *   - bySize analytics: exact 10U/5U/4U/3U/2U/1U buckets with plus/minus money logic
+ *   - wagerType badge on BetCard (PREGAME / LIVE)
+ *   - customLine displayed on BetCard for RL/TOTAL bets
  *
  * Access: OWNER | ADMIN | HANDICAPPER only.
  *   - OWNER / ADMIN: can view any handicapper's bets via selector
@@ -22,6 +26,7 @@ import {
   Clock, TrendingUp, Minus, AlertCircle,
   ChevronLeft, Plus, Pencil, Trash2, CheckCircle2,
   DollarSign, Hash, ChevronDown, Zap, RefreshCw, BarChart2,
+  FileText, Radio, Lock,
 } from "lucide-react";
 import type { TrackedBet } from "@shared/types";
 import { EquityChart, BreakdownGrid, HandicapperSelector } from "@/components/BetTrackerAnalytics";
@@ -70,6 +75,8 @@ type Market    = "ML" | "RL" | "TOTAL";
 type PickSide  = "AWAY" | "HOME" | "OVER" | "UNDER";
 type Result    = "PENDING" | "WIN" | "LOSS" | "PUSH" | "VOID";
 type StakeMode = "$" | "U";
+type WagerType = "PREGAME" | "LIVE";
+type ActiveTab = "BETS" | "LOGS";
 
 interface OddsEntry { odds: number; value: number; }
 interface GameOdds {
@@ -442,7 +449,6 @@ function LinescoreGrid({
   awayAbbrev:  string;
   homeAbbrev:  string;
 }) {
-  // Always show 9 columns (innings 1-9), pad with null if game not complete
   const cols = Array.from({ length: 9 }, (_, i) => {
     const inn = ls.innings.find(x => x.num === i + 1);
     return inn ?? { num: i + 1, awayRuns: null, homeRuns: null };
@@ -462,9 +468,7 @@ function LinescoreGrid({
       <table className="w-full text-center" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
         <thead>
           <tr>
-            <th className="text-[9px] text-zinc-600 font-medium text-left pr-2 pb-1 w-8">
-              {/* Team abbrev column */}
-            </th>
+            <th className="text-[9px] text-zinc-600 font-medium text-left pr-2 pb-1 w-8" />
             {cols.map(c => (
               <th key={c.num} className={`text-[9px] font-bold pb-1 w-6 ${
                 isLive && ls.currentInning === c.num ? "text-emerald-400" : "text-zinc-600"
@@ -478,7 +482,6 @@ function LinescoreGrid({
           </tr>
         </thead>
         <tbody>
-          {/* Away row */}
           <tr>
             <td className="text-[9px] font-bold text-zinc-400 text-left pr-2">{awayAbbrev}</td>
             {cols.map(c => (
@@ -486,17 +489,10 @@ function LinescoreGrid({
                 {c.awayRuns !== null ? c.awayRuns : (isFinal ? "0" : "·")}
               </td>
             ))}
-            <td className="text-[11px] font-bold font-mono text-white px-1">
-              {ls.awayR !== null ? ls.awayR : "—"}
-            </td>
-            <td className="text-[10px] font-mono text-zinc-500 px-1">
-              {ls.awayH !== null ? ls.awayH : "—"}
-            </td>
-            <td className="text-[10px] font-mono text-zinc-500 px-1">
-              {ls.awayE !== null ? ls.awayE : "—"}
-            </td>
+            <td className="text-[11px] font-bold font-mono text-white px-1">{ls.awayR !== null ? ls.awayR : "—"}</td>
+            <td className="text-[10px] font-mono text-zinc-500 px-1">{ls.awayH !== null ? ls.awayH : "—"}</td>
+            <td className="text-[10px] font-mono text-zinc-500 px-1">{ls.awayE !== null ? ls.awayE : "—"}</td>
           </tr>
-          {/* Home row */}
           <tr>
             <td className="text-[9px] font-bold text-zinc-400 text-left pr-2">{homeAbbrev}</td>
             {cols.map(c => (
@@ -504,15 +500,9 @@ function LinescoreGrid({
                 {c.homeRuns !== null ? c.homeRuns : (isFinal ? "0" : "·")}
               </td>
             ))}
-            <td className="text-[11px] font-bold font-mono text-white px-1">
-              {ls.homeR !== null ? ls.homeR : "—"}
-            </td>
-            <td className="text-[10px] font-mono text-zinc-500 px-1">
-              {ls.homeH !== null ? ls.homeH : "—"}
-            </td>
-            <td className="text-[10px] font-mono text-zinc-500 px-1">
-              {ls.homeE !== null ? ls.homeE : "—"}
-            </td>
+            <td className="text-[11px] font-bold font-mono text-white px-1">{ls.homeR !== null ? ls.homeR : "—"}</td>
+            <td className="text-[10px] font-mono text-zinc-500 px-1">{ls.homeH !== null ? ls.homeH : "—"}</td>
+            <td className="text-[10px] font-mono text-zinc-500 px-1">{ls.homeE !== null ? ls.homeE : "—"}</td>
           </tr>
         </tbody>
       </table>
@@ -523,15 +513,16 @@ function LinescoreGrid({
 // ─── BetCard ──────────────────────────────────────────────────────────────────
 
 function BetCard({
-  bet, stakeMode, unitSize, onResult, onDelete, onEdit, linescore,
+  bet, stakeMode, unitSize, onResult, onDelete, onEdit, linescore, canDirectEdit,
 }: {
-  bet:        EnrichedBet;
-  stakeMode:  StakeMode;
-  unitSize:   number;
-  onResult:   (id: number, result: Result) => void;
-  onDelete:   (id: number) => void;
-  onEdit:     (bet: TrackedBet) => void;
-  linescore?: LinescoreEntry;
+  bet:           EnrichedBet;
+  stakeMode:     StakeMode;
+  unitSize:      number;
+  onResult:      (id: number, result: Result) => void;
+  onDelete:      (id: number) => void;
+  onEdit:        (bet: TrackedBet) => void;
+  linescore?:    LinescoreEntry;
+  canDirectEdit: boolean; // false for porter/hank viewing own bets
 }) {
   const risk  = parseFloat(bet.risk);
   const toWin = parseFloat(bet.toWin);
@@ -544,11 +535,6 @@ function BetCard({
   const tfShort = timeframeShort(bet.timeframe ?? "FULL_GAME");
   const result  = bet.result as Result;
 
-  // ── Game state ──────────────────────────────────────────────────────────────
-  // Priority order for game state detection:
-  //   1. Bet is graded (result !== PENDING) → treat as Final (scores are in DB)
-  //   2. Linescore status (most accurate for today's games)
-  //   3. AN status (fallback)
   const isGraded   = bet.result !== "PENDING" && bet.result !== "VOID";
   const lsStatus   = linescore?.status ?? null;
   const anStatus   = bet.gameStatus ?? null;
@@ -556,46 +542,39 @@ function BetCard({
   const isFinal    = isGraded || lsStatus === "Final" || anStatus === "complete";
   const isLive     = !isFinal && (lsStatus === "Live" || anStatus === "in_progress");
 
-  // Scores:
-  //   - Graded bets: use DB-stored awayScore/homeScore (authoritative, always present)
-  //   - Live bets: use linescore totals (real-time)
-  //   - Upcoming: no scores
   const dbAwayScore = bet.awayScore !== null && bet.awayScore !== undefined
-    ? parseFloat(String(bet.awayScore))
-    : null;
+    ? parseFloat(String(bet.awayScore)) : null;
   const dbHomeScore = bet.homeScore !== null && bet.homeScore !== undefined
-    ? parseFloat(String(bet.homeScore))
-    : null;
+    ? parseFloat(String(bet.homeScore)) : null;
 
-  const awayR = isGraded
-    ? dbAwayScore
-    : (linescore?.awayR ?? dbAwayScore);
-  const homeR = isGraded
-    ? dbHomeScore
-    : (linescore?.homeR ?? dbHomeScore);
+  const awayR = isGraded ? dbAwayScore : (linescore?.awayR ?? dbAwayScore);
+  const homeR = isGraded ? dbHomeScore : (linescore?.homeR ?? dbHomeScore);
   const hasScore = awayR !== null && homeR !== null;
 
-  // Inning indicator for live games
   const currentInning = linescore?.currentInning ?? null;
   const inningState   = linescore?.inningState ?? null;
   const inningLabel   = currentInning
     ? `${inningState === "Top" ? "▲" : inningState === "Bottom" ? "▼" : ""}${currentInning}`
     : null;
 
-  // ── Pick display ────────────────────────────────────────────────────────────
-  // For RL bets, pick string already has the line embedded (e.g. "SF RL +1.5")
-  // Don't show a separate line badge in that case
   const pickIsAway = bet.pickSide === "AWAY";
   const pickIsHome = bet.pickSide === "HOME";
 
-  // Market label
   const mktLabel = bet.market === "ML" ? "ML"
     : bet.market === "RL" ? (bet.sport === "NHL" ? "PL" : "RL")
     : "TOT";
 
-  // Away/home abbreviations (for display only)
   const awayAbbrev = linescore?.awayAbbrev || bet.awayTeam || "AWY";
   const homeAbbrev = linescore?.homeAbbrev || bet.homeTeam || "HME";
+
+  // Custom line display (for RL/TOTAL bets)
+  const customLine = (bet as any).customLine;
+  const lineDisplay = customLine !== null && customLine !== undefined
+    ? parseFloat(String(customLine))
+    : null;
+
+  // Wager type badge
+  const wagerType = (bet as any).wagerType as WagerType | undefined;
 
   return (
     <div className={`relative bg-zinc-900/90 border rounded-xl overflow-hidden transition-all ${
@@ -632,14 +611,21 @@ function BetCard({
 
           {/* Center: score / status / time */}
           <div className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
-            {/* Date + sport */}
             <div className="flex items-center gap-1.5">
               <span className="text-[9px] tracking-widest text-zinc-600 uppercase">{bet.sport}</span>
               <span className="text-zinc-700 text-[9px]">·</span>
               <span className="text-[9px] text-zinc-600">{fmtDate(bet.gameDate)}</span>
+              {/* Wager type badge */}
+              {wagerType === "LIVE" && (
+                <span className="flex items-center gap-0.5 text-[9px] font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded">
+                  <Radio size={8} />LIVE
+                </span>
+              )}
+              {wagerType === "PREGAME" && (
+                <span className="text-[9px] font-bold text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">PRE</span>
+              )}
             </div>
 
-            {/* Score / Time / Live indicator */}
             {isFinal && hasScore ? (
               <div className="flex flex-col items-center gap-0.5">
                 <div className="flex items-center gap-2">
@@ -685,7 +671,6 @@ function BetCard({
                 </span>
               </div>
             ) : (
-              /* Upcoming */
               <div className="flex flex-col items-center gap-0.5">
                 <span className="text-sm font-bold text-zinc-400">
                   {fmtStartTime(bet.startUtc, bet.gameTime) || "—"}
@@ -708,100 +693,119 @@ function BetCard({
             <span className="text-[9px] font-bold text-zinc-400 tracking-wider">{bet.homeTeam ?? "?"}</span>
           </div>
 
-          {/* Edit/Delete */}
+          {/* Edit/Delete buttons */}
           <div className="flex flex-col gap-1 shrink-0 ml-1">
-            <button type="button" onClick={() => onEdit(bet)}
-              className="p-1.5 rounded-lg text-zinc-700 hover:text-zinc-300 hover:bg-zinc-800 transition-all"
-              title="Edit bet"
-            >
-              <Pencil size={11} />
-            </button>
-            <button type="button" onClick={() => onDelete(bet.id)}
-              className="p-1.5 rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-all"
-              title="Delete bet"
-            >
-              <Trash2 size={11} />
-            </button>
+            {canDirectEdit ? (
+              <>
+                <button type="button" onClick={() => onEdit(bet)}
+                  className="p-1.5 rounded-lg text-zinc-700 hover:text-zinc-300 hover:bg-zinc-800 transition-all"
+                  title="Edit bet"
+                >
+                  <Pencil size={11} />
+                </button>
+                <button type="button" onClick={() => onDelete(bet.id)}
+                  className="p-1.5 rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                  title="Delete bet"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={() => onEdit(bet)}
+                  className="p-1.5 rounded-lg text-zinc-700 hover:text-yellow-400 hover:bg-yellow-500/10 transition-all"
+                  title="Request edit"
+                >
+                  <FileText size={11} />
+                </button>
+                <button type="button" onClick={() => onDelete(bet.id)}
+                  className="p-1.5 rounded-lg text-zinc-700 hover:text-yellow-400 hover:bg-yellow-500/10 transition-all"
+                  title="Request deletion"
+                >
+                  <Lock size={11} />
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* ── Row 2: Pick + Bet Details (centered) ── */}
+        {/* ── Row 2: Pick + Bet Details ── */}
         <div className="flex flex-col items-center gap-2">
 
-          {/* Pick row: logo + pick label + market badge + timeframe badge + odds */}
+          {/* Pick row */}
           <div className="flex items-center justify-center gap-1.5 flex-wrap">
-            {/* Pick team logo highlight */}
             {(pickIsAway && bet.awayLogo) && (
               <img src={bet.awayLogo} alt="" className="w-4 h-4 object-contain opacity-80" />
             )}
             {(pickIsHome && bet.homeLogo) && (
               <img src={bet.homeLogo} alt="" className="w-4 h-4 object-contain opacity-80" />
             )}
-            {/* Pick label */}
             <span className="text-white font-bold text-sm">{bet.pick}</span>
-            {/* Market badge */}
+            {/* Custom line display for RL/TOTAL */}
+            {lineDisplay !== null && (bet.market === "RL" || bet.market === "TOTAL") && (
+              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded font-mono">
+                {bet.market === "TOTAL"
+                  ? `${bet.pickSide === "OVER" ? "O" : "U"} ${lineDisplay}`
+                  : (lineDisplay > 0 ? `+${lineDisplay}` : `${lineDisplay}`)}
+              </span>
+            )}
             <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-medium tracking-wider">{mktLabel}</span>
-            {/* Timeframe badge */}
             {tfShort && (
               <span className="text-[9px] bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded font-medium">{tfShort}</span>
             )}
-            {/* Odds */}
             <span className={`text-[11px] font-bold font-mono ${
               bet.odds >= 0 ? "text-emerald-400" : "text-zinc-300"
             }`}>
               {fmtOdds(bet.odds)}
             </span>
-            {/* Result badge inline */}
             <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold border ${resultBg(result)}`}>
               {result}
             </span>
           </div>
 
-          {/* Stake row: Risk → To Win → P/L + quick buttons */}
+          {/* Stake row */}
           <div className="flex items-center justify-center gap-2 w-full">
-            <div className="flex items-center gap-3 justify-center flex-1">
-              <div className="text-center">
-                <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-0.5">Risk</div>
-                <div className="text-xs font-mono text-zinc-300">{fmtStake(risk)}</div>
-              </div>
-              <div className="text-zinc-700 text-xs">→</div>
-              <div className="text-center">
-                <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-0.5">To Win</div>
-                <div className="text-xs font-mono text-emerald-400">{fmtStake(toWin)}</div>
-              </div>
-              {result !== "PENDING" && result !== "VOID" && (
-                <>
-                  <div className="text-zinc-700 text-xs">→</div>
-                  <div className="text-center">
-                    <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-0.5">P/L</div>
-                    <div className={`text-xs font-mono font-bold ${resultColor(result)}`}>
-                      {result === "WIN"  ? `+${fmtStake(toWin)}`
-                       : result === "LOSS" ? `-${fmtStake(risk)}`
-                       : result === "PUSH" ? "PUSH"
-                       : "—"}
-                    </div>
-                  </div>
-                </>
-              )}
+            <div className="flex items-center gap-1.5 bg-zinc-800/50 rounded-lg px-3 py-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Risk</span>
+              <span className="text-xs font-bold font-mono text-white">{fmtStake(risk)}</span>
             </div>
+            <span className="text-zinc-700 text-xs">→</span>
+            <div className="flex items-center gap-1.5 bg-zinc-800/50 rounded-lg px-3 py-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Win</span>
+              <span className="text-xs font-bold font-mono text-emerald-400">{fmtStake(toWin)}</span>
+            </div>
+            {result !== "PENDING" && result !== "VOID" && (
+              <div className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 ${
+                result === "WIN" ? "bg-green-500/10" : result === "LOSS" ? "bg-red-500/10" : "bg-yellow-500/10"
+              }`}>
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider">P/L</span>
+                <span className={`text-xs font-bold font-mono ${resultColor(result)}`}>
+                  {result === "WIN"  ? `+${fmtStake(toWin)}` :
+                   result === "LOSS" ? `-${fmtStake(risk)}` :
+                   "PUSH"}
+                </span>
+              </div>
+            )}
+          </div>
 
-            {/* Quick result buttons */}
-            <div className="flex items-center gap-1 shrink-0">
-              {(["WIN", "LOSS", "PUSH"] as const).map(r => (
-                <button key={r} type="button"
-                  onClick={() => onResult(bet.id, r)}
-                  className={`px-2 py-1 rounded-lg text-[9px] font-bold tracking-wider transition-all border ${
-                    result === r
-                      ? resultBg(r)
-                      : "border-zinc-800 text-zinc-700 hover:border-zinc-600 hover:text-zinc-400"
-                  }`}
+          {/* Quick result buttons (only for direct-edit users) */}
+          {canDirectEdit && result === "PENDING" && (
+            <div className="flex items-center gap-1.5 w-full justify-center">
+              {(["WIN", "LOSS", "PUSH", "VOID"] as Result[]).map(r => (
+                <button key={r} type="button" onClick={() => onResult(bet.id, r)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all hover:opacity-80 ${resultBg(r)}`}
                 >
-                  {r === "WIN" ? "W" : r === "LOSS" ? "L" : "P"}
+                  {r}
                 </button>
               ))}
             </div>
-          </div>
+          )}
         </div>
+
+        {/* Linescore (MLB only) */}
+        {linescore && bet.sport === "MLB" && (
+          <LinescoreGrid ls={linescore} awayAbbrev={awayAbbrev} homeAbbrev={homeAbbrev} />
+        )}
 
         {/* Notes */}
         {bet.notes && (
@@ -810,6 +814,253 @@ function BetCard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Logs Tab ─────────────────────────────────────────────────────────────────
+
+function LogsTab({
+  logsQuery,
+  reviewMut,
+  invalidateLogs,
+}: {
+  logsQuery: ReturnType<typeof trpc.betTracker.getLogs.useQuery>;
+  reviewMut: ReturnType<typeof trpc.betTracker.reviewEditRequest.useMutation>;
+  invalidateLogs: () => void;
+}) {
+  const [reviewId, setReviewId]     = useState<number | null>(null);
+  const [reviewAction, setReviewAction] = useState<"APPROVE" | "DENY">("APPROVE");
+  const [reviewNote, setReviewNote] = useState("");
+  const [activeSection, setActiveSection] = useState<"BETS" | "REQUESTS">("REQUESTS");
+
+  const data = logsQuery.data as { editRequests: any[]; bets: any[] } | undefined;
+  const editRequests = data?.editRequests ?? [];
+  const bets         = data?.bets ?? [];
+  const pendingRequests = editRequests.filter((r: any) => r.status === "PENDING");
+
+  function handleReview() {
+    if (reviewId === null) return;
+    reviewMut.mutate(
+      { requestId: reviewId, action: reviewAction, reviewNote: reviewNote || undefined },
+      {
+        onSuccess: () => {
+          setReviewId(null);
+          setReviewNote("");
+          invalidateLogs();
+        },
+      }
+    );
+  }
+
+  if (logsQuery.isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Section tabs */}
+      <div className="flex items-center gap-2 border-b border-zinc-800 pb-2">
+        <button type="button"
+          onClick={() => setActiveSection("REQUESTS")}
+          className={`px-4 py-2 text-xs font-bold tracking-wider rounded-lg transition-all ${
+            activeSection === "REQUESTS"
+              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+              : "text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          EDIT REQUESTS
+          {pendingRequests.length > 0 && (
+            <span className="ml-2 bg-yellow-500 text-black text-[10px] font-black px-1.5 py-0.5 rounded-full">
+              {pendingRequests.length}
+            </span>
+          )}
+        </button>
+        <button type="button"
+          onClick={() => setActiveSection("BETS")}
+          className={`px-4 py-2 text-xs font-bold tracking-wider rounded-lg transition-all ${
+            activeSection === "BETS"
+              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+              : "text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          ALL BETS LOG
+          <span className="ml-2 text-zinc-600 text-[10px]">({bets.length})</span>
+        </button>
+      </div>
+
+      {/* Edit Requests */}
+      {activeSection === "REQUESTS" && (
+        <div className="space-y-3">
+          {editRequests.length === 0 ? (
+            <div className="text-center py-12 text-zinc-600 text-sm">No edit requests submitted yet.</div>
+          ) : (
+            editRequests.map((req: any) => (
+              <div key={req.id} className={`bg-zinc-900/80 border rounded-xl p-4 space-y-2 ${
+                req.status === "PENDING" ? "border-yellow-500/30" :
+                req.status === "APPROVED" ? "border-green-500/20" :
+                "border-zinc-800"
+              }`}>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      req.status === "PENDING"  ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-400" :
+                      req.status === "APPROVED" ? "bg-green-500/10 border-green-500/30 text-green-400" :
+                      "bg-zinc-800 border-zinc-700 text-zinc-500"
+                    }`}>{req.status}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                      req.requestType === "DELETE"
+                        ? "bg-red-500/10 border-red-500/20 text-red-400"
+                        : "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                    }`}>{req.requestType}</span>
+                    <span className="text-xs text-zinc-400 font-medium">@{req.requesterUsername}</span>
+                    <span className="text-[10px] text-zinc-600">Bet #{req.betId}</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-600">
+                    {new Date(req.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                {req.reason && (
+                  <div className="text-xs text-zinc-400 bg-zinc-800/50 rounded-lg px-3 py-2 italic">
+                    "{req.reason}"
+                  </div>
+                )}
+                {req.proposedChanges && (
+                  <div className="text-[10px] text-zinc-500 bg-zinc-800/30 rounded px-2 py-1 font-mono">
+                    Changes: {req.proposedChanges}
+                  </div>
+                )}
+                {req.reviewerUsername && (
+                  <div className="text-[10px] text-zinc-500">
+                    Reviewed by @{req.reviewerUsername}
+                    {req.reviewNote && `: "${req.reviewNote}"`}
+                  </div>
+                )}
+                {req.status === "PENDING" && (
+                  <div className="flex gap-2 pt-1">
+                    <button type="button"
+                      onClick={() => { setReviewId(req.id); setReviewAction("APPROVE"); setReviewNote(""); }}
+                      className="flex-1 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-bold hover:bg-green-500/20 transition-all"
+                    >
+                      Approve
+                    </button>
+                    <button type="button"
+                      onClick={() => { setReviewId(req.id); setReviewAction("DENY"); setReviewNote(""); }}
+                      className="flex-1 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-all"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* All Bets Log */}
+      {activeSection === "BETS" && (
+        <div className="space-y-2">
+          {bets.length === 0 ? (
+            <div className="text-center py-12 text-zinc-600 text-sm">No bets tracked yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[10px] text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+                    <th className="text-left py-2 px-2">ID</th>
+                    <th className="text-left py-2 px-2">User</th>
+                    <th className="text-left py-2 px-2">Date</th>
+                    <th className="text-left py-2 px-2">Sport</th>
+                    <th className="text-left py-2 px-2">Pick</th>
+                    <th className="text-left py-2 px-2">Odds</th>
+                    <th className="text-left py-2 px-2">Risk</th>
+                    <th className="text-left py-2 px-2">ToWin</th>
+                    <th className="text-left py-2 px-2">Type</th>
+                    <th className="text-left py-2 px-2">Result</th>
+                    <th className="text-left py-2 px-2">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bets.map((b: any) => (
+                    <tr key={b.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20 transition-colors">
+                      <td className="py-2 px-2 text-zinc-600 font-mono">#{b.id}</td>
+                      <td className="py-2 px-2">
+                        <span className="text-zinc-300 font-medium">@{b.username}</span>
+                        <span className={`ml-1 text-[9px] font-bold uppercase px-1 py-0.5 rounded ${
+                          b.userRole === "owner" ? "text-yellow-400" :
+                          b.userRole === "admin" ? "text-blue-400" :
+                          "text-emerald-400"
+                        }`}>{b.userRole}</span>
+                      </td>
+                      <td className="py-2 px-2 text-zinc-400 font-mono">{fmtDate(b.gameDate)}</td>
+                      <td className="py-2 px-2 text-zinc-500">{b.sport}</td>
+                      <td className="py-2 px-2 text-white font-medium">{b.pick}</td>
+                      <td className={`py-2 px-2 font-mono font-bold ${b.odds >= 0 ? "text-emerald-400" : "text-zinc-300"}`}>
+                        {fmtOdds(b.odds)}
+                      </td>
+                      <td className="py-2 px-2 text-zinc-400 font-mono">{parseFloat(b.risk).toFixed(2)}</td>
+                      <td className="py-2 px-2 text-emerald-400 font-mono">{parseFloat(b.toWin).toFixed(2)}</td>
+                      <td className="py-2 px-2">
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                          (b as any).wagerType === "LIVE"
+                            ? "bg-red-500/10 text-red-400"
+                            : "bg-zinc-800 text-zinc-500"
+                        }`}>{(b as any).wagerType ?? "PRE"}</span>
+                      </td>
+                      <td className={`py-2 px-2 font-bold text-[10px] ${resultColor(b.result as Result)}`}>{b.result}</td>
+                      <td className="py-2 px-2 text-zinc-600 font-mono text-[10px]">
+                        {new Date(b.createdAt).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Review modal */}
+      {reviewId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="font-bold text-sm tracking-wider">
+              {reviewAction === "APPROVE" ? "✅ Approve Request" : "❌ Deny Request"}
+            </h3>
+            <p className="text-zinc-400 text-xs">Request #{reviewId}</p>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Note (optional)</label>
+              <textarea
+                value={reviewNote}
+                onChange={e => setReviewNote(e.target.value)}
+                rows={2}
+                placeholder="Reason for decision…"
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setReviewId(null)}
+                className="flex-1 py-2.5 rounded-xl border border-zinc-700 text-zinc-400 text-sm font-medium hover:border-zinc-500 transition-colors"
+              >
+                Cancel
+              </button>
+              <button type="button" onClick={handleReview}
+                disabled={reviewMut.isPending}
+                className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-colors disabled:opacity-40 ${
+                  reviewAction === "APPROVE" ? "bg-green-600 hover:bg-green-500" : "bg-red-600 hover:bg-red-500"
+                }`}
+              >
+                {reviewMut.isPending ? "Processing…" : reviewAction}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -839,10 +1090,22 @@ export default function BetTracker() {
   useEffect(() => { try { localStorage.setItem("bt_stakeMode", stakeMode); } catch {} }, [stakeMode]);
   useEffect(() => { try { localStorage.setItem("bt_unitSize", String(unitSize)); } catch {} }, [unitSize]);
 
-  // ── Handicapper selector + analytics state ────────────────────────────────
-  const [targetUserId, setTargetUserId]   = useState<number | undefined>(undefined);
+  // ── Tab state ─────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<ActiveTab>("BETS");
+
+  // ── Handicapper selector: default to logged-in user ───────────────────────
+  // Initialize to appUser.id once loaded; owner/admin can change it
+  const [targetUserId, setTargetUserId] = useState<number | undefined>(undefined);
   const [showAnalytics, setShowAnalytics] = useState(false);
-  const [filterAllTime, setFilterAllTime] = useState(false);
+  // All-Time ON by default
+  const [filterAllTime, setFilterAllTime] = useState(true);
+
+  // Set default targetUserId to logged-in user once appUser loads
+  useEffect(() => {
+    if (appUser && targetUserId === undefined) {
+      setTargetUserId(appUser.id);
+    }
+  }, [appUser, targetUserId]);
 
   const effectiveUserId = isOwnerOrAdmin && targetUserId ? targetUserId : undefined;
 
@@ -859,14 +1122,24 @@ export default function BetTracker() {
   const [formPickSide, setFormPickSide]   = useState<PickSide>("AWAY");
   const [formOdds, setFormOdds]           = useState("");
   const [formRisk, setFormRisk]           = useState("2");
+  const [formToWin, setFormToWin]         = useState(""); // editable toWin
+  const [formToWinManual, setFormToWinManual] = useState(false); // true if user typed it
   const [formNotes, setFormNotes]         = useState("");
   const [formError, setFormError]         = useState("");
+  const [formWagerType, setFormWagerType] = useState<WagerType>("PREGAME");
+  const [formCustomLine, setFormCustomLine] = useState(""); // custom line for RL/TOTAL
 
   // Edit / delete modal
   const [editBet, setEditBet]       = useState<TrackedBet | null>(null);
   const [editNotes, setEditNotes]   = useState("");
   const [editResult, setEditResult] = useState<Result>("PENDING");
-  const [deleteId, setDeleteId]     = useState<number | null>(null);
+  const [editIsRequest, setEditIsRequest] = useState(false); // true = submit request, not direct edit
+  const [editRequestReason, setEditRequestReason] = useState("");
+
+  // Delete modal
+  const [deleteId, setDeleteId]         = useState<number | null>(null);
+  const [deleteIsRequest, setDeleteIsRequest] = useState(false);
+  const [deleteRequestReason, setDeleteRequestReason] = useState("");
 
   // Auto-grade toast
   const [gradeToast, setGradeToast] = useState<{ graded: number; wins: number; losses: number; pushes: number; stillPending: number } | null>(null);
@@ -875,15 +1148,29 @@ export default function BetTracker() {
   const oddsNum = parseInt(formOdds, 10);
   const riskNum = parseFloat(formRisk);
 
-  const toWinCalc = useMemo(() => {
+  const autoToWin = useMemo(() => {
     if (!isNaN(oddsNum) && oddsNum !== 0 && !isNaN(riskNum) && riskNum > 0) {
       return calcToWin(oddsNum, riskNum);
     }
     return null;
   }, [oddsNum, riskNum]);
 
-  const riskLabel  = stakeMode === "$" ? "Risk $" : "Risk (u)";
-  const toWinLabel = stakeMode === "$" ? "To Win $" : "To Win (u)";
+  // Sync auto-calculated toWin into the field when not manually overridden
+  useEffect(() => {
+    if (!formToWinManual && autoToWin !== null) {
+      setFormToWin(String(autoToWin));
+    }
+  }, [autoToWin, formToWinManual]);
+
+  // Reset manual override when odds/risk change significantly
+  useEffect(() => {
+    setFormToWinManual(false);
+  }, [formOdds, formRisk]);
+
+  const toWinNum = parseFloat(formToWin);
+
+  const riskLabel  = stakeMode === "$" ? "Risk $" : "Risk (U)";
+  const toWinLabel = stakeMode === "$" ? "To Win $" : "To Win (U)";
 
   function fmtToWin(n: number): string {
     if (stakeMode === "$") return fmtDollar(n);
@@ -898,7 +1185,7 @@ export default function BetTracker() {
   const timeframeOptions = TIMEFRAMES_BY_SPORT[activeSport];
 
   useEffect(() => { setFormTimeframe("FULL_GAME"); }, [activeSport]);
-  useEffect(() => { setFormGame(null); setFormPickSide("AWAY"); setFormOdds(""); }, [formDate, activeSport]);
+  useEffect(() => { setFormGame(null); setFormPickSide("AWAY"); setFormOdds(""); setFormCustomLine(""); }, [formDate, activeSport]);
 
   // NRFI/YRFI: auto-set market=TOTAL and pickSide when timeframe changes
   useEffect(() => {
@@ -918,6 +1205,8 @@ export default function BetTracker() {
       const o = getPickOdds(formGame.odds, formMarket, newSide);
       setFormOdds(o !== null ? String(o) : "");
     }
+    // Reset custom line when market changes
+    setFormCustomLine("");
   }, [formMarket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -958,7 +1247,6 @@ export default function BetTracker() {
   );
 
   // ── Linescore query (MLB only) ─────────────────────────────────────────────
-  // Collect unique MLB dates from the current bet list
   const enrichedBets = (listQuery.data ?? []) as EnrichedBet[];
   const mlbDates = useMemo(() => {
     const dates = new Set<string>();
@@ -972,14 +1260,12 @@ export default function BetTracker() {
     { sport: "MLB", dates: mlbDates },
     {
       enabled: canAccess && mlbDates.length > 0,
-      staleTime: 30_000,          // 30s — refresh frequently for live games
-      refetchInterval: 60_000,    // poll every 60s automatically
+      staleTime: 30_000,
+      refetchInterval: 60_000,
       retry: 1,
     }
   );
 
-  // Map gamePk → LinescoreEntry for O(1) lookup in BetCard
-  // We also need to match by awayAbbrev+homeAbbrev since bets don't store gamePk
   const linescoreByTeams = useMemo(() => {
     const map = new Map<string, LinescoreEntry>();
     if (!linescoreQuery.data) return map;
@@ -990,15 +1276,27 @@ export default function BetTracker() {
     return map;
   }, [linescoreQuery.data]);
 
+  // ── Logs query (owner/admin only) ─────────────────────────────────────────
+  const logsQuery = trpc.betTracker.getLogs.useQuery(
+    { limit: 200, offset: 0 },
+    { enabled: canAccess && isOwnerOrAdmin && activeTab === "LOGS" }
+  );
+
   const utils = trpc.useUtils();
   const invalidate = useCallback(() => {
     utils.betTracker.list.invalidate();
     utils.betTracker.getStats.invalidate();
   }, [utils]);
+  const invalidateLogs = useCallback(() => {
+    utils.betTracker.getLogs.invalidate();
+    invalidate();
+  }, [utils, invalidate]);
 
   const createMut    = trpc.betTracker.create.useMutation({ onSuccess: invalidate });
   const updateMut    = trpc.betTracker.update.useMutation({ onSuccess: invalidate });
   const deleteMut    = trpc.betTracker.delete.useMutation({ onSuccess: invalidate });
+  const submitRequestMut = trpc.betTracker.submitEditRequest.useMutation({ onSuccess: invalidateLogs });
+  const reviewMut    = trpc.betTracker.reviewEditRequest.useMutation({ onSuccess: invalidateLogs });
   const autoGradeMut = trpc.betTracker.autoGrade.useMutation({
     onSuccess: (data) => {
       console.log(`[BetTracker][OUTPUT] autoGrade: graded=${data.graded} wins=${data.wins} losses=${data.losses} pushes=${data.pushes} stillPending=${data.stillPending}`);
@@ -1012,8 +1310,6 @@ export default function BetTracker() {
   });
 
   // ── Real-time auto-grade polling ───────────────────────────────────────────
-  // Poll every 60s when any bet is PENDING. Fire immediately when linescore
-  // transitions to "Final" for a game that has a PENDING bet.
   const prevLinescoreRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
@@ -1022,14 +1318,12 @@ export default function BetTracker() {
     const pendingBets = enrichedBets.filter(b => b.result === "PENDING");
     if (pendingBets.length === 0) return;
 
-    // Check if any game just went Final (status transition)
     if (linescoreQuery.data) {
       let newFinalFound = false;
       for (const ls of Object.values(linescoreQuery.data)) {
         const key = `${ls.gameDate}:${ls.awayAbbrev}:${ls.homeAbbrev}`;
         const prev = prevLinescoreRef.current[key];
         if (ls.status === "Final" && prev && prev !== "Final") {
-          // A game just went Final — check if we have a PENDING bet on it
           const hasPending = pendingBets.some(b =>
             b.gameDate === ls.gameDate &&
             (b.awayTeam === ls.awayAbbrev || b.homeTeam === ls.homeAbbrev)
@@ -1046,7 +1340,6 @@ export default function BetTracker() {
       }
     }
 
-    // Set up 60s polling interval
     const interval = setInterval(() => {
       if (!autoGradeMut.isPending) {
         console.log(`[BetTracker][STEP] autoGrade: 60s poll — grading ${pendingBets.length} PENDING bets`);
@@ -1067,6 +1360,7 @@ export default function BetTracker() {
     setFormPickSide("AWAY");
     const o = getPickOdds(game.odds, formMarket, "AWAY");
     setFormOdds(o !== null ? String(o) : "");
+    setFormCustomLine("");
   }, [formMarket]);
 
   const handlePickSide = useCallback((side: PickSide) => {
@@ -1117,10 +1411,10 @@ export default function BetTracker() {
     if (isNaN(riskNum) || riskNum <= 0)  { setFormError(`Enter a valid ${stakeMode === "U" ? "unit" : "dollar"} amount.`); return; }
 
     const riskDollars  = stakeMode === "U" ? riskNum * unitSize : riskNum;
-    const toWinDollars = stakeMode === "U" ? (toWinCalc ?? 0) * unitSize : (toWinCalc ?? calcToWin(oddsNum, riskNum));
+    const toWinFinal   = !isNaN(toWinNum) && toWinNum > 0
+      ? (stakeMode === "U" ? toWinNum * unitSize : toWinNum)
+      : (stakeMode === "U" ? (autoToWin ?? 0) * unitSize : (autoToWin ?? calcToWin(oddsNum, riskNum)));
 
-    // NRFI/YRFI: enforce market=TOTAL, line=0.5, and correct pickSide
-    // These are fixed by definition — not user-configurable
     let effectiveMarket   = formMarket;
     let effectivePickSide = formPickSide;
     let linePick: number | undefined = undefined;
@@ -1140,20 +1434,30 @@ export default function BetTracker() {
       if (lv !== null && lv !== undefined) linePick = Math.abs(lv);
     }
 
+    // Custom line override (for RL/TOTAL)
+    const customLineNum = formCustomLine.trim() !== "" ? parseFloat(formCustomLine) : undefined;
+    const effectiveCustomLine = (effectiveMarket === "RL" || effectiveMarket === "TOTAL") && customLineNum !== undefined && !isNaN(customLineNum)
+      ? customLineNum
+      : undefined;
+
+    console.log(`[BetTracker][INPUT] create: sport=${activeSport} date=${formDate} game=${formGame.awayTeam}@${formGame.homeTeam} market=${effectiveMarket} pickSide=${effectivePickSide} odds=${oddsNum} risk=${riskDollars} toWin=${toWinFinal} wagerType=${formWagerType} customLine=${effectiveCustomLine ?? "null"}`);
+
     await createMut.mutateAsync({
-      anGameId:  formGame.id,
-      sport:     activeSport,
-      gameDate:  formDate,
-      awayTeam:  formGame.awayTeam,
-      homeTeam:  formGame.homeTeam,
-      timeframe: formTimeframe,
-      market:    effectiveMarket,
-      pickSide:  effectivePickSide,
-      odds:      oddsNum,
-      risk:      riskDollars,
-      toWin:     toWinDollars,
-      line:      linePick,
-      notes:     formNotes || undefined,
+      anGameId:   formGame.id,
+      sport:      activeSport,
+      gameDate:   formDate,
+      awayTeam:   formGame.awayTeam,
+      homeTeam:   formGame.homeTeam,
+      timeframe:  formTimeframe,
+      market:     effectiveMarket,
+      pickSide:   effectivePickSide,
+      odds:       oddsNum,
+      risk:       riskDollars,
+      toWin:      toWinFinal,
+      line:       linePick,
+      notes:      formNotes || undefined,
+      wagerType:  formWagerType,
+      customLine: effectiveCustomLine,
     });
 
     setFormGame(null);
@@ -1162,7 +1466,11 @@ export default function BetTracker() {
     setFormPickSide("AWAY");
     setFormOdds("");
     setFormRisk("2");
+    setFormToWin("");
+    setFormToWinManual(false);
     setFormNotes("");
+    setFormWagerType("PREGAME");
+    setFormCustomLine("");
   };
 
   const handleResult = async (id: number, result: Result) => {
@@ -1171,8 +1479,36 @@ export default function BetTracker() {
 
   const handleEditSave = async () => {
     if (!editBet) return;
-    await updateMut.mutateAsync({ id: editBet.id, notes: editNotes, result: editResult });
+    if (editIsRequest) {
+      // Submit edit request for porter/hank
+      await submitRequestMut.mutateAsync({
+        betId:       editBet.id,
+        requestType: "EDIT",
+        reason:      editRequestReason || undefined,
+        proposedChanges: { notes: editNotes, result: editResult },
+      });
+    } else {
+      await updateMut.mutateAsync({ id: editBet.id, notes: editNotes, result: editResult });
+    }
     setEditBet(null);
+    setEditIsRequest(false);
+    setEditRequestReason("");
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (deleteId === null) return;
+    if (deleteIsRequest) {
+      await submitRequestMut.mutateAsync({
+        betId:       deleteId,
+        requestType: "DELETE",
+        reason:      deleteRequestReason || undefined,
+      });
+    } else {
+      await deleteMut.mutateAsync({ id: deleteId });
+    }
+    setDeleteId(null);
+    setDeleteIsRequest(false);
+    setDeleteRequestReason("");
   };
 
   // ── Stats ─────────────────────────────────────────────────────────────────
@@ -1444,6 +1780,31 @@ export default function BetTracker() {
               />
             </div>
 
+            {/* WAGER TYPE: PREGAME / LIVE */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Wager Type</label>
+              <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg p-0.5 w-fit">
+                <button type="button" onClick={() => setFormWagerType("PREGAME")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                    formWagerType === "PREGAME"
+                      ? "bg-zinc-700 text-white"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  PRE-GAME
+                </button>
+                <button type="button" onClick={() => setFormWagerType("LIVE")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                    formWagerType === "LIVE"
+                      ? "bg-red-500/20 border border-red-500/30 text-red-400"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  <Radio size={10} />LIVE
+                </button>
+              </div>
+            </div>
+
             {/* GAME */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Game</label>
@@ -1465,7 +1826,7 @@ export default function BetTracker() {
               options={timeframeOptions}
             />
 
-            {/* MARKET — hidden for NRFI/YRFI (auto-set to TOTAL) */}
+            {/* MARKET — hidden for NRFI/YRFI */}
             {formTimeframe !== "NRFI" && formTimeframe !== "YRFI" && (
               <SelectField
                 label={`Market — ${MARKET_LABELS[activeSport][formMarket]}`}
@@ -1485,13 +1846,13 @@ export default function BetTracker() {
                 <div className="text-[11px] text-zinc-300 leading-relaxed">
                   <span className="font-bold text-emerald-400">{formTimeframe}</span>
                   {formTimeframe === "NRFI"
-                    ? " — No Run First Inning. Auto-set: TOTAL UNDER 0.5 runs in inning 1. WIN if neither team scores in the 1st."
-                    : " — Yes Run First Inning. Auto-set: TOTAL OVER 0.5 runs in inning 1. WIN if either team scores in the 1st."}
+                    ? " — No Run First Inning. Auto-set: TOTAL UNDER 0.5 runs in inning 1."
+                    : " — Yes Run First Inning. Auto-set: TOTAL OVER 0.5 runs in inning 1."}
                 </div>
               </div>
             )}
 
-            {/* PICK — hidden for NRFI/YRFI (auto-set) */}
+            {/* PICK — hidden for NRFI/YRFI */}
             {formTimeframe !== "NRFI" && formTimeframe !== "YRFI" && (
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Pick</label>
@@ -1507,6 +1868,26 @@ export default function BetTracker() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* CUSTOM LINE (for RL and TOTAL only) */}
+            {(formMarket === "RL" || formMarket === "TOTAL") && formTimeframe !== "NRFI" && formTimeframe !== "YRFI" && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">
+                  {formMarket === "TOTAL" ? "Total Line (e.g. 8, 8.5)" : "Run Line (e.g. -1.5, +1.5)"}
+                </label>
+                <input
+                  type="number"
+                  value={formCustomLine}
+                  onChange={e => setFormCustomLine(e.target.value)}
+                  placeholder={formMarket === "TOTAL" ? "8.0" : "-1.5"}
+                  step="0.5"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+                />
+                <p className="text-[10px] text-zinc-600">
+                  Override the API line. Leave blank to use the default line from the slate.
+                </p>
               </div>
             )}
 
@@ -1535,25 +1916,40 @@ export default function BetTracker() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">{toWinLabel}</label>
-                <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm font-mono text-emerald-400 min-h-[42px] flex items-center">
-                  {toWinCalc !== null
-                    ? fmtToWin(toWinCalc)
-                    : <span className="text-zinc-600"><Minus size={12} /></span>
-                  }
-                </div>
+                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">
+                  {toWinLabel}
+                  {formToWinManual && (
+                    <button type="button"
+                      onClick={() => { setFormToWinManual(false); if (autoToWin !== null) setFormToWin(String(autoToWin)); }}
+                      className="ml-1 text-[9px] text-emerald-400 underline"
+                    >
+                      reset
+                    </button>
+                  )}
+                </label>
+                <input
+                  type="number"
+                  value={formToWin}
+                  onChange={e => { setFormToWin(e.target.value); setFormToWinManual(true); }}
+                  placeholder={autoToWin !== null ? String(autoToWin) : "0"}
+                  min={0}
+                  step={stakeMode === "U" ? "0.5" : "10"}
+                  className={`w-full bg-zinc-900 border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
+                    formToWinManual ? "border-emerald-500/50 text-emerald-400" : "border-zinc-700"
+                  }`}
+                />
               </div>
             </div>
 
             {/* Unit math explainer */}
-            {stakeMode === "U" && toWinCalc !== null && riskNum > 0 && (
+            {stakeMode === "U" && !isNaN(toWinNum) && toWinNum > 0 && riskNum > 0 && (
               <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 bg-zinc-800/50 rounded-lg px-3 py-2">
                 <Hash size={10} className="text-emerald-400 shrink-0" />
                 <span>
-                  {fmtUnits(riskNum)} to win {fmtUnits(toWinCalc)}
+                  {fmtUnits(riskNum)} to win {fmtUnits(toWinNum)}
                   {unitSize > 0 && (
                     <span className="text-zinc-600 ml-1">
-                      ({fmtDollar(riskNum * unitSize)} to win {fmtDollar(toWinCalc * unitSize)})
+                      ({fmtDollar(riskNum * unitSize)} to win {fmtDollar(toWinNum * unitSize)})
                     </span>
                   )}
                 </span>
@@ -1589,103 +1985,157 @@ export default function BetTracker() {
             </button>
           </div>
 
-          {/* ── Bets List ─────────────────────────────────────────────────── */}
+          {/* ── Right Panel: Tabs (BETS | LOGS) ──────────────────────────── */}
           <div className="space-y-4">
-            {/* Filter bar */}
-            <div className="flex items-center gap-3 flex-wrap">
-              {!filterAllTime && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Filter Date</label>
-                  <input
-                    type="date"
-                    value={filterDate}
-                    onChange={e => setFilterDate(e.target.value)}
-                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
-                  />
-                </div>
-              )}
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Result</label>
-                <div className="relative">
-                  <select
-                    value={filterResult}
-                    onChange={e => setFilterResult(e.target.value as Result | "")}
-                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 pr-8 text-sm text-white appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
-                  >
-                    <option value="">All Results</option>
-                    {RESULTS.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                  <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
-                </div>
-              </div>
-              <div className="ml-auto flex items-center gap-2 self-end pb-2">
-                <span className="text-xs text-zinc-500">{bets.length} bet{bets.length !== 1 ? "s" : ""}</span>
-                {/* Linescore refresh indicator */}
-                {linescoreQuery.isFetching && (
-                  <div className="w-3 h-3 border border-emerald-500 border-t-transparent rounded-full animate-spin" title="Refreshing linescores…" />
-                )}
-                <button type="button" onClick={() => {
-                    autoGradeMut.mutate({ sport: activeSport, gameDate: filterAllTime ? undefined : (filterDate || undefined) });
-                  }}
-                  disabled={autoGradeMut.isPending || enrichedBets.filter(b => b.result === "PENDING").length === 0}
-                  title="Auto-grade all pending bets using official league scores"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold tracking-wider hover:bg-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+
+            {/* Tab bar */}
+            <div className="flex items-center gap-1 border-b border-zinc-800 pb-0">
+              <button type="button"
+                onClick={() => setActiveTab("BETS")}
+                className={`px-4 py-2.5 text-xs font-bold tracking-wider border-b-2 transition-all ${
+                  activeTab === "BETS"
+                    ? "border-emerald-400 text-emerald-400"
+                    : "border-transparent text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                BETS
+              </button>
+              {isOwnerOrAdmin && (
+                <button type="button"
+                  onClick={() => setActiveTab("LOGS")}
+                  className={`px-4 py-2.5 text-xs font-bold tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
+                    activeTab === "LOGS"
+                      ? "border-emerald-400 text-emerald-400"
+                      : "border-transparent text-zinc-500 hover:text-zinc-300"
+                  }`}
                 >
-                  {autoGradeMut.isPending
-                    ? <><RefreshCw size={11} className="animate-spin" /> Grading…</>
-                    : <><Zap size={11} /> GRADE BETS</>}
+                  <FileText size={11} />LOGS
                 </button>
-              </div>
+              )}
             </div>
 
-            {/* Bet cards with day separators */}
-            {listQuery.isLoading ? (
-              <div className="flex items-center justify-center py-16">
-                <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : bets.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center space-y-2">
-                <Clock size={28} className="text-zinc-700" />
-                <p className="text-zinc-500 text-sm">
-                  {filterAllTime
-                    ? "No bets tracked yet."
-                    : `No bets tracked yet for ${activeSport} on ${fmtDate(filterDate)}.`}
-                </p>
-                <p className="text-zinc-600 text-xs">Use the form to add your first bet.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {betsWithSeparators.map((item, idx) => {
-                  if (item.type === "separator") {
-                    const record = `${item.wins}W-${item.losses}L${item.pushes > 0 ? `-${item.pushes}P` : ""}${item.pending > 0 ? ` (${item.pending} pending)` : ""}`;
-                    return (
-                      <div key={`sep-${item.date}-${idx}`} className="flex items-center gap-3 py-2">
-                        <div className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">
-                          {item.date ? fmtDate(item.date) : "Unknown Date"}
-                        </div>
-                        <div className="flex-1 h-px bg-zinc-800" />
-                        <div className="text-[10px] font-mono text-zinc-600">{record}</div>
-                      </div>
-                    );
-                  }
-                  // Look up linescore for this bet (MLB only)
-                  const ls = item.bet.sport === "MLB"
-                    ? linescoreByTeams.get(`${item.bet.gameDate}:${item.bet.awayTeam}:${item.bet.homeTeam}`) ?? undefined
-                    : undefined;
-                  return (
-                    <BetCard
-                      key={item.bet.id}
-                      bet={item.bet}
-                      stakeMode={stakeMode}
-                      unitSize={unitSize}
-                      onResult={handleResult}
-                      onDelete={id => setDeleteId(id)}
-                      onEdit={b => { setEditBet(b); setEditNotes(b.notes ?? ""); setEditResult(b.result as Result); }}
-                      linescore={ls}
-                    />
-                  );
-                })}
-              </div>
+            {/* BETS Tab */}
+            {activeTab === "BETS" && (
+              <>
+                {/* Filter bar */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {!filterAllTime && (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Filter Date</label>
+                      <input
+                        type="date"
+                        value={filterDate}
+                        onChange={e => setFilterDate(e.target.value)}
+                        className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                      />
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Result</label>
+                    <div className="relative">
+                      <select
+                        value={filterResult}
+                        onChange={e => setFilterResult(e.target.value as Result | "")}
+                        className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 pr-8 text-sm text-white appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                      >
+                        <option value="">All Results</option>
+                        {RESULTS.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                      <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                    </div>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2 self-end pb-2">
+                    <span className="text-xs text-zinc-500">{bets.length} bet{bets.length !== 1 ? "s" : ""}</span>
+                    {linescoreQuery.isFetching && (
+                      <div className="w-3 h-3 border border-emerald-500 border-t-transparent rounded-full animate-spin" title="Refreshing linescores…" />
+                    )}
+                    <button type="button" onClick={() => {
+                        autoGradeMut.mutate({ sport: activeSport, gameDate: filterAllTime ? undefined : (filterDate || undefined) });
+                      }}
+                      disabled={autoGradeMut.isPending || enrichedBets.filter(b => b.result === "PENDING").length === 0}
+                      title="Auto-grade all pending bets using official league scores"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold tracking-wider hover:bg-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      {autoGradeMut.isPending
+                        ? <><RefreshCw size={11} className="animate-spin" /> Grading…</>
+                        : <><Zap size={11} /> GRADE BETS</>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bet cards with day separators */}
+                {listQuery.isLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : bets.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center space-y-2">
+                    <Clock size={28} className="text-zinc-700" />
+                    <p className="text-zinc-500 text-sm">
+                      {filterAllTime
+                        ? "No bets tracked yet."
+                        : `No bets tracked yet for ${activeSport} on ${fmtDate(filterDate)}.`}
+                    </p>
+                    <p className="text-zinc-600 text-xs">Use the form to add your first bet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {betsWithSeparators.map((item, idx) => {
+                      if (item.type === "separator") {
+                        const record = `${item.wins}W-${item.losses}L${item.pushes > 0 ? `-${item.pushes}P` : ""}${item.pending > 0 ? ` (${item.pending} pending)` : ""}`;
+                        return (
+                          <div key={`sep-${item.date}-${idx}`} className="flex items-center gap-3 py-2">
+                            <div className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">
+                              {item.date ? fmtDate(item.date) : "Unknown Date"}
+                            </div>
+                            <div className="flex-1 h-px bg-zinc-800" />
+                            <div className="text-[10px] font-mono text-zinc-600">{record}</div>
+                          </div>
+                        );
+                      }
+                      const ls = item.bet.sport === "MLB"
+                        ? linescoreByTeams.get(`${item.bet.gameDate}:${item.bet.awayTeam}:${item.bet.homeTeam}`) ?? undefined
+                        : undefined;
+                      // canDirectEdit: owner/admin can always edit; handicapper can only edit their own
+                      // porter/hank (handicapper role) must submit request
+                      const betOwnerIsHandicapper = item.bet.userId === appUser?.id && role === "handicapper";
+                      const canDirectEdit = isOwnerOrAdmin || !betOwnerIsHandicapper;
+                      return (
+                        <BetCard
+                          key={item.bet.id}
+                          bet={item.bet}
+                          stakeMode={stakeMode}
+                          unitSize={unitSize}
+                          onResult={handleResult}
+                          onDelete={id => {
+                            setDeleteId(id);
+                            setDeleteIsRequest(!isOwnerOrAdmin);
+                            setDeleteRequestReason("");
+                          }}
+                          onEdit={b => {
+                            setEditBet(b);
+                            setEditNotes(b.notes ?? "");
+                            setEditResult(b.result as Result);
+                            setEditIsRequest(!isOwnerOrAdmin);
+                            setEditRequestReason("");
+                          }}
+                          linescore={ls}
+                          canDirectEdit={canDirectEdit}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* LOGS Tab */}
+            {activeTab === "LOGS" && isOwnerOrAdmin && (
+              <LogsTab
+                logsQuery={logsQuery}
+                reviewMut={reviewMut}
+                invalidateLogs={invalidateLogs}
+              />
             )}
           </div>
         </div>
@@ -1695,7 +2145,17 @@ export default function BetTracker() {
       {editBet && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm space-y-4">
-            <h3 className="font-bold text-sm tracking-wider">EDIT BET</h3>
+            <h3 className="font-bold text-sm tracking-wider">
+              {editIsRequest ? "📋 REQUEST EDIT" : "EDIT BET"}
+            </h3>
+            {editIsRequest && (
+              <div className="flex items-start gap-2 bg-yellow-500/8 border border-yellow-500/20 rounded-lg px-3 py-2.5">
+                <Lock size={12} className="text-yellow-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-zinc-300">
+                  Your bets are immutable. This will submit an edit request for owner/admin review.
+                </p>
+              </div>
+            )}
             <div className="text-xs text-zinc-400">{editBet.pick} · {fmtOdds(editBet.odds)}</div>
             <SelectField
               label="Result"
@@ -1712,6 +2172,18 @@ export default function BetTracker() {
                 className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
               />
             </div>
+            {editIsRequest && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Reason for Request</label>
+                <textarea
+                  value={editRequestReason}
+                  onChange={e => setEditRequestReason(e.target.value)}
+                  rows={2}
+                  placeholder="Explain why this change is needed…"
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white resize-none focus:outline-none focus:ring-1 focus:ring-yellow-500 transition-colors"
+                />
+              </div>
+            )}
             <div className="flex gap-3">
               <button type="button" onClick={() => setEditBet(null)}
                 className="flex-1 py-2.5 rounded-xl border border-zinc-700 text-zinc-400 text-sm font-medium hover:border-zinc-500 transition-colors"
@@ -1719,10 +2191,14 @@ export default function BetTracker() {
                 Cancel
               </button>
               <button type="button" onClick={handleEditSave}
-                disabled={updateMut.isPending}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold transition-colors disabled:opacity-40"
+                disabled={updateMut.isPending || submitRequestMut.isPending}
+                className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-colors disabled:opacity-40 ${
+                  editIsRequest ? "bg-yellow-600 hover:bg-yellow-500" : "bg-emerald-500 hover:bg-emerald-400"
+                }`}
               >
-                {updateMut.isPending ? "Saving…" : "Save"}
+                {(updateMut.isPending || submitRequestMut.isPending)
+                  ? "Saving…"
+                  : editIsRequest ? "Submit Request" : "Save"}
               </button>
             </div>
           </div>
@@ -1752,42 +2228,70 @@ export default function BetTracker() {
               <div className="text-zinc-500 text-[10px] uppercase tracking-wider">Losses</div>
               <div className="text-red-400 font-bold">{gradeToast.losses}</div>
             </div>
-            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded
+-lg px-3 py-2">
               <div className="text-zinc-500 text-[10px] uppercase tracking-wider">Pushes</div>
               <div className="text-yellow-400 font-bold">{gradeToast.pushes}</div>
             </div>
           </div>
           {gradeToast.stillPending > 0 && (
-            <div className="mt-2 text-[10px] text-zinc-500 text-center">
-              {gradeToast.stillPending} bet{gradeToast.stillPending !== 1 ? "s" : ""} still pending (game not final)
+            <div className="mt-2 text-[10px] text-zinc-500">
+              {gradeToast.stillPending} bet{gradeToast.stillPending !== 1 ? "s" : ""} still pending (game not final yet)
             </div>
           )}
         </div>
       )}
 
-      {/* ── Delete confirm modal ────────────────────────────────────────────── */}
+      {/* ── Delete confirmation modal ─────────────────────────────────────── */}
       {deleteId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-xs space-y-4 text-center">
-            <Trash2 size={24} className="mx-auto text-red-400" />
-            <p className="font-bold text-sm">Delete this bet?</p>
-            <p className="text-zinc-500 text-xs">This action cannot be undone.</p>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="font-bold text-sm tracking-wider text-red-400">
+              {deleteIsRequest ? "📋 REQUEST DELETION" : "DELETE BET"}
+            </h3>
+            {deleteIsRequest ? (
+              <>
+                <div className="flex items-start gap-2 bg-yellow-500/8 border border-yellow-500/20 rounded-lg px-3 py-2.5">
+                  <Lock size={12} className="text-yellow-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-zinc-300">
+                    Your bets are immutable. This will submit a deletion request for owner/admin review.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Reason for Request</label>
+                  <textarea
+                    value={deleteRequestReason}
+                    onChange={e => setDeleteRequestReason(e.target.value)}
+                    rows={2}
+                    placeholder="Explain why this bet should be removed…"
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white resize-none focus:outline-none focus:ring-1 focus:ring-yellow-500 transition-colors"
+                  />
+                </div>
+              </>
+            ) : (
+              <p className="text-zinc-400 text-sm">This action cannot be undone. The bet will be permanently removed.</p>
+            )}
             <div className="flex gap-3">
-              <button type="button" onClick={() => setDeleteId(null)}
+              <button type="button" onClick={() => { setDeleteId(null); setDeleteIsRequest(false); setDeleteRequestReason(""); }}
                 className="flex-1 py-2.5 rounded-xl border border-zinc-700 text-zinc-400 text-sm font-medium hover:border-zinc-500 transition-colors"
               >
                 Cancel
               </button>
-              <button type="button" onClick={async () => { await deleteMut.mutateAsync({ id: deleteId }); setDeleteId(null); }}
-                disabled={deleteMut.isPending}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-400 text-white text-sm font-bold transition-colors disabled:opacity-40"
+              <button type="button" onClick={handleDeleteConfirm}
+                disabled={deleteMut.isPending || submitRequestMut.isPending}
+                className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-colors disabled:opacity-40 ${
+                  deleteIsRequest ? "bg-yellow-600 hover:bg-yellow-500" : "bg-red-600 hover:bg-red-500"
+                }`}
               >
-                {deleteMut.isPending ? "Deleting…" : "Delete"}
+                {(deleteMut.isPending || submitRequestMut.isPending)
+                  ? "Processing…"
+                  : deleteIsRequest ? "Submit Request" : "Delete"}
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

@@ -533,6 +533,13 @@
       "when": 1777421876459,
       "tag": "0075_panoramic_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "5",
+      "when": 1777503715829,
+      "tag": "0076_dry_patriot",
+      "breakpoints": true
     }
   ]
 }

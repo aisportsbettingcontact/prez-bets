@@ -2030,6 +2030,17 @@ export const trackedBets = mysqlTable("tracked_bets", {
    */
   awayScore: varchar("awayScore", { length: 16 }),
   homeScore: varchar("homeScore", { length: 16 }),
+  /**
+   * Wager type: PREGAME (placed before game starts) or LIVE (in-game live bet).
+   * Defaults to PREGAME.
+   */
+  wagerType: mysqlEnum("wagerType", ["PREGAME", "LIVE"]).notNull().default("PREGAME"),
+  /**
+   * Custom line value for RL/Total bets — overrides the default 1.5/7.5 hardcoded line.
+   * e.g. 8.0 for an Over 8 total, -1.5 for a standard run line.
+   * NULL means use the default line for the market.
+   */
+  customLine: decimal("customLine", { precision: 6, scale: 1 }),
   /** UTC timestamp (ms) when this bet was created */
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   /** UTC timestamp (ms) when this bet was last updated */
@@ -2044,3 +2055,48 @@ export const trackedBets = mysqlTable("tracked_bets", {
 
 export type TrackedBet = typeof trackedBets.$inferSelect;
 export type InsertTrackedBet = typeof trackedBets.$inferInsert;
+
+// ─── Bet Edit Requests (porter/hank immutable bets — request changes via this table) ──
+/**
+ * When a handicapper (porter/hank) wants to edit or delete a tracked bet,
+ * they submit a request here instead of modifying the bet directly.
+ * Owner/Admin reviews and approves/denies the request.
+ */
+export const betEditRequests = mysqlTable("bet_edit_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK to tracked_bets.id — the bet being requested to change */
+  betId: int("betId").notNull(),
+  /** FK to app_users.id — the handicapper making the request */
+  requestedBy: int("requestedBy").notNull(),
+  /**
+   * Request type:
+   *   EDIT   = modify fields on the bet
+   *   DELETE = remove the bet from the tracker
+   */
+  requestType: mysqlEnum("requestType", ["EDIT", "DELETE"]).notNull(),
+  /** JSON blob of the proposed changes (for EDIT requests) */
+  proposedChanges: text("proposedChanges"),
+  /** Free-text reason for the request */
+  reason: text("reason"),
+  /**
+   * Status of the request:
+   *   PENDING  = awaiting owner/admin review
+   *   APPROVED = approved and applied
+   *   DENIED   = denied by owner/admin
+   */
+  status: mysqlEnum("status", ["PENDING", "APPROVED", "DENIED"]).notNull().default("PENDING"),
+  /** FK to app_users.id — the owner/admin who reviewed the request */
+  reviewedBy: int("reviewedBy"),
+  /** UTC timestamp (ms) when the request was reviewed */
+  reviewedAt: timestamp("reviewedAt"),
+  /** Optional note from the reviewer */
+  reviewNote: text("reviewNote"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  idxBetId:       index("idx_ber_bet_id").on(t.betId),
+  idxRequestedBy: index("idx_ber_requested_by").on(t.requestedBy),
+  idxStatus:      index("idx_ber_status").on(t.status),
+}));
+export type BetEditRequest = typeof betEditRequests.$inferSelect;
+export type InsertBetEditRequest = typeof betEditRequests.$inferInsert;

@@ -2789,3 +2789,47 @@
 - [ ] Wire auto-grading for 04/21 pending bets via MLB API scoreGrader
 - [x] Run vitest for betTracker router after all changes (487/487 passing)
 - [x] Save checkpoint and deploy (5b2f90ec)
+
+## Session: 2026-04-29 - BetTracker Major Feature Update
+
+- [ ] Default handicapper dropdown to logged-in user on page load
+- [ ] All-Time toggle: on by default, active/highlighted
+- [ ] Role-based access: prez/sippi/owner see prez bets; porter/hank see own only; admin sees all
+- [ ] Immutable bets for porter/hank: no delete after creation; edit-request flow instead
+- [ ] Schema: add wagerType enum (PREGAME/LIVE) to trackedBets
+- [ ] Schema: add customLine (decimal) field to trackedBets for RL/Total custom line values
+- [ ] Schema: add betEditRequests table for porter/hank edit/delete requests
+- [ ] DB push migrations
+- [ ] Server: LOGS procedure (prez/sippi/admin only) — all creates, edits, edit requests
+- [ ] Server: enforce immutability for porter/hank bets (block delete/edit, allow edit-request)
+- [ ] Frontend: pregame/live wager toggle in ADD BET form
+- [ ] Frontend: customizable line field for RL and Total markets (replaces hardcoded 7.5)
+- [ ] Frontend: editable TO WIN (U) field (currently read-only, calculated)
+- [ ] Frontend: unit size analytics fix — 1U/2U/3U/4U/5U/10U buckets; plus-money uses risk, minus-money uses toWin
+- [ ] Frontend: LOGS tab (prez/sippi/admin only) with full audit trail
+- [ ] Slate load speed: in-memory cache with 60s TTL for AN slate per sport/date
+
+## Session: 2026-04-29 - BetTracker v4 (Role Access, Immutability, LOGS, Analytics Fix)
+
+- [x] Schema: add wagerType (PREGAME/LIVE) and customLine to tracked_bets
+- [x] Schema: create bet_edit_requests table (betId, requestedBy, requestType, proposedChanges, reason, status, reviewedBy, reviewedAt, reviewNote)
+- [x] Run db:push to apply schema changes
+- [x] Server: fix bySize analytics — plus-money uses risk as unit count, minus-money uses toWin as unit count
+- [x] Server: bySize buckets ordered 10U → 5U → 4U → 3U → 2U → 1U
+- [x] Server: listHandicappers returns all owner/admin/handicapper accounts
+- [x] Server: list procedure — OWNER/ADMIN can view any user via targetUserId; HANDICAPPER sees own bets only
+- [x] Server: create procedure — accepts wagerType and customLine fields
+- [x] Server: update procedure — HANDICAPPER forbidden; ADMIN cannot touch owner bets; OWNER can only edit own bets
+- [x] Server: delete procedure — HANDICAPPER forbidden (must submitEditRequest); ADMIN cannot delete owner bets
+- [x] Server: submitEditRequest — handicapper submits EDIT or DELETE request for own bet
+- [x] Server: reviewEditRequest — OWNER/ADMIN approves or denies pending edit request
+- [x] Server: getLogs — OWNER/ADMIN: full audit log of all bets + all edit requests with user info
+- [x] Client: default logged-in user selected in handicapper dropdown on BetTracker page
+- [x] Client: All-Time toggled ON by default
+- [x] Client: wagerType (PREGAME/LIVE) toggle in bet creation form
+- [x] Client: customLine field for RL/TOTAL bets (editable text input)
+- [x] Client: TO WIN field is now editable/typable (not just auto-calculated)
+- [x] Client: LOGS tab visible to owner/admin — shows all bets created + all edit requests
+- [x] Client: porter/hank edit/delete triggers submit-request modal (immutable bets)
+- [x] Client: review modal in LOGS tab for owner/admin to approve/deny requests
+- [x] TypeScript: 0 errors

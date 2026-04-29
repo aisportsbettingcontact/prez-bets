@@ -1,22 +1,23 @@
 /**
  * betTracker.ts — tRPC router for the Bet Tracker feature.
  *
- * All procedures are gated behind handicapperProcedure, which allows
- * OWNER, ADMIN, and HANDICAPPER roles only.
+ * Role-based access model (v4):
+ *   OWNER (prez)     — can see/edit/delete own bets; can see sippi bets (sippi is also owner);
+ *                      can see all handicapper bets via targetUserId
+ *   ADMIN            — can see all bets; can edit/delete porter & hank bets; cannot touch owner bets
+ *   HANDICAPPER      — can only see own bets; porter & hank bets are IMMUTABLE after creation
+ *                      (must submit edit/delete request; owner/admin reviews)
  *
- * Procedures:
- *   list      — list bets for the current user (filterable by sport, date, result)
- *   create    — create a new tracked bet (structured: game + timeframe + market + pickSide)
- *   update    — update an existing bet (result, notes, odds, risk, etc.)
- *   delete    — delete a bet by id
- *   getSlate  — get the AN game slate for a given sport + date (cached, ~0ms on warm)
- *   getStats  — aggregate P/L stats for the current user
+ * Immutability rule for handicappers (porter/hank):
+ *   - create: allowed
+ *   - update/delete: FORBIDDEN — must use submitEditRequest instead
  *
- * Schema fields added in v3:
- *   anGameId   — Action Network game id (links to AN scoreboard)
- *   timeframe  — FULL_GAME | FIRST_5 | FIRST_INNING
- *   market     — ML | RL | TOTAL
- *   pickSide   — AWAY | HOME | OVER | UNDER
+ * Owner bets (role=owner) are protected from admin edit/delete.
+ *
+ * New procedures (v4):
+ *   submitEditRequest — handicapper submits EDIT or DELETE request for own bet
+ *   getLogs           — owner/admin/sippi: full audit log (all bets created + all edit requests)
+ *   reviewEditRequest — owner/admin: approve or deny a pending edit request
  *
  * Logging convention:
  *   [BetTracker][INPUT]  — raw input received
@@ -32,8 +33,8 @@ import { router } from "../_core/trpc";
 import { handicapperProcedure } from "./appUsers";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
-import { trackedBets, appUsers } from "../../drizzle/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { trackedBets, appUsers, betEditRequests } from "../../drizzle/schema";
+import { eq, and, desc, inArray, asc } from "drizzle-orm";
 import { fetchAnSlate, resolveLogoUrl } from "../actionNetwork";
 import { gradeTrackedBet, fetchScores, type Sport as GraderSport, type Timeframe as GraderTimeframe, type Market as GraderMarket, type PickSide as GraderPickSide } from "../scoreGrader";
 
@@ -54,10 +55,11 @@ const TIMEFRAMES = [
 ] as const;
 const MARKETS    = ["ML", "RL", "TOTAL"] as const;
 const PICK_SIDES = ["AWAY", "HOME", "OVER", "UNDER"] as const;
+const WAGER_TYPES = ["PREGAME", "LIVE"] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Compute toWin from American odds + risk (dollars) */
+/** Compute toWin from American odds + risk (units) */
 function calcToWin(odds: number, risk: number): number {
   if (odds >= 100) {
     return parseFloat((risk * (odds / 100)).toFixed(2));
@@ -93,6 +95,40 @@ function derivePickLabel(
   return `${team} ${suffix}`;
 }
 
+/**
+ * Determine the unit-size bucket label for a bet.
+ *
+ * Unit-size logic (v4):
+ *   - Plus-money bets (+odds): the RISK amount IS the unit count.
+ *     e.g. ARI ML +155 at 3U risk → 3U play.
+ *   - Minus-money bets (-odds): the TO-WIN amount IS the unit count.
+ *     e.g. NYM ML -153 at ~5U risk to win 5U → 5U play.
+ *
+ * Buckets: 10U, 5U, 4U, 3U, 2U, 1U (exact integer matching).
+ * Any non-integer or out-of-range value maps to the nearest bucket.
+ */
+function calcUnitBucket(odds: number, risk: number, toWin: number): string {
+  // Determine the "unit count" for this bet
+  let unitCount: number;
+  if (odds >= 100) {
+    // Plus money: risk IS the unit count
+    unitCount = risk;
+  } else {
+    // Minus money: toWin IS the unit count
+    unitCount = toWin;
+  }
+
+  // Round to nearest integer for bucket assignment
+  const u = Math.round(unitCount);
+
+  if (u >= 10) return "10U";
+  if (u >= 5)  return "5U";
+  if (u >= 4)  return "4U";
+  if (u >= 3)  return "3U";
+  if (u >= 2)  return "2U";
+  return "1U";
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const betTrackerRouter = router({
@@ -100,6 +136,8 @@ export const betTrackerRouter = router({
   /**
    * listHandicappers — OWNER/ADMIN only: list all handicapper accounts.
    * Used by the BetTracker handicapper selector dropdown.
+   * Returns all users with role owner/admin/handicapper so the selector
+   * can show all accounts including prez (owner) and sippi (owner).
    */
   listHandicappers: handicapperProcedure
     .query(async ({ ctx }) => {
@@ -120,7 +158,11 @@ export const betTrackerRouter = router({
   /**
    * list — fetch all bets for the authenticated user.
    * Optional filters: sport, gameDate, result.
-   * Owner/Admin can pass targetUserId to view another handicapper's bets.
+   *
+   * Visibility rules:
+   *   OWNER (prez/sippi)  — can view own bets + any other user via targetUserId
+   *   ADMIN               — can view any user via targetUserId
+   *   HANDICAPPER         — can only view own bets (targetUserId ignored)
    */
   list: handicapperProcedure
     .input(z.object({
@@ -131,15 +173,16 @@ export const betTrackerRouter = router({
     }).optional())
     .query(async ({ ctx, input }) => {
       const role = ctx.appUser.role;
-      // Visibility enforcement: only owner/admin can view other handicappers
+      // Visibility enforcement
       let userId = ctx.appUser.id;
       if (input?.targetUserId && input.targetUserId !== userId) {
         if (role !== "owner" && role !== "admin") {
+          console.log(`[BetTracker][ERROR] list: FORBIDDEN — role=${role} cannot view targetUserId=${input.targetUserId}`);
           throw new TRPCError({ code: "FORBIDDEN", message: "Owner or Admin required to view other handicappers" });
         }
         userId = input.targetUserId;
       }
-      console.log(`[BetTracker][INPUT] list: viewerId=${ctx.appUser.id} targetUserId=${userId} sport=${input?.sport ?? "ALL"} date=${input?.gameDate ?? "ALL"} result=${input?.result ?? "ALL"}`);
+      console.log(`[BetTracker][INPUT] list: viewerId=${ctx.appUser.id} role=${role} targetUserId=${userId} sport=${input?.sport ?? "ALL"} date=${input?.gameDate ?? "ALL"} result=${input?.result ?? "ALL"}`);
 
       const conditions = [eq(trackedBets.userId, userId)];
       if (input?.sport)    conditions.push(eq(trackedBets.sport, input.sport));
@@ -156,15 +199,13 @@ export const betTrackerRouter = router({
       console.log(`[BetTracker][OUTPUT] list: userId=${userId} → ${rows.length} bets returned`);
 
       // ── Enrich with SlateGame data (logos, full names, gameTime, status, live scores) ──
-      // Collect unique (sport, gameDate) pairs
       const pairs = new Map<string, { sport: string; gameDate: string }>();
       for (const row of rows) {
         const key = `${row.sport}:${row.gameDate}`;
         if (!pairs.has(key)) pairs.set(key, { sport: row.sport, gameDate: row.gameDate });
       }
 
-      // Fetch slates for all unique pairs (cached)
-      const slateMap = new Map<number, import('../actionNetwork').SlateGame>(); // anGameId → SlateGame
+      const slateMap = new Map<number, import('../actionNetwork').SlateGame>();
       await Promise.all(
         Array.from(pairs.values()).map(async ({ sport, gameDate }) => {
           try {
@@ -176,23 +217,16 @@ export const betTrackerRouter = router({
         })
       );
 
-      // Merge slate data into each bet row
-      // For bets where the AN slate is unavailable (historical dates), fall back to
-      // resolveLogoUrl which builds logos directly from team abbreviations.
       type RawBet = typeof rows[0];
       const enriched = rows.map((row: RawBet) => {
         const slate = row.anGameId ? slateMap.get(row.anGameId) : undefined;
-
-        // Logo fallback: resolve from MLB_BY_ABBREV when slate is unavailable
         const awayLogo = slate?.awayLogo
           ?? (row.awayTeam ? resolveLogoUrl(row.sport, row.awayTeam, "") || null : null);
         const homeLogo = slate?.homeLogo
           ?? (row.homeTeam ? resolveLogoUrl(row.sport, row.homeTeam, "") || null : null);
-
         if (!slate && (awayLogo || homeLogo)) {
           console.log(`[BetTracker][STATE] list: bet id=${row.id} — no slate, logo fallback: ${row.awayTeam}=${awayLogo ? 'OK' : 'MISS'} ${row.homeTeam}=${homeLogo ? 'OK' : 'MISS'}`);
         }
-
         return {
           ...row,
           awayLogo,
@@ -216,58 +250,62 @@ export const betTrackerRouter = router({
 
   /**
    * create — add a new tracked bet.
-   * Structured inputs: anGameId, timeframe, market, pickSide.
+   * Structured inputs: anGameId, timeframe, market, pickSide, wagerType, customLine.
    * pick is auto-derived from pickSide + market + team abbreviations.
-   * toWin is auto-calculated from odds + risk.
+   * toWin is auto-calculated from odds + risk (or provided explicitly).
    */
   create: handicapperProcedure
     .input(z.object({
       // Game identification
-      anGameId:  z.number().int().positive(),
-      sport:     z.enum(SPORTS).default("MLB"),
-      gameDate:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      awayTeam:  z.string().min(1).max(128),
-      homeTeam:  z.string().min(1).max(128),
+      anGameId:   z.number().int().positive(),
+      sport:      z.enum(SPORTS).default("MLB"),
+      gameDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      awayTeam:   z.string().min(1).max(128),
+      homeTeam:   z.string().min(1).max(128),
       // Bet structure
-      timeframe: z.enum(TIMEFRAMES).default("FULL_GAME"),
-      market:    z.enum(MARKETS).default("ML"),
-      pickSide:  z.enum(PICK_SIDES),
+      timeframe:  z.enum(TIMEFRAMES).default("FULL_GAME"),
+      market:     z.enum(MARKETS).default("ML"),
+      pickSide:   z.enum(PICK_SIDES),
       // Stake
-      odds:      z.number().int().min(-10000).max(10000),
-      risk:      z.number().positive().max(1_000_000),
-      toWin:     z.number().positive().optional(),
+      odds:       z.number().int().min(-10000).max(10000),
+      risk:       z.number().positive().max(1_000_000),
+      toWin:      z.number().positive().optional(),
       // Optional
-      line:      z.number().optional(),   // RL spread or Total line value
-      notes:     z.string().max(2000).optional(),
+      line:       z.number().optional(),         // RL spread or Total line value (default)
+      customLine: z.number().optional(),         // Exact custom line override (e.g. 8.0 for Over 8)
+      wagerType:  z.enum(WAGER_TYPES).default("PREGAME"),
+      notes:      z.string().max(2000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.appUser.id;
       const toWin  = input.toWin ?? calcToWin(input.odds, input.risk);
       const pick   = derivePickLabel(input.pickSide, input.market, input.awayTeam, input.homeTeam, input.timeframe);
 
-      console.log(`[BetTracker][INPUT] create: userId=${userId} sport=${input.sport} date=${input.gameDate} anGameId=${input.anGameId} timeframe=${input.timeframe} market=${input.market} pickSide=${input.pickSide} pick="${pick}" odds=${input.odds} risk=${input.risk} toWin=${toWin}`);
+      console.log(`[BetTracker][INPUT] create: userId=${userId} sport=${input.sport} date=${input.gameDate} anGameId=${input.anGameId} timeframe=${input.timeframe} market=${input.market} pickSide=${input.pickSide} pick="${pick}" odds=${input.odds} risk=${input.risk} toWin=${toWin} wagerType=${input.wagerType} customLine=${input.customLine ?? "null"}`);
       console.log(`[BetTracker][STATE] create: awayTeam=${input.awayTeam} homeTeam=${input.homeTeam} derivedPick="${pick}"`);
 
       const db = await getDb();
       const [result] = await db.insert(trackedBets).values({
         userId,
-        anGameId:  input.anGameId,
-        sport:     input.sport,
-        gameDate:  input.gameDate,
-        awayTeam:  input.awayTeam,
-        homeTeam:  input.homeTeam,
-        timeframe: input.timeframe,
-        market:    input.market,
-        pickSide:  input.pickSide,
-        betType:   input.market === "TOTAL" ? (input.pickSide === "OVER" ? "OVER" : "UNDER") : input.market,
+        anGameId:   input.anGameId,
+        sport:      input.sport,
+        gameDate:   input.gameDate,
+        awayTeam:   input.awayTeam,
+        homeTeam:   input.homeTeam,
+        timeframe:  input.timeframe,
+        market:     input.market,
+        pickSide:   input.pickSide,
+        betType:    input.market === "TOTAL" ? (input.pickSide === "OVER" ? "OVER" : "UNDER") : input.market,
         pick,
-        odds:      input.odds,
-        risk:      String(input.risk),
-        toWin:     String(toWin),
-        book:      null,
-        line:      input.line !== undefined ? String(input.line) : null,
-        notes:     input.notes ?? null,
-        result:    "PENDING",
+        odds:       input.odds,
+        risk:       String(input.risk),
+        toWin:      String(toWin),
+        book:       null,
+        line:       input.line !== undefined ? String(input.line) : null,
+        customLine: input.customLine !== undefined ? String(input.customLine) : null,
+        wagerType:  input.wagerType,
+        notes:      input.notes ?? null,
+        result:     "PENDING",
       });
 
       const insertId = (result as { insertId: number }).insertId;
@@ -275,18 +313,15 @@ export const betTrackerRouter = router({
       console.log(`[BetTracker][VERIFY] create: PASS — bet inserted with id=${insertId}`);
 
       // ── Auto-grade-on-create ──────────────────────────────────────────────────
-      // If the game date is in the past (already concluded), immediately attempt
-      // to grade the bet so the user sees the final result right away without
-      // waiting for the background polling cycle.
-      const todayUtc = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+      const todayUtc = new Date().toISOString().slice(0, 10);
       const isPastDate = input.gameDate < todayUtc;
-
       console.log(`[BetTracker][STEP] create: autoGradeOnCreate check — gameDate=${input.gameDate} todayUtc=${todayUtc} isPastDate=${isPastDate}`);
 
       if (isPastDate) {
         try {
           console.log(`[BetTracker][STEP] create: autoGradeOnCreate — attempting to grade betId=${insertId} (past date)`);
-
+          // Use customLine if provided, otherwise fall back to line
+          const gradeLineValue = input.customLine ?? input.line ?? null;
           const gradeOut = await gradeTrackedBet({
             sport:     input.sport as GraderSport,
             gameDate:  input.gameDate,
@@ -296,20 +331,18 @@ export const betTrackerRouter = router({
             market:    input.market as GraderMarket,
             pickSide:  input.pickSide as GraderPickSide,
             odds:      input.odds,
-            line:      input.line ?? null,
+            line:      gradeLineValue,
             anGameId:  input.anGameId,
           });
 
           console.log(`[BetTracker][STATE] create: autoGradeOnCreate result=${gradeOut.result} reason=${gradeOut.reason}`);
 
           if (gradeOut.result !== "PENDING") {
-            // Game is final — update the bet with the graded result and scores
             const teamUpdates: Record<string, string | null> = {
               result:    gradeOut.result,
               awayScore: gradeOut.awayScore !== null ? String(gradeOut.awayScore) : null,
               homeScore: gradeOut.homeScore !== null ? String(gradeOut.homeScore) : null,
             };
-            // Also fix team abbreviations if the grader resolved them from the API
             if (gradeOut.awayAbbrev && gradeOut.awayAbbrev !== input.awayTeam) {
               teamUpdates.awayTeam = gradeOut.awayAbbrev;
               console.log(`[BetTracker][STATE] create: autoGradeOnCreate — updating awayTeam from "${input.awayTeam}" to "${gradeOut.awayAbbrev}"`);
@@ -318,20 +351,16 @@ export const betTrackerRouter = router({
               teamUpdates.homeTeam = gradeOut.homeAbbrev;
               console.log(`[BetTracker][STATE] create: autoGradeOnCreate — updating homeTeam from "${input.homeTeam}" to "${gradeOut.homeAbbrev}"`);
             }
-
             await db.update(trackedBets).set(teamUpdates).where(eq(trackedBets.id, insertId));
-
             console.log(`[BetTracker][OUTPUT] create: autoGradeOnCreate COMPLETE — betId=${insertId} result=${gradeOut.result} score=${gradeOut.awayScore}-${gradeOut.homeScore}`);
             console.log(`[BetTracker][VERIFY] create: autoGradeOnCreate PASS — betId=${insertId} graded=${gradeOut.result}`);
           } else {
-            console.log(`[BetTracker][STATE] create: autoGradeOnCreate — betId=${insertId} still PENDING (game not final yet): ${gradeOut.reason}`);
+            console.log(`[BetTracker][STATE] create: autoGradeOnCreate — betId=${insertId} still PENDING: ${gradeOut.reason}`);
           }
         } catch (gradeErr) {
-          // Auto-grade failure must never block the create response — log and continue
           console.error(`[BetTracker][ERROR] create: autoGradeOnCreate FAILED for betId=${insertId} — ${String(gradeErr)}`);
         }
       }
-      // ─────────────────────────────────────────────────────────────────────────
 
       const [created] = await db.select().from(trackedBets).where(eq(trackedBets.id, insertId));
       return created;
@@ -339,24 +368,31 @@ export const betTrackerRouter = router({
 
   /**
    * update — update an existing bet.
-   * Only the owner of the bet can update it.
-   * Supports updating result, notes, odds, risk, timeframe, market, pickSide.
+   *
+   * Access rules:
+   *   OWNER (prez/sippi) — can update own bets only
+   *   ADMIN              — can update porter/hank bets (handicapper role); CANNOT update owner bets
+   *   HANDICAPPER        — FORBIDDEN (must use submitEditRequest)
    */
   update: handicapperProcedure
     .input(z.object({
-      id:        z.number().int().positive(),
-      timeframe: z.enum(TIMEFRAMES).optional(),
-      market:    z.enum(MARKETS).optional(),
-      pickSide:  z.enum(PICK_SIDES).optional(),
-      odds:      z.number().int().min(-10000).max(10000).optional(),
-      risk:      z.number().positive().max(1_000_000).optional(),
-      toWin:     z.number().positive().optional(),
-      notes:     z.string().max(2000).optional(),
-      result:    z.enum(RESULTS).optional(),
+      id:         z.number().int().positive(),
+      timeframe:  z.enum(TIMEFRAMES).optional(),
+      market:     z.enum(MARKETS).optional(),
+      pickSide:   z.enum(PICK_SIDES).optional(),
+      odds:       z.number().int().min(-10000).max(10000).optional(),
+      risk:       z.number().positive().max(1_000_000).optional(),
+      toWin:      z.number().positive().optional(),
+      notes:      z.string().max(2000).optional(),
+      result:     z.enum(RESULTS).optional(),
+      wagerType:  z.enum(WAGER_TYPES).optional(),
+      customLine: z.number().optional(),
+      line:       z.number().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.appUser.id;
-      console.log(`[BetTracker][INPUT] update: userId=${userId} betId=${input.id} fields=${JSON.stringify(Object.keys(input).filter(k => k !== 'id'))}`);
+      const role   = ctx.appUser.role;
+      console.log(`[BetTracker][INPUT] update: userId=${userId} role=${role} betId=${input.id} fields=${JSON.stringify(Object.keys(input).filter(k => k !== 'id'))}`);
 
       const db = await getDb();
       const [existing] = await db.select().from(trackedBets).where(eq(trackedBets.id, input.id));
@@ -364,18 +400,48 @@ export const betTrackerRouter = router({
         console.log(`[BetTracker][ERROR] update: betId=${input.id} not found`);
         throw new TRPCError({ code: "NOT_FOUND", message: "Bet not found" });
       }
-      if (existing.userId !== userId) {
-        console.log(`[BetTracker][ERROR] update: betId=${input.id} owned by userId=${existing.userId}, requester=${userId}`);
-        throw new TRPCError({ code: "FORBIDDEN", message: "Cannot modify another user's bet" });
+
+      // ── Access control ────────────────────────────────────────────────────────
+      // Fetch the bet owner's role to determine immutability
+      const [betOwner] = await db
+        .select({ id: appUsers.id, role: appUsers.role })
+        .from(appUsers)
+        .where(eq(appUsers.id, existing.userId));
+
+      const betOwnerRole = betOwner?.role ?? "user";
+
+      if (role === "handicapper") {
+        // Handicappers cannot directly update any bet — must use submitEditRequest
+        console.log(`[BetTracker][ERROR] update: FORBIDDEN — handicapper role must use submitEditRequest`);
+        throw new TRPCError({ code: "FORBIDDEN", message: "Handicappers cannot directly edit bets. Use the edit request system." });
       }
 
-      // Build update payload — only include provided fields
+      if (role === "admin") {
+        // Admin can only edit handicapper bets, not owner bets
+        if (betOwnerRole === "owner") {
+          console.log(`[BetTracker][ERROR] update: FORBIDDEN — admin cannot edit owner bet (betId=${input.id} ownedBy=${existing.userId} ownerRole=${betOwnerRole})`);
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admins cannot edit owner bets" });
+        }
+        // Admin can edit handicapper bets even if they don't own them
+        console.log(`[BetTracker][STATE] update: admin editing handicapper bet betId=${input.id} ownedBy=${existing.userId}`);
+      } else if (role === "owner") {
+        // Owner can only edit their own bets
+        if (existing.userId !== userId) {
+          console.log(`[BetTracker][ERROR] update: FORBIDDEN — owner can only edit own bets (betId=${input.id} ownedBy=${existing.userId} requester=${userId})`);
+          throw new TRPCError({ code: "FORBIDDEN", message: "Cannot modify another user's bet" });
+        }
+      }
+
+      // ── Build update payload ──────────────────────────────────────────────────
       const patch: Record<string, unknown> = {};
-      if (input.timeframe !== undefined) patch.timeframe = input.timeframe;
-      if (input.market    !== undefined) patch.market    = input.market;
-      if (input.pickSide  !== undefined) patch.pickSide  = input.pickSide;
-      if (input.notes     !== undefined) patch.notes     = input.notes;
-      if (input.result    !== undefined) patch.result    = input.result;
+      if (input.timeframe  !== undefined) patch.timeframe  = input.timeframe;
+      if (input.market     !== undefined) patch.market     = input.market;
+      if (input.pickSide   !== undefined) patch.pickSide   = input.pickSide;
+      if (input.notes      !== undefined) patch.notes      = input.notes;
+      if (input.result     !== undefined) patch.result     = input.result;
+      if (input.wagerType  !== undefined) patch.wagerType  = input.wagerType;
+      if (input.customLine !== undefined) patch.customLine = String(input.customLine);
+      if (input.line       !== undefined) patch.line       = String(input.line);
 
       // Re-derive pick label if market or pickSide changed
       const newMarket   = (input.market   ?? existing.market)   as typeof MARKETS[number];
@@ -383,7 +449,7 @@ export const betTrackerRouter = router({
       if (input.market !== undefined || input.pickSide !== undefined) {
         const awayTeam = existing.awayTeam ?? "";
         const homeTeam = existing.homeTeam ?? "";
-        patch.pick   = derivePickLabel(newPickSide, newMarket, awayTeam, homeTeam);
+        patch.pick    = derivePickLabel(newPickSide, newMarket, awayTeam, homeTeam);
         patch.betType = newMarket === "TOTAL"
           ? (newPickSide === "OVER" ? "OVER" : "UNDER")
           : newMarket;
@@ -416,13 +482,18 @@ export const betTrackerRouter = router({
 
   /**
    * delete — remove a bet by id.
-   * Only the owner of the bet can delete it.
+   *
+   * Access rules:
+   *   OWNER (prez/sippi) — can delete own bets only
+   *   ADMIN              — can delete handicapper bets; CANNOT delete owner bets
+   *   HANDICAPPER        — FORBIDDEN (must use submitEditRequest with requestType=DELETE)
    */
   delete: handicapperProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.appUser.id;
-      console.log(`[BetTracker][INPUT] delete: userId=${userId} betId=${input.id}`);
+      const role   = ctx.appUser.role;
+      console.log(`[BetTracker][INPUT] delete: userId=${userId} role=${role} betId=${input.id}`);
 
       const db = await getDb();
       const [existing] = await db.select().from(trackedBets).where(eq(trackedBets.id, input.id));
@@ -430,15 +501,264 @@ export const betTrackerRouter = router({
         console.log(`[BetTracker][ERROR] delete: betId=${input.id} not found`);
         throw new TRPCError({ code: "NOT_FOUND", message: "Bet not found" });
       }
-      if (existing.userId !== userId) {
-        console.log(`[BetTracker][ERROR] delete: betId=${input.id} owned by userId=${existing.userId}, requester=${userId}`);
-        throw new TRPCError({ code: "FORBIDDEN", message: "Cannot delete another user's bet" });
+
+      // Fetch the bet owner's role
+      const [betOwner] = await db
+        .select({ id: appUsers.id, role: appUsers.role })
+        .from(appUsers)
+        .where(eq(appUsers.id, existing.userId));
+      const betOwnerRole = betOwner?.role ?? "user";
+
+      if (role === "handicapper") {
+        console.log(`[BetTracker][ERROR] delete: FORBIDDEN — handicapper must use submitEditRequest for deletion`);
+        throw new TRPCError({ code: "FORBIDDEN", message: "Handicappers cannot directly delete bets. Submit a delete request instead." });
+      }
+
+      if (role === "admin") {
+        if (betOwnerRole === "owner") {
+          console.log(`[BetTracker][ERROR] delete: FORBIDDEN — admin cannot delete owner bet (betId=${input.id} ownedBy=${existing.userId})`);
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admins cannot delete owner bets" });
+        }
+        console.log(`[BetTracker][STATE] delete: admin deleting handicapper bet betId=${input.id} ownedBy=${existing.userId}`);
+      } else if (role === "owner") {
+        if (existing.userId !== userId) {
+          console.log(`[BetTracker][ERROR] delete: FORBIDDEN — owner can only delete own bets (betId=${input.id} ownedBy=${existing.userId} requester=${userId})`);
+          throw new TRPCError({ code: "FORBIDDEN", message: "Cannot delete another user's bet" });
+        }
       }
 
       await db.delete(trackedBets).where(eq(trackedBets.id, input.id));
-      console.log(`[BetTracker][OUTPUT] delete: SUCCESS — betId=${input.id} deleted`);
+      console.log(`[BetTracker][OUTPUT] delete: SUCCESS — betId=${input.id} deleted by userId=${userId} role=${role}`);
       console.log(`[BetTracker][VERIFY] delete: PASS — betId=${input.id} removed`);
       return { success: true, deletedId: input.id };
+    }),
+
+  /**
+   * submitEditRequest — handicapper submits an EDIT or DELETE request for their own bet.
+   * The bet itself is NOT modified. Owner/Admin reviews via reviewEditRequest.
+   */
+  submitEditRequest: handicapperProcedure
+    .input(z.object({
+      betId:           z.number().int().positive(),
+      requestType:     z.enum(["EDIT", "DELETE"]),
+      reason:          z.string().max(2000).optional(),
+      proposedChanges: z.record(z.string(), z.unknown()).optional(), // JSON object of proposed field changes
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.appUser.id;
+      const role   = ctx.appUser.role;
+      console.log(`[BetTracker][INPUT] submitEditRequest: userId=${userId} role=${role} betId=${input.betId} requestType=${input.requestType}`);
+
+      const db = await getDb();
+      const [existing] = await db.select().from(trackedBets).where(eq(trackedBets.id, input.betId));
+      if (!existing) {
+        console.log(`[BetTracker][ERROR] submitEditRequest: betId=${input.betId} not found`);
+        throw new TRPCError({ code: "NOT_FOUND", message: "Bet not found" });
+      }
+
+      // Only the bet owner can submit a request for their own bet
+      if (existing.userId !== userId) {
+        console.log(`[BetTracker][ERROR] submitEditRequest: FORBIDDEN — betId=${input.betId} ownedBy=${existing.userId} requester=${userId}`);
+        throw new TRPCError({ code: "FORBIDDEN", message: "Can only submit requests for your own bets" });
+      }
+
+      // Owner/Admin can directly edit — this endpoint is for handicappers
+      // But allow it for any role (owner might use it too in edge cases)
+      const proposedChangesJson = input.proposedChanges
+        ? JSON.stringify(input.proposedChanges)
+        : null;
+
+      const [insertResult] = await db.insert(betEditRequests).values({
+        betId:           input.betId,
+        requestedBy:     userId,
+        requestType:     input.requestType,
+        proposedChanges: proposedChangesJson,
+        reason:          input.reason ?? null,
+        status:          "PENDING",
+      });
+      const requestId = (insertResult as { insertId: number }).insertId;
+
+      console.log(`[BetTracker][OUTPUT] submitEditRequest: SUCCESS — requestId=${requestId} betId=${input.betId} type=${input.requestType} userId=${userId}`);
+      console.log(`[BetTracker][VERIFY] submitEditRequest: PASS — request inserted with id=${requestId}`);
+      return { success: true, requestId };
+    }),
+
+  /**
+   * reviewEditRequest — OWNER/ADMIN only: approve or deny a pending edit request.
+   * On APPROVE:
+   *   - DELETE request: deletes the bet
+   *   - EDIT request: applies proposedChanges to the bet
+   * On DENY: marks request as DENIED with optional note.
+   */
+  reviewEditRequest: handicapperProcedure
+    .input(z.object({
+      requestId:  z.number().int().positive(),
+      action:     z.enum(["APPROVE", "DENY"]),
+      reviewNote: z.string().max(2000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.appUser.id;
+      const role   = ctx.appUser.role;
+      console.log(`[BetTracker][INPUT] reviewEditRequest: reviewerId=${userId} role=${role} requestId=${input.requestId} action=${input.action}`);
+
+      if (role !== "owner" && role !== "admin") {
+        console.log(`[BetTracker][ERROR] reviewEditRequest: FORBIDDEN — role=${role}`);
+        throw new TRPCError({ code: "FORBIDDEN", message: "Owner or Admin required to review edit requests" });
+      }
+
+      const db = await getDb();
+      const [req] = await db.select().from(betEditRequests).where(eq(betEditRequests.id, input.requestId));
+      if (!req) {
+        console.log(`[BetTracker][ERROR] reviewEditRequest: requestId=${input.requestId} not found`);
+        throw new TRPCError({ code: "NOT_FOUND", message: "Edit request not found" });
+      }
+      if (req.status !== "PENDING") {
+        console.log(`[BetTracker][ERROR] reviewEditRequest: requestId=${input.requestId} already ${req.status}`);
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Request already ${req.status}` });
+      }
+
+      // Fetch the associated bet
+      const [bet] = await db.select().from(trackedBets).where(eq(trackedBets.id, req.betId));
+      if (!bet) {
+        console.log(`[BetTracker][ERROR] reviewEditRequest: betId=${req.betId} not found`);
+        throw new TRPCError({ code: "NOT_FOUND", message: "Associated bet not found" });
+      }
+
+      // Admin cannot approve requests on owner bets
+      if (role === "admin") {
+        const [betOwner] = await db
+          .select({ role: appUsers.role })
+          .from(appUsers)
+          .where(eq(appUsers.id, bet.userId));
+        if (betOwner?.role === "owner") {
+          console.log(`[BetTracker][ERROR] reviewEditRequest: FORBIDDEN — admin cannot approve requests on owner bets`);
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admins cannot approve requests on owner bets" });
+        }
+      }
+
+      const now = new Date();
+
+      if (input.action === "APPROVE") {
+        if (req.requestType === "DELETE") {
+          await db.delete(trackedBets).where(eq(trackedBets.id, req.betId));
+          console.log(`[BetTracker][STATE] reviewEditRequest: APPROVED DELETE — betId=${req.betId} deleted`);
+        } else if (req.requestType === "EDIT" && req.proposedChanges) {
+          // Apply proposed changes
+          let changes: Record<string, unknown> = {};
+          try {
+            changes = JSON.parse(req.proposedChanges);
+          } catch {
+            console.warn(`[BetTracker][WARN] reviewEditRequest: could not parse proposedChanges for requestId=${input.requestId}`);
+          }
+          if (Object.keys(changes).length > 0) {
+            // Sanitize: only allow safe fields
+            const allowed = ["odds", "risk", "toWin", "notes", "result", "wagerType", "customLine", "line", "timeframe", "market", "pickSide"];
+            const safe: Record<string, unknown> = {};
+            for (const k of allowed) {
+              if (k in changes) safe[k] = changes[k];
+            }
+            if (Object.keys(safe).length > 0) {
+              await db.update(trackedBets).set(safe).where(eq(trackedBets.id, req.betId));
+              console.log(`[BetTracker][STATE] reviewEditRequest: APPROVED EDIT — betId=${req.betId} fields=${Object.keys(safe).join(",")}`);
+            }
+          }
+        }
+        await db.update(betEditRequests).set({
+          status:     "APPROVED",
+          reviewedBy: userId,
+          reviewedAt: now,
+          reviewNote: input.reviewNote ?? null,
+        }).where(eq(betEditRequests.id, input.requestId));
+        console.log(`[BetTracker][OUTPUT] reviewEditRequest: APPROVED — requestId=${input.requestId} by reviewerId=${userId}`);
+      } else {
+        await db.update(betEditRequests).set({
+          status:     "DENIED",
+          reviewedBy: userId,
+          reviewedAt: now,
+          reviewNote: input.reviewNote ?? null,
+        }).where(eq(betEditRequests.id, input.requestId));
+        console.log(`[BetTracker][OUTPUT] reviewEditRequest: DENIED — requestId=${input.requestId} by reviewerId=${userId}`);
+      }
+
+      console.log(`[BetTracker][VERIFY] reviewEditRequest: PASS — requestId=${input.requestId} action=${input.action}`);
+      return { success: true, requestId: input.requestId, action: input.action };
+    }),
+
+  /**
+   * getLogs — OWNER/ADMIN only: full audit log of all bets created and all edit requests.
+   * Used by the LOGS tab for transparency and integrity monitoring.
+   * Returns:
+   *   - bets: all tracked_bets with user info (username, role)
+   *   - editRequests: all bet_edit_requests with requester + reviewer info
+   */
+  getLogs: handicapperProcedure
+    .input(z.object({
+      limit:  z.number().int().positive().max(500).default(200),
+      offset: z.number().int().min(0).default(0),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const role = ctx.appUser.role;
+      if (role !== "owner" && role !== "admin") {
+        console.log(`[BetTracker][ERROR] getLogs: FORBIDDEN — role=${role}`);
+        throw new TRPCError({ code: "FORBIDDEN", message: "Owner or Admin required to view logs" });
+      }
+
+      const limit  = input?.limit  ?? 200;
+      const offset = input?.offset ?? 0;
+
+      console.log(`[BetTracker][INPUT] getLogs: viewerId=${ctx.appUser.id} role=${role} limit=${limit} offset=${offset}`);
+
+      const db = await getDb();
+
+      // Fetch all bets with user info
+      const betsRaw = await db
+        .select({
+          bet:  trackedBets,
+          user: { id: appUsers.id, username: appUsers.username, role: appUsers.role },
+        })
+        .from(trackedBets)
+        .leftJoin(appUsers, eq(trackedBets.userId, appUsers.id))
+        .orderBy(desc(trackedBets.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      // Fetch all edit requests with requester + reviewer info
+      const requestsRaw = await db
+        .select()
+        .from(betEditRequests)
+        .orderBy(desc(betEditRequests.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      // Enrich edit requests with usernames
+      const userIds = new Set<number>();
+      for (const r of requestsRaw) {
+        userIds.add(r.requestedBy);
+        if (r.reviewedBy) userIds.add(r.reviewedBy);
+      }
+      const usersForRequests = userIds.size > 0
+        ? await db
+            .select({ id: appUsers.id, username: appUsers.username, role: appUsers.role })
+            .from(appUsers)
+            .where(inArray(appUsers.id, Array.from(userIds)))
+        : [];
+      const userMap = new Map<number, { id: number; username: string; role: string }>(usersForRequests.map((u: { id: number; username: string; role: string }) => [u.id, u]));
+
+      const editRequests = requestsRaw.map((r: typeof requestsRaw[0]) => ({
+        ...r,
+        requesterUsername: userMap.get(r.requestedBy)?.username ?? `user#${r.requestedBy}`,
+        requesterRole:     userMap.get(r.requestedBy)?.role     ?? "unknown",
+        reviewerUsername:  r.reviewedBy ? (userMap.get(r.reviewedBy)?.username ?? `user#${r.reviewedBy}`) : null,
+      }));
+
+      const bets = betsRaw.map((row: typeof betsRaw[0]) => ({
+        ...row.bet,
+        username: row.user?.username ?? `user#${row.bet.userId}`,
+        userRole: row.user?.role     ?? "unknown",
+      }));
+
+      console.log(`[BetTracker][OUTPUT] getLogs: bets=${bets.length} editRequests=${editRequests.length}`);
+      return { bets, editRequests };
     }),
 
   /**
@@ -509,6 +829,11 @@ export const betTrackerRouter = router({
       for (const bet of pending) {
         console.log(`[BetTracker][STEP] autoGrade: grading betId=${bet.id} sport=${bet.sport} date=${bet.gameDate} ${bet.awayTeam}@${bet.homeTeam} timeframe=${bet.timeframe} market=${bet.market} pickSide=${bet.pickSide}`);
 
+        // Use customLine if set, otherwise fall back to line
+        const gradeLineValue = bet.customLine != null
+          ? parseFloat(String(bet.customLine))
+          : (bet.line != null ? parseFloat(String(bet.line)) : null);
+
         const gradeOut = await gradeTrackedBet({
           sport:     bet.sport as GraderSport,
           gameDate:  bet.gameDate,
@@ -518,7 +843,7 @@ export const betTrackerRouter = router({
           market:    (bet.market ?? "ML") as GraderMarket,
           pickSide:  (bet.pickSide ?? "AWAY") as GraderPickSide,
           odds:      bet.odds,
-          line:      bet.line != null ? parseFloat(String(bet.line)) : null,
+          line:      gradeLineValue,
           anGameId:  bet.anGameId,
         });
 
@@ -530,9 +855,6 @@ export const betTrackerRouter = router({
           continue;
         }
 
-        // Update bet result + final scores + actual team abbreviations in DB
-        // awayAbbrev/homeAbbrev from the grader are the official API abbreviations;
-        // use them to fix any placeholder values (e.g. "OPP") stored at bet creation time.
         const teamUpdates: Record<string, string | null> = {
           result:    gradeOut.result,
           awayScore: gradeOut.awayScore !== null ? String(gradeOut.awayScore) : null,
@@ -546,9 +868,7 @@ export const betTrackerRouter = router({
           teamUpdates.homeTeam = gradeOut.homeAbbrev;
           console.log(`[BetTracker][STATE] autoGrade: betId=${bet.id} — fixing homeTeam from "${bet.homeTeam}" to "${gradeOut.homeAbbrev}"`);
         }
-        await db.update(trackedBets)
-          .set(teamUpdates)
-          .where(eq(trackedBets.id, bet.id));
+        await db.update(trackedBets).set(teamUpdates).where(eq(trackedBets.id, bet.id));
 
         graded++;
         if (gradeOut.result === "WIN")  wins++;
@@ -588,7 +908,6 @@ export const betTrackerRouter = router({
       );
       console.log(`[BetTracker][STATE] autoGradeAll: ${pending.length} PENDING bets across all users for date=${input.gameDate}`);
 
-      // Pre-fetch scores for all sports present in the pending bets (parallel)
       const sportsNeeded: GraderSport[] = Array.from(new Set(pending.map((b: { sport: string }) => b.sport))) as GraderSport[];
       console.log(`[BetTracker][STEP] autoGradeAll: pre-fetching scores for sports=${sportsNeeded.join(",")}`);
       await Promise.all(sportsNeeded.map(s => fetchScores(s, input.gameDate)));
@@ -597,6 +916,10 @@ export const betTrackerRouter = router({
       let graded = 0, wins = 0, losses = 0, pushes = 0, stillPending = 0;
 
       for (const bet of pending) {
+        const gradeLineValue = bet.customLine != null
+          ? parseFloat(String(bet.customLine))
+          : (bet.line != null ? parseFloat(String(bet.line)) : null);
+
         const gradeOut = await gradeTrackedBet({
           sport:     bet.sport as GraderSport,
           gameDate:  bet.gameDate,
@@ -606,13 +929,12 @@ export const betTrackerRouter = router({
           market:    (bet.market ?? "ML") as GraderMarket,
           pickSide:  (bet.pickSide ?? "AWAY") as GraderPickSide,
           odds:      bet.odds,
-          line:      bet.line != null ? parseFloat(String(bet.line)) : null,
+          line:      gradeLineValue,
           anGameId:  bet.anGameId,
         });
 
         if (gradeOut.result === "PENDING") { stillPending++; continue; }
 
-        // Fix any placeholder team names (e.g. "OPP") using actual API abbreviations
         const allUpdates: Record<string, string | null> = {
           result:    gradeOut.result,
           awayScore: gradeOut.awayScore !== null ? String(gradeOut.awayScore) : null,
@@ -624,16 +946,14 @@ export const betTrackerRouter = router({
         if (gradeOut.homeAbbrev && (!bet.homeTeam || bet.homeTeam === 'OPP' || bet.homeTeam.trim() === '')) {
           allUpdates.homeTeam = gradeOut.homeAbbrev;
         }
-        await db.update(trackedBets)
-          .set(allUpdates)
-          .where(eq(trackedBets.id, bet.id));
+        await db.update(trackedBets).set(allUpdates).where(eq(trackedBets.id, bet.id));
 
         graded++;
         if (gradeOut.result === "WIN")  wins++;
         if (gradeOut.result === "LOSS") losses++;
         if (gradeOut.result === "PUSH") pushes++;
 
-        console.log(`[BetTracker][OUTPUT] autoGradeAll: betId=${bet.id} userId=${bet.userId} → ${gradeOut.result} score=${gradeOut.awayScore}-${gradeOut.homeScore} awayTeam=${allUpdates.awayTeam ?? bet.awayTeam} homeTeam=${allUpdates.homeTeam ?? bet.homeTeam}`);
+        console.log(`[BetTracker][OUTPUT] autoGradeAll: betId=${bet.id} userId=${bet.userId} → ${gradeOut.result} score=${gradeOut.awayScore}-${gradeOut.homeScore}`);
       }
 
       const summary = { graded, wins, losses, pushes, stillPending, total: pending.length };
@@ -645,13 +965,10 @@ export const betTrackerRouter = router({
    * getStats — full aggregate stats with all breakdown dimensions.
    * Owner/Admin can pass targetUserId to view another handicapper's stats.
    *
-   * Returns:
-   *   - Overall: wins, losses, pushes, pending, netProfit, roi, totalRisk, bestWin, worstLoss
-   *   - byType:  breakdown by market (ML / RL / TOTAL)
-   *   - bySize:  breakdown by unit size (Heavy 5U+ / Mid 2-5U / Light <2U)
-   *   - byMonth: breakdown by calendar month (YYYY-MM)
-   *   - bySport: breakdown by sport (MLB / NHL / NBA / etc.)
-   *   - equityCurve: [{date, cumPL}] sorted ascending for chart rendering
+   * bySize breakdown (v4 — exact unit buckets):
+   *   Plus-money bets: risk = unit count
+   *   Minus-money bets: toWin = unit count
+   *   Buckets: 10U, 5U, 4U, 3U, 2U, 1U
    */
   getStats: handicapperProcedure
     .input(z.object({
@@ -675,12 +992,11 @@ export const betTrackerRouter = router({
       if (input?.gameDate) conditions.push(eq(trackedBets.gameDate, input.gameDate));
 
       const db = await getDb();
-      // Fetch all bets sorted by gameDate ascending (needed for equity curve)
       const rows = await db
         .select()
         .from(trackedBets)
         .where(and(...conditions))
-        .orderBy(trackedBets.gameDate, trackedBets.createdAt);
+        .orderBy(asc(trackedBets.gameDate), asc(trackedBets.createdAt));
 
       // ── Overall aggregation ──────────────────────────────────────────────────
       let wins = 0, losses = 0, pushes = 0, pending = 0, voids = 0;
@@ -742,28 +1058,37 @@ export const betTrackerRouter = router({
       // ── By Bet Type (market) ─────────────────────────────────────────────────
       const byType = buildBreakdown(bet => bet.market ?? bet.betType ?? "ML");
 
-      // ── By Unit Size ─────────────────────────────────────────────────────────
+      // ── By Unit Size (v4 — exact buckets with plus/minus money logic) ─────────
+      // Plus-money: risk IS the unit count (amount risked = unit size)
+      // Minus-money: toWin IS the unit count (amount to win = unit size)
+      // Buckets: 10U, 5U, 4U, 3U, 2U, 1U
+      const UNIT_BUCKET_ORDER = ["10U", "5U", "4U", "3U", "2U", "1U"];
       const bySize = buildBreakdown(bet => {
-        const r = parseFloat(bet.risk);
-        if (r >= 5) return "Heavy (5U+)";
-        if (r >= 2) return "Mid (2-5U)";
-        return "Light (<2U)";
+        const risk  = parseFloat(bet.risk);
+        const toWin = parseFloat(bet.toWin);
+        return calcUnitBucket(bet.odds, risk, toWin);
+      }).sort((a, b) => {
+        const ai = UNIT_BUCKET_ORDER.indexOf(a.key);
+        const bi = UNIT_BUCKET_ORDER.indexOf(b.key);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       });
 
       // ── By Month ─────────────────────────────────────────────────────────────
-      const byMonth = buildBreakdown(bet => bet.gameDate.substring(0, 7)); // YYYY-MM
+      const byMonth = buildBreakdown(bet => bet.gameDate.substring(0, 7));
 
       // ── By Sport ─────────────────────────────────────────────────────────────
       const bySport = buildBreakdown(bet => bet.sport);
 
-      // ── By Result (WIN/LOSS breakdown for quick reference) ───────────────────
+      // ── By Result ────────────────────────────────────────────────────────────
       const byResult = buildBreakdown(bet => bet.result);
 
       // ── By Timeframe ─────────────────────────────────────────────────────────
       const byTimeframe = buildBreakdown(bet => bet.timeframe ?? "FULL_GAME");
 
+      // ── By Wager Type (PREGAME / LIVE) ───────────────────────────────────────
+      const byWagerType = buildBreakdown(bet => bet.wagerType ?? "PREGAME");
+
       // ── Equity Curve ─────────────────────────────────────────────────────────
-      // Cumulative P/L over time (settled bets only, sorted by gameDate asc)
       let cumPL = 0;
       const equityCurve: { date: string; cumPL: number; betId: number; pick: string; result: string; pl: number }[] = [];
       for (const bet of rows) {
@@ -776,11 +1101,9 @@ export const betTrackerRouter = router({
           cumPL += pl;
           equityCurve.push({ date: bet.gameDate, cumPL: parseFloat(cumPL.toFixed(2)), betId: bet.id, pick: bet.pick, result: "LOSS", pl: parseFloat(pl.toFixed(2)) });
         }
-        // PUSH/PENDING/VOID: no P/L impact on curve
       }
 
       const stats = {
-        // Overall
         totalBets:  rows.length,
         wins, losses, pushes, pending, voids,
         gradedBets: wins + losses + pushes,
@@ -791,18 +1114,17 @@ export const betTrackerRouter = router({
         roi,
         bestWin:    parseFloat(bestWin.toFixed(2)),
         worstLoss:  parseFloat(worstLoss.toFixed(2)),
-        // Breakdowns
         byType,
         bySize,
         byMonth,
         bySport,
         byResult,
         byTimeframe,
-        // Equity curve
+        byWagerType,
         equityCurve,
       };
 
-      console.log(`[BetTracker][OUTPUT] getStats: userId=${userId} → totalBets=${stats.totalBets} wins=${stats.wins} losses=${stats.losses} roi=${stats.roi}% equityCurve=${equityCurve.length} points`);
+      console.log(`[BetTracker][OUTPUT] getStats: userId=${userId} → totalBets=${stats.totalBets} wins=${stats.wins} losses=${stats.losses} roi=${stats.roi}% equityCurve=${equityCurve.length} points bySize=${JSON.stringify(bySize.map(s => s.key))}`);
       return stats;
     }),
 
@@ -821,20 +1143,20 @@ export const betTrackerRouter = router({
 
       type InningLine = { num: number; awayRuns: number | null; homeRuns: number | null };
       type LinescoreEntry = {
-        gamePk:       number;
-        gameDate:     string;
-        awayAbbrev:   string;
-        homeAbbrev:   string;
-        innings:      InningLine[];
-        awayR:        number | null;
-        awayH:        number | null;
-        awayE:        number | null;
-        homeR:        number | null;
-        homeH:        number | null;
-        homeE:        number | null;
+        gamePk:        number;
+        gameDate:      string;
+        awayAbbrev:    string;
+        homeAbbrev:    string;
+        innings:       InningLine[];
+        awayR:         number | null;
+        awayH:         number | null;
+        awayE:         number | null;
+        homeR:         number | null;
+        homeH:         number | null;
+        homeE:         number | null;
         currentInning: number | null;
-        inningState:  string | null;  // "Top" | "Bottom" | "Middle" | "End"
-        status:       string;         // "Preview" | "Live" | "Final" | "Postponed" etc.
+        inningState:   string | null;
+        status:        string;
       };
 
       const result: Record<number, LinescoreEntry> = {};
@@ -883,18 +1205,17 @@ export const betTrackerRouter = router({
                 awayRuns:  inn.away?.runs ?? null,
                 homeRuns:  inn.home?.runs ?? null,
               }));
-
               result[game.gamePk] = {
                 gamePk:        game.gamePk,
                 gameDate:      date,
                 awayAbbrev:    game.teams?.away?.team?.abbreviation ?? "",
                 homeAbbrev:    game.teams?.home?.team?.abbreviation ?? "",
                 innings,
-                awayR:         ls?.teams?.away?.runs  ?? null,
-                awayH:         ls?.teams?.away?.hits  ?? null,
+                awayR:         ls?.teams?.away?.runs   ?? null,
+                awayH:         ls?.teams?.away?.hits   ?? null,
                 awayE:         ls?.teams?.away?.errors ?? null,
-                homeR:         ls?.teams?.home?.runs  ?? null,
-                homeH:         ls?.teams?.home?.hits  ?? null,
+                homeR:         ls?.teams?.home?.runs   ?? null,
+                homeH:         ls?.teams?.home?.hits   ?? null,
                 homeE:         ls?.teams?.home?.errors ?? null,
                 currentInning: ls?.currentInning ?? null,
                 inningState:   ls?.inningState   ?? null,
