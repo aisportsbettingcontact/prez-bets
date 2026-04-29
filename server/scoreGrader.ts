@@ -491,7 +491,8 @@ export async function fetchScores(sport: Sport, date: string): Promise<GameScore
 // Maps common AN abbreviation variants to the official league abbreviation
 
 const ABBREV_ALIASES: Record<string, string> = {
-  // MLB
+  // MLB — normalize MLB Stats API abbreviations to AN canonical form
+  "AZ":  "ARI",  // Diamondbacks: MLB Stats API returns "AZ", AN/DB uses "ARI"
   "KC":  "KC",   // Royals — AN sends KC, MLB API sends KC
   "TB":  "TB",   // Rays (MLB)
   "ATH": "ATH",  // Athletics (new Oakland → ATH)
