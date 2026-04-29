@@ -725,9 +725,11 @@ function BetCard({
           </div>
         </div>
 
-        {/* ── Row 2: Pick + Bet Details ── */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+        {/* ── Row 2: Pick + Bet Details (centered) ── */}
+        <div className="flex flex-col items-center gap-2">
+
+          {/* Pick row: logo + pick label + market badge + timeframe badge + odds */}
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
             {/* Pick team logo highlight */}
             {(pickIsAway && bet.awayLogo) && (
               <img src={bet.awayLogo} alt="" className="w-4 h-4 object-contain opacity-80" />
@@ -749,56 +751,55 @@ function BetCard({
             }`}>
               {fmtOdds(bet.odds)}
             </span>
+            {/* Result badge inline */}
+            <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold border ${resultBg(result)}`}>
+              {result}
+            </span>
           </div>
 
-          {/* Result badge */}
-          <span className={`px-2 py-1 rounded-lg text-[9px] font-bold border shrink-0 ${resultBg(result)}`}>
-            {result}
-          </span>
-        </div>
-
-        {/* ── Row 4: Stake + P/L + Quick result buttons ── */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <div className="text-center">
-              <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-0.5">Risk</div>
-              <div className="text-xs font-mono text-zinc-300">{fmtStake(risk)}</div>
-            </div>
-            <div className="text-zinc-700 text-xs">→</div>
-            <div className="text-center">
-              <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-0.5">To Win</div>
-              <div className="text-xs font-mono text-emerald-400">{fmtStake(toWin)}</div>
-            </div>
-            {result !== "PENDING" && result !== "VOID" && (
-              <>
-                <div className="text-zinc-700 text-xs">→</div>
-                <div className="text-center">
-                  <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-0.5">P/L</div>
-                  <div className={`text-xs font-mono font-bold ${resultColor(result)}`}>
-                    {result === "WIN"  ? `+${fmtStake(toWin)}`
-                     : result === "LOSS" ? `-${fmtStake(risk)}`
-                     : result === "PUSH" ? "PUSH"
-                     : "—"}
+          {/* Stake row: Risk → To Win → P/L + quick buttons */}
+          <div className="flex items-center justify-center gap-2 w-full">
+            <div className="flex items-center gap-3 justify-center flex-1">
+              <div className="text-center">
+                <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-0.5">Risk</div>
+                <div className="text-xs font-mono text-zinc-300">{fmtStake(risk)}</div>
+              </div>
+              <div className="text-zinc-700 text-xs">→</div>
+              <div className="text-center">
+                <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-0.5">To Win</div>
+                <div className="text-xs font-mono text-emerald-400">{fmtStake(toWin)}</div>
+              </div>
+              {result !== "PENDING" && result !== "VOID" && (
+                <>
+                  <div className="text-zinc-700 text-xs">→</div>
+                  <div className="text-center">
+                    <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-0.5">P/L</div>
+                    <div className={`text-xs font-mono font-bold ${resultColor(result)}`}>
+                      {result === "WIN"  ? `+${fmtStake(toWin)}`
+                       : result === "LOSS" ? `-${fmtStake(risk)}`
+                       : result === "PUSH" ? "PUSH"
+                       : "—"}
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
 
-          {/* Quick result buttons */}
-          <div className="flex items-center gap-1">
-            {(["WIN", "LOSS", "PUSH"] as const).map(r => (
-              <button key={r} type="button"
-                onClick={() => onResult(bet.id, r)}
-                className={`px-2 py-1 rounded-lg text-[9px] font-bold tracking-wider transition-all border ${
-                  result === r
-                    ? resultBg(r)
-                    : "border-zinc-800 text-zinc-700 hover:border-zinc-600 hover:text-zinc-400"
-                }`}
-              >
-                {r === "WIN" ? "W" : r === "LOSS" ? "L" : "P"}
-              </button>
-            ))}
+            {/* Quick result buttons */}
+            <div className="flex items-center gap-1 shrink-0">
+              {(["WIN", "LOSS", "PUSH"] as const).map(r => (
+                <button key={r} type="button"
+                  onClick={() => onResult(bet.id, r)}
+                  className={`px-2 py-1 rounded-lg text-[9px] font-bold tracking-wider transition-all border ${
+                    result === r
+                      ? resultBg(r)
+                      : "border-zinc-800 text-zinc-700 hover:border-zinc-600 hover:text-zinc-400"
+                  }`}
+                >
+                  {r === "WIN" ? "W" : r === "LOSS" ? "L" : "P"}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

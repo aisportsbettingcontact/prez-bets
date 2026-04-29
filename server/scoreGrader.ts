@@ -606,23 +606,39 @@ export function gradeBet(
   }
 
   if (market === "RL") {
-    // Default RL line: -1.5 for MLB/NHL (standard run/puck line)
-    const rlLine = line ?? (sport === "MLB" || sport === "NHL" ? 1.5 : 0);
+    // RL line convention:
+    //   line is stored as a SIGNED value from the pick string.
+    //   e.g. "SEA RL -1.5" → line = -1.5 (SEA is favorite, must win by >1.5)
+    //        "LAA RL +1.5" → line = +1.5 (LAA is underdog, can lose by <1.5)
+    //
+    // Grading formula (unified for both AWAY and HOME):
+    //   The picked team covers if: pickedTeamScore + line > opposingTeamScore
+    //   Equivalently: pickedTeamMargin + line > 0
+    //
+    // For AWAY pick: awayMargin = awayScore - homeScore; covers if awayMargin + line > 0
+    // For HOME pick: homeMargin = homeScore - awayScore; covers if homeMargin + line > 0
+    //
+    // Default line for MLB/NHL when not stored: -1.5 (standard favorite RL)
+    const rlLine = line ?? (sport === "MLB" || sport === "NHL" ? -1.5 : 0);
 
-    // AWAY covers if awayScore - homeScore > rlLine (for AWAY pick)
-    // HOME covers if homeScore - awayScore > rlLine (for HOME pick)
     const awayMargin = awayScore - homeScore;
     const homeMargin = homeScore - awayScore;
 
-    if (pickSide === "AWAY") {
-      if (awayMargin > rlLine)       { console.log(`[ScoreGrader][OUTPUT] gradeBet RL: AWAY covers +${rlLine} (margin=${awayMargin}) → WIN`);  return "WIN"; }
-      if (awayMargin < rlLine)       { console.log(`[ScoreGrader][OUTPUT] gradeBet RL: AWAY fails +${rlLine} (margin=${awayMargin}) → LOSS`); return "LOSS"; }
-      console.log(`[ScoreGrader][OUTPUT] gradeBet RL: AWAY exact ${rlLine} → PUSH`); return "PUSH";
-    } else {
-      if (homeMargin > rlLine)       { console.log(`[ScoreGrader][OUTPUT] gradeBet RL: HOME covers +${rlLine} (margin=${homeMargin}) → WIN`);  return "WIN"; }
-      if (homeMargin < rlLine)       { console.log(`[ScoreGrader][OUTPUT] gradeBet RL: HOME fails +${rlLine} (margin=${homeMargin}) → LOSS`); return "LOSS"; }
-      console.log(`[ScoreGrader][OUTPUT] gradeBet RL: HOME exact ${rlLine} → PUSH`); return "PUSH";
+    const pickedMargin = pickSide === "AWAY" ? awayMargin : homeMargin;
+    const coverValue = pickedMargin + rlLine;
+
+    console.log(`[ScoreGrader][STATE] gradeBet RL: pickSide=${pickSide} pickedMargin=${pickedMargin} rlLine=${rlLine} coverValue=${coverValue}`);
+
+    if (coverValue > 0) {
+      console.log(`[ScoreGrader][OUTPUT] gradeBet RL: ${pickSide} covers (coverValue=${coverValue}) → WIN`);
+      return "WIN";
     }
+    if (coverValue < 0) {
+      console.log(`[ScoreGrader][OUTPUT] gradeBet RL: ${pickSide} fails (coverValue=${coverValue}) → LOSS`);
+      return "LOSS";
+    }
+    console.log(`[ScoreGrader][OUTPUT] gradeBet RL: exact push (coverValue=0) → PUSH`);
+    return "PUSH";
   }
 
   if (market === "TOTAL") {
