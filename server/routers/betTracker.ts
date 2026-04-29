@@ -706,6 +706,112 @@ export const betTrackerRouter = router({
       console.log(`[BetTracker][OUTPUT] getStats: userId=${userId} → totalBets=${stats.totalBets} wins=${stats.wins} losses=${stats.losses} roi=${stats.roi}% equityCurve=${equityCurve.length} points`);
       return stats;
     }),
+
+  /**
+   * getLinescores — fetch MLB per-inning linescore data for one or more dates.
+   * Calls the official MLB Stats API: https://statsapi.mlb.com/api/v1/schedule
+   * Returns a map keyed by gamePk with innings array + R/H/E totals + status.
+   */
+  getLinescores: handicapperProcedure
+    .input(z.object({
+      sport:  z.literal("MLB"),
+      dates:  z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).min(1).max(14),
+    }))
+    .query(async ({ input }) => {
+      console.log(`[BetTracker][INPUT] getLinescores: sport=${input.sport} dates=${input.dates.join(",")}`);
+
+      type InningLine = { num: number; awayRuns: number | null; homeRuns: number | null };
+      type LinescoreEntry = {
+        gamePk:       number;
+        gameDate:     string;
+        awayAbbrev:   string;
+        homeAbbrev:   string;
+        innings:      InningLine[];
+        awayR:        number | null;
+        awayH:        number | null;
+        awayE:        number | null;
+        homeR:        number | null;
+        homeH:        number | null;
+        homeE:        number | null;
+        currentInning: number | null;
+        inningState:  string | null;  // "Top" | "Bottom" | "Middle" | "End"
+        status:       string;         // "Preview" | "Live" | "Final" | "Postponed" etc.
+      };
+
+      const result: Record<number, LinescoreEntry> = {};
+
+      await Promise.all(input.dates.map(async (date) => {
+        const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=linescore,team`;
+        console.log(`[BetTracker][STEP] getLinescores: fetching ${url}`);
+        try {
+          const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+          if (!resp.ok) {
+            console.warn(`[BetTracker][WARN] getLinescores: MLB API returned ${resp.status} for date=${date}`);
+            return;
+          }
+          const json = await resp.json() as {
+            dates?: Array<{
+              games?: Array<{
+                gamePk: number;
+                gameDate: string;
+                status?: { abstractGameState?: string; detailedState?: string };
+                linescore?: {
+                  currentInning?: number;
+                  inningState?: string;
+                  innings?: Array<{
+                    num: number;
+                    away?: { runs?: number };
+                    home?: { runs?: number };
+                  }>;
+                  teams?: {
+                    away?: { runs?: number; hits?: number; errors?: number };
+                    home?: { runs?: number; hits?: number; errors?: number };
+                  };
+                };
+                teams?: {
+                  away?: { team?: { abbreviation?: string } };
+                  home?: { team?: { abbreviation?: string } };
+                };
+              }>;
+            }>;
+          };
+
+          for (const dateBlock of json.dates ?? []) {
+            for (const game of dateBlock.games ?? []) {
+              const ls = game.linescore;
+              const innings: InningLine[] = (ls?.innings ?? []).map(inn => ({
+                num:       inn.num,
+                awayRuns:  inn.away?.runs ?? null,
+                homeRuns:  inn.home?.runs ?? null,
+              }));
+
+              result[game.gamePk] = {
+                gamePk:        game.gamePk,
+                gameDate:      date,
+                awayAbbrev:    game.teams?.away?.team?.abbreviation ?? "",
+                homeAbbrev:    game.teams?.home?.team?.abbreviation ?? "",
+                innings,
+                awayR:         ls?.teams?.away?.runs  ?? null,
+                awayH:         ls?.teams?.away?.hits  ?? null,
+                awayE:         ls?.teams?.away?.errors ?? null,
+                homeR:         ls?.teams?.home?.runs  ?? null,
+                homeH:         ls?.teams?.home?.hits  ?? null,
+                homeE:         ls?.teams?.home?.errors ?? null,
+                currentInning: ls?.currentInning ?? null,
+                inningState:   ls?.inningState   ?? null,
+                status:        game.status?.abstractGameState ?? "Preview",
+              };
+            }
+          }
+          console.log(`[BetTracker][STATE] getLinescores: date=${date} → ${Object.keys(result).length} games accumulated`);
+        } catch (e) {
+          console.warn(`[BetTracker][WARN] getLinescores: fetch failed for date=${date}:`, e);
+        }
+      }));
+
+      console.log(`[BetTracker][OUTPUT] getLinescores: total=${Object.keys(result).length} games returned`);
+      return result;
+    }),
 });
 
 export type BetTrackerRouter = typeof betTrackerRouter;

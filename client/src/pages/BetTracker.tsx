@@ -1,25 +1,17 @@
 /**
- * BetTracker.tsx — Handicapper Bet Tracker v5
+ * BetTracker.tsx — Handicapper Bet Tracker v7
  *
- * New in v5:
- *   - Handicapper selector (owner/admin can view any handicapper's bets)
- *   - Analytics panel: equity curve + 6 breakdown dimensions
- *     (By Type / By Unit Size / By Month / By Sport / By Timeframe / By Result)
- *   - Best Win / Worst Loss stat cards
- *   - All-Time toggle (removes date + sport filter for aggregate view)
- *   - Day-separator rows in bet log
- *   - Auto-grading of pending bets via MLB API
+ * New in v7:
+ *   - BetCard full redesign: large team logos, 9-inning linescore grid (MLB),
+ *     live/final scores, start time for upcoming games
+ *   - getLinescores tRPC procedure used for per-inning MLB data
+ *   - Real-time auto-grade polling: 60s interval when PENDING bets exist,
+ *     fires immediately when gameStatus transitions to "Final"
+ *   - RL fix: line value embedded inline in pick string, no duplicate field
  *
  * Access: OWNER | ADMIN | HANDICAPPER only.
  *   - OWNER / ADMIN: can view any handicapper's bets via selector
  *   - HANDICAPPER: sees only their own bets
- *
- * Logging convention:
- *   [BetTracker][INPUT]  — user action / form input
- *   [BetTracker][STEP]   — operation in progress
- *   [BetTracker][STATE]  — intermediate computed values
- *   [BetTracker][OUTPUT] — final result
- *   [BetTracker][VERIFY] — validation pass/fail
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -29,7 +21,7 @@ import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import {
   Clock, TrendingUp, Minus, AlertCircle,
   ChevronLeft, Plus, Pencil, Trash2, CheckCircle2,
-  DollarSign, Hash, ChevronDown, Zap, RefreshCw, BarChart2, Users,
+  DollarSign, Hash, ChevronDown, Zap, RefreshCw, BarChart2,
 } from "lucide-react";
 import type { TrackedBet } from "@shared/types";
 import { EquityChart, BreakdownGrid, HandicapperSelector } from "@/components/BetTrackerAnalytics";
@@ -50,6 +42,24 @@ type EnrichedBet = TrackedBet & {
   gameTime:     string | null;
   startUtc:     string | null;
   gameStatus:   string | null;
+};
+
+/** Per-inning linescore entry returned by getLinescores */
+type LinescoreEntry = {
+  gamePk:        number;
+  gameDate:      string;
+  awayAbbrev:    string;
+  homeAbbrev:    string;
+  innings:       { num: number; awayRuns: number | null; homeRuns: number | null }[];
+  awayR:         number | null;
+  awayH:         number | null;
+  awayE:         number | null;
+  homeR:         number | null;
+  homeH:         number | null;
+  homeE:         number | null;
+  currentInning: number | null;
+  inningState:   string | null;
+  status:        string;
 };
 
 const SPORTS = ["MLB", "NHL", "NBA", "NCAAM"] as const;
@@ -201,6 +211,18 @@ function getPickLine(odds: GameOdds | null, market: Market, pickSide: PickSide):
     case "TOTAL": return pickSide === "OVER" ? odds.over?.value   ?? null : odds.under?.value  ?? null;
     default:      return null;
   }
+}
+
+/** Format a local start time from a UTC ISO string */
+function fmtStartTime(utcStr: string | null, gameTime: string | null): string {
+  if (utcStr) {
+    try {
+      const d = new Date(utcStr);
+      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+    } catch { /* fall through */ }
+  }
+  if (gameTime) return `${gameTime} ET`;
+  return "";
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -407,17 +429,105 @@ function GameSelector({
   );
 }
 
+// ─── LinescoreGrid ────────────────────────────────────────────────────────────
+
+function LinescoreGrid({
+  ls, awayAbbrev, homeAbbrev,
+}: {
+  ls:          LinescoreEntry;
+  awayAbbrev:  string;
+  homeAbbrev:  string;
+}) {
+  // Always show 9 columns (innings 1-9), pad with null if game not complete
+  const cols = Array.from({ length: 9 }, (_, i) => {
+    const inn = ls.innings.find(x => x.num === i + 1);
+    return inn ?? { num: i + 1, awayRuns: null, homeRuns: null };
+  });
+
+  const isLive  = ls.status === "Live";
+  const isFinal = ls.status === "Final";
+
+  function cellCls(runs: number | null, isCurrentInning: boolean): string {
+    if (runs === null) return "text-zinc-700";
+    if (isCurrentInning && isLive) return "text-emerald-300 font-bold";
+    return "text-zinc-300";
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-center" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+        <thead>
+          <tr>
+            <th className="text-[9px] text-zinc-600 font-medium text-left pr-2 pb-1 w-8">
+              {/* Team abbrev column */}
+            </th>
+            {cols.map(c => (
+              <th key={c.num} className={`text-[9px] font-bold pb-1 w-6 ${
+                isLive && ls.currentInning === c.num ? "text-emerald-400" : "text-zinc-600"
+              }`}>
+                {c.num}
+              </th>
+            ))}
+            <th className="text-[9px] font-bold text-zinc-400 pb-1 px-1">R</th>
+            <th className="text-[9px] font-bold text-zinc-600 pb-1 px-1">H</th>
+            <th className="text-[9px] font-bold text-zinc-600 pb-1 px-1">E</th>
+          </tr>
+        </thead>
+        <tbody>
+          {/* Away row */}
+          <tr>
+            <td className="text-[9px] font-bold text-zinc-400 text-left pr-2">{awayAbbrev}</td>
+            {cols.map(c => (
+              <td key={c.num} className={`text-[10px] font-mono ${cellCls(c.awayRuns, isLive && ls.currentInning === c.num)}`}>
+                {c.awayRuns !== null ? c.awayRuns : (isFinal ? "0" : "·")}
+              </td>
+            ))}
+            <td className="text-[11px] font-bold font-mono text-white px-1">
+              {ls.awayR !== null ? ls.awayR : "—"}
+            </td>
+            <td className="text-[10px] font-mono text-zinc-500 px-1">
+              {ls.awayH !== null ? ls.awayH : "—"}
+            </td>
+            <td className="text-[10px] font-mono text-zinc-500 px-1">
+              {ls.awayE !== null ? ls.awayE : "—"}
+            </td>
+          </tr>
+          {/* Home row */}
+          <tr>
+            <td className="text-[9px] font-bold text-zinc-400 text-left pr-2">{homeAbbrev}</td>
+            {cols.map(c => (
+              <td key={c.num} className={`text-[10px] font-mono ${cellCls(c.homeRuns, isLive && ls.currentInning === c.num)}`}>
+                {c.homeRuns !== null ? c.homeRuns : (isFinal ? "0" : "·")}
+              </td>
+            ))}
+            <td className="text-[11px] font-bold font-mono text-white px-1">
+              {ls.homeR !== null ? ls.homeR : "—"}
+            </td>
+            <td className="text-[10px] font-mono text-zinc-500 px-1">
+              {ls.homeH !== null ? ls.homeH : "—"}
+            </td>
+            <td className="text-[10px] font-mono text-zinc-500 px-1">
+              {ls.homeE !== null ? ls.homeE : "—"}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ─── BetCard ──────────────────────────────────────────────────────────────────
 
 function BetCard({
-  bet, stakeMode, unitSize, onResult, onDelete, onEdit,
+  bet, stakeMode, unitSize, onResult, onDelete, onEdit, linescore,
 }: {
-  bet:       EnrichedBet;
-  stakeMode: StakeMode;
-  unitSize:  number;
-  onResult:  (id: number, result: Result) => void;
-  onDelete:  (id: number) => void;
-  onEdit:    (bet: TrackedBet) => void;
+  bet:        EnrichedBet;
+  stakeMode:  StakeMode;
+  unitSize:   number;
+  onResult:   (id: number, result: Result) => void;
+  onDelete:   (id: number) => void;
+  onEdit:     (bet: TrackedBet) => void;
+  linescore?: LinescoreEntry;
 }) {
   const risk  = parseFloat(bet.risk);
   const toWin = parseFloat(bet.toWin);
@@ -427,25 +537,34 @@ function BetCard({
     return fmtUnits(unitSize > 0 ? n / unitSize : n);
   }
 
-  const tfShort  = timeframeShort(bet.timeframe ?? "FULL_GAME");
-  const result   = bet.result as Result;
+  const tfShort = timeframeShort(bet.timeframe ?? "FULL_GAME");
+  const result  = bet.result as Result;
 
-  // Derive pick label: for RL bets, the pick already contains the line (e.g. "SF RL +1.5")
-  // Don't show a separate RL badge if the line is already embedded in the pick string
-  const pickHasLine = bet.market === "RL" && bet.pick.includes("+") || bet.pick.includes("-1.5") || bet.pick.includes("+1.5");
-  const lineDisplay = bet.line !== null && bet.line !== undefined && !pickHasLine
-    ? (Number(bet.line) > 0 ? `+${bet.line}` : String(bet.line))
+  // ── Game state ──────────────────────────────────────────────────────────────
+  // Use linescore status if available (more accurate), else fall back to AN status
+  const lsStatus  = linescore?.status ?? null;
+  const anStatus  = bet.gameStatus ?? null;
+
+  // Determine game state from best available source
+  const isFinal   = lsStatus === "Final" || anStatus === "complete";
+  const isLive    = !isFinal && (lsStatus === "Live" || anStatus === "in_progress");
+  const isUpcoming = !isFinal && !isLive;
+
+  // Scores: prefer linescore totals, fall back to bet.awayScore/homeScore
+  const awayR = linescore?.awayR ?? (bet.awayScore !== null && bet.awayScore !== undefined ? parseInt(String(bet.awayScore), 10) : null);
+  const homeR = linescore?.homeR ?? (bet.homeScore !== null && bet.homeScore !== undefined ? parseInt(String(bet.homeScore), 10) : null);
+  const hasScore = awayR !== null && homeR !== null;
+
+  // Inning indicator for live games
+  const currentInning = linescore?.currentInning ?? null;
+  const inningState   = linescore?.inningState ?? null;
+  const inningLabel   = currentInning
+    ? `${inningState === "Top" ? "▲" : inningState === "Bottom" ? "▼" : ""}${currentInning}`
     : null;
 
-  // Score display
-  const awayScore = bet.awayScore;
-  const homeScore = bet.homeScore;
-  const hasScore  = awayScore !== null && awayScore !== undefined && homeScore !== null && homeScore !== undefined;
-  const isComplete = bet.gameStatus === "complete" || result !== "PENDING";
-  const isLive     = bet.gameStatus === "in_progress";
-  const isUpcoming = !isComplete && !isLive;
-
-  // Determine which team is the pick
+  // ── Pick display ────────────────────────────────────────────────────────────
+  // For RL bets, pick string already has the line embedded (e.g. "SF RL +1.5")
+  // Don't show a separate line badge in that case
   const pickIsAway = bet.pickSide === "AWAY";
   const pickIsHome = bet.pickSide === "HOME";
 
@@ -454,11 +573,18 @@ function BetCard({
     : bet.market === "RL" ? (bet.sport === "NHL" ? "PL" : "RL")
     : "TOT";
 
+  // Show linescore grid only for MLB bets that have linescore data
+  const showLinescore = bet.sport === "MLB" && linescore !== null && linescore !== undefined;
+
+  // Away/home abbreviations for linescore grid
+  const awayAbbrev = linescore?.awayAbbrev || bet.awayTeam || "AWY";
+  const homeAbbrev = linescore?.homeAbbrev || bet.homeTeam || "HME";
+
   return (
     <div className={`relative bg-zinc-900/90 border rounded-xl overflow-hidden transition-all ${
-      result === "WIN"  ? "border-green-500/25" :
-      result === "LOSS" ? "border-red-500/20" :
-      result === "PUSH" ? "border-yellow-500/20" :
+      result === "WIN"  ? "border-green-500/30" :
+      result === "LOSS" ? "border-red-500/25" :
+      result === "PUSH" ? "border-yellow-500/25" :
       "border-zinc-800"
     }`}>
       {/* Result accent bar */}
@@ -470,56 +596,93 @@ function BetCard({
         "bg-zinc-800"
       }`} />
 
-      <div className="pl-4 pr-4 pt-3 pb-3 space-y-2.5">
-        {/* ── Row 1: Matchup header ── */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Away team logo */}
+      <div className="pl-4 pr-3 pt-3 pb-3 space-y-3">
+
+        {/* ── Row 1: Matchup header with large logos ── */}
+        <div className="flex items-center gap-3">
+          {/* Away team */}
+          <div className="flex flex-col items-center gap-1 shrink-0">
             {bet.awayLogo ? (
-              <img src={bet.awayLogo} alt={bet.awayTeam ?? ""} className="w-7 h-7 object-contain shrink-0" />
+              <img src={bet.awayLogo} alt={bet.awayTeam ?? ""} className="w-10 h-10 sm:w-12 sm:h-12 object-contain"
+                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
             ) : (
-              <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
-                <span className="text-[8px] font-bold text-zinc-500">{(bet.awayTeam ?? "?").slice(0,3)}</span>
+              <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
+                <span className="text-[9px] font-bold text-zinc-500">{(bet.awayTeam ?? "?").slice(0, 3)}</span>
               </div>
             )}
-            {/* Matchup text */}
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-bold text-white">
-                  {bet.awayNickname ?? bet.awayTeam ?? "?"}
-                </span>
-                <span className="text-[10px] text-zinc-600">@</span>
-                <span className="text-[11px] font-bold text-white">
-                  {bet.homeNickname ?? bet.homeTeam ?? "?"}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[9px] tracking-widest text-zinc-600 uppercase">{bet.sport}</span>
-                <span className="text-zinc-700 text-[9px]">·</span>
-                <span className="text-[9px] text-zinc-600">{fmtDate(bet.gameDate)}</span>
-                {/* Game status / time */}
-                {isLive && (
-                  <span className="text-[9px] font-bold text-emerald-400 animate-pulse">LIVE</span>
-                )}
-                {isUpcoming && bet.gameTime && (
-                  <span className="text-[9px] text-zinc-500">{bet.gameTime} ET</span>
-                )}
-                {isComplete && hasScore && (
-                  <span className="text-[9px] text-zinc-500 font-mono">FINAL {awayScore}-{homeScore}</span>
-                )}
-              </div>
-            </div>
+            <span className="text-[9px] font-bold text-zinc-400 tracking-wider">{bet.awayTeam ?? "?"}</span>
           </div>
-          {/* Home team logo */}
-          <div className="flex items-center gap-2 shrink-0">
-            {bet.homeLogo ? (
-              <img src={bet.homeLogo} alt={bet.homeTeam ?? ""} className="w-7 h-7 object-contain" />
+
+          {/* Center: score / status / time */}
+          <div className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
+            {/* Date + sport */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] tracking-widest text-zinc-600 uppercase">{bet.sport}</span>
+              <span className="text-zinc-700 text-[9px]">·</span>
+              <span className="text-[9px] text-zinc-600">{fmtDate(bet.gameDate)}</span>
+            </div>
+
+            {/* Score / Time / Live indicator */}
+            {isFinal && hasScore ? (
+              <div className="flex flex-col items-center gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className={`text-xl font-black font-mono ${
+                    pickIsAway ? (result === "WIN" ? "text-green-400" : result === "LOSS" ? "text-red-400" : "text-white") : "text-zinc-300"
+                  }`}>{awayR}</span>
+                  <span className="text-zinc-600 text-sm font-bold">-</span>
+                  <span className={`text-xl font-black font-mono ${
+                    pickIsHome ? (result === "WIN" ? "text-green-400" : result === "LOSS" ? "text-red-400" : "text-white") : "text-zinc-300"
+                  }`}>{homeR}</span>
+                </div>
+                <span className="text-[9px] font-bold text-zinc-500 tracking-widest uppercase">Final</span>
+              </div>
+            ) : isLive && hasScore ? (
+              <div className="flex flex-col items-center gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-black font-mono text-white">{awayR}</span>
+                  <span className="text-zinc-600 text-sm font-bold">-</span>
+                  <span className="text-xl font-black font-mono text-white">{homeR}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[9px] font-bold text-emerald-400 tracking-widest uppercase">
+                    {inningLabel ? `${inningLabel} INN` : "LIVE"}
+                  </span>
+                </div>
+              </div>
+            ) : isLive ? (
+              <div className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[9px] font-bold text-emerald-400 tracking-widest uppercase">
+                  {inningLabel ? `${inningLabel} INN` : "LIVE"}
+                </span>
+              </div>
             ) : (
-              <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
-                <span className="text-[8px] font-bold text-zinc-500">{(bet.homeTeam ?? "?").slice(0,3)}</span>
+              /* Upcoming */
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-sm font-bold text-zinc-400">
+                  {fmtStartTime(bet.startUtc, bet.gameTime) || "—"}
+                </span>
+                <span className="text-[9px] text-zinc-600 tracking-widest uppercase">Start Time</span>
               </div>
             )}
-            {/* Edit/Delete */}
+          </div>
+
+          {/* Home team */}
+          <div className="flex flex-col items-center gap-1 shrink-0">
+            {bet.homeLogo ? (
+              <img src={bet.homeLogo} alt={bet.homeTeam ?? ""} className="w-10 h-10 sm:w-12 sm:h-12 object-contain"
+                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
+                <span className="text-[9px] font-bold text-zinc-500">{(bet.homeTeam ?? "?").slice(0, 3)}</span>
+              </div>
+            )}
+            <span className="text-[9px] font-bold text-zinc-400 tracking-wider">{bet.homeTeam ?? "?"}</span>
+          </div>
+
+          {/* Edit/Delete */}
+          <div className="flex flex-col gap-1 shrink-0 ml-1">
             <button type="button" onClick={() => onEdit(bet)}
               className="p-1.5 rounded-lg text-zinc-700 hover:text-zinc-300 hover:bg-zinc-800 transition-all"
               title="Edit bet"
@@ -535,7 +698,18 @@ function BetCard({
           </div>
         </div>
 
-        {/* ── Row 2: Pick + Bet Details ── */}
+        {/* ── Row 2: 9-inning linescore grid (MLB only) ── */}
+        {showLinescore && (
+          <div className="bg-zinc-950/60 border border-zinc-800/60 rounded-lg px-3 py-2">
+            <LinescoreGrid
+              ls={linescore!}
+              awayAbbrev={awayAbbrev}
+              homeAbbrev={homeAbbrev}
+            />
+          </div>
+        )}
+
+        {/* ── Row 3: Pick + Bet Details ── */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 flex-wrap min-w-0">
             {/* Pick team logo highlight */}
@@ -553,10 +727,6 @@ function BetCard({
             {tfShort && (
               <span className="text-[9px] bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded font-medium">{tfShort}</span>
             )}
-            {/* Line (only if not already in pick string) */}
-            {lineDisplay && (
-              <span className="text-[10px] text-zinc-500 font-mono">{lineDisplay}</span>
-            )}
             {/* Odds */}
             <span className={`text-[11px] font-bold font-mono ${
               bet.odds >= 0 ? "text-emerald-400" : "text-zinc-300"
@@ -565,27 +735,13 @@ function BetCard({
             </span>
           </div>
 
-          {/* Score display for complete/live games */}
-          {hasScore && (
-            <div className="flex items-center gap-1.5 shrink-0">
-              <div className="flex items-center gap-1">
-                {bet.awayLogo && <img src={bet.awayLogo} alt="" className="w-3.5 h-3.5 object-contain" />}
-                <span className={`text-xs font-bold font-mono ${
-                  pickIsAway ? (result === "WIN" ? "text-green-400" : result === "LOSS" ? "text-red-400" : "text-white") : "text-zinc-400"
-                }`}>{awayScore}</span>
-              </div>
-              <span className="text-zinc-700 text-[10px]">-</span>
-              <div className="flex items-center gap-1">
-                <span className={`text-xs font-bold font-mono ${
-                  pickIsHome ? (result === "WIN" ? "text-green-400" : result === "LOSS" ? "text-red-400" : "text-white") : "text-zinc-400"
-                }`}>{homeScore}</span>
-                {bet.homeLogo && <img src={bet.homeLogo} alt="" className="w-3.5 h-3.5 object-contain" />}
-              </div>
-            </div>
-          )}
+          {/* Result badge */}
+          <span className={`px-2 py-1 rounded-lg text-[9px] font-bold border shrink-0 ${resultBg(result)}`}>
+            {result}
+          </span>
         </div>
 
-        {/* ── Row 3: Stake + P/L + Result buttons ── */}
+        {/* ── Row 4: Stake + P/L + Quick result buttons ── */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <div className="text-center">
@@ -613,7 +769,7 @@ function BetCard({
             )}
           </div>
 
-          {/* Quick result buttons + status badge */}
+          {/* Quick result buttons */}
           <div className="flex items-center gap-1">
             {(["WIN", "LOSS", "PUSH"] as const).map(r => (
               <button key={r} type="button"
@@ -627,11 +783,6 @@ function BetCard({
                 {r === "WIN" ? "W" : r === "LOSS" ? "L" : "P"}
               </button>
             ))}
-            <span className={`px-2 py-1 rounded-lg text-[9px] font-bold border ${
-              resultBg(result)
-            }`}>
-              {result}
-            </span>
           </div>
         </div>
 
@@ -676,7 +827,6 @@ export default function BetTracker() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [filterAllTime, setFilterAllTime] = useState(false);
 
-  // Effective userId for queries (owner/admin can view others)
   const effectiveUserId = isOwnerOrAdmin && targetUserId ? targetUserId : undefined;
 
   // ── Sport / filter state ──────────────────────────────────────────────────
@@ -696,10 +846,10 @@ export default function BetTracker() {
   const [formError, setFormError]         = useState("");
 
   // Edit / delete modal
-  const [editBet, setEditBet]     = useState<TrackedBet | null>(null);
-  const [editNotes, setEditNotes] = useState("");
+  const [editBet, setEditBet]       = useState<TrackedBet | null>(null);
+  const [editNotes, setEditNotes]   = useState("");
   const [editResult, setEditResult] = useState<Result>("PENDING");
-  const [deleteId, setDeleteId]   = useState<number | null>(null);
+  const [deleteId, setDeleteId]     = useState<number | null>(null);
 
   // Auto-grade toast
   const [gradeToast, setGradeToast] = useState<{ graded: number; wins: number; losses: number; pushes: number; stillPending: number } | null>(null);
@@ -756,9 +906,9 @@ export default function BetTracker() {
 
   const listQuery = trpc.betTracker.list.useQuery(
     {
-      sport: filterAllTime ? undefined : activeSport,
-      gameDate: filterAllTime ? undefined : (filterDate || undefined),
-      result: filterResult || undefined,
+      sport:        filterAllTime ? undefined : activeSport,
+      gameDate:     filterAllTime ? undefined : (filterDate || undefined),
+      result:       filterResult || undefined,
       targetUserId: effectiveUserId,
     },
     { enabled: canAccess }
@@ -766,18 +916,50 @@ export default function BetTracker() {
 
   const statsQuery = trpc.betTracker.getStats.useQuery(
     {
-      sport: filterAllTime ? undefined : activeSport,
-      gameDate: filterAllTime ? undefined : (filterDate || undefined),
+      sport:        filterAllTime ? undefined : activeSport,
+      gameDate:     filterAllTime ? undefined : (filterDate || undefined),
       targetUserId: effectiveUserId,
     },
     { enabled: canAccess }
   );
 
-  // listHandicappers — owner/admin only
   const handicappersQuery = trpc.betTracker.listHandicappers.useQuery(
     undefined,
     { enabled: canAccess && isOwnerOrAdmin }
   );
+
+  // ── Linescore query (MLB only) ─────────────────────────────────────────────
+  // Collect unique MLB dates from the current bet list
+  const enrichedBets = (listQuery.data ?? []) as EnrichedBet[];
+  const mlbDates = useMemo(() => {
+    const dates = new Set<string>();
+    for (const b of enrichedBets) {
+      if (b.sport === "MLB") dates.add(b.gameDate);
+    }
+    return Array.from(dates).sort();
+  }, [enrichedBets]);
+
+  const linescoreQuery = trpc.betTracker.getLinescores.useQuery(
+    { sport: "MLB", dates: mlbDates },
+    {
+      enabled: canAccess && mlbDates.length > 0,
+      staleTime: 30_000,          // 30s — refresh frequently for live games
+      refetchInterval: 60_000,    // poll every 60s automatically
+      retry: 1,
+    }
+  );
+
+  // Map gamePk → LinescoreEntry for O(1) lookup in BetCard
+  // We also need to match by awayAbbrev+homeAbbrev since bets don't store gamePk
+  const linescoreByTeams = useMemo(() => {
+    const map = new Map<string, LinescoreEntry>();
+    if (!linescoreQuery.data) return map;
+    for (const ls of Object.values(linescoreQuery.data)) {
+      const key = `${ls.gameDate}:${ls.awayAbbrev}:${ls.homeAbbrev}`;
+      map.set(key, ls);
+    }
+    return map;
+  }, [linescoreQuery.data]);
 
   const utils = trpc.useUtils();
   const invalidate = useCallback(() => {
@@ -799,6 +981,53 @@ export default function BetTracker() {
       console.log(`[BetTracker][ERROR] autoGrade: ${err.message}`);
     },
   });
+
+  // ── Real-time auto-grade polling ───────────────────────────────────────────
+  // Poll every 60s when any bet is PENDING. Fire immediately when linescore
+  // transitions to "Final" for a game that has a PENDING bet.
+  const prevLinescoreRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!canAccess) return;
+
+    const pendingBets = enrichedBets.filter(b => b.result === "PENDING");
+    if (pendingBets.length === 0) return;
+
+    // Check if any game just went Final (status transition)
+    if (linescoreQuery.data) {
+      let newFinalFound = false;
+      for (const ls of Object.values(linescoreQuery.data)) {
+        const key = `${ls.gameDate}:${ls.awayAbbrev}:${ls.homeAbbrev}`;
+        const prev = prevLinescoreRef.current[key];
+        if (ls.status === "Final" && prev && prev !== "Final") {
+          // A game just went Final — check if we have a PENDING bet on it
+          const hasPending = pendingBets.some(b =>
+            b.gameDate === ls.gameDate &&
+            (b.awayTeam === ls.awayAbbrev || b.homeTeam === ls.homeAbbrev)
+          );
+          if (hasPending) {
+            console.log(`[BetTracker][STATE] autoGrade: game ${ls.awayAbbrev}@${ls.homeAbbrev} just went Final — firing immediate grade`);
+            newFinalFound = true;
+          }
+        }
+        prevLinescoreRef.current[key] = ls.status;
+      }
+      if (newFinalFound && !autoGradeMut.isPending) {
+        autoGradeMut.mutate({});
+      }
+    }
+
+    // Set up 60s polling interval
+    const interval = setInterval(() => {
+      if (!autoGradeMut.isPending) {
+        console.log(`[BetTracker][STEP] autoGrade: 60s poll — grading ${pendingBets.length} PENDING bets`);
+        autoGradeMut.mutate({});
+      }
+    }, 60_000);
+
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enrichedBets, linescoreQuery.data, canAccess]);
 
   // ── Game selection ────────────────────────────────────────────────────────
   const slateGames = (slateQuery.data ?? []) as SlateGame[];
@@ -914,15 +1143,12 @@ export default function BetTracker() {
   // ── Bet list with day separators ──────────────────────────────────────────
   const bets = listQuery.data ?? [];
 
-  // Group bets by date for day-separator rows
-  const enrichedBets = bets as EnrichedBet[];
   const betsWithSeparators = useMemo(() => {
     const result: Array<{ type: "separator"; date: string; wins: number; losses: number; pushes: number; pending: number } | { type: "bet"; bet: EnrichedBet }> = [];
     let lastDate = "";
     for (const bet of enrichedBets) {
       const d = bet.gameDate ?? "";
       if (d !== lastDate) {
-        // Compute daily stats for this date
         const dayBets = enrichedBets.filter(b => b.gameDate === d);
         const wins    = dayBets.filter(b => b.result === "WIN").length;
         const losses  = dayBets.filter(b => b.result === "LOSS").length;
@@ -1104,13 +1330,13 @@ export default function BetTracker() {
             <div className="hidden sm:block">
               <StatCard
                 label="Worst L"
-                value={stats.worstLoss < 0 ? fmtStake(stats.worstLoss) : "—"}
+                value={stats.worstLoss > 0 ? `-${fmtStake(stats.worstLoss)}` : "—"}
                 color="text-red-400"
               />
             </div>
           </div>
 
-          {/* Mobile: P/L + ROI + Best Win + Worst L on second row */}
+          {/* Mobile: P/L + ROI on second row */}
           <div className="grid grid-cols-2 gap-2 mt-2 sm:hidden">
             <StatCard
               label="Net P/L"
@@ -1131,7 +1357,6 @@ export default function BetTracker() {
       {showAnalytics && (
         <div className="bg-zinc-900/30 border-b border-zinc-800/60">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-            {/* Equity Curve */}
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp size={14} className="text-emerald-400" />
@@ -1142,8 +1367,6 @@ export default function BetTracker() {
               </div>
               <EquityChart points={stats.equityCurve} />
             </div>
-
-            {/* Breakdown Grid */}
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <BarChart2 size={14} className="text-emerald-400" />
@@ -1336,6 +1559,10 @@ export default function BetTracker() {
               </div>
               <div className="ml-auto flex items-center gap-2 self-end pb-2">
                 <span className="text-xs text-zinc-500">{bets.length} bet{bets.length !== 1 ? "s" : ""}</span>
+                {/* Linescore refresh indicator */}
+                {linescoreQuery.isFetching && (
+                  <div className="w-3 h-3 border border-emerald-500 border-t-transparent rounded-full animate-spin" title="Refreshing linescores…" />
+                )}
                 <button type="button" onClick={() => {
                     autoGradeMut.mutate({ sport: activeSport, gameDate: filterAllTime ? undefined : (filterDate || undefined) });
                   }}
@@ -1380,6 +1607,10 @@ export default function BetTracker() {
                       </div>
                     );
                   }
+                  // Look up linescore for this bet (MLB only)
+                  const ls = item.bet.sport === "MLB"
+                    ? linescoreByTeams.get(`${item.bet.gameDate}:${item.bet.awayTeam}:${item.bet.homeTeam}`) ?? undefined
+                    : undefined;
                   return (
                     <BetCard
                       key={item.bet.id}
@@ -1389,6 +1620,7 @@ export default function BetTracker() {
                       onResult={handleResult}
                       onDelete={id => setDeleteId(id)}
                       onEdit={b => { setEditBet(b); setEditNotes(b.notes ?? ""); setEditResult(b.result as Result); }}
+                      linescore={ls}
                     />
                   );
                 })}
