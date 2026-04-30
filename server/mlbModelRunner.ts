@@ -1522,12 +1522,38 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
   const engineInputById = new Map<number, EngineInput>();
   for (const inp of engineInputs) engineInputById.set(inp.db_id, inp);
 
-  // Build a fast lookup: db_id → dbGame (for bookTotal and book RL anchoring)
-  // CRITICAL: bookTotal is the ground truth for modelTotal — Python's r.total_line may differ by 0.5
-  // This map is built from the same dbGames array used to build engineInputs, so it reflects
-  // the exact DB state at model-run time.
+  // Build a fast lookup: db_id → dbGame (for book RL anchoring)
   const dbGameById = new Map<number, typeof dbGames[0]>();
   for (const g of dbGames) dbGameById.set(g.id, g);
+
+  // ── LIVE bookTotal re-read (CRITICAL for modelTotal accuracy) ────────────────
+  // dbGames was fetched at model-run START — bookTotal may have been null then if odds
+  // hadn't been scraped yet. We re-read bookTotal NOW (right before DB writes) to get
+  // the current authoritative value. This prevents modelTotal from being set to Python's
+  // r.total_line when bookTotal was null at model-run time but has since been populated.
+  const modelableIds = engineResults.filter(r => r.ok).map(r => r.db_id);
+  const liveBookTotalMap = new Map<number, number | null>();
+  if (modelableIds.length > 0) {
+    try {
+      const liveRows = await db.select({ id: games.id, bookTotal: games.bookTotal })
+        .from(games)
+        .where(inArray(games.id, modelableIds));
+      for (const row of liveRows) {
+        liveBookTotalMap.set(row.id, row.bookTotal != null ? parseFloat(String(row.bookTotal)) : null);
+      }
+      console.log(`${TAG} [LIVE bookTotal re-read] ${liveRows.length} games fetched`);
+      // Log any games where live bookTotal differs from snapshot
+      for (const [id, liveVal] of Array.from(liveBookTotalMap.entries())) {
+        const snapVal = dbGameById.get(id)?.bookTotal != null ? parseFloat(String(dbGameById.get(id)!.bookTotal)) : null;
+        if (liveVal !== snapVal) {
+          const g = dbGameById.get(id);
+          console.warn(`${TAG} [LIVE bookTotal DRIFT] id=${id} ${g?.awayTeam}@${g?.homeTeam}: snapshot=${snapVal} live=${liveVal} — using live value for modelTotal`);
+        }
+      }
+    } catch (err) {
+      console.error(`${TAG} [LIVE bookTotal re-read FAILED] ${err} — falling back to snapshot values`);
+    }
+  }
 
   for (const r of engineResults) {
     if (!r.ok || r.error) {
@@ -1593,14 +1619,23 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
           // ── Total (ALWAYS anchored to book O/U line, NOT model-derived line) ────────────
           // CRITICAL: modelTotal MUST equal bookTotal so displayed model line matches book line.
           // r.total_line = Python's optimal line (may differ from book by 0.5) — NEVER use this.
-          // Priority: (1) dbGameById.bookTotal [DB ground truth] → (2) engineInput.book_lines.ou_line → (3) r.total_line fallback
-          // dbGameById.bookTotal is the most reliable: it's the value that was in the DB when the
-          // model ran, and bookTotal is never changed by the model runner itself.
-          modelTotal:           String(
-            dbGameById.get(r.db_id)?.bookTotal
-              ?? engineInputById.get(r.db_id)?.book_lines?.ou_line
-              ?? r.total_line
-          ),
+          // Priority:
+          //   (1) liveBookTotalMap [live DB re-read right before write — most current]
+          //   (2) dbGameById.bookTotal [snapshot at model-run start — may be stale]
+          //   (3) engineInput.book_lines.ou_line [what was passed to Python]
+          //   (4) r.total_line [Python's own computed line — LAST RESORT ONLY]
+          // liveBookTotalMap is the authoritative source: it reflects the current bookTotal
+          // even if odds were populated AFTER the model started running.
+          modelTotal:           (() => {
+            const liveTotal = liveBookTotalMap.get(r.db_id);
+            if (liveTotal != null && !isNaN(liveTotal)) return String(liveTotal);
+            const snapTotal = dbGameById.get(r.db_id)?.bookTotal;
+            if (snapTotal != null) return String(snapTotal);
+            const engineTotal = engineInputById.get(r.db_id)?.book_lines?.ou_line;
+            if (engineTotal != null && !isNaN(engineTotal)) return String(engineTotal);
+            console.warn(`${TAG} [${r.db_id}] ${r.game} — [TOTAL FALLBACK] bookTotal not available, using Python r.total_line=${r.total_line}`);
+            return String(r.total_line);
+          })(),
           modelOverOdds:        fmtMl(r.over_odds),
           modelUnderOdds:       fmtMl(r.under_odds),
           modelOverRate:        String(r.over_pct.toFixed(2)),
