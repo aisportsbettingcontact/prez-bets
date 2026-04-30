@@ -2926,3 +2926,22 @@
 - [x] Add `idx_tb_user_result_date` composite index (userId + result + gameDate) — optimal for auto-grade pending queries
 - [x] Run `pnpm db:push` — 2 new indexes applied (migration 0081)
 - [x] TypeScript: 0 errors
+
+## Session: 2026-04-30 — BetTracker 250x Performance Optimization
+
+- [x] Server: add `listWithStatsPaginated` cursor-based infinite-scroll procedure (limit=50, cursor by gameDate+id)
+- [x] Server: add `isHistorical` flag — skip slate enrichment for fully historical result sets
+- [x] Server: parallel page+stats queries in `listWithStatsPaginated` (Promise.all)
+- [x] Server: import lt, or, sql from drizzle-orm for cursor pagination support
+- [x] Frontend: replace `listWithStats.useQuery` with `listWithStatsPaginated.useInfiniteQuery`
+- [x] Frontend: `isHistoricalRange` derived flag — staleTime:Infinity for graded historical data
+- [x] Frontend: staleTime:Infinity + gcTime:30m for historical ranges (ALL_TIME, L7, L14, 1M when dateTo < today)
+- [x] Frontend: `paginatedQueryInput` stabilized with useMemo — no unstable object references
+- [x] Frontend: `allPageBets` flattened from all pages via useMemo
+- [x] Frontend: skeleton BetCard loading states (6 placeholders with animate-pulse)
+- [x] Frontend: “LOAD MORE BETS” button with isFetchingNextPage spinner
+- [x] Frontend: `betsWithSeparators` single-pass aggregation — replaces 4x .filter() + 1x .reduce() per date group
+- [x] Frontend: linescore query — staleTime:Infinity for historical MLB dates, refetchInterval:false when no live dates
+- [x] Frontend: `hasLiveMlbDates` derived flag — only polls live MLB games
+- [x] Frontend: `invalidate` updated to target both `listWithStats` and `listWithStatsPaginated`
+- [x] TypeScript: 0 errors

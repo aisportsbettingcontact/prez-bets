@@ -34,7 +34,7 @@ import { handicapperProcedure } from "./appUsers";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 import { trackedBets, appUsers, betEditRequests } from "../../drizzle/schema";
-import { eq, and, desc, inArray, asc, gte, lte } from "drizzle-orm";
+import { eq, and, desc, inArray, asc, gte, lte, lt, or, sql } from "drizzle-orm";
 import { fetchAnSlate, resolveLogoUrl } from "../actionNetwork";
 import { gradeTrackedBet, fetchScores, type Sport as GraderSport, type Timeframe as GraderTimeframe, type Market as GraderMarket, type PickSide as GraderPickSide } from "../scoreGrader";
 
@@ -1547,6 +1547,276 @@ export const betTrackerRouter = router({
 
       console.log(`[BetTracker][OUTPUT] getLinescores: total=${Object.keys(result).length} games returned`);
       return result;
+    }),
+
+  /**
+   * listWithStatsPaginated — cursor-based infinite scroll variant of listWithStats.
+   *
+   * Performance profile:
+   *   - Page query: LIMIT 50 rows (vs full table scan in listWithStats)
+   *   - Stats query: runs in parallel with page query (no sequential wait)
+   *   - isHistorical flag: skips AN slate enrichment for fully graded historical pages
+   *   - Cursor: (gameDate DESC, id DESC) — stable, index-aligned, no OFFSET penalty
+   *   - nextCursor: null when no more pages remain
+   *
+   * Client usage:
+   *   trpc.betTracker.listWithStatsPaginated.useInfiniteQuery(input, {
+   *     getNextPageParam: (last) => last.nextCursor,
+   *   })
+   */
+  listWithStatsPaginated: handicapperProcedure
+    .input(z.object({
+      sport:        z.enum(SPORTS).optional(),
+      gameDate:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      dateFrom:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      dateTo:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      result:       z.enum(RESULTS).optional(),
+      targetUserId: z.number().int().positive().optional(),
+      unitSize:     z.number().positive().optional(),
+      limit:        z.number().int().min(1).max(200).default(50),
+      /** Cursor: JSON-encoded { gameDate: string; id: number } */
+      cursor:       z.string().optional(),
+      /** When true, skip AN slate enrichment (fully historical pages have no live data) */
+      isHistorical: z.boolean().optional(),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const role = ctx.appUser.role;
+      let userId = ctx.appUser.id;
+      if (input?.targetUserId && input.targetUserId !== userId) {
+        if (role !== "owner" && role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Owner or Admin required to view other handicappers" });
+        }
+        userId = input.targetUserId;
+      }
+      const unitSize    = input?.unitSize ?? 100;
+      const limit       = input?.limit    ?? 50;
+      const isHistorical = input?.isHistorical ?? false;
+
+      // ── Decode cursor ──────────────────────────────────────────────────────────
+      let cursorDate: string | null = null;
+      let cursorId:   number | null = null;
+      if (input?.cursor) {
+        try {
+          const c = JSON.parse(input.cursor) as { gameDate: string; id: number };
+          cursorDate = c.gameDate;
+          cursorId   = c.id;
+        } catch { /* invalid cursor — start from beginning */ }
+      }
+
+      // ── Build WHERE conditions ─────────────────────────────────────────────────
+      const baseConditions = [eq(trackedBets.userId, userId)];
+      if (input?.sport)    baseConditions.push(eq(trackedBets.sport, input.sport));
+      if (input?.gameDate) baseConditions.push(eq(trackedBets.gameDate, input.gameDate));
+      if (input?.dateFrom) baseConditions.push(gte(trackedBets.gameDate, input.dateFrom));
+      if (input?.dateTo)   baseConditions.push(lte(trackedBets.gameDate, input.dateTo));
+
+      // List conditions (with optional result filter)
+      const listConditions = [...baseConditions];
+      if (input?.result) listConditions.push(eq(trackedBets.result, input.result));
+
+      // Cursor condition: (gameDate < cursorDate) OR (gameDate = cursorDate AND id < cursorId)
+      if (cursorDate !== null && cursorId !== null) {
+        listConditions.push(
+          or(
+            lt(trackedBets.gameDate, cursorDate),
+            and(
+              eq(trackedBets.gameDate, cursorDate),
+              lt(trackedBets.id, cursorId)
+            )
+          )!
+        );
+      }
+
+      const db = await getDb();
+
+      // ── Run page query + stats query in parallel ───────────────────────────────
+      // Stats always uses full base conditions (no cursor, no result filter)
+      // Page uses cursor + limit for fast pagination
+      const [pageRows, statsRows] = await Promise.all([
+        db.select().from(trackedBets)
+          .where(and(...listConditions))
+          .orderBy(desc(trackedBets.gameDate), desc(trackedBets.id))
+          .limit(limit + 1), // fetch one extra to detect hasNextPage
+        db.select().from(trackedBets)
+          .where(and(...baseConditions))
+          .orderBy(asc(trackedBets.gameDate), asc(trackedBets.id)),
+      ]);
+
+      // ── Determine next cursor ──────────────────────────────────────────────────
+      const hasNextPage = pageRows.length > limit;
+      const rows = hasNextPage ? pageRows.slice(0, limit) : pageRows;
+      let nextCursor: string | null = null;
+      if (hasNextPage && rows.length > 0) {
+        const last = rows[rows.length - 1];
+        nextCursor = JSON.stringify({ gameDate: last.gameDate, id: last.id });
+      }
+
+      // ── Enrich page rows with logos/slate data ─────────────────────────────────
+      // Skip enrichment for historical pages (no live data needed)
+      const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+      const slateMap = new Map<number, import('../actionNetwork').SlateGame>();
+
+      if (!isHistorical) {
+        const pairs = new Map<string, { sport: string; gameDate: string }>();
+        for (const row of rows) {
+          const key = `${row.sport}:${row.gameDate}`;
+          if (!pairs.has(key) && row.gameDate >= todayStr) {
+            pairs.set(key, { sport: row.sport, gameDate: row.gameDate });
+          }
+        }
+        if (pairs.size > 0) {
+          await Promise.all(
+            Array.from(pairs.values()).map(async ({ sport, gameDate }) => {
+              try {
+                const games = await fetchAnSlate(sport, gameDate);
+                for (const g of games) slateMap.set(g.id, g);
+              } catch (e) {
+                console.warn(`[BetTracker][WARN] listWithStatsPaginated: fetchAnSlate failed for ${sport}/${gameDate}:`, e);
+              }
+            })
+          );
+        }
+      }
+
+      type RawBet = typeof rows[0];
+      const enriched = rows.map((row: RawBet) => {
+        const slate = row.anGameId ? slateMap.get(row.anGameId) : undefined;
+        const awayLogo = slate?.awayLogo ?? (row.awayTeam ? resolveLogoUrl(row.sport, row.awayTeam, "") || null : null);
+        const homeLogo = slate?.homeLogo ?? (row.homeTeam ? resolveLogoUrl(row.sport, row.homeTeam, "") || null : null);
+        return {
+          ...row,
+          awayLogo,
+          homeLogo,
+          awayFull:     slate?.awayFull     ?? null,
+          homeFull:     slate?.homeFull     ?? null,
+          awayNickname: slate?.awayNickname ?? null,
+          homeNickname: slate?.homeNickname ?? null,
+          awayColor:    slate?.awayColor    ?? null,
+          homeColor:    slate?.homeColor    ?? null,
+          gameTime:     slate?.gameTime     ?? null,
+          startUtc:     slate?.startUtc     ?? null,
+          gameStatus:   slate?.status       ?? null,
+        };
+      });
+
+      // ── Stats aggregation (single pass over full statsRows) ────────────────────
+      function toUnits(dollarAmt: number, storedUnits: string | null | undefined): number {
+        if (storedUnits != null && storedUnits !== "") {
+          const v = parseFloat(storedUnits);
+          if (!isNaN(v) && v > 0) return v;
+        }
+        return dollarAmt / unitSize;
+      }
+
+      let wins = 0, losses = 0, pushes = 0, pending = 0, voids = 0;
+      let totalRisk = 0, totalWon = 0, totalLost = 0;
+      let bestWin = 0, worstLoss = 0;
+      type BkEntry = { wins: number; losses: number; pushes: number; risk: number; won: number; lost: number };
+      const byTypeMap      = new Map<string, BkEntry>();
+      const bySizeMap      = new Map<string, BkEntry>();
+      const byMonthMap     = new Map<string, BkEntry>();
+      const bySportMap     = new Map<string, BkEntry>();
+      const byResultMap    = new Map<string, BkEntry>();
+      const byTimeframeMap = new Map<string, BkEntry>();
+      const byWagerTypeMap = new Map<string, BkEntry>();
+      const dayPLMap       = new Map<string, number>();
+      let cumPL = 0;
+      const equityCurve: { date: string; cumPL: number; betId: number; pick: string; result: string; pl: number }[] = [];
+      let longestWinStreak = 0, currentWinStreak = 0;
+
+      function bkGet(map: Map<string, BkEntry>, key: string): BkEntry {
+        if (!map.has(key)) map.set(key, { wins: 0, losses: 0, pushes: 0, risk: 0, won: 0, lost: 0 });
+        return map.get(key)!;
+      }
+      function bkApply(map: Map<string, BkEntry>, key: string, result: string, riskU: number, toWinU: number) {
+        const e = bkGet(map, key);
+        if (result === "WIN")  { e.wins++;   e.risk += riskU; e.won  += toWinU; }
+        if (result === "LOSS") { e.losses++; e.risk += riskU; e.lost += riskU;  }
+        if (result === "PUSH") { e.pushes++; }
+      }
+      const UNIT_BUCKET_ORDER = ["10U", "5U", "4U", "3U", "2U", "1U"];
+
+      for (const bet of statsRows) {
+        const riskU  = toUnits(parseFloat(bet.risk),  bet.riskUnits);
+        const toWinU = toUnits(parseFloat(bet.toWin), bet.toWinUnits);
+        const res    = bet.result;
+        switch (res) {
+          case "WIN":     wins++;   totalRisk += riskU; totalWon  += toWinU; if (toWinU > bestWin)   bestWin   = toWinU; break;
+          case "LOSS":   losses++; totalRisk += riskU; totalLost += riskU;  if (riskU  > worstLoss) worstLoss = riskU;  break;
+          case "PUSH":   pushes++;  break;
+          case "PENDING": pending++; break;
+          case "VOID":   voids++;   break;
+        }
+        const typeKey  = bet.market ?? bet.betType ?? "ML";
+        const riskDollar   = parseFloat(bet.risk);
+        const toWinDollar  = parseFloat(bet.toWin);
+        const riskUnitsRaw = bet.riskUnits  != null ? parseFloat(bet.riskUnits)  : null;
+        const toWinUnitsRaw= bet.toWinUnits != null ? parseFloat(bet.toWinUnits) : null;
+        const sizeKey  = calcUnitBucket(bet.odds, riskDollar, toWinDollar, riskUnitsRaw, toWinUnitsRaw);
+        const monthKey = bet.gameDate.substring(0, 7);
+        bkApply(byTypeMap,      typeKey,              res, riskU, toWinU);
+        bkApply(bySizeMap,      sizeKey,              res, riskU, toWinU);
+        bkApply(byMonthMap,     monthKey,             res, riskU, toWinU);
+        bkApply(bySportMap,     bet.sport,            res, riskU, toWinU);
+        bkApply(byResultMap,    res,                  res, riskU, toWinU);
+        bkApply(byTimeframeMap, bet.timeframe ?? "FULL_GAME", res, riskU, toWinU);
+        bkApply(byWagerTypeMap, bet.wagerType ?? "PREGAME",   res, riskU, toWinU);
+        if (res === "WIN")  dayPLMap.set(bet.gameDate, (dayPLMap.get(bet.gameDate) ?? 0) + toWinU);
+        if (res === "LOSS") dayPLMap.set(bet.gameDate, (dayPLMap.get(bet.gameDate) ?? 0) - riskU);
+        if (res === "WIN") {
+          cumPL += toWinU;
+          equityCurve.push({ date: bet.gameDate, cumPL: parseFloat(cumPL.toFixed(2)), betId: bet.id, pick: bet.pick, result: "WIN", pl: parseFloat(toWinU.toFixed(2)) });
+        } else if (res === "LOSS") {
+          cumPL -= riskU;
+          equityCurve.push({ date: bet.gameDate, cumPL: parseFloat(cumPL.toFixed(2)), betId: bet.id, pick: bet.pick, result: "LOSS", pl: parseFloat((-riskU).toFixed(2)) });
+        }
+        if (res === "WIN")  { currentWinStreak++; if (currentWinStreak > longestWinStreak) longestWinStreak = currentWinStreak; }
+        else if (res === "LOSS") currentWinStreak = 0;
+      }
+
+      function finalizeBreakdown(map: Map<string, BkEntry>) {
+        return Array.from(map.entries()).map(([key, e]) => {
+          const np = e.won - e.lost;
+          return { key, wins: e.wins, losses: e.losses, pushes: e.pushes, totalRisk: parseFloat(e.risk.toFixed(2)), netProfit: parseFloat(np.toFixed(2)), roi: e.risk > 0 ? parseFloat(((np / e.risk) * 100).toFixed(2)) : 0 };
+        }).sort((a, b) => a.key.localeCompare(b.key));
+      }
+
+      const byType      = finalizeBreakdown(byTypeMap);
+      const bySize      = finalizeBreakdown(bySizeMap).sort((a, b) => {
+        const ai = UNIT_BUCKET_ORDER.indexOf(a.key); const bi = UNIT_BUCKET_ORDER.indexOf(b.key);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      });
+      const byMonth     = finalizeBreakdown(byMonthMap);
+      const bySport     = finalizeBreakdown(bySportMap);
+      const byResult    = finalizeBreakdown(byResultMap);
+      const byTimeframe = finalizeBreakdown(byTimeframeMap);
+      const byWagerType = finalizeBreakdown(byWagerTypeMap);
+
+      const netProfit = totalWon - totalLost;
+      const roi       = totalRisk > 0 ? parseFloat(((netProfit / totalRisk) * 100).toFixed(2)) : 0;
+
+      let biggestDayDate = "", biggestDayUnits = 0;
+      dayPLMap.forEach((pl, date) => { if (pl > biggestDayUnits) { biggestDayUnits = pl; biggestDayDate = date; } });
+
+      const stats = {
+        totalBets:  statsRows.length,
+        wins, losses, pushes, pending, voids,
+        gradedBets: wins + losses + pushes,
+        totalRisk:  parseFloat(totalRisk.toFixed(2)),
+        totalWon:   parseFloat(totalWon.toFixed(2)),
+        totalLost:  parseFloat(totalLost.toFixed(2)),
+        netProfit:  parseFloat(netProfit.toFixed(2)),
+        roi,
+        bestWin:    parseFloat(bestWin.toFixed(2)),
+        worstLoss:  parseFloat(worstLoss.toFixed(2)),
+        byType, bySize, byMonth, bySport, byResult, byTimeframe, byWagerType,
+        equityCurve,
+        biggestDayDate,
+        biggestDayUnits: parseFloat(biggestDayUnits.toFixed(2)),
+        longestWinStreak,
+      };
+
+      return { bets: enriched, stats, nextCursor, hasNextPage, pageSize: rows.length, totalBets: statsRows.length };
     }),
 });
 

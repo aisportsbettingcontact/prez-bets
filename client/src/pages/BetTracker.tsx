@@ -1429,31 +1429,64 @@ export default function BetTracker() {
     { enabled: canAccess, staleTime: 4 * 60 * 1000, retry: 1 }
   );
 
-  // ── OPTIMIZED: Single combined query replaces separate list + getStats calls ──────────
-  // One DB round-trip, one network request, one cache entry.
-  // 2 queries → 1 query. Network payload compressed 70-85% via gzip on the server.
-  const listWithStatsQuery = trpc.betTracker.listWithStats.useQuery(
-    {
-      sport:        activeSport === "ALL" ? undefined : activeSport,
-      gameDate:     (dateRange === "ALL_TIME" && !filterAllTime) ? (filterDate || undefined) : undefined,
-      dateFrom:     dateRange !== "ALL_TIME" ? dateFrom : undefined,
-      dateTo:       dateRange !== "ALL_TIME" ? dateTo : undefined,
-      result:       filterResult || undefined,
-      targetUserId: effectiveUserId,
-      unitSize:     unitSize > 0 ? unitSize : 100,
-    },
+  // ── OPTIMIZED: Paginated infinite-scroll query — 50 bets per page, cursor-based ──────────
+  // - staleTime:Infinity for historical ranges (immutable graded data never needs refetch)
+  // - staleTime:60s for TODAY/SEASON (live data may update)
+  // - isHistorical flag skips AN slate enrichment on historical pages
+  // - useInfiniteQuery: only fetches page 1 on load; subsequent pages on scroll
+  const today = todayPt();
+  const isHistoricalRange = useMemo(() => {
+    if (dateRange === "TODAY") return false;
+    if (dateRange === "SEASON") return false;
+    // L7/L14/1M: historical if dateTo < today (no pending bets possible)
+    if (dateTo && dateTo < today) return true;
+    // ALL_TIME with a specific filterDate in the past
+    if (dateRange === "ALL_TIME" && !filterAllTime && filterDate && filterDate < today) return true;
+    return false;
+  }, [dateRange, dateTo, today, filterAllTime, filterDate]);
+
+  const paginatedQueryInput = useMemo(() => ({
+    sport:        activeSport === "ALL" ? undefined : activeSport,
+    gameDate:     (dateRange === "ALL_TIME" && !filterAllTime) ? (filterDate || undefined) : undefined,
+    dateFrom:     dateRange !== "ALL_TIME" ? dateFrom : undefined,
+    dateTo:       dateRange !== "ALL_TIME" ? dateTo : undefined,
+    result:       filterResult || undefined,
+    targetUserId: effectiveUserId,
+    unitSize:     unitSize > 0 ? unitSize : 100,
+    limit:        50,
+    isHistorical: isHistoricalRange,
+  }), [activeSport, dateRange, filterAllTime, filterDate, dateFrom, dateTo, filterResult, effectiveUserId, unitSize, isHistoricalRange]);
+
+  const paginatedQuery = trpc.betTracker.listWithStatsPaginated.useInfiniteQuery(
+    paginatedQueryInput,
     {
       enabled: canAccess,
-      staleTime: 60_000,
-      gcTime: 5 * 60_000,
+      // staleTime:Infinity for historical data — graded bets never change
+      // staleTime:60s for live ranges (TODAY, SEASON with pending bets)
+      staleTime: isHistoricalRange ? Infinity : 60_000,
+      gcTime: isHistoricalRange ? 30 * 60_000 : 5 * 60_000,
       refetchOnWindowFocus: false,
       placeholderData: keepPreviousData,
       retry: 1,
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      initialCursor: undefined,
     }
   );
+
+  // Flatten all pages into a single bets array
+  const allPageBets = useMemo(() => {
+    if (!paginatedQuery.data) return [];
+    return paginatedQuery.data.pages.flatMap(p => p.bets) as EnrichedBet[];
+  }, [paginatedQuery.data]);
+
+  // Stats always come from the first page (stats are computed over the full set server-side)
+  const firstPageStats = paginatedQuery.data?.pages[0]?.stats;
+
   // Compatibility aliases so all downstream code works unchanged
-  const listQuery  = { data: listWithStatsQuery.data?.bets, isLoading: listWithStatsQuery.isLoading, isFetching: listWithStatsQuery.isFetching };
-  const statsQuery = { data: listWithStatsQuery.data?.stats, isLoading: listWithStatsQuery.isLoading };
+  const listQuery  = { data: allPageBets, isLoading: paginatedQuery.isLoading, isFetching: paginatedQuery.isFetching };
+  const statsQuery = { data: firstPageStats, isLoading: paginatedQuery.isLoading };
+  const hasNextPage = paginatedQuery.hasNextPage ?? false;
+  const isFetchingNextPage = paginatedQuery.isFetchingNextPage;
 
   const handicappersQuery = trpc.betTracker.listHandicappers.useQuery(
     undefined,
@@ -1470,12 +1503,16 @@ export default function BetTracker() {
     return Array.from(dates).sort();
   }, [enrichedBets]);
 
+  // Historical MLB linescores never change — staleTime:Infinity prevents refetching graded dates
+  // Only today's dates need live polling (refetchInterval:60s)
+  const hasLiveMlbDates = useMemo(() => mlbDates.some(d => d >= today), [mlbDates, today]);
   const linescoreQuery = trpc.betTracker.getLinescores.useQuery(
     { sport: "MLB", dates: mlbDates },
     {
       enabled: canAccess && mlbDates.length > 0,
-      staleTime: 30_000,
-      refetchInterval: 60_000,
+      staleTime: hasLiveMlbDates ? 30_000 : Infinity,
+      gcTime:    hasLiveMlbDates ? 5 * 60_000 : 30 * 60_000,
+      refetchInterval: hasLiveMlbDates ? 60_000 : false,
       retry: 1,
     }
   );
@@ -1498,8 +1535,9 @@ export default function BetTracker() {
 
   const utils = trpc.useUtils();
   const invalidate = useCallback(() => {
-    // Single combined query invalidation — replaces separate list + getStats invalidations
+    // Invalidate both query variants
     utils.betTracker.listWithStats.invalidate();
+    utils.betTracker.listWithStatsPaginated.invalidate();
   }, [utils]);
   const invalidateLogs = useCallback(() => {
     utils.betTracker.getLogs.invalidate();
@@ -1809,23 +1847,16 @@ export default function BetTracker() {
 
     for (const d of dateOrder) {
       const dayBets = byDate.get(d) ?? [];
-      const wins    = dayBets.filter(b => b.result === "WIN").length;
-      const losses  = dayBets.filter(b => b.result === "LOSS").length;
-      const pushes  = dayBets.filter(b => b.result === "PUSH").length;
-      const pending = dayBets.filter(b => b.result === "PENDING").length;
-      // Net P/L for the day: computed from result + riskUnits/toWinUnits
-      // WIN  → +toWinUnits
-      // LOSS → -riskUnits
-      // PUSH/VOID → 0
-      // PENDING → 0 (not yet settled)
-      const netProfit = dayBets.reduce((sum, b) => {
-        const risk   = parseFloat(String(b.riskUnits   ?? 0));
-        const toWin  = parseFloat(String(b.toWinUnits  ?? 0));
-        if (b.result === "WIN")  return sum + (isNaN(toWin) ? 0 : toWin);
-        if (b.result === "LOSS") return sum - (isNaN(risk)  ? 0 : risk);
-        return sum; // PUSH / VOID / PENDING = 0
-      }, 0);
-      // [PERF] Removed per-date console.log from hot useMemo — was firing 32x per render cycle
+      // ── Single-pass aggregation: replaces 4 separate .filter() + 1 .reduce() per date group ──
+      let wins = 0, losses = 0, pushes = 0, pending = 0, netProfit = 0;
+      for (const b of dayBets) {
+        switch (b.result) {
+          case "WIN":  { wins++;  const tw = parseFloat(String(b.toWinUnits ?? 0)); netProfit += isNaN(tw) ? 0 : tw; break; }
+          case "LOSS": { losses++; const rk = parseFloat(String(b.riskUnits  ?? 0)); netProfit -= isNaN(rk) ? 0 : rk; break; }
+          case "PUSH": pushes++;  break;
+          case "PENDING": pending++; break;
+        }
+      }
       result.push({ type: "separator", date: d, wins, losses, pushes, pending, netProfit });
       // Sort within this date group before pushing
       for (const bet of sortDayBets(dayBets)) {
@@ -2456,8 +2487,35 @@ export default function BetTracker() {
 
                 {/* Bet cards with day separators */}
                 {listQuery.isLoading ? (
-                  <div className="flex items-center justify-center py-16">
-                    <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  /* ── Skeleton BetCard placeholders — eliminates layout shift on load ── */
+                  <div className="space-y-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="rounded-xl overflow-hidden border border-zinc-800/60 animate-pulse">
+                        {/* Date strip skeleton */}
+                        <div className="flex items-center gap-3 px-3 py-2.5 bg-zinc-900/80">
+                          <div className="h-4 w-24 bg-zinc-800 rounded" />
+                          <div className="flex-1 h-px bg-zinc-800" />
+                          <div className="h-3 w-16 bg-zinc-800 rounded" />
+                          <div className="h-3 w-12 bg-zinc-800 rounded" />
+                        </div>
+                        {/* BetCard skeleton */}
+                        <div className="p-3 space-y-3 bg-zinc-950/40">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-zinc-800" />
+                            <div className="flex-1 flex flex-col items-center gap-1">
+                              <div className="h-4 w-32 bg-zinc-800 rounded" />
+                              <div className="h-3 w-20 bg-zinc-800 rounded" />
+                            </div>
+                            <div className="w-10 h-10 rounded-full bg-zinc-800" />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="h-6 w-28 bg-zinc-800 rounded-lg" />
+                            <div className="h-5 w-16 bg-zinc-800 rounded" />
+                            <div className="h-5 w-16 bg-zinc-800 rounded" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : bets.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center space-y-2">
@@ -2551,6 +2609,27 @@ export default function BetTracker() {
                         );
                       });
                     })()}
+                  </div>
+                )}
+
+                {/* ── Load More — infinite scroll pagination ── */}
+                {!listQuery.isLoading && hasNextPage && (
+                  <div className="flex justify-center pt-2 pb-1">
+                    <button
+                      type="button"
+                      onClick={() => paginatedQuery.fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                      className="flex items-center gap-2 px-5 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-bold tracking-wider text-zinc-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isFetchingNextPage ? (
+                        <>
+                          <div className="w-3 h-3 border border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                          LOADING…
+                        </>
+                      ) : (
+                        <>LOAD MORE BETS</>
+                      )}
+                    </button>
                   </div>
                 )}
               </>
