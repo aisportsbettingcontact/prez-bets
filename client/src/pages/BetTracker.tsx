@@ -69,6 +69,7 @@ type LinescoreEntry = {
 
 const SPORTS = ["MLB", "NHL", "NBA", "NCAAM"] as const;
 type Sport = typeof SPORTS[number];
+type SportOrAll = Sport | "ALL";
 
 type Timeframe = "FULL_GAME" | "FIRST_5" | "FIRST_INNING" | "NRFI" | "YRFI" | "REGULATION" | "FIRST_PERIOD" | "FIRST_HALF" | "FIRST_QUARTER";
 type Market    = "ML" | "RL" | "TOTAL";
@@ -143,6 +144,16 @@ const RESULTS = ["PENDING", "WIN", "LOSS", "PUSH", "VOID"] as const;
 
 function todayEst(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+/** Today in UTC-8 (Pacific Time) as YYYY-MM-DD */
+function todayPt(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+}
+/** Subtract N days from a YYYY-MM-DD string, return YYYY-MM-DD */
+function subtractDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
 }
 
 function calcToWin(odds: number, risk: number): number {
@@ -953,10 +964,7 @@ function BetCard({
           )}
         </div>
 
-        {/* Linescore (MLB only) */}
-        {linescore && bet.sport === "MLB" && (
-          <LinescoreGrid ls={linescore} awayAbbrev={awayAbbrev} homeAbbrev={homeAbbrev} />
-        )}
+        {/* Linescore removed per user request */}
 
         {/* Notes */}
         {bet.notes && (
@@ -1261,9 +1269,23 @@ export default function BetTracker() {
   const effectiveUserId = isOwnerOrAdmin && targetUserId ? targetUserId : undefined;
 
   // ── Sport / filter state ──────────────────────────────────────────────────
-  const [activeSport, setActiveSport]   = useState<Sport>("MLB");
+  const [activeSport, setActiveSport]   = useState<SportOrAll>("ALL");
   const [filterDate, setFilterDate]     = useState(todayEst);
   const [filterResult, setFilterResult] = useState<Result | "">("");
+  // Date range filter: ALL_TIME | TODAY | L7 | L14 | 1M
+  type DateRange = "ALL_TIME" | "TODAY" | "L7" | "L14" | "1M";
+  const [dateRange, setDateRange] = useState<DateRange>("ALL_TIME");
+
+  // Compute dateFrom/dateTo from dateRange (UTC-8 based)
+  const { dateFrom, dateTo } = useMemo(() => {
+    const today = todayPt();
+    console.log(`[BetTracker][STATE] dateRange=${dateRange} todayPt=${today}`);
+    if (dateRange === "TODAY")    return { dateFrom: today, dateTo: today };
+    if (dateRange === "L7")       return { dateFrom: subtractDays(today, 6), dateTo: today };
+    if (dateRange === "L14")      return { dateFrom: subtractDays(today, 13), dateTo: today };
+    if (dateRange === "1M")       return { dateFrom: subtractDays(today, 29), dateTo: today };
+    return { dateFrom: undefined, dateTo: undefined }; // ALL_TIME
+  }, [dateRange]);
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [formDate, setFormDate]           = useState(todayEst);
@@ -1333,7 +1355,9 @@ export default function BetTracker() {
     return fmtUnits(unitSize > 0 ? n / unitSize : n);
   }
 
-  const timeframeOptions = TIMEFRAMES_BY_SPORT[activeSport];
+  // When activeSport is ALL, default the form sport to MLB
+  const formSport: Sport = activeSport === "ALL" ? "MLB" : activeSport;
+  const timeframeOptions = TIMEFRAMES_BY_SPORT[formSport];
 
   useEffect(() => { setFormTimeframe("FULL_GAME"); }, [activeSport]);
   useEffect(() => { setFormGame(null); setFormPickSide("AWAY"); setFormOdds(""); setFormCustomLine(""); }, [formDate, activeSport]);
@@ -1369,14 +1393,16 @@ export default function BetTracker() {
 
   // ── tRPC ──────────────────────────────────────────────────────────────────
   const slateQuery = trpc.betTracker.getSlate.useQuery(
-    { sport: activeSport, gameDate: formDate },
+    { sport: activeSport === "ALL" ? "MLB" : activeSport, gameDate: formDate },
     { enabled: canAccess, staleTime: 4 * 60 * 1000, retry: 1 }
   );
 
   const listQuery = trpc.betTracker.list.useQuery(
     {
-      sport:        filterAllTime ? undefined : activeSport,
-      gameDate:     filterAllTime ? undefined : (filterDate || undefined),
+      sport:        activeSport === "ALL" ? undefined : activeSport,
+      gameDate:     (dateRange === "ALL_TIME" && !filterAllTime) ? (filterDate || undefined) : undefined,
+      dateFrom:     dateRange !== "ALL_TIME" ? dateFrom : undefined,
+      dateTo:       dateRange !== "ALL_TIME" ? dateTo : undefined,
       result:       filterResult || undefined,
       targetUserId: effectiveUserId,
     },
@@ -1385,8 +1411,10 @@ export default function BetTracker() {
 
   const statsQuery = trpc.betTracker.getStats.useQuery(
     {
-      sport:        filterAllTime ? undefined : activeSport,
-      gameDate:     filterAllTime ? undefined : (filterDate || undefined),
+      sport:        activeSport === "ALL" ? undefined : activeSport,
+      gameDate:     (dateRange === "ALL_TIME" && !filterAllTime) ? (filterDate || undefined) : undefined,
+      dateFrom:     dateRange !== "ALL_TIME" ? dateFrom : undefined,
+      dateTo:       dateRange !== "ALL_TIME" ? dateTo : undefined,
       targetUserId: effectiveUserId,
       unitSize:     unitSize > 0 ? unitSize : 100,
     },
@@ -1611,7 +1639,7 @@ export default function BetTracker() {
 
     await createMut.mutateAsync({
       anGameId:   formGame.id,
-      sport:      activeSport,
+      sport:      formSport,
       gameDate:   formDate,
       awayTeam:   formGame.awayTeam,
       homeTeam:   formGame.homeTeam,
@@ -1833,7 +1861,7 @@ export default function BetTracker() {
 
         {/* Sport tabs */}
         <div className="w-full px-4 sm:px-6 lg:px-8 flex gap-1 pb-0">
-          {SPORTS.map(s => (
+          {(["ALL", ...SPORTS] as SportOrAll[]).map(s => (
             <button type="button" key={s}
               onClick={() => setActiveSport(s)}
               className={`px-4 py-2.5 text-xs font-bold tracking-wider transition-all border-b-2 ${
@@ -1850,7 +1878,7 @@ export default function BetTracker() {
       <div className="bg-zinc-900/50 border-b border-zinc-800/60">
         <div className="w-full px-4 sm:px-6 lg:px-8 py-3 space-y-3">
 
-          {/* Handicapper selector + All-time toggle */}
+          {/* Handicapper selector + Date range pills */}
           <div className="flex flex-wrap items-center gap-2">
             {isOwnerOrAdmin && (handicappersQuery.data?.length ?? 0) > 0 && (
               <HandicapperSelector
@@ -1860,76 +1888,78 @@ export default function BetTracker() {
                 currentUserId={appUser!.id}
               />
             )}
-            <button
-              type="button"
-              onClick={() => setFilterAllTime(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                filterAllTime
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : "bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              All-Time
-            </button>
+            {/* Date range filter pills */}
+            {(["ALL_TIME", "TODAY", "L7", "L14", "1M"] as const).map(r => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => {
+                  setDateRange(r);
+                  setFilterAllTime(r === "ALL_TIME");
+                  console.log(`[BetTracker][INPUT] dateRange changed to ${r}`);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  dateRange === r
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                    : "bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {r === "ALL_TIME" ? "All-Time" : r === "TODAY" ? "Today" : r === "L7" ? "L7 Days" : r === "L14" ? "L14 Days" : "1M"}
+              </button>
+            ))}
             {statsQuery.isLoading && (
               <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
             )}
           </div>
 
-          {/* Stat cards row */}
-          <div className="grid grid-cols-4 sm:grid-cols-9 gap-2 sm:gap-3">
-            <StatCard label="Total"   value={stats.totalBets} />
-            <StatCard label="Wins"    value={stats.wins}   color="text-green-400" />
-            <StatCard label="Losses"  value={stats.losses} color="text-red-400" />
+          {/* Stat cards — desktop/tablet: single centered row; mobile: 3x2 grid */}
+          <div className="hidden sm:flex flex-wrap justify-center gap-2 sm:gap-3">
+            <StatCard label="Total Bets" value={stats.totalBets} />
+            <StatCard label="Wins"       value={stats.wins}   color="text-green-400" />
+            <StatCard label="Losses"     value={stats.losses} color="text-red-400" />
             {stats.pushes > 0 && (
-              <StatCard label="Pushes"  value={stats.pushes} color="text-yellow-400" />
+              <StatCard label="Pushes"   value={stats.pushes} color="text-yellow-400" />
             )}
             {stats.pending > 0 && (
-              <div className="hidden sm:block">
-                <StatCard label="Pending" value={stats.pending} color="text-zinc-400" />
-              </div>
+              <StatCard label="Pending"  value={stats.pending} color="text-zinc-400" />
             )}
-            <div className="hidden sm:block">
-              <StatCard
-                label="Net P/L"
-                value={stakeMode === "$" ? fmtDollar(stats.netProfit * unitSize) : fmtUnits(stats.netProfit)}
-                color={stats.netProfit >= 0 ? "text-green-400" : "text-red-400"}
-              />
-            </div>
-            <div className="hidden sm:block">
-              <StatCard
-                label="ROI"
-                value={`${stats.roi}%`}
-                color={stats.roi >= 0 ? "text-green-400" : "text-red-400"}
-                sub={`on ${stakeMode === "$" ? fmtDollar(stats.totalRisk * unitSize) : fmtUnits(stats.totalRisk)} risked`}
-              />
-            </div>
-            <div className="hidden sm:block">
-              <StatCard
-                label="Biggest Day"
-                value={(stats.biggestDayUnits ?? 0) > 0 ? `+${fmtUnits(stats.biggestDayUnits ?? 0)}` : "—"}
-                color="text-green-400"
-                sub={stats.biggestDayDate ? stats.biggestDayDate.substring(5) : undefined}
-              />
-            </div>
-            <div className="hidden sm:block">
-              <StatCard
-                label="Win Streak"
-                value={(stats.longestWinStreak ?? 0) > 0 ? `${stats.longestWinStreak}W` : "—"}
-                color="text-emerald-400"
-              />
-            </div>
-          </div>
-
-          {/* Mobile: P/L + ROI on second row */}
-          <div className="grid grid-cols-2 gap-2 mt-2 sm:hidden">
             <StatCard
-              label="Net P/L"
-              value={stakeMode === "$" ? fmtDollar(stats.netProfit * unitSize) : fmtUnits(stats.netProfit)}
-              color={stats.netProfit >= 0 ? "text-green-400" : "text-red-400"}
+              label="WP%"
+              value={`${stats.wins + stats.losses > 0 ? ((stats.wins / (stats.wins + stats.losses)) * 100).toFixed(1) : "0.0"}%`}
+              color="text-white"
             />
             <StatCard
-              label="ROI"
+              label="ROI%"
+              value={`${stats.roi}%`}
+              color={stats.roi >= 0 ? "text-green-400" : "text-red-400"}
+              sub={`on ${stakeMode === "$" ? fmtDollar(stats.totalRisk * unitSize) : fmtUnits(stats.totalRisk)} risked`}
+            />
+            <StatCard
+              label="Biggest Day"
+              value={(stats.biggestDayUnits ?? 0) > 0 ? `+${fmtUnits(stats.biggestDayUnits ?? 0)}` : "—"}
+              color="text-green-400"
+              sub={stats.biggestDayDate ? stats.biggestDayDate.substring(5) : undefined}
+            />
+            <StatCard
+              label="Win Streak"
+              value={(stats.longestWinStreak ?? 0) > 0 ? `${stats.longestWinStreak}W` : "—"}
+              color="text-emerald-400"
+            />
+          </div>
+
+          {/* Mobile: 3x2 grid — Total Bets / +Units / Wins / Losses / WP% / ROI% */}
+          <div className="grid grid-cols-3 gap-2 sm:hidden">
+            <StatCard label="Total Bets" value={stats.totalBets} />
+            <StatCard label="+/- Units"  value={fmtUnits(stats.netProfit)} color={stats.netProfit >= 0 ? "text-green-400" : "text-red-400"} />
+            <StatCard label="Wins"       value={stats.wins}   color="text-green-400" />
+            <StatCard label="Losses"     value={stats.losses} color="text-red-400" />
+            <StatCard
+              label="WP%"
+              value={`${stats.wins + stats.losses > 0 ? ((stats.wins / (stats.wins + stats.losses)) * 100).toFixed(1) : "0.0"}%`}
+              color="text-white"
+            />
+            <StatCard
+              label="ROI%"
               value={`${stats.roi}%`}
               color={stats.roi >= 0 ? "text-green-400" : "text-red-400"}
               sub={`on ${stakeMode === "$" ? fmtDollar(stats.totalRisk * unitSize) : fmtUnits(stats.totalRisk)} risked`}
@@ -1945,11 +1975,22 @@ export default function BetTracker() {
             <div>
               <div className="flex flex-col items-center justify-center gap-1 mb-3">
                 <div className="flex items-center gap-2">
-                  <TrendingUp size={22} className="text-emerald-400" />
-                  <span className="text-xl font-bold tracking-widest text-white uppercase">+/- UNITS</span>
+                  <TrendingUp size={22} className={stats.netProfit >= 0 ? "text-emerald-400" : "text-red-400"} />
+                  <span className={`text-xl font-bold tracking-widest uppercase ${stats.netProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {stats.netProfit >= 0 ? "+" : ""}{fmtUnits(stats.netProfit)}
+                  </span>
                 </div>
                 <span className="text-[10px] text-zinc-500">
-                  {filterAllTime ? "All-Time" : `${activeSport} · ${filterDate ? fmtDate(filterDate) : "All Dates"}`}
+                  {dateRange === "ALL_TIME"
+                    ? (activeSport === "ALL" ? "All Sports · All-Time" : `${activeSport} · All-Time`)
+                    : dateRange === "TODAY"
+                      ? (activeSport === "ALL" ? "All Sports · Today" : `${activeSport} · Today`)
+                      : dateRange === "L7"
+                        ? (activeSport === "ALL" ? "All Sports · Last 7 Days" : `${activeSport} · Last 7 Days`)
+                        : dateRange === "L14"
+                          ? (activeSport === "ALL" ? "All Sports · Last 14 Days" : `${activeSport} · Last 14 Days`)
+                          : (activeSport === "ALL" ? "All Sports · Last 30 Days" : `${activeSport} · Last 30 Days`)
+                  }
                 </span>
               </div>
               <EquityChart points={stats.equityCurve} />
@@ -2016,7 +2057,7 @@ export default function BetTracker() {
                 selectedId={formGame?.id ?? null}
                 onSelect={handleGameSelect}
                 loading={slateQuery.isLoading}
-                sport={activeSport}
+                sport={formSport}
                 formDate={formDate}
                 linescoreByTeams={linescoreByTeams}
               />
@@ -2033,12 +2074,12 @@ export default function BetTracker() {
             {/* MARKET — hidden for NRFI/YRFI */}
             {formTimeframe !== "NRFI" && formTimeframe !== "YRFI" && (
               <SelectField
-                label={`Market — ${MARKET_LABELS[activeSport][formMarket]}`}
+                label={`Market — ${MARKET_LABELS[formSport][formMarket]}`}
                 value={formMarket}
                 onChange={v => setFormMarket(v as Market)}
                 options={(["ML", "RL", "TOTAL"] as Market[]).map(m => ({
                   value: m,
-                  label: MARKET_LABELS[activeSport][m],
+                  label: MARKET_LABELS[formSport][m],
                 }))}
               />
             )}
@@ -2276,7 +2317,7 @@ export default function BetTracker() {
                     <p className="text-zinc-500 text-sm">
                       {filterAllTime
                         ? "No bets tracked yet."
-                        : `No bets tracked yet for ${activeSport} on ${fmtDate(filterDate)}.`}
+                        : `No bets tracked yet${activeSport !== "ALL" ? ` for ${activeSport}` : ""} on ${fmtDate(filterDate)}.`}
                     </p>
                     <p className="text-zinc-600 text-xs">Use the form to add your first bet.</p>
                   </div>

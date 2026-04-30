@@ -34,7 +34,7 @@ import { handicapperProcedure } from "./appUsers";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 import { trackedBets, appUsers, betEditRequests } from "../../drizzle/schema";
-import { eq, and, desc, inArray, asc } from "drizzle-orm";
+import { eq, and, desc, inArray, asc, gte, lte } from "drizzle-orm";
 import { fetchAnSlate, resolveLogoUrl } from "../actionNetwork";
 import { gradeTrackedBet, fetchScores, type Sport as GraderSport, type Timeframe as GraderTimeframe, type Market as GraderMarket, type PickSide as GraderPickSide } from "../scoreGrader";
 
@@ -177,6 +177,8 @@ export const betTrackerRouter = router({
     .input(z.object({
       sport:         z.enum(SPORTS).optional(),
       gameDate:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      dateFrom:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      dateTo:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       result:        z.enum(RESULTS).optional(),
       targetUserId:  z.number().int().positive().optional(),
     }).optional())
@@ -196,6 +198,8 @@ export const betTrackerRouter = router({
       const conditions = [eq(trackedBets.userId, userId)];
       if (input?.sport)    conditions.push(eq(trackedBets.sport, input.sport));
       if (input?.gameDate) conditions.push(eq(trackedBets.gameDate, input.gameDate));
+      if (input?.dateFrom) conditions.push(gte(trackedBets.gameDate, input.dateFrom));
+      if (input?.dateTo)   conditions.push(lte(trackedBets.gameDate, input.dateTo));
       if (input?.result)   conditions.push(eq(trackedBets.result, input.result));
 
       const db = await getDb();
@@ -988,6 +992,8 @@ export const betTrackerRouter = router({
     .input(z.object({
       sport:         z.enum(SPORTS).optional(),
       gameDate:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      dateFrom:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      dateTo:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       targetUserId:  z.number().int().positive().optional(),
       /** Client-side unit size (e.g. 100 = $100/unit). Used to normalize legacy bets lacking riskUnits/toWinUnits. */
       unitSize:      z.number().positive().optional(),
@@ -1008,6 +1014,9 @@ export const betTrackerRouter = router({
       const conditions = [eq(trackedBets.userId, userId)];
       if (input?.sport)    conditions.push(eq(trackedBets.sport, input.sport));
       if (input?.gameDate) conditions.push(eq(trackedBets.gameDate, input.gameDate));
+      if (input?.dateFrom) conditions.push(gte(trackedBets.gameDate, input.dateFrom));
+      if (input?.dateTo)   conditions.push(lte(trackedBets.gameDate, input.dateTo));
+      console.log(`[BetTracker][STEP] getStats: conditions=${conditions.length} sport=${input?.sport ?? "ALL"} gameDate=${input?.gameDate ?? "none"} dateFrom=${input?.dateFrom ?? "none"} dateTo=${input?.dateTo ?? "none"}`);
 
       const db = await getDb();
       const rows = await db

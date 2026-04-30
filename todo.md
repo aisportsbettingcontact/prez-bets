@@ -2852,3 +2852,16 @@
 - [x] Layout: 2-col grid [2fr 1fr] replacing 3-col [360px 300px 1fr]
 - [x] Layout: left column wraps Add Bet form + Breakdowns (stacked below form)
 - [x] TypeScript: 0 errors
+
+## Session: BetTracker v14 — Apr 30 2026
+
+- [x] Add ALL sport tab to the left of MLB (SportOrAll type, formSport fallback to MLB)
+- [x] Add date range filter pills: All-Time | Today | L7 Days | L14 Days | 1M
+- [x] Server: dateFrom/dateTo params added to list and getStats procedures (gte/lte drizzle-orm)
+- [x] Stat pills: uniform min-h-[72px] height, centered flex-wrap layout on desktop/tablet
+- [x] Mobile stat pills: 3x2 grid (Total Bets / +Units / Wins / Losses / WP% / ROI%)
+- [x] Pushes and Pending pills hidden when value is 0
+- [x] Chart title = actual +/- units value (dynamic color: green/red)
+- [x] Remove Net P/L stat card (replaced by +/- Units in chart title)
+- [x] Remove MLB 9-inning linescore from BetCard
+- [x] todayPt() helper (UTC-8 Pacific Time) and subtractDays() utility added
