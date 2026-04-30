@@ -27,49 +27,11 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 import { useMobileDebug, logMobileEvent } from "@/hooks/useMobileDebug";
+import { formatGameTime, timeToMinutes, formatDateHeader, formatDateShort } from '@/lib/gameUtils';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatMilitaryTime(time: string | null | undefined): string {
-  if (!time) return "TBD";
-  const upper = time.trim().toUpperCase();
-  if (upper === "TBD" || upper === "TBA" || upper === "") return "TBD";
-  // Handle already-formatted 12-hour strings like "7:05 PM ET" or "12:15 PM ET"
-  const already12h = /^(\d{1,2}):(\d{2})\s*(AM|PM)/i.exec(time);
-  if (already12h) {
-    const h = parseInt(already12h[1], 10);
-    const m = already12h[2];
-    const ap = already12h[3].toUpperCase();
-    return `${h}:${m} ${ap} ET`;
-  }
-  // Military time format (e.g. "19:05")
-  const [hStr, mStr] = time.split(":");
-  const h = parseInt(hStr ?? "0", 10);
-  const m = parseInt(mStr ?? "0", 10);
-  if (isNaN(h) || isNaN(m)) return "TBD";
-  const suffix = h >= 12 ? "PM" : "AM";
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}:${String(m).padStart(2, "0")} ${suffix} ET`;
-}
-
-function timeToMinutes(time: string | null | undefined): number {
-  if (!time || time.toUpperCase() === "TBD" || time.toUpperCase() === "TBA") return 9999;
-  // Handle already-formatted 12-hour strings like "7:05 PM ET" or "12:15 PM ET"
-  const already12h = /^(\d{1,2}):(\d{2})\s*(AM|PM)/i.exec(time);
-  if (already12h) {
-    let h = parseInt(already12h[1], 10);
-    const m = parseInt(already12h[2], 10);
-    const ap = already12h[3].toUpperCase();
-    if (ap === "PM" && h !== 12) h += 12;
-    if (ap === "AM" && h === 12) h = 0;
-    return h * 60 + m;
-  }
-  // Military time format (e.g. "19:05")
-  const [hStr, mStr] = time.split(":");
-  const h = parseInt(hStr ?? "0", 10);
-  const m = parseInt(mStr ?? "0", 10);
-  if (isNaN(h) || isNaN(m)) return 9999;
-  return h * 60 + m;
-}
+/** Alias: formatMilitaryTime → shared formatGameTime */
+const formatMilitaryTime = formatGameTime;
 
 /** Games starting at midnight (00:00 ET) are stored under their correct calendar
  * date by the backend. No frontend date adjustment needed. */
@@ -80,22 +42,6 @@ function effectiveGameDate(gameDate: string, _startTimeEst: string | null | unde
 /** Sort key: midnight (00:00) sorts first (beginning of day = 0 minutes) */
 function sortableMinutes(time: string | null | undefined): number {
   return timeToMinutes(time);
-}
-
-function formatDateHeader(dateStr: string): string {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", {
-      weekday: "long", month: "long", day: "numeric", year: "numeric",
-    });
-  } catch { return dateStr; }
-}
-
-function formatDateShort(dateStr: string): string {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  } catch { return dateStr; }
 }
 
 /**
@@ -354,11 +300,16 @@ export default function ModelProjections() {
   useEffect(() => {
     if (!headerRef.current) return;
     const obs = new ResizeObserver(() => {
-      setHeaderHeight(Math.ceil(headerRef.current?.getBoundingClientRect().height ?? 88));
+      const h = Math.ceil(headerRef.current?.getBoundingClientRect().height ?? 88);
+      setHeaderHeight(h);
+      // Set CSS variable so sticky column header can position itself below the main header
+      document.documentElement.style.setProperty('--prez-header-h', `${h}px`);
     });
     obs.observe(headerRef.current);
-    setHeaderHeight(Math.ceil(headerRef.current.getBoundingClientRect().height));
-     return () => obs.disconnect();
+    const initialH = Math.ceil(headerRef.current.getBoundingClientRect().height);
+    setHeaderHeight(initialH);
+    document.documentElement.style.setProperty('--prez-header-h', `${initialH}px`);
+    return () => obs.disconnect();
   }, []);
 
   // ── Tab bar scroll fade: show right-edge gradient when content overflows ───────────
@@ -777,16 +728,14 @@ export default function ModelProjections() {
       const el = document.getElementById(`game-card-${gameId}`);
       if (!el) return;
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.style.transition = "box-shadow 0.15s ease, outline 0.15s ease";
-      el.style.outline = "2px solid #22c55e"; el.style.borderRadius = "12px";
-      el.style.boxShadow = "0 0 0 4px rgba(34,197,94,0.3), 0 0 24px rgba(34,197,94,0.2)";
-      let count = 0;
-      const pulse = setInterval(() => {
-        count++;
-        if (count % 2 === 0) { el.style.boxShadow = "0 0 0 4px rgba(34,197,94,0.3), 0 0 24px rgba(34,197,94,0.2)"; el.style.outline = "2px solid #22c55e"; }
-        else { el.style.boxShadow = "0 0 0 2px rgba(34,197,94,0.15)"; el.style.outline = "2px solid rgba(34,197,94,0.4)"; }
-        if (count >= 5) { clearInterval(pulse); setTimeout(() => { el.style.outline = ""; el.style.boxShadow = ""; el.style.borderRadius = ""; el.style.transition = ""; }, 600); }
-      }, 300);
+      // Use CSS animation class instead of setInterval — zero style leak risk
+      el.classList.remove('prez-game-pulse');
+      // Force reflow to restart animation if already applied
+      void el.offsetWidth;
+      el.classList.add('prez-game-pulse');
+      el.addEventListener('animationend', () => {
+        el.classList.remove('prez-game-pulse');
+      }, { once: true });
     }, 120);
   };
 
@@ -1216,7 +1165,7 @@ export default function ModelProjections() {
       {/* Only shown when MODEL PROJECTIONS tab is active. Hidden for BETTING SPLITS tab. */}
       {feedMobileTab === 'dual' && (
         <div className="lg:hidden" style={{
-          position: 'sticky', top: 0, zIndex: 10,
+          position: 'sticky', top: 'var(--prez-header-h, 88px)', zIndex: 10,
           display: 'grid',
           gridTemplateColumns: 'clamp(170px, 14vw, 220px) 1fr',
           background: 'hsl(var(--card))',

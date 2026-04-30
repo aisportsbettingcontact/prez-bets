@@ -456,7 +456,7 @@ function LineupRows({ players, isMobile }: { players: LineupPlayer[]; isMobile: 
                   color: "#FFFFFF",
                   whiteSpace: "nowrap",
                   overflow: "hidden",
-                  textOverflow: "clip",
+                  textOverflow: "ellipsis",
                   lineHeight: 1.2,
                 }}
               >
@@ -823,8 +823,8 @@ export function MlbLineupCard({ awayTeam, homeTeam, startTime, lineup }: MlbLine
   const awayInfo = MLB_BY_ABBREV.get(awayTeam);
   const homeInfo = MLB_BY_ABBREV.get(homeTeam);
 
-  // Debug: log team resolution on mount
-  if (typeof window !== "undefined") {
+  // Debug: log team resolution on mount (dev only — gated to prevent production noise)
+  if (process.env.NODE_ENV === 'development' && typeof window !== "undefined") {
     if (awayInfo) {
       console.log(`[MlbLineupCard] AWAY ${awayTeam} → mlbId=${awayInfo.mlbId} logo=${awayInfo.logoUrl} primary=${awayInfo.primaryColor}`);
     } else {

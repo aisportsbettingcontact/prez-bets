@@ -250,6 +250,7 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin
   const [viewMonth, setViewMonth] = useState(() => parseInt(displayBase.slice(5, 7)) - 1);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
   useEffect(() => {
@@ -261,6 +262,20 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  // Phase 10 — Fix viewport clipping on narrow screens (375px phones)
+  // When the dropdown opens near the right edge, switch to right-aligned.
+  useEffect(() => {
+    if (!open || !dropdownRef.current) return;
+    const rect = dropdownRef.current.getBoundingClientRect();
+    if (rect.right > window.innerWidth - 8) {
+      dropdownRef.current.style.left = 'auto';
+      dropdownRef.current.style.right = '0';
+    } else {
+      dropdownRef.current.style.left = '0';
+      dropdownRef.current.style.right = 'auto';
+    }
   }, [open]);
 
   // When selectedDate changes externally, sync the calendar view to that month
@@ -324,6 +339,7 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin
       {/* Dropdown calendar */}
       {open && (
         <div
+          ref={dropdownRef}
           className="absolute left-0 top-full mt-1.5 z-50 rounded-xl border border-white/10 shadow-2xl overflow-hidden"
           style={{ background: "#0f0f0f", width: 220 }}
         >

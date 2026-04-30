@@ -30,6 +30,9 @@ import { NHL_BY_DB_SLUG, NHL_BY_ABBREV } from "@shared/nhlTeams";
 import { MLB_BY_ABBREV } from "@shared/mlbTeams";
 import { getGameTeamColorsClient } from "@shared/teamColors";
 import { useVisibility } from "@/hooks/useVisibility";
+import { useIsDesktop } from "@/hooks/useIsDesktop";
+import { americanToImplied, calculateEdge, getEdgeColor, getVerdict } from '@/lib/edgeUtils';
+import { formatGameTime, toNum, spreadSign } from '@/lib/gameUtils';
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
@@ -38,33 +41,15 @@ import { OddsHistoryPanel } from "./OddsHistoryPanel";
 import MlbLast5Panel from "./MlbLast5Panel";
 import RecentSchedulePanel from "./RecentSchedulePanel";
 import SituationalResultsPanel from "./SituationalResultsPanel";
+import { MobileGameCard } from './MobileGameCard';
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type GameRow = RouterOutput["games"]["list"][number];
 
-// ── Time formatting ───────────────────────────────────────────────────────────
-function formatMilitaryTime(time: string, _sport?: string): string {
-  const upper = time?.toUpperCase() ?? "";
-  if (!time || upper === "TBD" || upper === "TBA" || !time.includes(":")) return "TBD";
-  // Handle already-formatted 12-hour strings like "7:05 PM ET" or "12:15 PM ET"
-  const already12h = /^(\d{1,2}):(\d{2})\s*(AM|PM)/i.exec(time);
-  if (already12h) {
-    const h = parseInt(already12h[1], 10);
-    const m = already12h[2];
-    const ap = already12h[3].toUpperCase();
-    return `${h}:${m} ${ap} ET`;
-  }
-  // Military time format (e.g. "19:05")
-  const parts = time.split(":");
-  let hours = parseInt(parts[0], 10);
-  const minutes = parts[1]?.slice(0, 2) ?? "00";
-  if (isNaN(hours)) return "TBD";
-  const ampm = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12 || 12;
-  return `${hours}:${minutes} ${ampm} ET`;
-}
+// ── Time formatting (alias — shared impl in @/lib/gameUtils) ──────────────────────────────────────────────────────────────────
+const formatMilitaryTime = (time: string, _sport?: string): string => formatGameTime(time);
 
-// ── Date formatting ───────────────────────────────────────────────────────────
+// ── Date formatting (local — uses weekday, different from shared formatDateHeader) ──────────────────────────────────────────────────────────────────
 function formatDate(dateStr: string): string {
   try {
     const d = new Date(dateStr + "T00:00:00");
@@ -74,70 +59,10 @@ function formatDate(dateStr: string): string {
   }
 }
 
-// ── Edge Calculation Engine (spec-compliant) ─────────────────────────────────
-//
-// RULE: Edge lives in the juice, not the line.
-// The line tells you what you're betting. The juice tells you what you're paying.
-// Edge = modelImplied - bookImplied (expressed as percentage points)
-//
-// Each market (spread, total, ML) is independent — never averaged, never combined.
-// Recalculate on every render (derived state, not stored state).
+// ── Edge / spread / number helpers — imported from @/lib/edgeUtils and @/lib/gameUtils ──────────────────────────────────────────────────────────────────
+// americanToImplied, calculateEdge, getVerdict, getEdgeColor → @/lib/edgeUtils
+// spreadSign, toNum → @/lib/gameUtils
 
-/** Convert American odds to implied probability (raw, with vig). */
-function americanToImplied(odds: number): number {
-  if (isNaN(odds)) return NaN;
-  if (odds < 0) return (-odds) / (-odds + 100);
-  return 100 / (odds + 100);
-}
-
-/**
- * Calculate edge in percentage points.
- * Positive = model likes this bet over book price.
- * Negative = book is more efficient than model here.
- * Returns NaN if either input is NaN (missing data).
- */
-function calculateEdge(bookOdds: number, modelOdds: number): number {
-  const bookImplied  = americanToImplied(bookOdds);
-  const modelImplied = americanToImplied(modelOdds);
-  if (isNaN(bookImplied) || isNaN(modelImplied)) return NaN;
-  return (modelImplied - bookImplied) * 100;
-}
-
-/** 6-tier verdict from edge pp value. */
-function getVerdict(edge: number): string {
-  if (isNaN(edge)) return '—';
-  if (edge >= 8)    return 'ELITE';
-  if (edge >= 5)    return 'STRONG';
-  if (edge >= 2.5)  return 'PLAYABLE';
-  if (edge >= 0.5)  return 'SMALL';
-  if (edge >= -1)   return 'NEUTRAL';
-  return 'FADE';
-}
-
-/** Color for a given edge pp value (spec-compliant 6-tier scale). */
-function getEdgeColor(edge: number): string {
-  if (isNaN(edge))  return 'rgba(255,255,255,0.30)';
-  if (edge >= 8)    return '#39FF14';   // ELITE   — full neon green
-  if (edge >= 5)    return '#7FFF00';   // STRONG  — chartreuse
-  if (edge >= 2.5)  return '#ADFF2F';   // PLAYABLE — yellow-green
-  if (edge >= 0.5)  return 'rgba(255,255,255,0.60)';  // SMALL — white/60
-  if (edge >= -1)   return 'rgba(255,255,255,0.30)';  // NEUTRAL — white/30
-  return '#FF2244';                     // FADE    — red
-}
-
-
-// ── Spread sign helper ────────────────────────────────────────────────────────
-function spreadSign(n: number): string {
-  if (isNaN(n)) return "—";
-  if (n === 0) return "PK";
-  return n > 0 ? `+${n}` : `${n}`;
-}
-
-// ── toNum helper ──────────────────────────────────────────────────────────────
-function toNum(v: string | number | null | undefined): number {
-  if (v === null || v === undefined || v === "") return NaN;
-  return typeof v === "number" ? v : parseFloat(v);
-}
 
 // ── Parse ROI% from edge label ───────────────────────────────────────────────
 // Label format: "HIGH | TCU +2.5 | 56.12% | +3.74% vs BE | 7.13% ROI"
@@ -646,6 +571,9 @@ interface DesktopMergedPanelProps {
   // Model toggle
   showModel: boolean;
   onToggleModel: () => void;
+  // AUTHORITATIVE edge direction — computed once at GameCard level, passed down
+  authSpreadEdgeIsAway: boolean | null;
+  authTotalEdgeIsOver: boolean | null;
   // Splits data
   game: {
     sport: string | null;
@@ -712,6 +640,8 @@ function DesktopMergedPanel({
   homeDisplayName,
   showModel,
   onToggleModel,
+  authSpreadEdgeIsAway,
+  authTotalEdgeIsOver,
   game,
 }: DesktopMergedPanelProps) {
   // ── Team colors for split bars (Fix #5: client-side registry, zero round-trips) ──
@@ -1618,6 +1548,9 @@ interface OddsLinesPanelProps {
   // MLB model fair odds at book's spread line
   modelAwaySpreadOdds?: string | null;
   modelHomeSpreadOdds?: string | null;
+  // AUTHORITATIVE edge direction — computed once at GameCard level, passed down
+  authSpreadEdgeIsAway: boolean | null;
+  authTotalEdgeIsOver: boolean | null;
 }
 
 function OddsLinesPanel({
@@ -1666,6 +1599,8 @@ function OddsLinesPanel({
   modelUnderOdds,
   modelAwaySpreadOdds,
   modelHomeSpreadOdds,
+  authSpreadEdgeIsAway,
+  authTotalEdgeIsOver,
 }: OddsLinesPanelProps) {
 
   const mdlAwayMl = modelAwayML ?? '—';
@@ -1739,35 +1674,10 @@ function OddsLinesPanel({
   // Grid: 6 columns when model is ON (Book|Model per group), 3 columns when model is OFF (Book only)
   const GRID = showModel ? 'grid-cols-6' : 'grid-cols-3';
 
-  // Determine which side has the spread edge (away or home)
-  const spreadEdgeIsAway = (() => {
-    if (isNaN(spreadDiff) || spreadDiff <= 0) return null;
-    // For NHL: use computedSpreadEdge string (set by Python engine) — line comparison is meaningless
-    if (isNhlGame) {
-      if (!computedSpreadEdge || computedSpreadEdge === 'PASS') return null;
-      return computedSpreadEdge.includes('+1.5') || computedSpreadEdge.includes('+2.5');
-    }
-    if (!isNaN(mdlAwaySpread) && !isNaN(awaySpread)) {
-      return mdlAwaySpread < awaySpread; // model favors away more than book → away edge
-    }
-    return null;
-  })();
-  const totalEdgeIsOver = (() => {
-    if (isNaN(totalDiff) || totalDiff <= 0) return null;
-    // For NHL: edge direction must come from computedTotalEdge (set by Python engine from model odds
-    // at the book's line), NOT from comparing model expected total vs book line.
-    if (isNhlGame) {
-      if (!computedTotalEdge || computedTotalEdge === 'PASS') return null;
-      const normalized = computedTotalEdge.toUpperCase();
-      if (normalized.startsWith('OVER')) return true;
-      if (normalized.startsWith('UNDER')) return false;
-      return null;
-    }
-    if (!isNaN(mdlTotal) && !isNaN(bkTotal)) {
-      return mdlTotal > bkTotal; // model higher than book → over edge
-    }
-    return null;
-  })();
+  // ── Use AUTHORITATIVE edge direction passed from GameCard (computed after awayAbbr resolved) ─
+  // Replaces the flawed includes('+1.5') check that failed for home favorites like 'COL -1.5'.
+  const spreadEdgeIsAway = authSpreadEdgeIsAway;
+  const totalEdgeIsOver  = authTotalEdgeIsOver;
 
   const hasSpreadEdge = spreadEdgeIsAway !== null;
   const hasTotalEdge  = totalEdgeIsOver !== null;
@@ -2195,16 +2105,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
     if (curHome !== null) prevHomeScoreRef.current = curHome;
   }, [game.awayScore, game.homeScore, game.id]);
 
-  // Desktop detection — used to apply desktop-only styles in ScorePanel
-  // Tailwind lg breakpoint = 1024px
-  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1024);
-  useEffect(() => {
-    const mql = window.matchMedia('(min-width: 1024px)');
-    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-    mql.addEventListener('change', handler);
-    setIsDesktop(mql.matches);
-    return () => mql.removeEventListener('change', handler);
-  }, []);
+  // Desktop detection — shared singleton hook (no duplicate matchMedia listeners)
+  const isDesktop = useIsDesktop();
 
   const maxDiff = Math.max(isNaN(spreadDiff) ? 0 : spreadDiff, isNaN(totalDiff) ? 0 : totalDiff);
   const borderColor = getEdgeColor(maxDiff);
@@ -2234,6 +2136,16 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
     if (isNaN(modelTotal) || isNaN(bookTotal)) return game.totalEdge;
     return modelTotal > bookTotal ? `Over ${bookTotal}` : `Under ${bookTotal}`;
   })();
+
+  // ── AUTHORITATIVE edge direction — computed ONCE, used by all 3 render paths ─
+  // Replaces 3 divergent local computations (desktop IIFE, DesktopMergedPanel, mobile IIFE).
+  // Uses edgeLabelIsAway() for NHL/MLB (abbrev-based); line arithmetic for NBA.
+  // [VERIFY] 'COL -1.5 [STRONG EDGE]' → abbr='COL', awayAbbr='SEA' → false (home edge) ✅
+  // [VERIFY] 'SJS +1.5 [STRONG EDGE]' → abbr='SJS', awayAbbr='SJS' → true (away edge) ✅
+  // NOTE: awayAbbr / awayDisplayName are defined below in makeCityAbbr — forward-reference safe
+  // because this block is inside the component body, evaluated after makeCityAbbr runs.
+  // We defer to a lazy getter pattern: define as a function, call after awayAbbr is resolved.
+  // ACTUAL ASSIGNMENT happens after awayAbbr is defined (see below).
 
   const awayConsensus = isNaN(awayBookSpread) && isNaN(bookTotal)
     ? "—"
@@ -2267,6 +2179,30 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   };
   const awayAbbr = makeCityAbbr(awayNhl, awayNba, awayMlb, awayName);
   const homeAbbr = makeCityAbbr(homeNhl, homeNba, homeMlb, homeName);
+
+  // ── AUTHORITATIVE edge direction — single source of truth for all render paths ──
+  // Computed here (after awayAbbr is resolved) and passed to DesktopMergedPanel + mobile IIFE.
+  // Eliminates the 3 divergent local computations that could disagree on the same render.
+  const authSpreadEdgeIsAway: boolean | null = (() => {
+    if (!computedSpreadEdge || computedSpreadEdge === 'PASS') return null;
+    if (isNhlGame || isMlbGame) {
+      return edgeLabelIsAway(computedSpreadEdge, awayAbbr, awayDisplayName, game.sport ?? 'NHL');
+    }
+    // NBA: use line arithmetic (model spread vs book spread)
+    if (!isNaN(awayModelSpread) && !isNaN(awayBookSpread)) return awayModelSpread < awayBookSpread;
+    return null;
+  })();
+  const authTotalEdgeIsOver: boolean | null = (() => {
+    if (!computedTotalEdge || computedTotalEdge === 'PASS') return null;
+    if (isNhlGame) {
+      const normalized = computedTotalEdge.toUpperCase();
+      if (normalized.startsWith('OVER')) return true;
+      if (normalized.startsWith('UNDER')) return false;
+      return null;
+    }
+    if (!isNaN(modelTotal) && !isNaN(bookTotal)) return modelTotal > bookTotal;
+    return null;
+  })();
 
   const CompactScorePanel = () => (
     <div className="flex flex-col justify-center h-full px-2 py-3 gap-2" style={{ minWidth: 0 }}>
@@ -2704,6 +2640,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 homeDisplayName={homeDisplayName}
                 showModel={showModel}
                 onToggleModel={toggleModel}
+                authSpreadEdgeIsAway={authSpreadEdgeIsAway}
+                authTotalEdgeIsOver={authTotalEdgeIsOver}
                 game={game}
               />
             </div>
@@ -2765,6 +2703,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 modelUnderOdds={game.modelUnderOdds}
                 modelAwaySpreadOdds={game.modelAwaySpreadOdds ?? null}
                 modelHomeSpreadOdds={game.modelHomeSpreadOdds ?? null}
+                authSpreadEdgeIsAway={authSpreadEdgeIsAway}
+                authTotalEdgeIsOver={authTotalEdgeIsOver}
               />
             </div>
           )}
@@ -2887,6 +2827,8 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       modelUnderOdds={game.modelUnderOdds}
                       modelAwaySpreadOdds={(game as unknown as Record<string, string | null>).modelAwaySpreadOdds ?? null}
                       modelHomeSpreadOdds={(game as unknown as Record<string, string | null>).modelHomeSpreadOdds ?? null}
+                      authSpreadEdgeIsAway={authSpreadEdgeIsAway}
+                      authTotalEdgeIsOver={authTotalEdgeIsOver}
                     />
                   </div>
                 </div>
@@ -2969,828 +2911,55 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                  BOOK active  → book values white bold, model #39FF14 40% opacity
                  MODEL active → book values gray 40% opacity, model #39FF14 bold
           ──────────────────────────────────────────────────────────────────── */}
-          {mode === "full" && (() => {
-            // ── Structured logging: GameCard mobile full render ──────────────
-            if (process.env.NODE_ENV === 'development') {
-              console.groupCollapsed(
-                `%c[GameCard:mobile] ${awayAbbr} @ ${homeAbbr} | tab=${mobileTab} | id=${game.id}`,
-                'color:#39FF14;font-weight:700;font-size:11px'
-              );
-              console.log('[data] spread:', { awayBookSpread, homeBookSpread, awayModelSpread, homeModelSpread, spreadDiff });
-              console.log('[data] total:', { bookTotal, modelTotal, totalDiff });
-              console.log('[data] ml:', { awayML: game.awayML, homeML: game.homeML, modelAwayML: game.modelAwayML, modelHomeML: game.modelHomeML });
-              console.log('[edge] spread:', computedSpreadEdge, '| total:', computedTotalEdge);
-              console.log('[state] showModel:', showModel, '| mobileTab:', mobileTab, '| status:', game.gameStatus);
-              console.groupEnd();
-            }
-
-            // ── Game clock formatter ──────────────────────────────────────
-            // Period notation: 1Q/2Q/3Q/4Q, 1H/2H, 1P/2P/3P (never 1st/2nd/3rd/4th)
-            const formatGameClock = (raw: string | null | undefined): string => {
-              if (!raw) return '';
-              const s = raw.trim();
-
-              // ── Server-emitted clock strings (already transformed) ──────
-              // These come pre-formatted from ncaaScoreboard.ts; pass through directly.
-              if (/^END\s+1ST\s+HALF$/i.test(s)) return 'END 1ST HALF';
-              if (/^END\s+2ND\s+HALF$/i.test(s)) return 'END 2ND HALF';
-              if (/^1ST\s+HALF$/i.test(s)) return '1ST HALF';
-              if (/^2ND\s+HALF$/i.test(s)) return '2ND HALF';
-              if (/^HALFTIME$/i.test(s)) return 'HALFTIME';
-
-              // ── NHL intermission strings (server-emitted from nhlSchedule.ts) ──
-              // "1ST INT", "2ND INT" = intermission after period 1/2
-              if (/^1ST\s+INT$/i.test(s)) return '1ST INT';
-              if (/^2ND\s+INT$/i.test(s)) return '2ND INT';
-              if (/^OT\s+INT$/i.test(s)) return 'OT INT';
-              // "END 1P", "END 2P", "END 3P", "END OT" = end of period
-              if (/^END\s+(\d+P|OT)$/i.test(s)) return s.toUpperCase();
-              // "Final/OT", "Final/SO" — pass through
-              if (/^Final\/(OT|SO)$/i.test(s)) return s;
-              // "SO" = shootout
-              if (/^SO$/i.test(s)) return 'SO';
-              // "OT" = overtime
-              if (/^OT$/i.test(s)) return 'OT';
-              // NHL period labels: "1P", "2P", "3P"
-              if (/^[123]P$/i.test(s)) return s.toUpperCase();
-
-              // ── Legacy / NBA / raw NCAA labels (fallback normalization) ───────
-              // Raw half labels (in case old DB rows still have these)
-              if (/^1st$/i.test(s)) return '1ST HALF';
-              if (/^2nd$/i.test(s)) return '2ND HALF';
-              if (/^half(time)?$/i.test(s)) return 'HALFTIME';
-              // Quarter labels → 1Q/2Q/3Q/4Q (NBA)
-              if (/^q?1(st)?$/i.test(s)) return '1Q';
-              if (/^q?2(nd)?$/i.test(s)) return '2Q';
-              if (/^q?3(rd)?$/i.test(s)) return '3Q';
-              if (/^q?4(th)?$/i.test(s)) return '4Q';
-              // Period labels (hockey legacy) → 1P/2P/3P
-              if (/^1(st)?\s+period$/i.test(s)) return '1P';
-              if (/^2(nd)?\s+period$/i.test(s)) return '2P';
-              if (/^3(rd)?\s+period$/i.test(s)) return '3P';
-              // MM:SS clock — pass through as-is
-              if (/^\d{1,2}:\d{2}$/.test(s)) return s;
-              // Compound: "09:36 1ST HALF" or "14:32 1P" — normalize period label then keep clock
-              // Pattern: clock-first (server format) "MM:SS LABEL"
-              const clockFirst = s.match(/^(\d{1,2}:\d{2})\s+(.+)$/);
-              if (clockFirst) {
-                const [, mm, periodRaw] = clockFirst;
-                const periodLabel = formatGameClock(periodRaw);
-                // Check for zero clock
-                const isZero = /^0?0:00$/.test(mm);
-                if (isZero && /half/i.test(periodLabel)) {
-                  return `END ${periodLabel}`;
-                }
-                if (isZero && /^[123]P$/i.test(periodLabel)) {
-                  return `END ${periodLabel.toUpperCase()}`;
-                }
-                return `${mm} ${periodLabel}`;
-              }
-              // Pattern: period-first (legacy) "LABEL MM:SS"
-              const compound = s.match(/^(q?\d|\d+(?:st|nd|rd|th)?(?:\s+(?:period|half))?|half(?:time)?)\s+(\d{1,2}:\d{2})$/i);
-              if (compound) {
-                const period = formatGameClock(compound[1]);
-                return `${period} ${compound[2]}`;
-              }
-              return s;
-            };
-            const formattedClock = formatGameClock(game.gameClock);
-
-               // ── Derived values for mobile odds table ─────────────────
-            // Spread odds in parentheses, e.g. "+1.5 (-225)" / "-1.5 (+185)"
-            const mbAwaySpreadOdds = game.awaySpreadOdds ?? null;
-            const mbHomeSpreadOdds = game.homeSpreadOdds ?? null;
-            const mbOverOdds  = game.overOdds ?? null;
-            const mbUnderOdds = game.underOdds ?? null;
-            const bkAwaySpreadStr  = !isNaN(awayBookSpread)
-              ? (mbAwaySpreadOdds ? `${spreadSign(awayBookSpread)} (${mbAwaySpreadOdds})` : spreadSign(awayBookSpread))
-              : '—';
-            const bkHomeSpreadStr  = !isNaN(homeBookSpread)
-              ? (mbHomeSpreadOdds ? `${spreadSign(homeBookSpread)} (${mbHomeSpreadOdds})` : spreadSign(homeBookSpread))
-              : '—';
-            const bkTotalStr       = !isNaN(bookTotal) ? String(bookTotal) : '—';
-            // Over/Under strings with odds, e.g. "o5.5 (-107)" / "u5.5 (-113)"
-            const bkOverStr  = !isNaN(bookTotal)
-              ? (mbOverOdds  ? `o${bkTotalStr} (${mbOverOdds})`  : `o${bkTotalStr}`)
-              : 'o—';
-            const bkUnderStr = !isNaN(bookTotal)
-              ? (mbUnderOdds ? `u${bkTotalStr} (${mbUnderOdds})` : `u${bkTotalStr}`)
-              : 'u—';
-            // For NHL: include puck line / spread odds and total odds in model display strings
-            // LOG: [GameCard:MobileOdds] trace model odds for each sport
-            if (process.env.NODE_ENV === 'development') {
-              console.log(
-                `%c[GameCard:MobileOdds] game=${game.id} sport=${game.sport} ` +
-                `mdlAwaySpreadOdds=${game.modelAwaySpreadOdds ?? 'null'} mdlHomeSpreadOdds=${game.modelHomeSpreadOdds ?? 'null'} ` +
-                `mdlOverOdds=${game.modelOverOdds ?? 'null'} mdlUnderOdds=${game.modelUnderOdds ?? 'null'} ` +
-                `isMlbGame=${isMlbGame} isNhlGame=${isNhlGame}`,
-                'color:#FF9900;font-size:9px'
-              );
-            }
-            const mdlAwaySpreadStr = !isNaN(awayModelSpread)
-              ? (isNhlGame && game.modelAwayPLOdds
-                  ? `${spreadSign(awayModelSpread)} (${game.modelAwayPLOdds})`
-                  : isMlbGame && game.modelAwaySpreadOdds
-                  ? `${spreadSign(awayModelSpread)} (${game.modelAwaySpreadOdds})`
-                  : spreadSign(awayModelSpread))
-              : '—';
-            const mdlHomeSpreadStr = !isNaN(homeModelSpread)
-              ? (isNhlGame && game.modelHomePLOdds
-                  ? `${spreadSign(homeModelSpread)} (${game.modelHomePLOdds})`
-                  : isMlbGame && game.modelHomeSpreadOdds
-                  ? `${spreadSign(homeModelSpread)} (${game.modelHomeSpreadOdds})`
-                  : spreadSign(homeModelSpread))
-              : '—';
-            // For NHL: display the BOOK's total line with the model's fair odds at that line
-            const mdlDisplayTotal = isNhlGame && !isNaN(bookTotal) ? bookTotal : modelTotal;
-            const mdlTotalStr = !isNaN(mdlDisplayTotal) ? String(mdlDisplayTotal) : '—';
-            // For NHL/MLB: total display strings include O/U odds at the model's line
-            const mdlOverTotalStr  = !isNaN(mdlDisplayTotal)
-              ? ((isNhlGame || isMlbGame) && game.modelOverOdds  ? `${mdlTotalStr} (${game.modelOverOdds})`  : mdlTotalStr)
-              : '—';
-            const mdlUnderTotalStr = !isNaN(mdlDisplayTotal)
-              ? ((isNhlGame || isMlbGame) && game.modelUnderOdds ? `${mdlTotalStr} (${game.modelUnderOdds})` : mdlTotalStr)
-              : '—';
-            // ── Split helpers: parse "value (odds)" → { line, odds } for two-line pill rendering ──
-            // Used by mobile OddsTable to pass mainValue and juiceStr separately to OddsCell
-            const splitOddsStr = (s: string): { line: string; odds: string | null } => {
-              const m = s.match(/^([^(]+?)\s*\(([^)]+)\)\s*$/);
-              if (m) return { line: m[1].trim(), odds: m[2].trim() };
-              return { line: s, odds: null };
-            };
-            const mdlAwaySplit  = splitOddsStr(mdlAwaySpreadStr);
-            const mdlHomeSplit  = splitOddsStr(mdlHomeSpreadStr);
-            const mdlOverSplit  = splitOddsStr(mdlOverTotalStr);
-            const mdlUnderSplit = splitOddsStr(mdlUnderTotalStr);
-
-            // ML values — always show + prefix for positive (underdog) values
-            // +100 displays as 'EV' (even money; -100 does not exist as a valid ML)
-            // LOG: [GameCard:ML] logs raw→formatted for every game in dev
-            const formatMl = (raw: string | number | null | undefined): string => {
-              if (raw == null || raw === '' || raw === '—') return '—';
-              const n = typeof raw === 'number' ? raw : Number(String(raw).replace(/[^\d.-]/g, ''));
-              if (isNaN(n)) return String(raw);
-              if (n === 100) return 'EV';   // +100 = even money
-              if (n > 0) return `+${n}`;
-              return String(n);
-            };
-            const bkAwayMl  = formatMl(game.awayML);
-            const bkHomeMl  = formatMl(game.homeML);
-            const mdlAwayMl = formatMl(game.modelAwayML);
-            const mdlHomeMl = formatMl(game.modelHomeML);
-
-            if (process.env.NODE_ENV === 'development') {
-              console.log(
-                `%c[GameCard:ML] game=${game.id} bkAway=${bkAwayMl} bkHome=${bkHomeMl} mdlAway=${mdlAwayMl} mdlHome=${mdlHomeMl}`,
-                'color:#39FF14;font-size:9px'
-              );
-            }
-
-               // ── Edge direction helpers ────────────────────────────────────
-            // AUTHORITATIVE: use edgeLabelIsAway for NHL/MLB — parses abbrev from label.
-            // awayAbbr is resolved from NHL_BY_DB_SLUG via makeCityAbbr (see above).
-            const spreadEdgeIsAway = (() => {
-              if (isNaN(spreadDiff) || spreadDiff <= 0) return null;
-              // For NHL: puck line is always ±1.5/±2.5 from simulation.
-              // Line arithmetic is invalid — use computedSpreadEdge (from Python engine P(margin>=2)).
-              if (isNhlGame) {
-                if (!computedSpreadEdge || computedSpreadEdge === 'PASS') return null;
-                // [FIX] Replace flawed '+1.5' string check with abbrev-based detection.
-                // '+1.5' check fails for home favorites (e.g. 'COL -1.5 [STRONG EDGE]' is home edge).
-                return edgeLabelIsAway(computedSpreadEdge, awayAbbr, awayDisplayName, 'NHL');
-              }
-              if (!isNaN(awayModelSpread) && !isNaN(awayBookSpread)) return awayModelSpread < awayBookSpread;
-              return null;
-            })();
-            const totalEdgeIsOver = (() => {
-              if (isNaN(totalDiff) || totalDiff <= 0) return null;
-              // For NHL: edge direction must come from computedTotalEdge (set by Python engine from
-              // model odds at the book's line), NOT from comparing model expected total vs book line.
-              if (isNhlGame) {
-                if (!computedTotalEdge || computedTotalEdge === 'PASS') return null;
-                const normalized = computedTotalEdge.toUpperCase();
-                if (normalized.startsWith('OVER')) return true;
-                if (normalized.startsWith('UNDER')) return false;
-                return null;
-              }
-              if (!isNaN(modelTotal) && !isNaN(bookTotal)) return modelTotal > bookTotal;
-              return null;
-            })();
-
-            // ── ML edge detection — unified with spread edge direction ──────────────
-            //
-            // PRIMARY RULE: ML edge direction MUST match spread edge direction.
-            //   spreadEdgeIsAway === true  → away team ML is the edge (same team covers spread)
-            //   spreadEdgeIsAway === false → home team ML is the edge
-            //   spreadEdgeIsAway === null  → no spread edge; fall back to implied-probability
-            //
-            // SECONDARY FALLBACK (only when no spread edge exists):
-            //   Implied probability: p = 100 / (|ML| + 100) for positive ML (underdog)
-            //                        p = |ML| / (|ML| + 100) for negative ML (favorite)
-            //   Edge exists when model implied prob > book implied prob by >= 2%
-            //
-            // GUARANTEE: zero contradictions — you cannot have UCLA spread edge AND
-            // Rutgers ML edge simultaneously; they always point to the same team.
-            const mlImpliedProb = (ml: string | number | null | undefined): number => {
-              if (ml == null || ml === '' || ml === '—') return NaN;
-              const n = typeof ml === 'number' ? ml : Number(String(ml).replace(/[^\d.-]/g, ''));
-              if (isNaN(n)) return NaN;
-              if (n === 100) return 0.5;                    // EV: exactly 50%
-              if (n > 0) return 100 / (n + 100);            // underdog
-              return Math.abs(n) / (Math.abs(n) + 100);     // favorite
-            };
-            const bkAwayMlProb  = mlImpliedProb(game.awayML);
-            const mdlAwayMlProb = mlImpliedProb(game.modelAwayML);
-            const bkHomeMlProb  = mlImpliedProb(game.homeML);
-            const mdlHomeMlProb = mlImpliedProb(game.modelHomeML);
-            const ML_EDGE_THRESHOLD = 0.02;
-            // Implied-probability fallback (only used when no spread edge exists)
-            const awayMlProbEdge = !isNaN(bkAwayMlProb) && !isNaN(mdlAwayMlProb)
-              ? (mdlAwayMlProb - bkAwayMlProb) >= ML_EDGE_THRESHOLD
-              : false;
-            const homeMlProbEdge = !isNaN(bkHomeMlProb) && !isNaN(mdlHomeMlProb)
-              ? (mdlHomeMlProb - bkHomeMlProb) >= ML_EDGE_THRESHOLD
-              : false;
-            // Unified ML edge: spread direction takes priority; prob fallback only when no spread edge
-            const awayMlEdgeDetected: boolean = spreadEdgeIsAway !== null
-              ? spreadEdgeIsAway === true    // spread edge → away team wins ML too
-              : awayMlProbEdge;              // no spread edge → use implied prob
-            const homeMlEdgeDetected: boolean = spreadEdgeIsAway !== null
-              ? spreadEdgeIsAway === false   // spread edge → home team wins ML too
-              : homeMlProbEdge;              // no spread edge → use implied prob
-            if (process.env.NODE_ENV === 'development') {
-              console.log(
-                `%c[GameCard:MLEdge:UNIFIED] game=${game.id}` +
-                ` spreadEdgeIsAway=${spreadEdgeIsAway}` +
-                ` | away: bkProb=${bkAwayMlProb?.toFixed(3)} mdlProb=${mdlAwayMlProb?.toFixed(3)} probEdge=${awayMlProbEdge} → finalEdge=${awayMlEdgeDetected}` +
-                ` | home: bkProb=${bkHomeMlProb?.toFixed(3)} mdlProb=${mdlHomeMlProb?.toFixed(3)} probEdge=${homeMlProbEdge} → finalEdge=${homeMlEdgeDetected}`,
-                'color:#39FF14;font-size:9px'
-              );
-            }
-
-            // ── Tab state ─────────────────────────────────────────────────────
-            // isDualTab: BOOK + MODEL both active simultaneously
-            // isBookTab / isModelTab: true when that tab is active OR dual is active
-            const isDualTab  = mobileTab === 'dual';
-            const isBookTab  = isDualTab; // MODEL PROJECTIONS tab = BOOK+MODEL both active
-            const isModelTab = isDualTab;
-
-            // ── Value style factories (reference image spec) ──────────────────
-            // The table is ALWAYS visible. Tab controls which column is "primary":
-            //
-            // BOOK tab active:
-            //   book  = white bold full opacity (primary)
-            //   model = #39FF14 bold if edge, else white 40% opacity (secondary, always visible)
-            //
-            // MODEL tab active (default / reference image):
-            //   book  = gray 50% opacity, unbolded (reference, always visible)
-            //   model = #39FF14 bold if edge, else white bold full opacity (primary)
-            //
-            // Neither tab (SPLITS/EDGE):
-            //   book  = gray 35% opacity, unbolded
-            //   model = #39FF14 if edge, else white 40% opacity, unbolded
-            //
-            // LOG: [GameCard:OddsStyle] logs active tab + edge flags in dev
-            if (process.env.NODE_ENV === 'development') {
-              console.log(
-                `%c[GameCard:OddsStyle] game=${game.id} tab=${mobileTab} spreadEdge=${spreadEdgeIsAway} totalEdge=${totalEdgeIsOver}`,
-                'color:#aaa;font-size:9px'
-              );
-            }
-
-            // ── Value style factories (matches both reference images exactly) ──
-            //
-            // BOOK LINES tab active (ref image 1):
-            //   book  = white BOLD full opacity     (primary)
-            //   model = white unbolded 70% opacity  (secondary, visible)
-            //   model edge = #39FF14 BOLD            (edge highlight always wins)
-            //
-            // MODEL LINES tab active (ref image 2):
-            //   book  = white unbolded 70% opacity  (secondary, visible for reference)
-            //   model non-edge = light gray BOLD     (primary, not edge)
-            //   model edge = #39FF14 BOLD            (edge highlight always wins)
-            //
-            // SPLITS / EDGE tabs:
-            //   both dimmed for context
-            //
-            // LOG: [GameCard:OddsStyle] logs tab + edge state in dev
-            if (process.env.NODE_ENV === 'development') {
-              console.log(
-                `%c[GameCard:OddsStyle] game=${game.id} tab=${mobileTab} spreadEdge=${spreadEdgeIsAway} totalEdge=${totalEdgeIsOver}`,
-                'color:#aaa;font-size:9px'
-              );
-            }
-
-            const bookStyle = (_isEdge?: boolean): React.CSSProperties => ({
-              // unbolded book values: 10.5px; bolded book values: 10.25px (bold appears optically larger)
-              fontSize: isDualTab ? '10.5px' : isBookTab ? '10.25px' : '10.5px',
-              // DUAL mode: book = light gray unbolded (secondary to model primary)
-              // BOOK-only: book = white bold (primary)
-              // MODEL-only: book = white unbolded 70% (secondary, visible for reference)
-              // SPLITS/EDGE: dimmed
-              fontWeight: isDualTab ? 400 : isBookTab ? 700 : 400,
-              color: isDualTab
-                ? 'rgba(200,200,200,0.65)'          // DUAL: light gray unbolded
-                : isBookTab
-                  ? 'rgba(255,255,255,1)'           // BOOK-only: white bold (primary)
-                  : isModelTab
-                    ? 'rgba(255,255,255,0.70)'      // MODEL-only: white unbolded (secondary)
-                    : 'rgba(255,255,255,0.30)',      // SPLITS/EDGE: dimmed
-              letterSpacing: '0.02em',
-              fontVariantNumeric: 'tabular-nums',
-            });
-
-            const modelStyle = (isEdge?: boolean): React.CSSProperties => {
-              // ── MODEL value color/weight rules ────────────────────────────────
-              // BOOK tab active:
-              //   model (any)  = white unbolded 70% — secondary, visible but NOT primary
-              //   edge does NOT trigger neon green when BOOK tab is active
-              //
-              // MODEL tab active:
-              //   model edge   = #39FF14 BOLD — edge highlight (primary)
-              //   model no-edge = white BOLD — primary non-edge (user request: white not gray)
-              //
-              // SPLITS/EDGE tabs:
-              //   model (any)  = dimmed 30%
-              //
-              // LOG: [GameCard:modelStyle] isEdge + tab in dev
-              if (process.env.NODE_ENV === 'development' && isEdge) {
-                console.log(
-                  `%c[GameCard:modelStyle] edge=true tab=${mobileTab} → ${isModelTab ? '#39FF14 bold' : 'white 70% unbolded'}`,
-                  'color:#aaa;font-size:9px'
-                );
-              }
-              if (isDualTab) {
-                // DUAL mode: model is primary — edge = neon green bold, non-edge = white bold
-                return {
-                  fontSize: '10.25px',  // bolded model values: 10.25px
-                  fontWeight: 700,
-                  color: isEdge ? '#39FF14' : 'rgba(255,255,255,1)',
-                  letterSpacing: '0.02em',
-                  fontVariantNumeric: 'tabular-nums',
-                };
-              }
-              if (isBookTab) {
-                // BOOK-only tab: model is always secondary — white unbolded, no edge highlight
-                return {
-                  fontSize: '10.5px',  // unbolded model values: 10.5px
-                  fontWeight: 400,
-                  color: 'rgba(255,255,255,0.70)',
-                  letterSpacing: '0.02em',
-                  fontVariantNumeric: 'tabular-nums',
-                };
-              }
-              if (isModelTab) {
-                // MODEL-only tab: edge = neon green bold; non-edge = white bold
-                return {
-                  fontSize: '10.25px',  // bolded model values: 10.25px
-                  fontWeight: 700,
-                  color: isEdge ? '#39FF14' : 'rgba(255,255,255,1)',
-                  letterSpacing: '0.02em',
-                  fontVariantNumeric: 'tabular-nums',
-                };
-              }
-              // SPLITS/EDGE tabs: dimmed
-              return {
-                fontSize: '10.5px',  // unbolded dimmed values: 10.5px
-                fontWeight: 400,
-                color: 'rgba(255,255,255,0.30)',
-                letterSpacing: '0.02em',
-                fontVariantNumeric: 'tabular-nums',
-              };
-            };
-
-            // Per-cell edge detection
-            const awaySpreadIsEdge  = spreadEdgeIsAway === true;
-            const homeSpreadIsEdge  = spreadEdgeIsAway === false;
-            const overTotalIsEdge   = totalEdgeIsOver  === true;
-            const underTotalIsEdge  = totalEdgeIsOver  === false;
-            // ML edge: unified with spread direction (awayMlEdgeDetected / homeMlEdgeDetected
-            // are already computed above using spread-first logic with prob fallback)
-            const awayMlIsEdge      = awayMlEdgeDetected;
-            const homeMlIsEdge      = homeMlEdgeDetected;
-
-            // ── Spec-compliant edge pp calculations (juice-only math, per market) ────────
-            // RULE: Edge lives in the juice, not the line.
-            // Each market is independent — never averaged, never combined.
-            // Recalculate on every render (derived state, not stored state).
-            // AWAY spread edge: book juice vs model juice
-            // NHL uses puck-line odds (modelAwayPLOdds); MLB uses run-line/spread odds (modelAwaySpreadOdds)
-            const awaySpreadEdgePP: number = (() => {
-              const bkOdds  = toNum(game.awaySpreadOdds);
-              const mdlOdds = isNhlGame
-                ? toNum(game.modelAwayPLOdds)
-                : toNum((game as unknown as Record<string, string | null>).modelAwaySpreadOdds ?? null);
-              if (process.env.NODE_ENV === 'development') {
-                console.log(`%c[GameCard:SpreadEdgePP:AWAY] game=${game.id} sport=${game.sport} bkOdds=${bkOdds} mdlOdds=${mdlOdds} isNhlGame=${isNhlGame}`, 'color:#FF9900;font-size:9px');
-              }
-              return calculateEdge(bkOdds, mdlOdds);
-            })();
-            // HOME spread edge
-            // NHL uses puck-line odds (modelHomePLOdds); MLB uses run-line/spread odds (modelHomeSpreadOdds)
-            const homeSpreadEdgePP: number = (() => {
-              const bkOdds  = toNum(game.homeSpreadOdds);
-              const mdlOdds = isNhlGame
-                ? toNum(game.modelHomePLOdds)
-                : toNum((game as unknown as Record<string, string | null>).modelHomeSpreadOdds ?? null);
-              if (process.env.NODE_ENV === 'development') {
-                console.log(`%c[GameCard:SpreadEdgePP:HOME] game=${game.id} sport=${game.sport} bkOdds=${bkOdds} mdlOdds=${mdlOdds} isNhlGame=${isNhlGame}`, 'color:#FF9900;font-size:9px');
-              }
-              return calculateEdge(bkOdds, mdlOdds);
-            })();
-            // OVER total edge
-            const overEdgePP: number = (() => {
-              const bkOdds  = toNum(game.overOdds);
-              const mdlOdds = toNum(game.modelOverOdds);
-              return calculateEdge(bkOdds, mdlOdds);
-            })();
-            // UNDER total edge
-            const underEdgePP: number = (() => {
-              const bkOdds  = toNum(game.underOdds);
-              const mdlOdds = toNum(game.modelUnderOdds);
-              return calculateEdge(bkOdds, mdlOdds);
-            })();
-            // AWAY ML edge
-            const awayMlEdgePP: number = (() => {
-              const bkOdds  = toNum(game.awayML);
-              const mdlOdds = toNum(game.modelAwayML);
-              return calculateEdge(bkOdds, mdlOdds);
-            })();
-            // HOME ML edge
-            const homeMlEdgePP: number = (() => {
-              const bkOdds  = toNum(game.homeML);
-              const mdlOdds = toNum(game.modelHomeML);
-              return calculateEdge(bkOdds, mdlOdds);
-            })();
-            // Best spread edge (away or home, whichever is higher)
-            const spreadEdgePP: number = (() => {
-              const a = isNaN(awaySpreadEdgePP) ? -Infinity : awaySpreadEdgePP;
-              const h = isNaN(homeSpreadEdgePP) ? -Infinity : homeSpreadEdgePP;
-              const best = Math.max(a, h);
-              return best === -Infinity ? NaN : best;
-            })();
-            // Best total edge (over or under, whichever is higher)
-            const totalEdgePP: number = (() => {
-              const o = isNaN(overEdgePP) ? -Infinity : overEdgePP;
-              const u = isNaN(underEdgePP) ? -Infinity : underEdgePP;
-              const best = Math.max(o, u);
-              return best === -Infinity ? NaN : best;
-            })();
-            // Best ML edge (away or home, whichever is higher)
-            const mlEdgePP: number = (() => {
-              const a = isNaN(awayMlEdgePP) ? -Infinity : awayMlEdgePP;
-              const h = isNaN(homeMlEdgePP) ? -Infinity : homeMlEdgePP;
-              const best = Math.max(a, h);
-              return best === -Infinity ? NaN : best;
-            })();
-            // Best edge across all 3 markets (for EdgeBadge container styling)
-            const bestEdgePP: number = (() => {
-              const vals = [spreadEdgePP, totalEdgePP, mlEdgePP].filter(v => !isNaN(v));
-              return vals.length > 0 ? Math.max(...vals) : NaN;
-            })();
-            if (process.env.NODE_ENV === 'development') {
-              console.log(
-                `%c[GameCard:EdgePP] game=${game.id}` +
-                ` spr=${isNaN(spreadEdgePP)?'NaN':spreadEdgePP.toFixed(2)}pp` +
-                ` (away=${isNaN(awaySpreadEdgePP)?'NaN':awaySpreadEdgePP.toFixed(2)} home=${isNaN(homeSpreadEdgePP)?'NaN':homeSpreadEdgePP.toFixed(2)})` +
-                ` | tot=${isNaN(totalEdgePP)?'NaN':totalEdgePP.toFixed(2)}pp` +
-                ` (over=${isNaN(overEdgePP)?'NaN':overEdgePP.toFixed(2)} under=${isNaN(underEdgePP)?'NaN':underEdgePP.toFixed(2)})` +
-                ` | ml=${isNaN(mlEdgePP)?'NaN':mlEdgePP.toFixed(2)}pp` +
-                ` (away=${isNaN(awayMlEdgePP)?'NaN':awayMlEdgePP.toFixed(2)} home=${isNaN(homeMlEdgePP)?'NaN':homeMlEdgePP.toFixed(2)})` +
-                ` | best=${isNaN(bestEdgePP)?'NaN':bestEdgePP.toFixed(2)}pp → ${getVerdict(bestEdgePP)}`,
-                'color:#39FF14;font-size:9px'
-              );
-            }
-
-            // ── Tab bar config ────────────────────────────────────────────────
-            // Only 2 tabs: MODEL PROJECTIONS (dual) and BETTING SPLITS (splits)
-            const TABS: { id: MobileTab; label: string }[] = [
-              { id: 'dual',   label: 'MODEL PROJECTIONS' },
-              { id: 'splits', label: 'BETTING SPLITS' },
-            ];
-
-            // ── Shared odds table (used by both BOOK and MODEL tabs) ──────────
-            // ── Mobile market card helpers ─────────────────────────────────────────
-            // Spec: flat 2-column grid inside each card. No circles.
-            // BOOK and MODEL side-by-side. Line on top (9px dim), juice below (14px bold).
-            // MODEL juice is neon green ONLY when that side has an edge (edgePP >= 1.5).
-            // Both white when no edge. All 3 market columns are flex-1 (equal width).
-            // ML card has an empty spacer row above the juice to align height with SPREAD/TOTAL.
-            const MktCard = ({
-              awayBookLine, awayBookJuice,
-              awayModelLine, awayModelJuice, awayModelHasEdge,
-              homeBookLine, homeBookJuice,
-              homeModelLine, homeModelJuice, homeModelHasEdge,
-              isML = false,
-              roiEdgePP,
-              roiLabel,
-            }: {
-              awayBookLine: string; awayBookJuice: string;
-              awayModelLine: string; awayModelJuice: string; awayModelHasEdge: boolean;
-              homeBookLine: string; homeBookJuice: string;
-              homeModelLine: string; homeModelJuice: string; homeModelHasEdge: boolean;
-              isML?: boolean;
-              roiEdgePP?: number;   // best edge pp for this market (used for ROI footer)
-              roiLabel?: string;    // label for the best edge side, e.g. "CGY +1.5", "U5.5"
-            }) => {
-              // SubCol: line row (dim 9px) + juice row (bold 14px)
-              // modelJuiceColor: neon green only when this side has an edge, otherwise white
-              const SubCol = ({ line, juice, isBook, hasEdge }: { line: string; juice: string; isBook: boolean; hasEdge: boolean }) => {
-                const juiceColor = isBook
-                  ? 'rgba(255,255,255,0.90)'                      // BOOK: always white
-                  : hasEdge ? '#39FF14' : 'rgba(255,255,255,0.90)'; // MODEL: neon if edge, white if not
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', minWidth: 0, flex: 1 }}>
-                    {/* Spacer/line row: always rendered to keep height consistent */}
-                    {isML
-                      ? <span style={{ fontSize: '9px', lineHeight: 1, visibility: 'hidden' }}>&nbsp;</span>  // empty spacer for ML
-                      : <span style={{ fontSize: '9px', fontWeight: 400, color: 'rgba(255,255,255,0.55)', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{line}</span>
-                    }
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: juiceColor, lineHeight: 1.15, whiteSpace: 'nowrap', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{juice}</span>
-                  </div>
-                );
-              };
-
-              const TeamRow = ({ bookLine, bookJuice, modelLine, modelJuice, modelHasEdge }: { bookLine: string; bookJuice: string; modelLine: string; modelJuice: string; modelHasEdge: boolean }) => (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px', padding: '4px 3px' }}>
-                  <SubCol line={bookLine} juice={bookJuice} isBook={true} hasEdge={false} />
-                  <SubCol line={modelLine} juice={modelJuice} isBook={false} hasEdge={modelHasEdge} />
-                </div>
-              );
-
-              return (
-                <div style={{
-                  display: 'flex', flexDirection: 'column',
-                  background: '#2a2a2e', borderRadius: '10px',
-                  overflow: 'hidden', flex: '1 1 0', minWidth: 0,
-                }}>
-                  {/* BOOK / MODEL header */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '3px 4px 2px' }}>
-                    <span style={{ fontSize: '6.5px', fontWeight: 700, color: 'rgba(255,255,255,0.35)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>BOOK</span>
-                    <span style={{ fontSize: '6.5px', fontWeight: 700, color: 'rgba(255,255,255,0.70)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>MODEL</span>
-                  </div>
-                  {/* Away row */}
-                  <TeamRow bookLine={awayBookLine} bookJuice={awayBookJuice} modelLine={awayModelLine} modelJuice={awayModelJuice} modelHasEdge={awayModelHasEdge} />
-                  {/* Divider */}
-                  <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0 4px' }} />
-                  {/* Home row */}
-                  <TeamRow bookLine={homeBookLine} bookJuice={homeBookJuice} modelLine={homeModelLine} modelJuice={homeModelJuice} modelHasEdge={homeModelHasEdge} />
-                  {/* ROI footer — edge side label + ROI% in neon green, or NO EDGE in gray */}
-                  {(() => {
-                    const pp = roiEdgePP ?? NaN;
-                    const hasEdge = !isNaN(pp) && pp >= 1.5;
-                    const roiStr = hasEdge ? `+${pp.toFixed(2)}% ROI` : 'NO EDGE';
-                    const roiColor = hasEdge ? getEdgeColor(pp) : 'rgba(200,200,200,0.45)';
-                    const label = hasEdge && roiLabel ? roiLabel : '';
-                    return (
-                      <div style={{
-                        borderTop: '1px solid rgba(255,255,255,0.07)',
-                        padding: '3px 4px 3px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '1px',
-                        background: hasEdge ? 'rgba(57,255,20,0.04)' : 'transparent',
-                      }}>
-                        {label ? (
-                          <span style={{ fontSize: '7px', fontWeight: 700, color: roiColor, textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textAlign: 'center' }}>{label}</span>
-                        ) : null}
-                        <span style={{ fontSize: '7.5px', fontWeight: hasEdge ? 800 : 400, color: roiColor, letterSpacing: '0.03em', lineHeight: 1, whiteSpace: 'nowrap', textAlign: 'center' }}>{roiStr}</span>
-                      </div>
-                    );
-                  })()}
-                </div>
-              );
-            };
-
-            const OddsTable = () => (
-              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', width: '100%', padding: '4px 6px 4px', gap: '4px' }}>
-                {/* Market cards row: SPREAD | TOTAL | ML — all flex-1 equal width, ROI footer inside each card */}
-                {/* SPREAD card — edge flags drive MODEL juice color; ROI footer shows best-side edge */}
-                {(() => {
-                  // Spread: best edge side label (e.g. "CGY +1.5" or "EDM -1.5")
-                  const spreadRoiPP = isNaN(awaySpreadEdgePP) && isNaN(homeSpreadEdgePP)
-                    ? NaN
-                    : (!isNaN(awaySpreadEdgePP) && (isNaN(homeSpreadEdgePP) || awaySpreadEdgePP >= homeSpreadEdgePP))
-                      ? awaySpreadEdgePP
-                      : homeSpreadEdgePP;
-                  const spreadRoiLabel = (() => {
-                    const isAway = !isNaN(awaySpreadEdgePP) && (isNaN(homeSpreadEdgePP) || awaySpreadEdgePP >= homeSpreadEdgePP);
-                    const abbr = isAway ? awayAbbr : homeAbbr;
-                    const line = isAway
-                      ? (!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '')
-                      : (!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '');
-                    return line ? `${abbr} ${line}` : abbr;
-                  })();
-                  return (
-                    <MktCard
-                      awayBookLine={!isNaN(awayBookSpread) ? spreadSign(awayBookSpread) : '—'}
-                      awayBookJuice={mbAwaySpreadOdds ? String(mbAwaySpreadOdds) : '—110'}
-                      awayModelLine={mdlAwaySplit.line || '—'}
-                      awayModelJuice={mdlAwaySplit.odds || '—'}
-                      awayModelHasEdge={!isNaN(awaySpreadEdgePP) && awaySpreadEdgePP >= 1.5}
-                      homeBookLine={!isNaN(homeBookSpread) ? spreadSign(homeBookSpread) : '—'}
-                      homeBookJuice={mbHomeSpreadOdds ? String(mbHomeSpreadOdds) : '—110'}
-                      homeModelLine={mdlHomeSplit.line || '—'}
-                      homeModelJuice={mdlHomeSplit.odds || '—'}
-                      homeModelHasEdge={!isNaN(homeSpreadEdgePP) && homeSpreadEdgePP >= 1.5}
-                      roiEdgePP={spreadRoiPP}
-                      roiLabel={spreadRoiLabel}
-                    />
-                  );
-                })()}
-                {/* TOTAL card */}
-                {(() => {
-                  // Total: best edge side label (e.g. "O5.5" or "U5.5")
-                  const totalRoiPP = isNaN(overEdgePP) && isNaN(underEdgePP)
-                    ? NaN
-                    : (!isNaN(overEdgePP) && (isNaN(underEdgePP) || overEdgePP >= underEdgePP))
-                      ? overEdgePP
-                      : underEdgePP;
-                  const totalRoiLabel = (() => {
-                    const isOver = !isNaN(overEdgePP) && (isNaN(underEdgePP) || overEdgePP >= underEdgePP);
-                    const prefix = isOver ? 'O' : 'U';
-                    return !isNaN(bookTotal) ? `${prefix}${bkTotalStr}` : prefix;
-                  })();
-                  return (
-                    <MktCard
-                      awayBookLine={!isNaN(bookTotal) ? `o${bkTotalStr}` : 'o—'}
-                      awayBookJuice={mbOverOdds ? String(mbOverOdds) : '—110'}
-                      awayModelLine={`o${mdlOverSplit.line || '—'}`}
-                      awayModelJuice={mdlOverSplit.odds || '—'}
-                      awayModelHasEdge={!isNaN(overEdgePP) && overEdgePP >= 1.5}
-                      homeBookLine={!isNaN(bookTotal) ? `u${bkTotalStr}` : 'u—'}
-                      homeBookJuice={mbUnderOdds ? String(mbUnderOdds) : '—110'}
-                      homeModelLine={`u${mdlUnderSplit.line || '—'}`}
-                      homeModelJuice={mdlUnderSplit.odds || '—'}
-                      homeModelHasEdge={!isNaN(underEdgePP) && underEdgePP >= 1.5}
-                      roiEdgePP={totalRoiPP}
-                      roiLabel={totalRoiLabel}
-                    />
-                  );
-                })()}
-                {/* ML card — juice IS the value; empty spacer row keeps height aligned */}
-                {(() => {
-                  // ML: best edge side label (e.g. "CGY ML" or "EDM ML")
-                  const mlRoiPP = isNaN(awayMlEdgePP) && isNaN(homeMlEdgePP)
-                    ? NaN
-                    : (!isNaN(awayMlEdgePP) && (isNaN(homeMlEdgePP) || awayMlEdgePP >= homeMlEdgePP))
-                      ? awayMlEdgePP
-                      : homeMlEdgePP;
-                  const mlRoiLabel = (() => {
-                    const isAway = !isNaN(awayMlEdgePP) && (isNaN(homeMlEdgePP) || awayMlEdgePP >= homeMlEdgePP);
-                    return `${isAway ? awayAbbr : homeAbbr} ML`;
-                  })();
-                  return (
-                    <MktCard
-                      awayBookLine={''}
-                      awayBookJuice={bkAwayMl || '—'}
-                      awayModelLine={''}
-                      awayModelJuice={mdlAwayMl || '—'}
-                      awayModelHasEdge={!isNaN(awayMlEdgePP) && awayMlEdgePP >= 1.5}
-                      homeBookLine={''}
-                      homeBookJuice={bkHomeMl || '—'}
-                      homeModelLine={''}
-                      homeModelJuice={mdlHomeMl || '—'}
-                      homeModelHasEdge={!isNaN(homeMlEdgePP) && homeMlEdgePP >= 1.5}
-                      isML={true}
-                      roiEdgePP={mlRoiPP}
-                      roiLabel={mlRoiLabel}
-                    />
-                  );
-                })()}
-              </div>
-            );
-
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: 0 }}>
-
-                {/* ── TWO-COLUMN TEAM GRID: frozen left + scrollable right ─────── */}
-                {/* Status row (star/LIVE/FINAL/time) is inside the frozen left panel, ABOVE the away team row */}
-                <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', width: '100%', minHeight: 0 }}>
-
-                {/* ── FROZEN LEFT PANEL: status row + team rows ── */}
-                <div style={{
-                  gridColumn: '1',
-                  borderRight: '1px solid hsl(var(--border) / 0.5)',
-                  background: 'hsl(var(--card))',
-                  zIndex: 2,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'stretch',
-                  padding: '0 6px',
-                  gap: 0,
-                  alignSelf: 'stretch',
-                }}>
-
-                  {/* Status row: star + LIVE/FINAL/time — compact at 80px */}
-                  <div style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    height: '20px',
-                    paddingLeft: '2px',
-                    gap: '2px',
-                    borderBottom: '1px solid rgba(255,255,255,0.10)',
-                  }}>
-                    {isAppAuthed && (
-                      <button type="button" onClick={handleStarClick}
-                        aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 1px', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center', color: isFavorited ? '#FFD700' : 'rgba(255,255,255,0.65)', filter: isFavorited ? 'drop-shadow(0 0 4px #FFD700)' : 'none', transition: 'color 0.15s' }}
-                      >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill={isFavorited ? '#FFD700' : 'none'} stroke={isFavorited ? '#FFD700' : 'rgba(255,255,255,0.85)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                        </svg>
-                      </button>
-                    )}
-                    {isLive ? (
-                      <span className="flex items-center gap-0.5 font-black tracking-widest uppercase" style={{ color: '#39FF14', fontSize: '9px', whiteSpace: 'nowrap', flexWrap: 'nowrap' }}>
-                        <span className="w-1 h-1 rounded-full animate-pulse inline-block" style={{ background: '#39FF14', flexShrink: 0 }} />
-                        LIVE
-                        {formattedClock && (
-                          <span style={{ color: 'rgba(255,255,255,0.90)', fontWeight: 600, fontSize: '9px', letterSpacing: '0.03em', fontVariantNumeric: 'tabular-nums', marginLeft: '2px', whiteSpace: 'nowrap', display: 'inline', lineHeight: 1 }}>{formattedClock}</span>
-                        )}
-                      </span>
-                    ) : isFinal ? (
-                      <span className="font-bold tracking-wide" style={{ fontSize: '8px', color: '#39FF14', background: 'rgba(255,255,255,0.12)', borderRadius: '999px', padding: '1px 6px', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>FINAL</span>
-                    ) : (
-                      <span style={{ fontSize: '9px', fontWeight: 400, color: 'hsl(var(--foreground))', whiteSpace: 'nowrap' }}>{time}</span>
-                    )}
-                  </div>
-
-                  {/* Away row: logo (28px) + abbr + score on same row */}
-                  <div style={{ display: 'flex', alignItems: 'center', flex: '1 1 0', minHeight: '40px', gap: '4px', paddingLeft: '2px', paddingRight: '4px', overflow: 'hidden' }}>
-                    {/* Logo: 28px */}
-                    <div style={{ flexShrink: 0, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <TeamLogo slug={game.awayTeam} name={awayName} logoUrl={awayLogoUrl} size={28} />
-                    </div>
-                    {/* Abbreviation — fills remaining space, truncates */}
-                    <span style={{ flex: '1 1 0', minWidth: 0, fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,0.90)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.03em' }}>
-                      {awayAbbr}
-                    </span>
-                    {/* Score */}
-                    {(isLive || isFinal) && hasScores && (
-                      <span className="tabular-nums flex-shrink-0 transition-colors duration-300" style={{
-                        fontSize: '13px', lineHeight: 1, fontWeight: awayScoreFlash ? 900 : awayWins ? 700 : 600,
-                        color: awayScoreFlash ? '#39FF14' : awayWins ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))',
-                        textShadow: awayScoreFlash ? '0 0 10px rgba(57,255,20,0.7)' : 'none',
-                      }}>{game.awayScore}</span>
-                    )}
-                  </div>
-
-                  {/* Divider */}
-                  <div style={{ height: 1, background: 'hsl(var(--border) / 0.4)' }} />
-
-                  {/* Home row: logo (28px) + abbr + score on same row */}
-                  <div style={{ display: 'flex', alignItems: 'center', flex: '1 1 0', minHeight: '40px', gap: '4px', paddingLeft: '2px', paddingRight: '4px', overflow: 'hidden' }}>
-                    {/* Logo: 28px */}
-                    <div style={{ flexShrink: 0, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <TeamLogo slug={game.homeTeam} name={homeName} logoUrl={homeLogoUrl} size={28} />
-                    </div>
-                    {/* Abbreviation — fills remaining space, truncates */}
-                    <span style={{ flex: '1 1 0', minWidth: 0, fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,0.90)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.03em' }}>
-                      {homeAbbr}
-                    </span>
-                    {/* Score */}
-                    {(isLive || isFinal) && hasScores && (
-                      <span className="tabular-nums flex-shrink-0 transition-colors duration-300" style={{
-                        fontSize: '13px', lineHeight: 1, fontWeight: homeScoreFlash ? 900 : homeWins ? 700 : 600,
-                        color: homeScoreFlash ? '#39FF14' : homeWins ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))',
-                        textShadow: homeScoreFlash ? '0 0 10px rgba(57,255,20,0.7)' : 'none',
-                      }}>{game.homeScore}</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── RIGHT PANEL: content only (tab bar moved to full-width header) ── */}
-                <div style={{ gridColumn: '2', display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-
-                  {/* ── OddsTable: visible only when MODEL PROJECTIONS (dual) tab is active ── */}
-                  {mobileTab === 'dual' && (
-                    <OddsTable />
-                  )}
-
-                  {/* ── SPLITS tab (additional content below OddsTable) ──────── */}
-                  {mobileTab === 'splits' && (
-                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                      <BettingSplitsPanel
-                        gameId={game.id}
-                        game={game}
-                        awayLabel={awayName}
-                        homeLabel={homeName}
-                        awayNickname={awayNickname}
-                        homeNickname={homeNickname}
-                        onMarketChange={setActiveMarket}
-                      />
-                    </div>
-                  )}
-
-                </div>
-                </div>
-              </div>
-            );
-          })()}
+          {mode === "full" && (
+            <MobileGameCard
+              game={game}
+              awayAbbr={awayAbbr}
+              homeAbbr={homeAbbr}
+              awayName={awayName}
+              homeName={homeName}
+              awayDisplayName={awayDisplayName}
+              homeDisplayName={homeDisplayName}
+              awayLogoUrl={awayLogoUrl}
+              homeLogoUrl={homeLogoUrl}
+              awayNickname={awayNickname}
+              homeNickname={homeNickname}
+              awayBookSpread={awayBookSpread}
+              homeBookSpread={homeBookSpread}
+              bookTotal={bookTotal}
+              modelTotal={modelTotal}
+              awayModelSpread={awayModelSpread}
+              homeModelSpread={homeModelSpread}
+              spreadDiff={spreadDiff}
+              totalDiff={totalDiff}
+              computedSpreadEdge={computedSpreadEdge}
+              computedTotalEdge={computedTotalEdge}
+              authSpreadEdgeIsAway={authSpreadEdgeIsAway}
+              authTotalEdgeIsOver={authTotalEdgeIsOver}
+              showModel={showModel}
+              mobileTab={mobileTab}
+              setMobileTab={setMobileTab}
+              isLive={isLive}
+              isFinal={isFinal}
+              isUpcoming={isUpcoming}
+              hasScores={hasScores}
+              awayWins={awayWins}
+              homeWins={homeWins}
+              awayScoreFlash={awayScoreFlash}
+              homeScoreFlash={homeScoreFlash}
+              time={time}
+              isAppAuthed={isAppAuthed}
+              isFavorited={isFavorited}
+              onStarClick={handleStarClick}
+              activeMarket={activeMarket}
+              setActiveMarket={setActiveMarket}
+              isNhlGame={isNhlGame}
+              isMlbGame={isMlbGame}
+              borderColor={borderColor}
+              awayMlbAnSlug={awayMlb?.anSlug}
+              homeMlbAnSlug={homeMlb?.anSlug}
+            />
+          )}
         </div>
       </motion.div>
 
@@ -3799,7 +2968,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
            table can expand freely. Shown ONLY when the SPLITS tab is active.
            The border-left matches the card's accent stripe for visual continuity.
       */}
-      {mobileTab === 'splits' && game.id != null && (
+      {mobileTab === 'splits' && isCardVisible && game.id != null && (
         <div
           className="w-full"
           style={{
@@ -3824,7 +2993,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
            NBA/NHL panels are intentionally omitted until their DBs are backfilled.
            Panels are rendered outside overflow:hidden so they can expand freely.
       */}
-      {mobileTab === 'splits' && game.sport === 'MLB' && awayMlb?.anSlug && homeMlb?.anSlug && (
+      {mobileTab === 'splits' && isCardVisible && game.sport === 'MLB' && awayMlb?.anSlug && homeMlb?.anSlug && (
         <>
           <RecentSchedulePanel
             sport="MLB"

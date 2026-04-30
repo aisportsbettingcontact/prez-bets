@@ -1307,10 +1307,16 @@ function F5GameCardV3({ game, lineup }: { game: CheatSheetGame; lineup?: CheatSh
   // DB stores on 0–100 scale (e.g. "43.51" = 43.51%)
   const f5AwayWinPct = parseNumV3(game.modelF5AwayWinPct);  // 0–100
   const f5HomeWinPct = parseNumV3(game.modelF5HomeWinPct);  // 0–100
-  // Push% derived: 100 - away - home (three-way market; clamp to 0 for float safety)
-  const f5PushPctV3 = (f5AwayWinPct != null && f5HomeWinPct != null)
-    ? Math.max(0, 100 - f5AwayWinPct - f5HomeWinPct)
-    : null;
+  // Push% — use DB-stored Bayesian-blended modelF5PushPct (same source as MlbCheatSheetCard).
+  // [FIX Phase 9] Replaces the derived 100-away-home formula which could disagree with the
+  // authoritative Bayesian-blended value stored by the Python model engine.
+  // [VERIFY] game.modelF5PushPct is stored as 0-1 in DB (e.g. 0.1234 = 12.34%)
+  const _modelF5PushPctRaw = parseNumV3(game.modelF5PushPct);
+  const f5PushPctV3 = _modelF5PushPctRaw != null
+    ? _modelF5PushPctRaw * 100  // convert 0-1 → 0-100 for display
+    : (f5AwayWinPct != null && f5HomeWinPct != null)
+      ? Math.max(0, 100 - f5AwayWinPct - f5HomeWinPct)  // fallback if DB value absent
+      : null;
 
   // ── F5 ML No-Vig Edge Display ─────────────────────────────────────────────
   // Remove vig from both sides: noVig = rawSide / (rawAway + rawHome)

@@ -178,8 +178,8 @@ function LogoCircle({ abbrev, size = 48 }: { abbrev: string; size?: number }) {
   const secondary = team?.secondaryColor ?? null;
   const tertiary  = (team as any)?.tertiaryColor ?? null;
 
-  // [VERIFY] Log logo resolution for debugging
-  if (typeof window !== "undefined") {
+  // [VERIFY] Log logo resolution for debugging (dev only — gated to prevent production noise)
+  if (process.env.NODE_ENV === 'development' && typeof window !== "undefined") {
     if (logo) {
       console.log(`[LogoCircle] ${abbrev} → mlbId=${(team as any)?.mlbId ?? 'N/A'} url=${logo} bg=${teamLogoGradient(primary, secondary, tertiary).slice(0,40)}...`);
     } else {
@@ -228,7 +228,7 @@ function Headshot({ mlbamId, size = 72 }: { mlbamId: number | null | undefined; 
         <img
           src={src}
           alt="pitcher"
-          style={{ width: size, height: size, objectFit: "cover", mixBlendMode: "screen" }}
+          style={{ width: size, height: size, objectFit: "contain" }}
           onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0"; }}
         />
       ) : (

@@ -9,6 +9,7 @@
  */
 
 import { useState } from "react";
+import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { trpc } from "@/lib/trpc";
 import { getGameTeamColorsClient } from "@shared/teamColors";
 import { OddsHistoryPanel } from "./OddsHistoryPanel";
@@ -623,10 +624,12 @@ export function BettingSplitsPanel({
     ? mobileMarket
     : (availableMarkets[0] ?? "spread");
 
+  const isDesktop = useIsDesktop();
+
   return (
     <>
       {/* ── Mobile (< lg): toggle + single active market ── */}
-      <div className="flex flex-col w-full h-full lg:hidden" style={{ padding: "4px 0" }}>
+      {!isDesktop && <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', padding: '4px 0' }}>
         {/* 3-way toggle */}
         <div className="flex items-center" style={{ padding: "0 8px 4px 8px", gap: 4 }}>
           {(["spread", "total", "ml"] as MobileMarket[]).map((m) => {
@@ -691,11 +694,11 @@ export function BettingSplitsPanel({
             homeLineLabel={homeMlLabel}
           />
         )}
-      </div>
+      </div>}
 
       {/* ── Desktop (≥ lg): full-size horizontal 3-column layout ── */}
       {/* Always render all 3 columns so the panel fills 100% width with no whitespace */}
-      <div className="hidden lg:flex items-stretch w-full">
+      {isDesktop && <div style={{ display: 'flex', alignItems: 'stretch', width: '100%' }}>
         {/* Spread column — always rendered */}
         <div className="flex-1 min-w-0">
           <MarketBlock title="Spread" awayLabel={awaySpreadLabel} homeLabel={homeSpreadLabel}
@@ -717,7 +720,7 @@ export function BettingSplitsPanel({
             ticketsPct={game.mlAwayBetsPct} handlePct={game.mlAwayMoneyPct}
             awayColor={awayColor} homeColor={homeColor} />
         </div>
-      </div>
+      </div>}
 
     </>
   );

@@ -2983,3 +2983,11 @@
 - [x] Server: admin/owner procedures (ownerProcedure, appUserProcedure) preserved unchanged
 - [x] Server: OWNER/ADMIN/HANDICAPPER/USER role gates untouched — zero changes to existing accounts or permissions
 - [x] TypeScript: 0 errors
+
+## Session: 2026-04-30 - Phases 11B-15 Refactor (Shared Utils, Performance, Correctness)
+
+- [x] Phase 11B: Remove local duplicate functions from GameCard.tsx (formatGameTime, spreadSign, toNum, getEdgeColor, calculateEdge) — import from shared libs
+- [x] Phase 12: Extract mobile IIFE (822 lines) from GameCard.tsx into MobileGameCard.tsx as React.memo with custom comparison
+- [x] Phase 13: Add isCardVisible guard to OddsHistoryPanel, RecentSchedulePanel, SituationalResultsPanel render conditions
+- [x] Phase 14: BettingSplitsPanel — replace CSS lg:hidden/hidden lg:flex with useIsDesktop() conditional rendering
+- [x] Phase 15: Final verification — 22/22 checks pass, 0 TypeScript errors
