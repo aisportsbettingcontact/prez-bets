@@ -21,8 +21,10 @@ import PostponedGames from "@/pages/PostponedGames";
 function Router() {
   return (
     <Switch>
-      {/* Public paywall landing — default entry point */}
-      <Route path="/" component={Home} />
+      {/* [PUBLIC MODE 2026-04-30] Landing page deactivated — / redirects directly to feed */}
+      <Route path="/">{() => <Redirect to="/feed" />}</Route>
+      {/* Landing page preserved at /home if needed */}
+      <Route path="/home" component={Home} />
       {/* Legacy redirects */}
       <Route path="/dashboard">{() => <Redirect to="/feed" />}</Route>
       <Route path="/projections">{() => <Redirect to="/feed" />}</Route>
@@ -30,8 +32,8 @@ function Router() {
       <Route path="/splits">{() => <Redirect to="/feed" />}</Route>
       {/* Unified feed page (AI Model Projections) */}
       <Route path="/feed" component={ModelProjections} />
-      {/* Legacy /login redirect to home */}
-      <Route path="/login">{() => <Redirect to="/" />}</Route>
+      {/* Legacy /login redirect to feed (public mode) */}
+      <Route path="/login">{() => <Redirect to="/feed" />}</Route>
       <Route path="/admin/users" component={UserManagement} />
       <Route path="/admin/publish" component={PublishProjections} />
       <Route path="/admin/ingest-an" component={IngestAnOdds} />

@@ -2958,3 +2958,28 @@
 - [x] Server: invalidateStatsCacheForUser — called on every create/update/delete mutation
 - [x] Server: cache-aware IIFE aggregation — full-table scan skipped on cache hit
 - [x] TypeScript: 0 errors
+
+## Session: 2026-04-30 — MLB April 30 Slate Modeling
+
+- [ ] Scrape tomorrow's 11 MLB games (matchups, starters, book lines)
+- [ ] Pull pitcher stats (ERA, FIP, xFIP, K/9, BB/9, HR/9, WHIP, recent form)
+- [ ] Pull team offense/defense metrics (wRC+, wOBA, ISO, K%, BB%, OPS vs LHP/RHP)
+- [ ] Pull park factors and weather for all 11 venues
+- [ ] Run run-total model projections for all 11 games
+- [ ] Convert run totals to moneyline probabilities and no-vig prices
+- [ ] Generate spread (run line) projections
+- [ ] Upsert all 11 games into DB with model lines
+- [ ] Publish all 11 games to feed
+- [ ] Verify all 11 games visible on public feed
+
+## Session: 2026-04-30 — Auth Wall Removal (Public Access Mode) — COMPLETED
+
+- [x] Frontend: removed auth redirect useEffect from ModelProjections.tsx (MLB/NBA/NHL Projections, Lineups, K Props, Cheat Sheets, HR Props)
+- [x] Frontend: removed auth redirect useEffect from BettingSplits.tsx (MLB/NBA/NHL Splits)
+- [x] Frontend: deactivated landing page — "/" redirects to "/feed", landing preserved at "/home"
+- [x] Frontend: "/login" redirect updated to "/feed" (public mode)
+- [x] Frontend: heartbeat mutation gated behind appUser — no UNAUTHORIZED noise for public viewers
+- [x] Server: all public-facing procedures already publicProcedure (games.list, mlbLineups, strikeoutProps, hrProps, activeSports, lastRefresh)
+- [x] Server: admin/owner procedures (ownerProcedure, appUserProcedure) preserved unchanged
+- [x] Server: OWNER/ADMIN/HANDICAPPER/USER role gates untouched — zero changes to existing accounts or permissions
+- [x] TypeScript: 0 errors

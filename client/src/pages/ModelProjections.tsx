@@ -422,10 +422,9 @@ export default function ModelProjections() {
   const { user, isAuthenticated } = useAuth();
   const { appUser, isOwner, loading: appAuthLoading, refetch: refetchAppUser } = useAppAuth();
 
-  useEffect(() => {
-    if (!appAuthLoading && !appUser) setLocation("/");
-  }, [appUser, appAuthLoading]);
-
+  // [PUBLIC MODE 2026-04-30] Auth wall removed — site open to unauthenticated viewers.
+  // Original redirect: if (!appAuthLoading && !appUser) setLocation("/");
+  // Age modal still shown for logged-in users who haven't accepted terms.
   useEffect(() => {
     if (!appAuthLoading && appUser && !appUser.termsAccepted) setShowAgeModal(true);
   }, [appAuthLoading, appUser]);
@@ -502,11 +501,13 @@ export default function ModelProjections() {
   });
   const appLogout = () => { closeSessionMutation.mutate(); appLogoutMutation.mutate(); };
   // Heartbeat every 5 minutes to track active session duration
+  // [PUBLIC MODE] Only fire heartbeat for authenticated users — prevents UNAUTHORIZED noise for public viewers
   useEffect(() => {
+    if (!appUser) return;
     const interval = setInterval(() => { heartbeatMutation.mutate(); }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [Boolean(appUser)]);
 
   useEffect(() => {
     resetUrlFilters();
