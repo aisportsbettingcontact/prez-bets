@@ -504,6 +504,14 @@ def calculate_probs(away_scores: np.ndarray, home_scores: np.ndarray) -> dict:
 
     p_underdog_cover = 1.0 - p_favorite_cover
 
+    # Hard mathematical invariant: P(fav covers -1.5) MUST be <= P(fav wins outright)
+    # P(win by 2+) <= P(win) always. Enforce before converting to odds.
+    fav_win_prob = home_win_prob if fav_is_home else away_win_prob
+    if p_favorite_cover > fav_win_prob:
+        # Clamp: cap at 98% of fav win probability
+        p_favorite_cover = fav_win_prob * 0.98
+        p_underdog_cover = 1.0 - p_favorite_cover
+
     # Assign cover probabilities to home/away
     if fav_is_home:
         home_pl_cover = p_favorite_cover

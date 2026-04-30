@@ -1312,14 +1312,40 @@ class MarketDerivation:
         # ── STEP 6: Run Line Origination ──────────────────────────────────────
         if logger:
             logger.step("Step 6: Run Line Origination")
-        p_hrl = sim['p_home_cover_rl']
-        p_arl = sim['p_away_cover_rl']
+        p_hrl_raw = sim['p_home_cover_rl']
+        p_arl_raw = sim['p_away_cover_rl']
+
+        # Apply remove_vig to RL probabilities (same as ML and O/U markets)
+        # Raw simulation probabilities may sum slightly above 1.0 due to simulation noise;
+        # normalizing ensures no-vig consistency across all three markets.
+        p_hrl, p_arl = remove_vig(p_hrl_raw, p_arl_raw)
+
+        # Hard mathematical invariant enforcement:
+        # P(fav covers -1.5) MUST be <= P(fav wins outright)
+        # P(dog covers +1.5) MUST be >= P(dog wins outright)
+        # rl_spread < 0 means home is the fav at -1.5
+        if sim['rl_spread'] < 0:
+            # Home is fav: P(home covers -1.5) <= P(home wins)
+            if p_hrl > p_home:
+                if logger:
+                    logger.flag(f"[RL-CLAMP] Home fav P(cover -1.5)={p_hrl:.4f} > P(win)={p_home:.4f} — clamping")
+                p_hrl = p_home * 0.98  # cap at 98% of ML win prob (small margin for run-diff)
+                p_arl = 1.0 - p_hrl
+        else:
+            # Away is fav: P(away covers -1.5) <= P(away wins)
+            if p_arl > p_away:
+                if logger:
+                    logger.flag(f"[RL-CLAMP] Away fav P(cover -1.5)={p_arl:.4f} > P(win)={p_away:.4f} — clamping")
+                p_arl = p_away * 0.98
+                p_hrl = 1.0 - p_arl
+
         rl_home_odds = prob_to_ml(p_hrl)
         rl_away_odds = prob_to_ml(p_arl)
 
         if logger:
             logger.output(f"RL: Home {sim['rl_spread']:+.1f}={rl_home_odds} ({p_hrl:.4f}) "
-                          f"Away {-sim['rl_spread']:+.1f}={rl_away_odds} ({p_arl:.4f})")
+                          f"Away {-sim['rl_spread']:+.1f}={rl_away_odds} ({p_arl:.4f}) "
+                          f"[raw: home={p_hrl_raw:.4f} away={p_arl_raw:.4f}]")
 
         # ── STEP 7: Conditional Structure Validation ──────────────────────────
         if logger:
