@@ -2991,3 +2991,18 @@
 - [x] Phase 13: Add isCardVisible guard to OddsHistoryPanel, RecentSchedulePanel, SituationalResultsPanel render conditions
 - [x] Phase 14: BettingSplitsPanel — replace CSS lg:hidden/hidden lg:flex with useIsDesktop() conditional rendering
 - [x] Phase 15: Final verification — 22/22 checks pass, 0 TypeScript errors
+
+## Session: 2026-04-30 - MLB Run Line / NHL Puck Line Model Flip Bug
+
+- [ ] Deep diagnostic: trace model spread values from DB → server → GameCard render for MLB/NHL
+- [ ] Identify root cause of model run line/puck line being mirrored relative to book line
+- [ ] Fix: enforce strict mirroring — model line must always match the same side as book line
+- [ ] Verify fix: 0 TypeScript errors, visual confirmation on MLB/NHL game cards
+
+## Session: 2026-04-30 - MLB/NHL Run Line / Puck Line Flip Fix
+
+- [x] Root cause identified: MLB feedback loop (mlbModelRunner overwrote awayRunLine/homeRunLine book fields) + NHL awayModelSpread used model origination line instead of book spread
+- [x] MLB fix: Removed awayRunLine/homeRunLine writes from mlbModelRunner.ts; added sign-enforcement guard (safeAwayRunLine/safeHomeRunLine) that auto-corrects any flip before DB write
+- [x] NHL fix: Changed awayModelSpread/homeModelSpread in nhlModelSync.ts to use correctedAwaySpreadStr (book-authoritative) instead of modelAwayPL (model origination line)
+- [x] DB correction: Fixed 5 flipped games (KC@ATH MLB + EDM@ANA NHL + others); 44 games verified PASS, 0 FAIL
+- [x] TypeScript check: 0 errors

@@ -559,10 +559,14 @@ export async function syncNhlModelForToday(
       await db
         .update(games)
         .set({
-          // Spread (puck line) — derived from simulation P(margin >= 2), NOT goal differential
-          // modelAwayPL / modelHomePL are "+1.5"/"-1.5" (or "±2.5") from the Python engine
-          awayModelSpread:     modelAwayPL,
-          homeModelSpread:     modelHomePL,
+          // Spread (puck line) — MUST mirror the BOOK's spread direction, not the model's own origination.
+          // modelAwayPL / modelHomePL are the model's own origination line (may differ from book direction).
+          // correctedAwaySpreadStr is derived from awayBookSpread (the book's authoritative spread).
+          // CRITICAL: awayModelSpread MUST use correctedAwaySpreadStr so the MODEL column always shows
+          //   the same side as the BOOK column. Using modelAwayPL here causes the flip bug:
+          //   e.g. book has EDM -1.5 (fav) but model shows +1.5 (dog) in the spread column.
+          awayModelSpread:     correctedAwaySpreadStr ?? modelAwayPL,
+          homeModelSpread:     correctedHomeSpreadStr ?? modelHomePL,
           spreadEdge:          spreadEdge ?? undefined,
           spreadDiff:          spreadDiff ?? undefined,
           // Total — ALWAYS anchored to book O/U line (mktTotal), NOT model-derived line

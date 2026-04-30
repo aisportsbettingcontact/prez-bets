@@ -1543,21 +1543,51 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
     console.log(`  RL: ${r.away_run_line} (${fmtMl(r.away_rl_odds)}) / ${r.home_run_line} (${fmtMl(r.home_rl_odds)})`);
     console.log(`  Cover%: away=${r.away_rl_cover_pct.toFixed(2)}% home=${r.home_rl_cover_pct.toFixed(2)}%`);
     console.log(`  Model spread: ${r.model_spread.toFixed(3)} | Sims: ${r.simulations} | Elapsed: ${r.elapsed_sec}s`);
+    // ── SIGN-ENFORCEMENT GUARD ────────────────────────────────────────────────
+    // awayModelSpread MUST mirror awayBookSpread sign.
+    // The Python engine computes away_run_line from rl_home_spread (derived from awayRunLine).
+    // If awayRunLine was corrupted by a previous model write, the Python output may be flipped.
+    // Ground truth: dbGameById has the DB state at model-run time.
+    // awayBookSpread is written ONLY by the VSiN scraper and is always the authoritative book value.
+    const dbGame = dbGameById.get(r.db_id);
+    const bookAwaySpreadForGuard = dbGame?.awayBookSpread != null
+      ? parseFloat(String(dbGame.awayBookSpread))
+      : null;
+    const modelAwayRLNum = parseFloat(r.away_run_line);
+    let safeAwayRunLine = r.away_run_line;
+    let safeHomeRunLine = r.home_run_line;
+    if (bookAwaySpreadForGuard !== null && !isNaN(bookAwaySpreadForGuard) && !isNaN(modelAwayRLNum)) {
+      const bookSign  = bookAwaySpreadForGuard >= 0 ? 1 : -1;
+      const modelSign = modelAwayRLNum >= 0 ? 1 : -1;
+      if (bookSign !== modelSign) {
+        // Python output is flipped — enforce book sign
+        const correctedAway = bookSign > 0 ? Math.abs(modelAwayRLNum) : -Math.abs(modelAwayRLNum);
+        const correctedHome = -correctedAway;
+        console.error(
+          `${TAG} [${r.db_id}] ${r.game} — [RL SIGN GUARD] CORRECTING FLIP: ` +
+          `Python away_run_line=${r.away_run_line} but awayBookSpread=${bookAwaySpreadForGuard} → ` +
+          `forcing awayModelSpread=${correctedAway >= 0 ? '+' : ''}${correctedAway.toFixed(1)} ` +
+          `homeModelSpread=${correctedHome >= 0 ? '+' : ''}${correctedHome.toFixed(1)}`
+        );
+        safeAwayRunLine = correctedAway >= 0 ? `+${correctedAway.toFixed(1)}` : `${correctedAway.toFixed(1)}`;
+        safeHomeRunLine = correctedHome >= 0 ? `+${correctedHome.toFixed(1)}` : `${correctedHome.toFixed(1)}`;
+      }
+    }
     try {
       await db.update(games)
         .set({
           // ── Run line ─────────────────────────────────────────────────────
           // awayModelSpread/homeModelSpread: signed RL label used by GameCard spread section
-          // awayRunLine/homeRunLine: same label stored in the book RL field for reference
-          // awayRunLineOdds/homeRunLineOdds: model-computed RL odds (raw storage)
+          // CRITICAL: awayRunLine/homeRunLine are BOOK fields — NEVER overwrite from model runner.
+          //   They are written ONLY by vsinAutoRefresh (the book scraper).
+          //   Overwriting them creates a feedback loop: corrupted book data → wrong rlHomeSpread
+          //   input on next run → flipped model output.
           // modelAwaySpreadOdds/modelHomeSpreadOdds: MUST also receive RL odds so GameCard
           //   renders them in the MLB spread section (GameCard checks isMlbGame && modelAwaySpreadOdds)
-          awayModelSpread:      r.away_run_line,        // e.g. "+1.5" or "-1.5"
-          homeModelSpread:      r.home_run_line,        // e.g. "-1.5" or "+1.5"
-          awayRunLine:          r.away_run_line,        // book RL label (reference copy)
-          homeRunLine:          r.home_run_line,        // book RL label (reference copy)
-          awayRunLineOdds:      fmtMl(r.away_rl_odds), // raw RL odds storage
-          homeRunLineOdds:      fmtMl(r.home_rl_odds), // raw RL odds storage
+          awayModelSpread:      safeAwayRunLine,        // sign-enforced to match awayBookSpread
+          homeModelSpread:      safeHomeRunLine,        // sign-enforced to match homeBookSpread
+          // ⚠ awayRunLine/homeRunLine intentionally NOT written here — book fields, scraper-owned
+          // ⚠ awayRunLineOdds/homeRunLineOdds intentionally NOT written here — book fields, scraper-owned
           modelAwaySpreadOdds:  fmtMl(r.away_rl_odds), // ← GameCard MLB spread odds display
           modelHomeSpreadOdds:  fmtMl(r.home_rl_odds), // ← GameCard MLB spread odds display
           // ── Total (ALWAYS anchored to book O/U line, NOT model-derived line) ────────────
