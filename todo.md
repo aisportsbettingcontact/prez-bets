@@ -2833,3 +2833,22 @@
 - [x] Client: porter/hank edit/delete triggers submit-request modal (immutable bets)
 - [x] Client: review modal in LOGS tab for owner/admin to approve/deny requests
 - [x] TypeScript: 0 errors
+
+## Session: BetTracker v13 — Stats, Chart, Layout
+
+- [x] Fix TS2802 error: replace for...of on MapIterator with dayPLMap.forEach()
+- [x] Add biggestDay (date + units) computation to getStats in betTracker.ts
+- [x] Add longestWinStreak computation to getStats in betTracker.ts
+- [x] Add biggestDayDate, biggestDayUnits, longestWinStreak to stats return object
+- [x] Update StatsData type in BetTrackerAnalytics.tsx with new optional fields
+- [x] EquityChart: dynamic PAD.left from ctx.measureText() on widest y-label
+- [x] EquityChart: PAD.bottom = 40, minLabelPx = 44 for x-axis date spacing
+- [x] Chart title: large centered +/- UNITS (text-xl font-bold, TrendingUp size=22)
+- [x] StatCard: min-h-[72px] h-auto overflow-visible (fixes ROI sub-label clipping)
+- [x] Stat pills: hide Pushes when pushes === 0
+- [x] Stat pills: hide Pending when pending === 0
+- [x] Stat pills: replace Best Win with Biggest Day (+units, date sub-label)
+- [x] Stat pills: replace Worst L with Win Streak (longestWinStreak W)
+- [x] Layout: 2-col grid [2fr 1fr] replacing 3-col [360px 300px 1fr]
+- [x] Layout: left column wraps Add Bet form + Breakdowns (stacked below form)
+- [x] TypeScript: 0 errors

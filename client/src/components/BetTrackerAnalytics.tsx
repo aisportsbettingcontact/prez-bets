@@ -45,8 +45,11 @@ export type StatsData = {
   totalLost?: number;
   netProfit: number;
   roi: number;
-  bestWin: number;
-  worstLoss: number;
+  bestWin?: number;
+  worstLoss?: number;
+  biggestDayDate?: string;
+  biggestDayUnits?: number;
+  longestWinStreak?: number;
   byType: BreakdownEntry[];
   bySize: BreakdownEntry[];
   byMonth: BreakdownEntry[];
@@ -102,20 +105,34 @@ export function EquityChart({ points }: { points: EquityPoint[] }) {
     canvas.height = Math.round(H * dpr);
     ctx.scale(dpr, dpr);
 
-    // Padding: left wide enough for Y labels, bottom for X labels
+    // Padding: measure widest y-label to set dynamic left padding
+    const gridCount = 5;
+    const values0 = points.map((p) => p.cumPL);
+    const minV0 = Math.min(0, ...values0);
+    const maxV0 = Math.max(0, ...values0);
+    const range0 = maxV0 - minV0 || 1;
+    const labelFontSizeEst = Math.max(9, Math.round(W / 80));
+    ctx.font = `${labelFontSizeEst}px JetBrains Mono, monospace`;
+    let maxLabelW = 0;
+    for (let i = 0; i <= gridCount; i++) {
+      const v = minV0 + (range0 * i) / gridCount;
+      const lbl = `${v >= 0 ? "+" : ""}${v.toFixed(1)}u`;
+      const w = ctx.measureText(lbl).width;
+      if (w > maxLabelW) maxLabelW = w;
+    }
     const PAD = {
       top: 20,
       right: 16,
-      bottom: 34,
-      left: 58,
+      bottom: 40,
+      left: Math.ceil(maxLabelW) + 12,
     };
     const chartW = W - PAD.left - PAD.right;
     const chartH = H - PAD.top - PAD.bottom;
 
-    const values = points.map((p) => p.cumPL);
-    const minV = Math.min(0, ...values);
-    const maxV = Math.max(0, ...values);
-    const range = maxV - minV || 1;
+    const values = values0;
+    const minV = minV0;
+    const maxV = maxV0;
+    const range = range0;
 
     const toX = (i: number) =>
       PAD.left + (i / Math.max(points.length - 1, 1)) * chartW;
@@ -128,7 +145,6 @@ export function EquityChart({ points }: { points: EquityPoint[] }) {
     ctx.fillRect(0, 0, W, H);
 
     // Grid lines + Y labels
-    const gridCount = 5;
     for (let i = 0; i <= gridCount; i++) {
       const v = minV + (range * i) / gridCount;
       const y = toY(v);
@@ -199,7 +215,7 @@ export function EquityChart({ points }: { points: EquityPoint[] }) {
 
     // X-axis date labels — compute step from available width
     // Minimum 52px per label to avoid clamping
-    const minLabelPx = 52;
+    const minLabelPx = 44;
     const maxLabels = Math.max(2, Math.floor(chartW / minLabelPx));
     const step = Math.max(1, Math.ceil((points.length - 1) / maxLabels));
     const labelFontSize = Math.max(8, Math.min(10, Math.round(W / 90)));
@@ -233,7 +249,7 @@ export function EquityChart({ points }: { points: EquityPoint[] }) {
       const PAD_LEFT = 58;
       const PAD_RIGHT = 16;
       const PAD_TOP = 20;
-      const PAD_BOTTOM = 34;
+      const PAD_BOTTOM = 40;
       const chartW = W - PAD_LEFT - PAD_RIGHT;
       const chartH = H - PAD_TOP - PAD_BOTTOM;
 

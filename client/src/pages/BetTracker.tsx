@@ -310,7 +310,7 @@ function StatCard({
   label, value, sub, color,
 }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
-    <div className="bg-white/4 border border-white/8 rounded-xl px-4 py-3 flex flex-col justify-center gap-1 min-w-0 h-[72px]">
+    <div className="bg-white/4 border border-white/8 rounded-xl px-4 py-3 flex flex-col justify-center gap-1 min-w-0 min-h-[72px] h-auto overflow-visible">
       <div className={`text-lg sm:text-xl lg:text-2xl font-bold truncate leading-none ${color ?? "text-white"}`}>{value}</div>
       <div className="text-[10px] text-zinc-500 tracking-widest uppercase truncate">{label}</div>
       {sub && <div className="text-[9px] text-zinc-600 truncate">{sub}</div>}
@@ -1881,10 +1881,14 @@ export default function BetTracker() {
             <StatCard label="Total"   value={stats.totalBets} />
             <StatCard label="Wins"    value={stats.wins}   color="text-green-400" />
             <StatCard label="Losses"  value={stats.losses} color="text-red-400" />
-            <StatCard label="Pushes"  value={stats.pushes} color="text-yellow-400" />
-            <div className="hidden sm:block">
-              <StatCard label="Pending" value={stats.pending} color="text-zinc-400" />
-            </div>
+            {stats.pushes > 0 && (
+              <StatCard label="Pushes"  value={stats.pushes} color="text-yellow-400" />
+            )}
+            {stats.pending > 0 && (
+              <div className="hidden sm:block">
+                <StatCard label="Pending" value={stats.pending} color="text-zinc-400" />
+              </div>
+            )}
             <div className="hidden sm:block">
               <StatCard
                 label="Net P/L"
@@ -1902,16 +1906,17 @@ export default function BetTracker() {
             </div>
             <div className="hidden sm:block">
               <StatCard
-                label="Best Win"
-                value={stats.bestWin > 0 ? `+${stakeMode === "$" ? fmtDollar(stats.bestWin * unitSize) : fmtUnits(stats.bestWin)}` : "—"}
+                label="Biggest Day"
+                value={(stats.biggestDayUnits ?? 0) > 0 ? `+${fmtUnits(stats.biggestDayUnits ?? 0)}` : "—"}
                 color="text-green-400"
+                sub={stats.biggestDayDate ? stats.biggestDayDate.substring(5) : undefined}
               />
             </div>
             <div className="hidden sm:block">
               <StatCard
-                label="Worst L"
-                value={stats.worstLoss > 0 ? `-${stakeMode === "$" ? fmtDollar(stats.worstLoss * unitSize) : fmtUnits(stats.worstLoss)}` : "—"}
-                color="text-red-400"
+                label="Win Streak"
+                value={(stats.longestWinStreak ?? 0) > 0 ? `${stats.longestWinStreak}W` : "—"}
+                color="text-emerald-400"
               />
             </div>
           </div>
@@ -1938,10 +1943,12 @@ export default function BetTracker() {
         <div className="bg-zinc-900/30 border-b border-zinc-800/60">
           <div className="w-full px-4 sm:px-6 lg:px-8 py-4 space-y-4">
             <div>
-              <div className="flex items-center gap-2 mb-3">
-                <TrendingUp size={14} className="text-emerald-400" />
-                <span className="text-xs font-bold tracking-widest text-zinc-400 uppercase">+/- UNITS</span>
-                <span className="text-[10px] text-zinc-600 ml-1">
+              <div className="flex flex-col items-center justify-center gap-1 mb-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp size={22} className="text-emerald-400" />
+                  <span className="text-xl font-bold tracking-widest text-white uppercase">+/- UNITS</span>
+                </div>
+                <span className="text-[10px] text-zinc-500">
                   {filterAllTime ? "All-Time" : `${activeSport} · ${filterDate ? fmtDate(filterDate) : "All Dates"}`}
                 </span>
               </div>
@@ -1954,8 +1961,10 @@ export default function BetTracker() {
 
       {/* ── Main content ───────────────────────────────────────────────────── */}
       <div className="w-full px-4 sm:px-6 lg:px-8 py-4">
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(300px,360px)_minmax(260px,300px)_1fr] gap-4 xl:gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4 xl:gap-6 items-start">
 
+          {/* ── Left Column: Add Bet Form + Breakdowns ───────────────────── */}
+          <div className="flex flex-col gap-4">
           {/* ── Add Bet Form ──────────────────────────────────────────────── */}
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 space-y-4 h-fit">
             <div className="flex items-center gap-2 pb-1 border-b border-zinc-800">
@@ -2178,14 +2187,17 @@ export default function BetTracker() {
             </button>
           </div>
 
-          {/* ── Breakdowns Column ────────────────────────────────────────── */}
-          <div className="hidden lg:flex flex-col gap-3 sticky top-[57px] self-start max-h-[calc(100vh-80px)] overflow-y-auto pr-1 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-zinc-700">
-            <div className="flex items-center gap-2 pb-1 border-b border-zinc-800">
-              <BarChart2 size={13} className="text-emerald-400" />
-              <span className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">Breakdowns</span>
+          {/* ── Breakdowns (below Add Bet, same left column) ─────────────── */}
+          <div className="hidden lg:block">
+            <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2 pb-1 border-b border-zinc-800">
+                <BarChart2 size={13} className="text-emerald-400" />
+                <span className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">Breakdowns</span>
+              </div>
+              <BreakdownGrid stats={stats} vertical />
             </div>
-            <BreakdownGrid stats={stats} vertical />
           </div>
+          </div>{/* end left column */}
           {/* ── Right Panel: Tabs (BETS | LOGS) ──────────────────────────── */}
           <div className="space-y-4">
 

@@ -1134,6 +1134,36 @@ export const betTrackerRouter = router({
           equityCurve.push({ date: bet.gameDate, cumPL: parseFloat(cumPL.toFixed(2)), betId: bet.id, pick: bet.pick, result: "LOSS", pl: parseFloat(pl.toFixed(2)) });
         }
       }
+      // ── Biggest Day (date with highest single-day net P/L) ────────────────────
+      const dayPLMap = new Map<string, number>();
+      for (const bet of rows) {
+        if (bet.result === "WIN") {
+          const pl = toUnits(parseFloat(bet.toWin), bet.toWinUnits);
+          dayPLMap.set(bet.gameDate, (dayPLMap.get(bet.gameDate) ?? 0) + pl);
+        } else if (bet.result === "LOSS") {
+          const pl = -toUnits(parseFloat(bet.risk), bet.riskUnits);
+          dayPLMap.set(bet.gameDate, (dayPLMap.get(bet.gameDate) ?? 0) + pl);
+        }
+      }
+      let biggestDayDate = "";
+      let biggestDayUnits = 0;
+      dayPLMap.forEach((pl, date) => {
+        if (pl > biggestDayUnits) { biggestDayUnits = pl; biggestDayDate = date; }
+      });
+      console.log(`[BetTracker][STATE] biggestDay: date=${biggestDayDate} units=${biggestDayUnits.toFixed(2)}`);
+      // ── Longest Win Streak (consecutive WIN results in chronological order) ────
+      let longestWinStreak = 0;
+      let currentWinStreak = 0;
+      for (const bet of rows) {
+        if (bet.result === "WIN") {
+          currentWinStreak++;
+          if (currentWinStreak > longestWinStreak) longestWinStreak = currentWinStreak;
+        } else if (bet.result === "LOSS") {
+          currentWinStreak = 0;
+        }
+        // PUSH/PENDING/VOID do not break or extend the streak
+      }
+      console.log(`[BetTracker][STATE] longestWinStreak=${longestWinStreak}`);
       const stats = {
         totalBets:  rows.length,
         wins, losses, pushes, pending, voids,
@@ -1153,6 +1183,9 @@ export const betTrackerRouter = router({
         byTimeframe,
         byWagerType,
         equityCurve,
+        biggestDayDate,
+        biggestDayUnits: parseFloat(biggestDayUnits.toFixed(2)),
+        longestWinStreak,
       };
 
       console.log(`[BetTracker][OUTPUT] getStats: userId=${userId} → totalBets=${stats.totalBets} wins=${stats.wins} losses=${stats.losses} roi=${stats.roi}% equityCurve=${equityCurve.length} points bySize=${JSON.stringify(bySize.map(s => s.key))}`);
