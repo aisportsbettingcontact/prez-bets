@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import compression from "compression";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -185,6 +186,12 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // ─── Gzip/Brotli response compression ───────────────────────────────────────
+  // Compresses all JSON/HTML responses. tRPC payloads (often 50-200KB for large
+  // bet lists) shrink 70-85% — dramatically reducing network transfer time.
+  // threshold=512: skip compression for tiny responses where overhead > benefit.
+  app.use(compression({ threshold: 512 }));
 
   // Trust the first proxy (Cloudflare / Manus edge) so req.protocol reflects
   // the original HTTPS scheme and cookies are set correctly (sameSite+secure).

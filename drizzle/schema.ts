@@ -2067,6 +2067,10 @@ export const trackedBets = mysqlTable("tracked_bets", {
   idxUserSportDate: index("idx_tb_user_sport_date").on(t.userId, t.sport, t.gameDate),
   /** Composite for userId + gameDate range scans (ALL sports, date-filtered queries) */
   idxUserDate:      index("idx_tb_user_date").on(t.userId, t.gameDate),
+  /** Composite for userId + result queries (filter by WIN/LOSS/PENDING etc.) */
+  idxUserResult:    index("idx_tb_user_result").on(t.userId, t.result),
+  /** Composite for userId + result + gameDate — optimal for pending-bet auto-grade queries */
+  idxUserResultDate: index("idx_tb_user_result_date").on(t.userId, t.result, t.gameDate),
 }));
 
 export type TrackedBet = typeof trackedBets.$inferSelect;

@@ -568,6 +568,13 @@
       "when": 1777526819176,
       "tag": "0080_brave_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "5",
+      "when": 1777528652528,
+      "tag": "0081_classy_iron_patriot",
+      "breakpoints": true
     }
   ]
 }

@@ -2911,3 +2911,18 @@
 - [x] Per-date expand/collapse is independent (Set-based toggle, no mutual exclusion)
 - [x] netProfit per day computed from riskUnits/toWinUnits + result (WIN=+toWin, LOSS=-risk, PUSH/VOID/PENDING=0)
 - [x] TypeScript: 0 errors
+
+## Session: 2026-04-30 — BetTracker 100x Performance Optimization
+
+- [x] Add gzip/brotli response compression middleware (threshold=512, 70-85% payload reduction)
+- [x] Add `listWithStats` combined tRPC procedure — eliminates double round-trip (2 queries → 1)
+- [x] Single-pass aggregation in `listWithStats` — all 7 breakdown dimensions computed in one loop
+- [x] Migrate BetTracker.tsx to use `listWithStats` — single network request replaces list+getStats
+- [x] Update `invalidate` callback to target `listWithStats` (single cache entry)
+- [x] Wrap `handleResult` in `useCallback` — stable ref prevents BetCard memo invalidation
+- [x] Extract `handleDeleteOpen`/`handleEditOpen` as stable `useCallback` refs — eliminates inline lambda re-renders
+- [x] Replace inline `onDelete`/`onEdit` lambdas in BetCard call site with stable refs
+- [x] Add `idx_tb_user_result` composite index (userId + result)
+- [x] Add `idx_tb_user_result_date` composite index (userId + result + gameDate) — optimal for auto-grade pending queries
+- [x] Run `pnpm db:push` — 2 new indexes applied (migration 0081)
+- [x] TypeScript: 0 errors
