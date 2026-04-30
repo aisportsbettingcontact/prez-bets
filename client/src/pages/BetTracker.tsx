@@ -18,7 +18,8 @@
  *   - HANDICAPPER: sees only their own bets
  */
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
@@ -640,8 +641,9 @@ function LinescoreGrid({
 }
 
 // ─── BetCard ──────────────────────────────────────────────────────────────────
-
-function BetCard({
+// memo: prevents re-render when parent state changes (e.g. addBetOpen, expandedDates)
+// unless the specific bet's props actually change.
+const BetCard = memo(function BetCard({
   bet, stakeMode, unitSize, onResult, onDelete, onEdit, linescore, canDirectEdit,
 }: {
   bet:           EnrichedBet;
@@ -700,7 +702,7 @@ function BetCard({
   const lineDisplay = (customLine !== null && customLine !== undefined)
     ? parseFloat(String(customLine))
     : (betLine !== null && betLine !== undefined ? parseFloat(String(betLine)) : null);
-  console.log(`[BetCard][STATE] id=${bet.id} market=${bet.market} customLine=${customLine} betLine=${betLine} lineDisplay=${lineDisplay}`);
+  // [PERF] Removed per-BetCard console.log — was firing on every card render (114+ times on All-Time load)
 
   // Stored nickname fields from the slate (e.g. "Blue Jays", "White Sox", "Mariners")
   // These are populated from mlbTeams.ts nickname field via the AN/Stats API slate.
@@ -975,7 +977,7 @@ function BetCard({
       </div>
     </div>
   );
-}
+});
 
 // ─── Logs Tab ─────────────────────────────────────────────────────────────────
 
@@ -1338,19 +1340,14 @@ export default function BetTracker() {
   // Per-date expanded state: Set of date strings that are currently expanded
   // Default: all collapsed (empty Set)
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
-  const toggleDate = (date: string) => {
+  const toggleDate = useCallback((date: string) => {
     setExpandedDates(prev => {
       const next = new Set(prev);
-      if (next.has(date)) {
-        next.delete(date);
-        console.log(`[BetTracker][INPUT] date collapsed: ${date}`);
-      } else {
-        next.add(date);
-        console.log(`[BetTracker][INPUT] date expanded: ${date}`);
-      }
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
       return next;
     });
-  };
+  }, []);
 
   // ── Derived values ────────────────────────────────────────────────────────
   const oddsNum = parseInt(formOdds, 10);
@@ -1441,7 +1438,17 @@ export default function BetTracker() {
       result:       filterResult || undefined,
       targetUserId: effectiveUserId,
     },
-    { enabled: canAccess }
+    {
+      enabled: canAccess,
+      // 60s staleTime: historical bets don't change; today's bets are refreshed by
+      // the 60s linescore interval. Prevents redundant refetches on tab/filter switches.
+      // placeholderData: show previous data instantly while new data loads (no spinner flash).
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      placeholderData: keepPreviousData,
+      retry: 1,
+    }
   );
 
   const statsQuery = trpc.betTracker.getStats.useQuery(
@@ -1453,7 +1460,14 @@ export default function BetTracker() {
       targetUserId: effectiveUserId,
       unitSize:     unitSize > 0 ? unitSize : 100,
     },
-    { enabled: canAccess }
+    {
+      enabled: canAccess,
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      placeholderData: keepPreviousData,
+      retry: 1,
+    }
   );
 
   const handicappersQuery = trpc.betTracker.listHandicappers.useQuery(
@@ -1807,7 +1821,7 @@ export default function BetTracker() {
         if (b.result === "LOSS") return sum - (isNaN(risk)  ? 0 : risk);
         return sum; // PUSH / VOID / PENDING = 0
       }, 0);
-      console.log(`[BetTracker][STATE] date=${d} wins=${wins} losses=${losses} netProfit=${netProfit.toFixed(2)}u`);
+      // [PERF] Removed per-date console.log from hot useMemo — was firing 32x per render cycle
       result.push({ type: "separator", date: d, wins, losses, pushes, pending, netProfit });
       // Sort within this date group before pushing
       for (const bet of sortDayBets(dayBets)) {

@@ -2056,11 +2056,17 @@ export const trackedBets = mysqlTable("tracked_bets", {
   /** UTC timestamp (ms) when this bet was last updated */
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
-  idxUserId:   index("idx_tb_user_id").on(t.userId),
-  idxGameId:   index("idx_tb_game_id").on(t.gameId),
-  idxGameDate: index("idx_tb_game_date").on(t.gameDate),
-  idxSport:    index("idx_tb_sport").on(t.sport),
-  idxResult:   index("idx_tb_result").on(t.result),
+  idxUserId:        index("idx_tb_user_id").on(t.userId),
+  idxGameId:        index("idx_tb_game_id").on(t.gameId),
+  idxGameDate:      index("idx_tb_game_date").on(t.gameDate),
+  idxSport:         index("idx_tb_sport").on(t.sport),
+  idxResult:        index("idx_tb_result").on(t.result),
+  /** Composite covering index: userId + sport + gameDate
+   *  Eliminates full-table scans for list() and getStats() when filtering by sport + date range.
+   *  MySQL uses this for: WHERE userId=X AND sport=Y AND gameDate BETWEEN A AND B */
+  idxUserSportDate: index("idx_tb_user_sport_date").on(t.userId, t.sport, t.gameDate),
+  /** Composite for userId + gameDate range scans (ALL sports, date-filtered queries) */
+  idxUserDate:      index("idx_tb_user_date").on(t.userId, t.gameDate),
 }));
 
 export type TrackedBet = typeof trackedBets.$inferSelect;
