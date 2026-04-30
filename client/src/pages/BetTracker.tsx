@@ -250,16 +250,27 @@ const MLB_TEAM_NICKNAMES: Record<string, string> = {
 };
 
 /**
- * Resolve team nickname from full name string or abbreviation fallback map.
- * Priority: (1) last word of awayFull/homeFull, (2) MLB_TEAM_NICKNAMES map, (3) raw abbreviation.
+ * Resolve team nickname for display (e.g. "BLUE JAYS", "WHITE SOX", "MARINERS").
+ *
+ * Priority:
+ *   (1) MLB_TEAM_NICKNAMES[abbrev]  — authoritative map covering all 30 MLB teams.
+ *       Multi-word nicknames ("Blue Jays", "White Sox", "Red Sox") are preserved in full.
+ *   (2) storedNickname              — nickname stored on the bet row from the slate API.
+ *   (3) raw abbreviation            — last resort.
+ *
+ * IMPORTANT: We do NOT use last-word splitting of fullName because multi-word
+ * nicknames would be truncated ("Toronto Blue Jays" → "Jays", "Chicago White Sox" → "Sox").
  */
-function resolveNickname(fullName: string | null | undefined, abbrev: string): string {
-  if (fullName) {
-    const last = fullName.trim().split(" ").pop();
-    if (last) return last.toUpperCase();
-  }
+function resolveNickname(
+  storedNickname: string | null | undefined,
+  abbrev: string,
+): string {
+  // (1) Authoritative abbreviation map — always preferred
   const mapped = MLB_TEAM_NICKNAMES[abbrev];
   if (mapped) return mapped.toUpperCase();
+  // (2) Stored nickname from the slate (e.g. "Blue Jays" from mlbTeams.ts)
+  if (storedNickname && storedNickname.trim()) return storedNickname.trim().toUpperCase();
+  // (3) Raw abbreviation fallback
   return abbrev.toUpperCase();
 }
 
@@ -680,10 +691,11 @@ function BetCard({
     : (betLine !== null && betLine !== undefined ? parseFloat(String(betLine)) : null);
   console.log(`[BetCard][STATE] id=${bet.id} market=${bet.market} customLine=${customLine} betLine=${betLine} lineDisplay=${lineDisplay}`);
 
-  // Full team name for pick display (e.g. "DIAMONDBACKS" instead of "ARI")
-  const awayFullName = (bet as any).awayFull as string | null | undefined;
-  const homeFullName = (bet as any).homeFull as string | null | undefined;
-  // Build display pick: use resolveNickname() for full name with abbreviation fallback
+  // Stored nickname fields from the slate (e.g. "Blue Jays", "White Sox", "Mariners")
+  // These are populated from mlbTeams.ts nickname field via the AN/Stats API slate.
+  const awayNicknameStored = (bet as any).awayNickname as string | null | undefined;
+  const homeNicknameStored = (bet as any).homeNickname as string | null | undefined;
+  // Build display pick: MLB_TEAM_NICKNAMES map is the primary source (multi-word safe)
   function getFullPickLabel(): string {
     const side = bet.pickSide;
     if (side === "OVER") {
@@ -694,9 +706,9 @@ function BetCard({
       const line = lineDisplay !== null ? ` ${lineDisplay}` : "";
       return `UNDER${line}`;
     }
-    const fullName = side === "AWAY" ? awayFullName : homeFullName;
-    const abbrev   = (side === "AWAY" ? bet.awayTeam : bet.homeTeam) ?? "?";
-    const nickname = resolveNickname(fullName, abbrev);
+    const storedNickname = side === "AWAY" ? awayNicknameStored : homeNicknameStored;
+    const abbrev         = (side === "AWAY" ? bet.awayTeam : bet.homeTeam) ?? "?";
+    const nickname       = resolveNickname(storedNickname, abbrev);
     const mkt = bet.market === "ML" ? "ML"
       : bet.market === "RL" ? (bet.sport === "NHL" ? "PL" : "RL")
       : "TOT";
@@ -1679,23 +1691,54 @@ export default function BetTracker() {
 
   // ── Bet list with day separators ──────────────────────────────────────────
   const bets = listQuery.data ?? [];
-
   const betsWithSeparators = useMemo(() => {
     const result: Array<{ type: "separator"; date: string; wins: number; losses: number; pushes: number; pending: number } | { type: "bet"; bet: EnrichedBet }> = [];
-    let lastDate = "";
+
+    // ── Sort logic within each date group ──────────────────────────────────
+    // Rule 1: Wins before Losses (PUSH/PENDING/VOID after)
+    // Rule 2: Within each result group, sort by riskUnits DESC (highest unit play first)
+    //
+    // Result priority: WIN=0, LOSS=1, PUSH=2, PENDING=3, VOID=4
+    const RESULT_PRIORITY: Record<string, number> = {
+      WIN: 0, LOSS: 1, PUSH: 2, PENDING: 3, VOID: 4,
+    };
+    function sortDayBets(dayBets: EnrichedBet[]): EnrichedBet[] {
+      return [...dayBets].sort((a, b) => {
+        const rA = RESULT_PRIORITY[a.result ?? "PENDING"] ?? 3;
+        const rB = RESULT_PRIORITY[b.result ?? "PENDING"] ?? 3;
+        if (rA !== rB) return rA - rB; // wins first
+        // Within same result: highest riskUnits first
+        const uA = parseFloat(String(a.riskUnits ?? 0));
+        const uB = parseFloat(String(b.riskUnits ?? 0));
+        return uB - uA;
+      });
+    }
+
+    // Group bets by date (preserving date order from server: desc)
+    const dateOrder: string[] = [];
+    const byDate = new Map<string, EnrichedBet[]>();
     for (const bet of enrichedBets) {
       const d = bet.gameDate ?? "";
-      if (d !== lastDate) {
-        const dayBets = enrichedBets.filter(b => b.gameDate === d);
-        const wins    = dayBets.filter(b => b.result === "WIN").length;
-        const losses  = dayBets.filter(b => b.result === "LOSS").length;
-        const pushes  = dayBets.filter(b => b.result === "PUSH").length;
-        const pending = dayBets.filter(b => b.result === "PENDING").length;
-        result.push({ type: "separator", date: d, wins, losses, pushes, pending });
-        lastDate = d;
+      if (!byDate.has(d)) {
+        dateOrder.push(d);
+        byDate.set(d, []);
       }
-      result.push({ type: "bet", bet });
+      byDate.get(d)!.push(bet);
     }
+
+    for (const d of dateOrder) {
+      const dayBets = byDate.get(d) ?? [];
+      const wins    = dayBets.filter(b => b.result === "WIN").length;
+      const losses  = dayBets.filter(b => b.result === "LOSS").length;
+      const pushes  = dayBets.filter(b => b.result === "PUSH").length;
+      const pending = dayBets.filter(b => b.result === "PENDING").length;
+      result.push({ type: "separator", date: d, wins, losses, pushes, pending });
+      // Sort within this date group before pushing
+      for (const bet of sortDayBets(dayBets)) {
+        result.push({ type: "bet", bet });
+      }
+    }
+
     return result;
   }, [enrichedBets]);
 

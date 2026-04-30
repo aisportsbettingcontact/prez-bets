@@ -23,7 +23,7 @@
  *   [AN][ERROR]  — failure with context
  */
 
-import { MLB_BY_ABBREV } from "@shared/mlbTeams";
+import { MLB_BY_ABBREV, MLB_BY_ID } from "@shared/mlbTeams";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -489,12 +489,21 @@ export async function fetchAnSlate(sport: string, dateStr: string): Promise<Slat
   // ── Cache miss — fetch ─────────────────────────────────────────────────────
   console.log(`[AN][CACHE] MISS key=${key} — initiating fetch`);
 
-  const promise = fetchAnSlateRaw(sport, dateStr).then(games => {
+  const promise = fetchAnSlateRaw(sport, dateStr).then(async games => {
+    // ── MLB Stats API fallback ────────────────────────────────────────────────
+    // AN returns 0 games for past dates (HTTP 403). Fall back to MLB Stats API
+    // which has full historical schedules. Only applies to MLB.
+    let finalGames = games;
+    if (games.length === 0 && sport.toUpperCase() === "MLB") {
+      console.log(`[AN][FALLBACK][STEP] AN returned 0 MLB games for date=${dateStr} — trying MLB Stats API fallback`);
+      finalGames = await fetchMlbStatsSlate(dateStr);
+      console.log(`[AN][FALLBACK][OUTPUT] MLB Stats API fallback: date=${dateStr} games=${finalGames.length}`);
+    }
     evictExpired();
-    slateCache.set(key, { games, fetchedAt: Date.now() });
+    slateCache.set(key, { games: finalGames, fetchedAt: Date.now() });
     inFlight.delete(key);
-    console.log(`[AN][CACHE] STORED key=${key} | games=${games.length} | TTL=${CACHE_TTL_MS / 1000}s`);
-    return games;
+    console.log(`[AN][CACHE] STORED key=${key} | games=${finalGames.length} | TTL=${CACHE_TTL_MS / 1000}s`);
+    return finalGames;
   }).catch(err => {
     inFlight.delete(key);
     console.error(`[AN][ERROR] fetchAnSlateRaw threw: ${err}`);
@@ -531,6 +540,139 @@ export async function prewarmSlateCache(): Promise<void> {
 
   const elapsed = Date.now() - start;
   console.log(`[AN][CACHE] Pre-warm complete | elapsed=${elapsed}ms | totalGames=${totalGames} | cacheSize=${slateCache.size}`);
+}
+
+// ─── MLB Stats API Fallback ───────────────────────────────────────────────────
+
+/**
+ * MLB abbreviation normalization for MLB Stats API responses.
+ * Stats API uses "AZ" for Diamondbacks and "OAK" for Athletics (legacy).
+ */
+const MLB_STATS_ABBREV_ALIASES: Record<string, string> = {
+  AZ:  "ARI",  // Diamondbacks
+  OAK: "ATH",  // Athletics (relocated to Sacramento)
+};
+
+/**
+ * Fetch MLB game slate from MLB Stats API (statsapi.mlb.com) as a fallback
+ * when Action Network returns 0 games (e.g., HTTP 403 for past dates).
+ * Returns SlateGame[] with empty odds — sufficient for bet entry and history display.
+ *
+ * [AN][FALLBACK] log prefix distinguishes these entries from AN-sourced data.
+ */
+async function fetchMlbStatsSlate(dateStr: string): Promise<SlateGame[]> {
+  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateStr}&hydrate=team&language=en`;
+  console.log(`[AN][FALLBACK][INPUT] fetchMlbStatsSlate: date=${dateStr}`);
+  console.log(`[AN][FALLBACK][STEP]  URL=${url}`);
+  const fetchStart = Date.now();
+  let resp: Response;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8_000);
+    resp = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        Accept: "application/json",
+        Referer: "https://www.mlb.com/",
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+  } catch (err) {
+    console.error(`[AN][FALLBACK][ERROR] fetchMlbStatsSlate: fetch failed date=${dateStr} err=${err}`);
+    return [];
+  }
+  const elapsed = Date.now() - fetchStart;
+  console.log(`[AN][FALLBACK][STATE] HTTP ${resp.status} date=${dateStr} elapsed=${elapsed}ms`);
+  if (!resp.ok) {
+    console.error(`[AN][FALLBACK][ERROR] fetchMlbStatsSlate: non-OK status=${resp.status} date=${dateStr}`);
+    return [];
+  }
+  let data: Record<string, unknown>;
+  try {
+    data = (await resp.json()) as Record<string, unknown>;
+  } catch (err) {
+    console.error(`[AN][FALLBACK][ERROR] fetchMlbStatsSlate: JSON parse failed date=${dateStr} err=${err}`);
+    return [];
+  }
+  const dates = (data.dates as Array<Record<string, unknown>>) ?? [];
+  // Stats API returns date in "YYYY-MM-DD" format matching our dateStr
+  const dateEntry = dates.find((d) => (d.date as string) === dateStr);
+  const apiGames = (dateEntry?.games as Array<Record<string, unknown>>) ?? [];
+  console.log(`[AN][FALLBACK][STATE] ${apiGames.length} raw games for date=${dateStr}`);
+  if (apiGames.length === 0) {
+    console.log(`[AN][FALLBACK][OUTPUT] 0 games for date=${dateStr} — no MLB games scheduled`);
+    return [];
+  }
+  const result: SlateGame[] = [];
+  let skipped = 0;
+  for (const g of apiGames) {
+    try {
+      const gamePk      = g.gamePk as number;
+      const startTime   = g.gameDate as string; // ISO UTC string
+      const statusObj   = g.status as Record<string, string>;
+      const teamsObj    = g.teams as Record<string, Record<string, unknown>>;
+      const awayTeamObj = (teamsObj.away?.team ?? {}) as Record<string, unknown>;
+      const homeTeamObj = (teamsObj.home?.team ?? {}) as Record<string, unknown>;
+      const awayId = awayTeamObj.id as number;
+      const homeId = homeTeamObj.id as number;
+      // Resolve via MLB_BY_ID first (most reliable), then abbreviation field
+      const awayEntry = MLB_BY_ID.get(awayId);
+      const homeEntry = MLB_BY_ID.get(homeId);
+      const rawAwayAbbrev = (awayTeamObj.abbreviation as string) ?? awayEntry?.abbrev ?? "";
+      const rawHomeAbbrev = (homeTeamObj.abbreviation as string) ?? homeEntry?.abbrev ?? "";
+      const awayAbbrev = awayEntry?.abbrev ?? (MLB_STATS_ABBREV_ALIASES[rawAwayAbbrev] ?? rawAwayAbbrev);
+      const homeAbbrev = homeEntry?.abbrev ?? (MLB_STATS_ABBREV_ALIASES[rawHomeAbbrev] ?? rawHomeAbbrev);
+      const awayTeam = awayEntry ?? MLB_BY_ABBREV.get(awayAbbrev);
+      const homeTeam = homeEntry ?? MLB_BY_ABBREV.get(homeAbbrev);
+      if (!awayTeam || !homeTeam) {
+        console.warn(`[AN][FALLBACK][STATE] SKIP gamePk=${gamePk}: unknown team away=${awayAbbrev}(id=${awayId}) home=${homeAbbrev}(id=${homeId})`);
+        skipped++;
+        continue;
+      }
+      // Map Stats API abstractGameState → AN-compatible status string
+      const abstractState = statusObj.abstractGameState ?? "Preview";
+      const detailedState = statusObj.detailedState ?? "";
+      let status: string;
+      if (abstractState === "Final")         status = "complete";
+      else if (abstractState === "Live")     status = "in_progress";
+      else if (detailedState === "Postponed") status = "postponed";
+      else                                    status = "scheduled";
+      const emptyOdds: GameOdds = {
+        awayMl: null, homeMl: null,
+        awayRl: null, homeRl: null,
+        over:   null, under:  null,
+        bookId: 0,
+      };
+      result.push({
+        id:           gamePk,
+        awayTeam:     awayTeam.abbrev,
+        homeTeam:     homeTeam.abbrev,
+        awayFull:     awayTeam.name,
+        homeFull:     homeTeam.name,
+        awayNickname: awayTeam.nickname,
+        homeNickname: homeTeam.nickname,
+        awayLogo:     awayTeam.logoUrl,
+        homeLogo:     homeTeam.logoUrl,
+        awayColor:    awayTeam.primaryColor,
+        homeColor:    homeTeam.primaryColor,
+        gameTime:     utcToEstTime(startTime),
+        startUtc:     startTime,
+        sport:        "MLB",
+        gameDate:     utcToEstDate(startTime),
+        status,
+        odds:         emptyOdds,
+      });
+      console.log(`[AN][FALLBACK][STATE] Mapped gamePk=${gamePk} ${awayTeam.abbrev}@${homeTeam.abbrev} status=${status} time=${utcToEstTime(startTime)}`);
+    } catch (err) {
+      console.error(`[AN][FALLBACK][ERROR] fetchMlbStatsSlate: parse error on game: ${err}`);
+      skipped++;
+    }
+  }
+  result.sort((a, b) => a.startUtc.localeCompare(b.startUtc));
+  console.log(`[AN][FALLBACK][OUTPUT] fetchMlbStatsSlate DONE: date=${dateStr} games=${result.length} skipped=${skipped} elapsed=${elapsed}ms`);
+  console.log(`[AN][FALLBACK][VERIFY] ${result.length > 0 ? "PASS" : "WARN — 0 games"} | date=${dateStr}`);
+  return result;
 }
 
 /**

@@ -368,7 +368,7 @@ function remapEntries(dimension: "type" | "size" | "month" | "sport" | "timefram
 
 export function BreakdownGrid({ stats }: { stats: StatsData }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
       <BreakdownPanel
         title="By Bet Type"
         icon={<BarChart2 size={13} />}
