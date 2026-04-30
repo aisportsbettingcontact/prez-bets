@@ -236,6 +236,12 @@ export async function listGames(opts?: { sport?: string; gameDate?: string }): P
     console.log(`[DB][listGames] MLB 7-day window: ${todayUtc} → ${plusSeven} (utcHour=${nowUtc.getUTCHours()}, beforeCutoff=${isBeforeCutoff})`);
   }
 
+  // ALWAYS exclude postponed/suspended/cancelled games from the feed — they were never played
+  // This covers MLB postponements (e.g. HOU@BAL, SF@PHI on 2026-04-29) that the MLB Stats API
+  // returns as valid schedule entries but with detailedState='Postponed'.
+  conditions.push(ne(games.gameStatus, 'postponed'));
+  console.log('[DB][listGames] Excluding postponed games from feed');
+
   // Public feed: show all games that have live VSiN odds (regardless of publishedToFeed)
   // MLB games are seeded from the schedule and may not have odds yet — show them regardless
   if (opts?.sport !== 'MLB') {
@@ -636,7 +642,7 @@ export async function updateNcaaStartTime(
   data: {
     startTimeEst: string;
     ncaaContestId: string;
-    gameStatus?: 'upcoming' | 'live' | 'final';
+    gameStatus?: 'upcoming' | 'live' | 'final' | 'postponed';
     awayScore?: number | null;
     homeScore?: number | null;
     gameClock?: string | null;

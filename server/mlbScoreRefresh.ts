@@ -85,11 +85,12 @@ export interface MlbLiveGame {
   homeRuns: number | null;
   /**
    * Mapped DB game status:
-   *   "upcoming" — not yet started (Preview, Scheduled, Postponed, Suspended, Warmup, Delayed)
-   *   "live"     — in progress (Live, In Progress)
-   *   "final"    — completed (Final, Game Over, Completed Early)
+   *   "upcoming"   — not yet started (Preview, Scheduled, Warmup, Delayed)
+   *   "live"       — in progress (Live, In Progress)
+   *   "final"      — completed (Final, Game Over, Completed Early)
+   *   "postponed"  — game postponed, suspended, or cancelled (hidden from feed)
    */
-  gameStatus: "upcoming" | "live" | "final";
+  gameStatus: "upcoming" | "live" | "final" | "postponed";
   /**
    * Human-readable game clock string for display:
    *   Live:    "Top 3rd" | "Bot 3rd" | "Mid 3rd" | "End 3rd" | "Top 10th (Extra)" etc.
@@ -209,15 +210,15 @@ interface MlbApiScheduleResponse {
  *   abstractGameState="Preview"  → "upcoming"  (includes: Scheduled, Pre-Game, Warmup, Delayed Start)
  *   abstractGameState="Live"     → "live"       (includes: In Progress, Manager Challenge, Replay Review)
  *   abstractGameState="Final"    → "final"      (includes: Final, Game Over, Completed Early)
- *   detailedState="Postponed"    → "upcoming"   (override: game not played today)
- *   detailedState="Suspended"    → "upcoming"   (override: game suspended, not final)
- *   detailedState="Cancelled"    → "upcoming"   (override: treat as not played)
+ *   detailedState="Postponed"    → "postponed"  (override: game not played today — hidden from feed)
+ *   detailedState="Suspended"    → "postponed"  (override: game suspended — hidden from feed)
+ *   detailedState="Cancelled"    → "postponed"  (override: treat as not played — hidden from feed)
  */
 function mapMlbStatus(
   abstractState: string,
   detailedState: string
-): "upcoming" | "live" | "final" {
-  // Explicit overrides for special states
+): "upcoming" | "live" | "final" | "postponed" {
+  // Explicit overrides for special states — these games are NOT played and must be hidden from feed
   const detailedLower = detailedState.toLowerCase();
   if (
     detailedLower.includes("postponed") ||
@@ -225,7 +226,7 @@ function mapMlbStatus(
     detailedLower.includes("cancelled") ||
     detailedLower.includes("canceled")
   ) {
-    return "upcoming";
+    return "postponed";
   }
 
   switch (abstractState) {
@@ -252,11 +253,11 @@ function mapMlbStatus(
  *   Upcoming          → null
  */
 function buildMlbGameClock(
-  status: "upcoming" | "live" | "final",
+  status: "upcoming" | "live" | "final" | "postponed",
   linescore: MlbApiLinescore | undefined,
   totalInnings: number | null
 ): string | null {
-  if (status === "upcoming") return null;
+  if (status === "upcoming" || status === "postponed") return null;
 
   if (status === "final") {
     if (totalInnings != null && totalInnings > 9) {
