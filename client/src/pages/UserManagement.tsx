@@ -365,23 +365,22 @@ function MetricsPanel() {
       </div>
 
       {/* Row 1 — Session KPIs */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         {sessionKpis.map((k) => (
-          <div key={k.label} className={`bg-white/3 border ${k.border} rounded-lg px-4 py-3`}>
-            <div className={`text-xl font-bold font-mono ${k.color}`}>{k.value}</div>
-            <div className="text-[10px] font-semibold tracking-wider text-zinc-300 mt-0.5">{k.label}</div>
-            <div className="text-[10px] text-zinc-600 mt-0.5">{k.sublabel}</div>
+          <div key={k.label} className={`bg-white/3 border ${k.border} rounded-lg px-3 sm:px-4 py-2.5 sm:py-3`}>
+            <div className={`text-lg sm:text-xl font-bold font-mono ${k.color}`}>{k.value}</div>
+            <div className="text-[9px] sm:text-[10px] font-semibold tracking-wider text-zinc-300 mt-0.5">{k.label}</div>
+            <div className="text-[9px] sm:text-[10px] text-zinc-600 mt-0.5">{k.sublabel}</div>
           </div>
         ))}
       </div>
-
       {/* Row 2 — Member KPIs */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         {memberKpis.map((k) => (
-          <div key={k.label} className={`bg-white/3 border ${k.border} rounded-lg px-4 py-3`}>
-            <div className={`text-xl font-bold font-mono ${k.color}`}>{k.value}</div>
-            <div className="text-[10px] font-semibold tracking-wider text-zinc-300 mt-0.5">{k.label}</div>
-            <div className="text-[10px] text-zinc-600 mt-0.5">{k.sublabel}</div>
+          <div key={k.label} className={`bg-white/3 border ${k.border} rounded-lg px-3 sm:px-4 py-2.5 sm:py-3`}>
+            <div className={`text-lg sm:text-xl font-bold font-mono ${k.color}`}>{k.value}</div>
+            <div className="text-[9px] sm:text-[10px] font-semibold tracking-wider text-zinc-300 mt-0.5">{k.label}</div>
+            <div className="text-[9px] sm:text-[10px] text-zinc-600 mt-0.5">{k.sublabel}</div>
           </div>
         ))}
       </div>
@@ -599,10 +598,10 @@ export default function UserManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
+    <div className="min-h-screen w-full bg-[#0a0a0a] text-white flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/8">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
+      <div className="sticky top-0 z-40 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/8 w-full">
+        <div className="w-full px-3 sm:px-5 lg:px-8 py-3 flex items-center gap-2 sm:gap-4">
           <button type="button" onClick={() => navigate("/dashboard")}
             className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-sm"
           >
@@ -646,8 +645,8 @@ export default function UserManagement() {
       </div>
 
       {/* Stats bar */}
-      <div className="max-w-6xl mx-auto px-4 py-4">
-        <div className="grid grid-cols-5 gap-3 mb-6">
+      <div className="flex-1 w-full px-3 sm:px-5 lg:px-8 py-4">
+        <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 mb-4 sm:mb-6">
           {[
             { label: "Total Accounts", value: rawUsers.length },
             { label: "Owners", value: rawUsers.filter((u) => u.role === "owner").length },
@@ -655,9 +654,9 @@ export default function UserManagement() {
             { label: "Handicappers", value: rawUsers.filter((u) => u.role === "handicapper").length },
             { label: "Active Access", value: rawUsers.filter((u) => u.hasAccess).length },
           ].map((stat) => (
-            <div key={stat.label} className="bg-white/4 border border-white/8 rounded-lg px-4 py-3">
-              <div className="text-xl font-bold text-white">{stat.value}</div>
-              <div className="text-xs text-zinc-500 tracking-wide">{stat.label}</div>
+            <div key={stat.label} className="bg-white/4 border border-white/8 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3">
+              <div className="text-lg sm:text-xl font-bold text-white">{stat.value}</div>
+              <div className="text-[10px] sm:text-xs text-zinc-500 tracking-wide">{stat.label}</div>
             </div>
           ))}
         </div>
@@ -706,7 +705,8 @@ export default function UserManagement() {
         )}
 
         {/* Table */}
-        <div className="bg-white/3 border border-white/8 rounded-xl overflow-hidden">
+        <div className="bg-white/3 border border-white/8 rounded-xl overflow-hidden w-full">
+          <div className="overflow-x-auto w-full">
           <Table>
             <TableHeader>
               <TableRow className="border-white/8 hover:bg-transparent">
@@ -864,6 +864,7 @@ export default function UserManagement() {
               )}
             </TableBody>
           </Table>
+          </div>
         </div>
       </div>
 
