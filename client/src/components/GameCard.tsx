@@ -838,38 +838,12 @@ function DesktopMergedPanel({
   // For NHL: puck line is always ±1.5 or ±2.5 from the simulation.
   // Comparing mdlAwaySpread < awaySpread is meaningless (both are ±1.5).
   // Edge direction is determined by the Python engine and stored in computedSpreadEdge.
-  // AUTHORITATIVE: parse team abbreviation from the edge label, compare to awayAbbr.
-  // This replaces the flawed "+1.5" string check (fails for home favorites like "COL -1.5 [STRONG EDGE]").
-  const awayAbbrDesktop = awayAbbr; // awayAbbr is resolved from NHL_BY_DB_SLUG via getGameTeamColorsClient
-  const spreadEdgeIsAway = (() => {
-    if (isNaN(spreadDiff) || spreadDiff <= 0) return null;
-    if (isNhlGame) {
-      if (!computedSpreadEdge || computedSpreadEdge === 'PASS') return null;
-      // Use edgeLabelIsAway: parses abbrev from label (e.g. "UTA" from "UTA +1.5 [ELITE EDGE]")
-      // and compares to awayAbbr (e.g. "STL" for st_louis_blues).
-      // [VERIFY] "COL -1.5 [STRONG EDGE]" → abbr="COL", awayAbbr="SEA" → false (home edge) ✅
-      // [VERIFY] "UTA +1.5 [ELITE EDGE]" → abbr="UTA", awayAbbr="STL" → false (home edge) ✅
-      // [VERIFY] "SJS +1.5 [STRONG EDGE]" → abbr="SJS", awayAbbr="SJS" → true (away edge) ✅
-      return edgeLabelIsAway(computedSpreadEdge, awayAbbrDesktop, awayDisplayName, sport);
-    }
-    if (!isNaN(mdlAwaySpread) && !isNaN(awaySpread)) return mdlAwaySpread < awaySpread;
-    return null;
-  })();
-  const totalEdgeIsOver = (() => {
-    if (isNaN(totalDiff) || totalDiff <= 0) return null;
-    // For NHL: edge direction must come from computedTotalEdge (set by Python engine from model odds
-    // at the book's line), NOT from comparing model expected total vs book line.
-    // The model could have E_total > book line but P(over) < 50% due to distribution shape.
-    if (isNhlGame) {
-      if (!computedTotalEdge || computedTotalEdge === 'PASS') return null;
-      const normalized = computedTotalEdge.toUpperCase();
-      if (normalized.startsWith('OVER')) return true;
-      if (normalized.startsWith('UNDER')) return false;
-      return null;
-    }
-    if (!isNaN(mdlTotal) && !isNaN(bkTotal)) return mdlTotal > bkTotal;
-    return null;
-  })();
+  // AUTHORITATIVE: use props from outer GameCard (computed with 3-tier priority).
+  // authSpreadEdgeIsAway: Tier 1 = model spread odds prob, Tier 2 = NHL label, Tier 3 = line arithmetic
+  // authTotalEdgeIsOver:  Tier 1 = model over/under odds prob, Tier 2 = NHL label, Tier 3 = line comparison
+  // Do NOT recompute locally — these are the single source of truth.
+  const spreadEdgeIsAway: boolean | null = authSpreadEdgeIsAway;
+  const totalEdgeIsOver: boolean | null = authTotalEdgeIsOver;
   const hasSpreadEdge = !isNaN(spreadDiff) && spreadDiff > 0;
   const hasTotalEdge  = !isNaN(totalDiff)  && totalDiff  > 0;
 
@@ -1175,8 +1149,11 @@ function DesktopMergedPanel({
   };
 
   // ── EdgeVerdict column ────────────────────────────────────────────────────
-  const spreadPass = normalizeEdgeLabel(computedSpreadEdge) === 'PASS' || (spreadDiff ?? 0) <= 0;
-  const totalPass  = normalizeEdgeLabel(computedTotalEdge)  === 'PASS' || (totalDiff  ?? 0) <= 0;
+  // AUTHORITATIVE pass detection: use computed edge direction values, NOT stale DB labels.
+  // spreadPass: no edge if spreadEdgeIsAway is null (no direction) OR spreadDiff <= 0
+  // totalPass:  no edge if totalEdgeIsOver is null (no direction) OR totalDiff <= 0
+  const spreadPass = spreadEdgeIsAway === null || (spreadDiff ?? 0) <= 0;
+  const totalPass  = totalEdgeIsOver  === null || (totalDiff  ?? 0) <= 0;
   const spreadIsStronger = (spreadDiff ?? 0) >= (totalDiff ?? 0);
   // Use edgeLabelIsAway for the edge panel logo — same authoritative abbrev-based detection.
   // awayAbbr is already resolved from NHL_BY_DB_SLUG via getGameTeamColorsClient above.
@@ -1248,7 +1225,14 @@ function DesktopMergedPanel({
               {!spreadPass && (() => {
                 const diff = isNaN(spreadDiff) ? null : spreadDiff;
                 const edgeColor = getEdgeColor(diff ?? 0);
-                const normalized = normalizeEdgeLabel(computedSpreadEdge);
+                // AUTHORITATIVE spread label: build from spreadEdgeIsAway + model spread value.
+                // Format: "CIN +1.5" or "PIT -1.5" using the model's spread for the edge side.
+                const edgeAbbr  = spreadEdgeIsAway ? awayAbbr : homeAbbr;
+                const edgeSpreadVal = spreadEdgeIsAway ? mdlAwaySpread : mdlHomeSpread;
+                const edgeSpreadStr = !isNaN(edgeSpreadVal)
+                  ? `${edgeAbbr} ${spreadSign(edgeSpreadVal)}`
+                  : normalizeEdgeLabel(computedSpreadEdge); // fallback to DB label
+                const normalized = edgeSpreadStr.trim();
                 const showArrow = (diff ?? 0) >= 3;
                 const mktLabel = sport === 'NHL' ? 'PUCK LINE' : sport === 'MLB' ? 'RUN LINE' : 'SPREAD';
                 return (
@@ -1279,7 +1263,15 @@ function DesktopMergedPanel({
               {!totalPass && (() => {
                 const diff = isNaN(totalDiff) ? null : totalDiff;
                 const edgeColor = getEdgeColor(diff ?? 0);
-                const normalized = normalizeEdgeLabel(computedTotalEdge);
+                // AUTHORITATIVE label: use totalEdgeIsOver (computed from model odds probability)
+                // NOT computedTotalEdge from DB (which may be stale/wrong from Python engine).
+                // Format: "OVER 8" or "UNDER 8.5" using the book's total line as anchor.
+                const authTotalLabel = totalEdgeIsOver === true
+                  ? `OVER ${isNaN(bkTotal) ? '' : bkTotal}`
+                  : totalEdgeIsOver === false
+                  ? `UNDER ${isNaN(bkTotal) ? '' : bkTotal}`
+                  : normalizeEdgeLabel(computedTotalEdge); // fallback to DB label if direction unknown
+                const normalized = authTotalLabel.trim();
                 const showArrow = (diff ?? 0) >= 3;
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '5px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: `1px solid ${edgeColor}33` }}>
@@ -2278,13 +2270,42 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
     return null;
   })();
   const authTotalEdgeIsOver: boolean | null = (() => {
-    if (!computedTotalEdge || computedTotalEdge === 'PASS') return null;
+    if (isNaN(totalDiff) || totalDiff <= 0) return null;
+
+    // ── TIER 1 (highest priority): Model over/under odds probability comparison ──────────────────
+    // When model over/under odds are available, use no-vig probability comparison.
+    // This is the most accurate method: edge lives in the juice, not the line.
+    // Example: model o8 (+120) vs book o8 (-118)/u8 (-102)
+    //   modelOverProb = 100/(100+120) = 45.45%
+    //   bookNoVigOverProb = removeVig(-118, -102)[0]/100 = 52.0%
+    //   45.45% < 52.0% → model LESS confident in OVER → UNDER edge ✓
+    const _mdlOverOddsNum  = toNum(game.modelOverOdds);
+    const _bkOverOddsNum   = toNum(game.overOdds);
+    const _bkUnderOddsNum  = toNum(game.underOdds);
+    if (!isNaN(_mdlOverOddsNum) && !isNaN(_bkOverOddsNum) && !isNaN(_bkUnderOddsNum)) {
+      const modelOverProb = americanToImplied(_mdlOverOddsNum);
+      const rawBkOver  = americanToImplied(_bkOverOddsNum);
+      const rawBkUnder = americanToImplied(_bkUnderOddsNum);
+      const vigTotal = rawBkOver + rawBkUnder;
+      if (!isNaN(modelOverProb) && vigTotal > 0) {
+        const bookNoVigOverProb = rawBkOver / vigTotal;
+        // OVER edge: model more confident in OVER than book no-vig
+        // UNDER edge: model less confident in OVER than book no-vig
+        return modelOverProb > bookNoVigOverProb;
+      }
+    }
+
+    // ── TIER 2: NHL — use computedTotalEdge from Python engine (model odds at book's line) ────────
+    // The Python engine already accounts for distribution shape, so trust its direction for NHL.
     if (isNhlGame) {
+      if (!computedTotalEdge || computedTotalEdge === 'PASS') return null;
       const normalized = computedTotalEdge.toUpperCase();
       if (normalized.startsWith('OVER')) return true;
       if (normalized.startsWith('UNDER')) return false;
       return null;
     }
+
+    // ── TIER 3 (fallback): Line comparison for NBA/NCAAM without model odds ──────────────────────
     if (!isNaN(modelTotal) && !isNaN(bookTotal)) return modelTotal > bookTotal;
     return null;
   })();

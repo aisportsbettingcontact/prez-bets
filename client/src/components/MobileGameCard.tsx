@@ -305,35 +305,12 @@ if (process.env.NODE_ENV === 'development') {
 }
 
    // ── Edge direction helpers ────────────────────────────────────
-// AUTHORITATIVE: use edgeLabelIsAway for NHL/MLB — parses abbrev from label.
-// awayAbbr is resolved from NHL_BY_DB_SLUG via makeCityAbbr (see above).
-const spreadEdgeIsAway = (() => {
-  if (isNaN(spreadDiff) || spreadDiff <= 0) return null;
-  // For NHL: puck line is always ±1.5/±2.5 from simulation.
-  // Line arithmetic is invalid — use computedSpreadEdge (from Python engine P(margin>=2)).
-  if (isNhlGame) {
-    if (!computedSpreadEdge || computedSpreadEdge === 'PASS') return null;
-    // [FIX] Replace flawed '+1.5' string check with abbrev-based detection.
-    // '+1.5' check fails for home favorites (e.g. 'COL -1.5 [STRONG EDGE]' is home edge).
-    return edgeLabelIsAway(computedSpreadEdge, awayAbbr, awayDisplayName, 'NHL');
-  }
-  if (!isNaN(awayModelSpread) && !isNaN(awayBookSpread)) return awayModelSpread < awayBookSpread;
-  return null;
-})();
-const totalEdgeIsOver = (() => {
-  if (isNaN(totalDiff) || totalDiff <= 0) return null;
-  // For NHL: edge direction must come from computedTotalEdge (set by Python engine from
-  // model odds at the book's line), NOT from comparing model expected total vs book line.
-  if (isNhlGame) {
-    if (!computedTotalEdge || computedTotalEdge === 'PASS') return null;
-    const normalized = computedTotalEdge.toUpperCase();
-    if (normalized.startsWith('OVER')) return true;
-    if (normalized.startsWith('UNDER')) return false;
-    return null;
-  }
-  if (!isNaN(modelTotal) && !isNaN(bookTotal)) return modelTotal > bookTotal;
-  return null;
-})();
+// AUTHORITATIVE: use props from GameCard (computed with 3-tier priority including model odds).
+// authSpreadEdgeIsAway: Tier 1 = model spread odds prob comparison, Tier 2 = NHL label, Tier 3 = line arithmetic
+// authTotalEdgeIsOver:  Tier 1 = model over/under odds prob comparison, Tier 2 = NHL label, Tier 3 = line comparison
+// These are the single source of truth — do NOT recompute locally.
+const spreadEdgeIsAway: boolean | null = authSpreadEdgeIsAway;
+const totalEdgeIsOver: boolean | null  = authTotalEdgeIsOver;
 
 // ── ML edge detection — unified with spread edge direction ──────────────
 //

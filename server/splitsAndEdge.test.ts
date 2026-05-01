@@ -509,6 +509,144 @@ describe('VSIN Data Pipeline Integrity', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 5. TOTAL EDGE DIRECTION LOGIC (Three-Tier Priority)
+// ─────────────────────────────────────────────────────────────────────────────
+// Mirrors the authTotalEdgeIsOver computation in GameCard.tsx.
+// Tier 1: model over/under odds probability comparison (most accurate)
+// Tier 2: NHL DB label (when model odds unavailable)
+// Tier 3: line comparison fallback (NBA/NCAAM without model odds)
+
+function americanToImplied(american: number): number {
+  if (isNaN(american)) return NaN;
+  if (american > 0) return 100 / (american + 100);
+  return Math.abs(american) / (Math.abs(american) + 100);
+}
+
+function computeTotalEdgeIsOver(
+  mdlOverOdds: string | null | undefined,
+  mdlUnderOdds: string | null | undefined,
+  bkOverOdds: string | null | undefined,
+  bkUnderOdds: string | null | undefined,
+  mdlTotal: number | null,
+  bkTotal: number | null,
+  isNhlGame: boolean,
+  computedTotalEdge: string | null | undefined
+): boolean | null {
+  const toN = (s: string | null | undefined): number => {
+    if (!s) return NaN;
+    const n = parseFloat(s.replace(/[^\d.+-]/g, ''));
+    return isNaN(n) ? NaN : n;
+  };
+
+  const mdlOverNum  = toN(mdlOverOdds);
+  const mdlUnderNum = toN(mdlUnderOdds);
+  const bkOverNum   = toN(bkOverOdds);
+  const bkUnderNum  = toN(bkUnderOdds);
+
+  // Tier 1: model odds probability comparison (MLB/NBA/NHL with model odds)
+  if (!isNaN(mdlOverNum) && !isNaN(mdlUnderNum) && !isNaN(bkOverNum) && !isNaN(bkUnderNum)) {
+    const modelOverProb   = americanToImplied(mdlOverNum);
+    const { probA: bookNoVigOverProb } = removeVig(bkOverNum, bkUnderNum);
+    if (!isNaN(modelOverProb) && bookNoVigOverProb > 0) {
+      return modelOverProb > bookNoVigOverProb; // true = OVER edge, false = UNDER edge
+    }
+  }
+
+  // Tier 2: NHL DB label (when model odds unavailable)
+  if (isNhlGame && computedTotalEdge) {
+    const upper = computedTotalEdge.toUpperCase().trim();
+    if (upper.startsWith('OVER')) return true;
+    if (upper.startsWith('UNDER')) return false;
+  }
+
+  // Tier 3: line comparison fallback (NBA/NCAAM)
+  if (mdlTotal != null && bkTotal != null && !isNaN(mdlTotal) && !isNaN(bkTotal)) {
+    return mdlTotal > bkTotal;
+  }
+
+  return null;
+}
+
+describe('Total Edge Direction Logic (Three-Tier)', () => {
+  // ── Tier 1: Model odds probability comparison ──
+
+  it('CIN/PIT: o8(+120) vs u8(-120) book o8(-118)/u8(-102) → UNDER edge (false)', () => {
+    // Model over +120 implies 45.45% win prob for OVER
+    // Book no-vig over: removeVig(-118, -102) → ~52% for OVER
+    // 45.45% < 52% → model LESS confident in OVER → UNDER edge
+    const result = computeTotalEdgeIsOver('+120', '-120', '-118', '-102', 8, 8.5, false, 'OVER 8');
+    expect(result).toBe(false); // UNDER edge
+  });
+
+  it('model over -121 vs book over -115/-105 → OVER edge (true)', () => {
+    // Model over -121 implies 54.75% win prob for OVER
+    // Book no-vig over: removeVig(-115, -105) → ~52.4% for OVER
+    // 54.75% > 52.4% → model MORE confident in OVER → OVER edge
+    const result = computeTotalEdgeIsOver('-121', '+121', '-115', '-105', 8.5, 8.5, false, 'OVER 8.5');
+    expect(result).toBe(true); // OVER edge
+  });
+
+  it('model under -120 vs book over -110/-110 → UNDER edge (false)', () => {
+    // Model over +120 implies 45.45% win prob for OVER
+    // Book no-vig over: removeVig(-110, -110) → 50% for OVER
+    // 45.45% < 50% → UNDER edge
+    const result = computeTotalEdgeIsOver('+120', '-120', '-110', '-110', 8, 8.5, false, 'OVER 8');
+    expect(result).toBe(false);
+  });
+
+  it('model over -110 vs book over -110/-110 → slight OVER edge (true)', () => {
+    // Model over -110 implies 52.38% win prob for OVER
+    // Book no-vig over: removeVig(-110, -110) → 50% for OVER
+    // 52.38% > 50% → OVER edge
+    const result = computeTotalEdgeIsOver('-110', '+110', '-110', '-110', 8.5, 8.5, false, 'OVER 8.5');
+    expect(result).toBe(true);
+  });
+
+  // ── Tier 2: NHL DB label fallback ──
+
+  it('NHL: no model odds, computedTotalEdge=OVER 5.5 → true (OVER edge)', () => {
+    const result = computeTotalEdgeIsOver(null, null, null, null, 5.5, 5.5, true, 'OVER 5.5');
+    expect(result).toBe(true);
+  });
+
+  it('NHL: no model odds, computedTotalEdge=UNDER 6 → false (UNDER edge)', () => {
+    const result = computeTotalEdgeIsOver(null, null, null, null, 6, 6.5, true, 'UNDER 6');
+    expect(result).toBe(false);
+  });
+
+  it('NHL: no model odds, computedTotalEdge=PASS → null (no edge)', () => {
+    const result = computeTotalEdgeIsOver(null, null, null, null, null, null, true, 'PASS');
+    expect(result).toBeNull();
+  });
+
+  // ── Tier 3: Line comparison fallback ──
+
+  it('NBA: no model odds, mdlTotal=8 > bkTotal=7.5 → OVER edge (true)', () => {
+    const result = computeTotalEdgeIsOver(null, null, null, null, 8, 7.5, false, null);
+    expect(result).toBe(true);
+  });
+
+  it('NBA: no model odds, mdlTotal=7 < bkTotal=7.5 → UNDER edge (false)', () => {
+    const result = computeTotalEdgeIsOver(null, null, null, null, 7, 7.5, false, null);
+    expect(result).toBe(false);
+  });
+
+  it('NBA: no model odds, mdlTotal=null → null (no edge)', () => {
+    const result = computeTotalEdgeIsOver(null, null, null, null, null, 7.5, false, null);
+    expect(result).toBeNull();
+  });
+
+  // ── Tier 1 takes priority over Tier 3 ──
+
+  it('Tier 1 overrides Tier 3: model odds say UNDER but line says OVER → UNDER wins', () => {
+    // mdlTotal=9 > bkTotal=8.5 (Tier 3 would say OVER)
+    // But model over +120 vs book -118/-102 (Tier 1 says UNDER)
+    const result = computeTotalEdgeIsOver('+120', '-120', '-118', '-102', 9, 8.5, false, 'OVER 9');
+    expect(result).toBe(false); // Tier 1 wins: UNDER edge
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 5. EDGE COLOR THRESHOLDS
 // ─────────────────────────────────────────────────────────────────────────────
 

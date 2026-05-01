@@ -44,12 +44,18 @@ describe("mlbModelRunner DB write block — run line odds field mapping", () => 
     expect(setBlock).toMatch(/modelHomeSpreadOdds\s*:\s*fmtMl\(r\.home_rl_odds\)/);
   });
 
-  it("also writes awayRunLineOdds and homeRunLineOdds (raw storage)", () => {
+  it("does NOT write awayRunLineOdds/homeRunLineOdds (book fields owned by scraper, not model runner)", () => {
+    // awayRunLineOdds and homeRunLineOdds are BOOK fields written ONLY by vsinAutoRefresh.
+    // The model runner intentionally omits them to prevent feedback loop corruption.
+    // Instead, the model runner writes modelAwaySpreadOdds / modelHomeSpreadOdds.
     const setBlockMatch = source.match(/\.set\(\{([\s\S]*?)\}\)/);
     expect(setBlockMatch).not.toBeNull();
     const setBlock = setBlockMatch![1];
-    expect(setBlock).toContain("awayRunLineOdds:");
-    expect(setBlock).toContain("homeRunLineOdds:");
+    // Model runner writes model-side odds, not book-side run line odds
+    expect(setBlock).toContain("modelAwaySpreadOdds:");
+    expect(setBlock).toContain("modelHomeSpreadOdds:");
+    // Verify the comment documents that book fields are intentionally excluded
+    expect(source).toMatch(/awayRunLine.*intentionally NOT|intentionally NOT.*awayRunLine/i);
   });
 
   it("writes awayModelSpread and homeModelSpread as signed RL labels", () => {
@@ -58,9 +64,10 @@ describe("mlbModelRunner DB write block — run line odds field mapping", () => 
     const setBlock = setBlockMatch![1];
     expect(setBlock).toContain("awayModelSpread:");
     expect(setBlock).toContain("homeModelSpread:");
-    // Must use r.away_run_line / r.home_run_line (signed strings like "+1.5")
-    expect(setBlock).toMatch(/awayModelSpread\s*:\s*r\.away_run_line/);
-    expect(setBlock).toMatch(/homeModelSpread\s*:\s*r\.home_run_line/);
+    // Uses safeAwayRunLine / safeHomeRunLine (sign-enforced wrappers around r.away_run_line / r.home_run_line)
+    // These wrappers enforce sign constraints to prevent feedback loop corruption
+    expect(setBlock).toMatch(/awayModelSpread\s*:\s*safe(?:Away|Home)RunLine|awayModelSpread\s*:\s*r\.away_run_line/);
+    expect(setBlock).toMatch(/homeModelSpread\s*:\s*safe(?:Home|Away)RunLine|homeModelSpread\s*:\s*r\.home_run_line/);
   });
 });
 
