@@ -254,8 +254,8 @@ function LabeledBar({ awayPct, homePct, awayColor, homeColor, awayLineLabel, hom
           boxSizing: 'border-box',
         }}
       >
-        {/* Away segment — label flush LEFT */}
-        {away > 0 && !isHomeFull && (
+        {/* Away segment — label flush LEFT (only when NOT full-bar) */}
+        {away > 0 && !isAwayFull && !isHomeFull && (
           <div style={awaySegStyle} className="transition-all duration-700">
             <span style={MOBILE_AWAY_LABEL_STYLE}>{away}%</span>
           </div>
@@ -264,22 +264,33 @@ function LabeledBar({ awayPct, homePct, awayColor, homeColor, awayLineLabel, hom
         {showDivider && (
           <div style={{ width: 1, background: 'rgba(255,255,255,0.25)', flexShrink: 0, alignSelf: 'stretch' }} />
         )}
-        {/* Home segment — label flush RIGHT */}
-        {home > 0 && !isAwayFull && (
+        {/* Home segment — label flush RIGHT (only when NOT full-bar) */}
+        {home > 0 && !isHomeFull && !isAwayFull && (
           <div style={homeSegStyle} className="transition-all duration-700">
             <span style={MOBILE_HOME_LABEL_STYLE}>{home}%</span>
           </div>
         )}
-        {/* 100% full-bar cases — label centered */}
-        {isAwayFull && (
+        {/* 100% full-bar cases — label centered — EXCLUSIVE: only one can render */}
+        {isAwayFull && !isHomeFull && (
           <div style={{ flex: 1, background: awayColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4 }} className="transition-all duration-700">
             <span style={MOBILE_FULL_LABEL_STYLE}>100%</span>
           </div>
         )}
-        {isHomeFull && (
+        {isHomeFull && !isAwayFull && (
           <div style={{ flex: 1, background: homeColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4 }} className="transition-all duration-700">
             <span style={MOBILE_FULL_LABEL_STYLE}>100%</span>
           </div>
+        )}
+        {/* Both-full fallback: split 50/50 with both labels (data anomaly guard) */}
+        {isAwayFull && isHomeFull && (
+          <>
+            <div style={{ flex: 1, background: awayColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px 0 0 4px' }} className="transition-all duration-700">
+              <span style={MOBILE_FULL_LABEL_STYLE}>100%</span>
+            </div>
+            <div style={{ flex: 1, background: homeColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0 4px 4px 0' }} className="transition-all duration-700">
+              <span style={MOBILE_FULL_LABEL_STYLE}>100%</span>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -452,8 +463,8 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
               width: '100%',
             }}
           >
-            {/* Away segment — label flush LEFT */}
-            {away > 0 && !isHomeFull && (
+            {/* Away segment — label flush LEFT (only when NOT full-bar) */}
+            {away > 0 && !isAwayFull && !isHomeFull && (
               <div style={awaySegStyle} className="transition-all duration-700">
                 <span style={DESKTOP_AWAY_LABEL_STYLE}>{away}%</span>
               </div>
@@ -462,22 +473,33 @@ function SplitBar({ label, awayPct, homePct, awayColor, homeColor }: SplitBarPro
             {showDivider && (
               <div style={{ width: 1.5, background: 'rgba(255,255,255,0.3)', flexShrink: 0, alignSelf: 'stretch' }} />
             )}
-            {/* Home segment — label flush RIGHT */}
-            {home > 0 && !isAwayFull && (
+            {/* Home segment — label flush RIGHT (only when NOT full-bar) */}
+            {home > 0 && !isHomeFull && !isAwayFull && (
               <div style={homeSegStyle} className="transition-all duration-700">
                 <span style={DESKTOP_HOME_LABEL_STYLE}>{home}%</span>
               </div>
             )}
-            {/* 100% full-bar cases — label centered */}
-            {isAwayFull && (
+            {/* 100% full-bar cases — label centered — EXCLUSIVE: only one can render */}
+            {isAwayFull && !isHomeFull && (
               <div style={{ flex: 1, background: awayColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px' }} className="transition-all duration-700">
                 <span style={DESKTOP_FULL_LABEL_STYLE}>100%</span>
               </div>
             )}
-            {isHomeFull && (
+            {isHomeFull && !isAwayFull && (
               <div style={{ flex: 1, background: homeColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px' }} className="transition-all duration-700">
                 <span style={DESKTOP_FULL_LABEL_STYLE}>100%</span>
               </div>
+            )}
+            {/* Both-full fallback: split 50/50 with both labels (data anomaly guard) */}
+            {isAwayFull && isHomeFull && (
+              <>
+                <div style={{ flex: 1, background: awayColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px 0 0 9999px' }} className="transition-all duration-700">
+                  <span style={DESKTOP_FULL_LABEL_STYLE}>100%</span>
+                </div>
+                <div style={{ flex: 1, background: homeColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0 9999px 9999px 0' }} className="transition-all duration-700">
+                  <span style={DESKTOP_FULL_LABEL_STYLE}>100%</span>
+                </div>
+              </>
             )}
           </div>
         );

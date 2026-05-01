@@ -97,3 +97,64 @@ export function removeVig(
 
 /** Minimum edge threshold in percentage points to display as an edge. */
 export const EDGE_THRESHOLD_PP = 1.5;
+
+/**
+ * Calculate ROI % from model ML vs book ML.
+ * ROI = (modelWinProb / bookNoVigProb - 1) * 100
+ *
+ * @param modelML  - Model's fair American ML for the side (e.g. -148 or +143)
+ * @param bookML   - Book's American ML for the same side (e.g. -160 or +135)
+ * @param bookOppML - Book's American ML for the opposite side (e.g. +130 or -155)
+ *                   Used to compute the no-vig book probability.
+ * @returns ROI as a percentage (e.g. 4.44), or NaN if any input is invalid.
+ */
+export function calculateRoi(
+  modelML: number,
+  bookML: number,
+  bookOppML: number
+): number {
+  if (isNaN(modelML) || isNaN(bookML) || isNaN(bookOppML)) return NaN;
+  const modelWinProb = americanToImplied(modelML);
+  const rawBook = americanToImplied(bookML);
+  const rawOpp  = americanToImplied(bookOppML);
+  const vigTotal = rawBook + rawOpp;
+  if (vigTotal <= 0 || isNaN(vigTotal)) return NaN;
+  const bookNoVigProb = rawBook / vigTotal;
+  if (bookNoVigProb <= 0) return NaN;
+  return (modelWinProb / bookNoVigProb - 1) * 100;
+}
+
+/**
+ * Calculate ROI % from model win probability (0–1) vs book odds.
+ * Used when the model provides a direct win probability rather than ML.
+ *
+ * @param modelWinProb - Model's win probability as a decimal (0–1)
+ * @param bookML       - Book's American ML for the same side
+ * @param bookOppML    - Book's American ML for the opposite side
+ * @returns ROI as a percentage (e.g. 4.44), or NaN if any input is invalid.
+ */
+export function calculateRoiFromProb(
+  modelWinProb: number,
+  bookML: number,
+  bookOppML: number
+): number {
+  if (isNaN(modelWinProb) || isNaN(bookML) || isNaN(bookOppML)) return NaN;
+  if (modelWinProb <= 0 || modelWinProb >= 1) return NaN;
+  const rawBook = americanToImplied(bookML);
+  const rawOpp  = americanToImplied(bookOppML);
+  const vigTotal = rawBook + rawOpp;
+  if (vigTotal <= 0 || isNaN(vigTotal)) return NaN;
+  const bookNoVigProb = rawBook / vigTotal;
+  if (bookNoVigProb <= 0) return NaN;
+  return (modelWinProb / bookNoVigProb - 1) * 100;
+}
+
+/**
+ * Format ROI % for display.
+ * e.g. 4.44 → "4.44% ROI", -2.1 → "-2.10% ROI"
+ */
+export function formatRoi(roi: number): string {
+  if (isNaN(roi)) return '';
+  const sign = roi >= 0 ? '+' : '';
+  return `${sign}${roi.toFixed(2)}% ROI`;
+}

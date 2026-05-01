@@ -31,7 +31,7 @@ import { MLB_BY_ABBREV } from "@shared/mlbTeams";
 import { getGameTeamColorsClient } from "@shared/teamColors";
 import { useVisibility } from "@/hooks/useVisibility";
 import { useIsDesktop } from "@/hooks/useIsDesktop";
-import { americanToImplied, calculateEdge, getEdgeColor, getVerdict } from '@/lib/edgeUtils';
+import { americanToImplied, calculateEdge, calculateRoi, formatRoi, getEdgeColor, getVerdict } from '@/lib/edgeUtils';
 import { formatGameTime, toNum, spreadSign } from '@/lib/gameUtils';
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -509,9 +509,10 @@ function MergedSplitBar({
             overflow: 'hidden',
             width: '100%',
           }}>
-            {away > 0 && !isHomeFull && (
+            {/* Away segment — label flush LEFT (only when NOT full-bar) */}
+            {away > 0 && !isAwayFull && !isHomeFull && (
               <div style={{
-                flexGrow: isAwayFull ? 1 : away,
+                flexGrow: away,
                 flexShrink: 1,
                 flexBasis: 0,
                 minWidth: away < 10 ? 36 : 30,
@@ -521,18 +522,19 @@ function MergedSplitBar({
                 justifyContent: 'flex-start',
                 paddingLeft: 'clamp(4px,0.4vw,8px)',
                 paddingRight: 'clamp(4px,0.4vw,8px)',
-                borderRadius: isAwayFull ? '9999px' : '9999px 0 0 9999px',
+                borderRadius: '9999px 0 0 9999px',
               }} className="transition-all duration-700">
-                {/* thin-space U+2009 before % = 0.1em gap between digit and % symbol */}
-                <span style={{ ...segLabel, textAlign: 'left' }}>{away} %</span>
+                <span style={{ ...segLabel, textAlign: 'left' }}>{away} %</span>
               </div>
             )}
+            {/* Divider */}
             {!isAwayFull && !isHomeFull && away > 0 && home > 0 && (
               <div style={{ width: 1, background: 'rgba(255,255,255,0.25)', flexShrink: 0 }} />
             )}
-            {home > 0 && !isAwayFull && (
+            {/* Home segment — label flush RIGHT (only when NOT full-bar) */}
+            {home > 0 && !isHomeFull && !isAwayFull && (
               <div style={{
-                flexGrow: isHomeFull ? 1 : home,
+                flexGrow: home,
                 flexShrink: 1,
                 flexBasis: 0,
                 minWidth: home < 10 ? 36 : 30,
@@ -542,20 +544,32 @@ function MergedSplitBar({
                 justifyContent: 'flex-end',
                 paddingLeft: 'clamp(4px,0.4vw,8px)',
                 paddingRight: 'clamp(4px,0.4vw,8px)',
-                borderRadius: isHomeFull ? '9999px' : '0 9999px 9999px 0',
+                borderRadius: '0 9999px 9999px 0',
               }} className="transition-all duration-700">
-                <span style={{ ...segLabel, textAlign: 'right' }}>{home} %</span>
+                <span style={{ ...segLabel, textAlign: 'right' }}>{home} %</span>
               </div>
             )}
-            {isAwayFull && (
+            {/* 100% full-bar cases — EXCLUSIVE: only one can render */}
+            {isAwayFull && !isHomeFull && (
               <div style={{ flex: 1, background: awayColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px' }}>
-                <span style={{ ...segLabel, textAlign: 'center' }}>100 %</span>
+                <span style={{ ...segLabel, textAlign: 'center' }}>100 %</span>
               </div>
             )}
-            {isHomeFull && (
+            {isHomeFull && !isAwayFull && (
               <div style={{ flex: 1, background: homeColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px' }}>
-                <span style={{ ...segLabel, textAlign: 'center' }}>100 %</span>
+                <span style={{ ...segLabel, textAlign: 'center' }}>100 %</span>
               </div>
+            )}
+            {/* Both-full fallback: split 50/50 with both labels (data anomaly guard) */}
+            {isAwayFull && isHomeFull && (
+              <>
+                <div style={{ flex: 1, background: awayColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px 0 0 9999px' }}>
+                  <span style={{ ...segLabel, textAlign: 'center' }}>100 %</span>
+                </div>
+                <div style={{ flex: 1, background: homeColor, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0 9999px 9999px 0' }}>
+                  <span style={{ ...segLabel, textAlign: 'center' }}>100 %</span>
+                </div>
+              </>
             )}
           </div>
         );
@@ -922,6 +936,37 @@ function DesktopMergedPanel({
   const awayMlModelStyle     = showModel ? (hasMlEdge && spreadEdgeIsAway === true  ? modelGreen : modelWhite) : dimCell;
   const homeMlModelStyle     = showModel ? (hasMlEdge && spreadEdgeIsAway === false ? modelGreen : modelWhite) : dimCell;
 
+  // ── ROI % computations for EDGE column display ────────────────────────────
+  // ROI = (modelWinProb / bookNoVigProb - 1) * 100
+  // For each market, compute ROI from model fair odds vs book odds (no-vig adjusted).
+  // Falls back to NaN if any required odds are missing.
+  const bkAwaySpreadOddsNum = toNum(awaySpreadOddsStr);
+  const bkHomeSpreadOddsNum = toNum(homeSpreadOddsStr);
+  const bkOverOddsNum  = toNum(overOddsStr);
+  const bkUnderOddsNum = toNum(underOddsStr);
+  // Spread/Run Line/Puck Line ROI — use the model's fair odds at the book's spread line
+  const mdlAwaySpreadOddsNum = toNum(isNhlGame ? mdlAwayPLOdds : isMlbGame ? mdlAwaySpreadOdds : null);
+  const mdlHomeSpreadOddsNum = toNum(isNhlGame ? mdlHomePLOdds : isMlbGame ? mdlHomeSpreadOdds : null);
+  const spreadRoiAway = calculateRoi(mdlAwaySpreadOddsNum, bkAwaySpreadOddsNum, bkHomeSpreadOddsNum);
+  const spreadRoiHome = calculateRoi(mdlHomeSpreadOddsNum, bkHomeSpreadOddsNum, bkAwaySpreadOddsNum);
+  const spreadRoi = spreadEdgeIsAway === true ? spreadRoiAway
+    : spreadEdgeIsAway === false ? spreadRoiHome
+    : NaN;
+  // Total ROI — use model over/under odds vs book over/under odds
+  const mdlOverOddsNum  = toNum(mdlOverOdds);
+  const mdlUnderOddsNum = toNum(mdlUnderOdds);
+  const totalRoiOver  = calculateRoi(mdlOverOddsNum,  bkOverOddsNum,  bkUnderOddsNum);
+  const totalRoiUnder = calculateRoi(mdlUnderOddsNum, bkUnderOddsNum, bkOverOddsNum);
+  const totalRoi = totalEdgeIsOver === true ? totalRoiOver
+    : totalEdgeIsOver === false ? totalRoiUnder
+    : NaN;
+  // ML ROI — use model ML vs book ML
+  const mlRoi = spreadEdgeIsAway === true
+    ? calculateRoi(mdlAwayMlNum, bkAwayMlNum, bkHomeMlNum)
+    : spreadEdgeIsAway === false
+    ? calculateRoi(mdlHomeMlNum, bkHomeMlNum, bkAwayMlNum)
+    : NaN;
+
   // ── Splits data ───────────────────────────────────────────────────────────
   const awaySpreadLabel = !isNaN(awaySpread) ? `${awayAbbr} (${spreadSign(awaySpread)})` : awayAbbr;
   const homeSpreadLabel = !isNaN(homeSpread) ? `${homeAbbr} (${spreadSign(homeSpread)})` : homeAbbr;
@@ -1217,9 +1262,15 @@ function DesktopMergedPanel({
                         {normalized}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 'clamp(11px,0.9vw,14px)', color: 'rgba(255,255,255,0.90)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{mktLabel}</span>
-                      <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff !== null ? `${diff}${diff === 1 ? 'PT' : 'PTS'}` : '—'}</span>
+                      {!isNaN(spreadRoi) ? (
+                        <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{formatRoi(spreadRoi)}</span>
+                      ) : diff !== null ? (
+                        <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff}{diff === 1 ? 'PT' : 'PTS'}</span>
+                      ) : (
+                        <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>—</span>
+                      )}
                     </div>
                   </div>
                 );
@@ -1238,9 +1289,15 @@ function DesktopMergedPanel({
                         {normalized}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 'clamp(11px,0.9vw,14px)', color: 'rgba(255,255,255,0.90)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>TOTAL</span>
-                      <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff !== null ? `${diff}${diff === 1 ? 'PT' : 'PTS'}` : '—'}</span>
+                      {!isNaN(totalRoi) ? (
+                        <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{formatRoi(totalRoi)}</span>
+                      ) : diff !== null ? (
+                        <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff}{diff === 1 ? 'PT' : 'PTS'}</span>
+                      ) : (
+                        <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>—</span>
+                      )}
                     </div>
                   </div>
                 );
@@ -1261,9 +1318,13 @@ function DesktopMergedPanel({
                         {mlEdgeLabel}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 'clamp(11px,0.9vw,14px)', color: 'rgba(255,255,255,0.90)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>MONEYLINE</span>
-                      <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff}{diff === 1 ? 'PT' : 'PTS'}</span>
+                      {!isNaN(mlRoi) ? (
+                        <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{formatRoi(mlRoi)}</span>
+                      ) : (
+                        <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff}{diff === 1 ? 'PT' : 'PTS'}</span>
+                      )}
                     </div>
                   </div>
                 );
