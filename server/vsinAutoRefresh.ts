@@ -621,21 +621,51 @@ async function refreshMlb(todayStr: string): Promise<{
     console.warn(`${tag} VSiN MLB splits scrape failed (non-fatal):`, err);
   }
 
-  // ── Step 2: Build VSiN slug → abbrev lookup map ────────────────────────────
+  // ── Step 2: Build date-aware VSiN slug → abbrev lookup maps ──────────────────────
   // MLB teams stored as abbreviations in DB; VSiN uses single-word slugs.
   // Both orderings stored so swapped home/away is handled transparently.
-  const vsinSplitsMap = new Map<string, { game: VsinSplitsGame; swapped: boolean }>();
+  //
+  // CRITICAL BUG FIX: vsinSplits contains BOTH today's AND tomorrow's games.
+  // The map key is ABBREV@ABBREV — not gameId. Many teams play BOTH today AND tomorrow
+  // (e.g., BAL@NYY, TOR@MIN). Using a single map with .set() causes tomorrow's splits
+  // to overwrite today's splits for the same matchup.
+  //
+  // FIX: Build TWO separate maps — one for today's splits, one for tomorrow's splits.
+  // When applying to DB games, use the map that matches the DB game's date.
+  // This ensures today's DB games always get today's VSIN splits, and tomorrow's DB
+  // games always get tomorrow's VSIN splits.
+  type SplitsEntry = { game: VsinSplitsGame; swapped: boolean };
+  const todaySplitsMap    = new Map<string, SplitsEntry>();
+  const tomorrowSplitsMap = new Map<string, SplitsEntry>();
+
+  // Compute tomorrowStr early so we can use it for map partitioning
+  const tomorrowStr = (() => {
+    const d = new Date(todayStr + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
   for (const g of vsinSplits) {
     const awayTeam = getMlbTeamByVsinSlug(g.awayVsinSlug);
     const homeTeam = getMlbTeamByVsinSlug(g.homeVsinSlug);
     if (awayTeam && homeTeam) {
-      // Key by abbreviation (how DB stores MLB teams)
-      vsinSplitsMap.set(`${awayTeam.abbrev}@${homeTeam.abbrev}`, { game: g, swapped: false });
-      vsinSplitsMap.set(`${homeTeam.abbrev}@${awayTeam.abbrev}`, { game: g, swapped: true });
-      console.log(
-        `${tag} Mapped VSiN splits: ${awayTeam.abbrev} @ ${homeTeam.abbrev} ` +
-        `(awaySlug="${g.awayVsinSlug}" homeSlug="${g.homeVsinSlug}")`
-      );
+      // Determine which date this VSIN game belongs to
+      const gameDate = g.gameId.length >= 8 ? `${g.gameId.slice(0,4)}-${g.gameId.slice(4,6)}-${g.gameId.slice(6,8)}` : 'unknown';
+      const targetMap = gameDate === tomorrowStr ? tomorrowSplitsMap : todaySplitsMap;
+      const normalKey = `${awayTeam.abbrev}@${homeTeam.abbrev}`;
+      const swappedKey = `${homeTeam.abbrev}@${awayTeam.abbrev}`;
+      if (!targetMap.has(normalKey)) {
+        targetMap.set(normalKey, { game: g, swapped: false });
+        targetMap.set(swappedKey, { game: g, swapped: true });
+        console.log(
+          `${tag} Mapped VSiN splits [${gameDate}]: ${awayTeam.abbrev} @ ${homeTeam.abbrev} ` +
+          `(awaySlug="${g.awayVsinSlug}" homeSlug="${g.homeVsinSlug}")`
+        );
+      } else {
+        console.log(
+          `${tag} SKIP_DUPLICATE [${gameDate}]: ${awayTeam.abbrev} @ ${homeTeam.abbrev} — already mapped`
+        );
+      }
     } else {
       console.warn(
         `${tag} UNRESOLVED VSiN slug: "${g.awayVsinSlug}" @ "${g.homeVsinSlug}" ` +
@@ -644,6 +674,16 @@ async function refreshMlb(todayStr: string): Promise<{
       );
     }
   }
+  console.log(`${tag} Split maps: today=${todaySplitsMap.size / 2} games, tomorrow=${tomorrowSplitsMap.size / 2} games`);
+
+  // Backward-compat alias: for today's DB games, fall back to tomorrowSplitsMap if not in todaySplitsMap
+  // (handles edge case where a game is only on VSIN's tomorrow view but the DB has it as today)
+  const getEntry = (key: string, dbGameDate: string): SplitsEntry | undefined => {
+    if (dbGameDate === tomorrowStr) {
+      return tomorrowSplitsMap.get(key) ?? todaySplitsMap.get(key);
+    }
+    return todaySplitsMap.get(key) ?? tomorrowSplitsMap.get(key);
+  };
 
   // -- Step 3: Apply VSiN splits to today + tomorrow's DB games --
   // VSiN's MLB page shows games for the next 1-2 days, so we query both
@@ -652,11 +692,7 @@ async function refreshMlb(todayStr: string): Promise<{
   let rlPopulated = 0;    // freshness monitor: today's games with real run-line splits
   let rlPending = 0;      // freshness monitor: today's games with 0/0 RL (market not open)
   let rlUnmatched = 0;    // freshness monitor: DB games not found in VSIN map
-  const tomorrowStr = (() => {
-    const d = new Date(todayStr + "T12:00:00Z");
-    d.setUTCDate(d.getUTCDate() + 1);
-    return d.toISOString().slice(0, 10);
-  })();
+  // tomorrowStr already computed above for map partitioning
   const [todayGames, tomorrowGames] = await Promise.all([
     listGamesByDate(todayStr, "MLB"),
     listGamesByDate(tomorrowStr, "MLB"),
@@ -670,12 +706,13 @@ async function refreshMlb(todayStr: string): Promise<{
 
   for (const dbGame of existingToday) {
     const key = `${dbGame.awayTeam}@${dbGame.homeTeam}`;
-    const entry = vsinSplitsMap.get(key);
+    const entry = getEntry(key, dbGame.gameDate);
     if (!entry) {
       console.log(
         `${tag} NO_VSIN_MATCH: ${dbGame.awayTeam} @ ${dbGame.homeTeam} ` +
-        `(gameId=${dbGame.id}) — not in VSiN splits today`
+        `(gameId=${dbGame.id} date=${dbGame.gameDate}) — not in VSiN splits`
       );
+      rlUnmatched++;
       continue;
     }
     const { game: splits, swapped } = entry;
