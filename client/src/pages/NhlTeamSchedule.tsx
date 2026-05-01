@@ -108,11 +108,11 @@ function ResultChip({ label, variant }: { label: string; variant: "win" | "loss"
   const colors = {
     win:     "bg-emerald-600/20 text-emerald-400 border border-emerald-600/40",
     loss:    "bg-red-600/20 text-red-400 border border-red-600/40",
-    push:    "bg-gray-600/20 text-gray-400 border border-gray-600/40",
-    neutral: "bg-white/5 text-gray-500 border border-white/10",
+    push:    "bg-gray-600/20 text-zinc-200 border border-gray-600/40",
+    neutral: "bg-white/5 text-zinc-300 border border-white/10",
   };
   return (
-    <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold font-mono", colors[variant])}>
+    <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold font-mono", colors[variant])}>
       {label}
     </span>
   );
@@ -167,17 +167,17 @@ function GameRow({
       isUpcoming && "opacity-70"
     )}>
       {/* Date */}
-      <td className="px-3 py-2.5 text-[10px] text-gray-400 font-mono whitespace-nowrap">
+      <td className="px-3 py-2.5 text-sm text-zinc-200 font-mono whitespace-nowrap">
         <div>{formatGameDate(game.gameDate)}</div>
         {isUpcoming && (
-          <div className="text-[9px] text-gray-600">{formatStartTime(game.startTimeUtc)}</div>
+          <div className="text-xs text-zinc-300">{formatStartTime(game.startTimeUtc)}</div>
         )}
       </td>
 
       {/* Opponent */}
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-[9px] text-gray-600 font-mono w-4 flex-shrink-0">
+          <span className="text-xs text-zinc-300 font-mono w-4 flex-shrink-0">
             {isHome ? "vs" : "@"}
           </span>
           {opponentTeam?.logoUrl && (
@@ -188,7 +188,7 @@ function GameRow({
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           )}
-          <span className="text-[10px] text-white font-mono font-bold">{opponentAbbr}</span>
+          <span className="text-sm text-white font-mono font-bold">{opponentAbbr}</span>
         </div>
       </td>
 
@@ -197,20 +197,20 @@ function GameRow({
         {hasScore ? (
           <div className="flex flex-col items-center gap-0.5">
             <ResultChip label={resultLabel} variant={resultVariant} />
-            <span className="text-[9px] text-gray-500 font-mono">
+            <span className="text-xs text-zinc-300 font-mono">
               {teamScore}-{oppScore}
             </span>
           </div>
         ) : (
-          <span className="text-[9px] text-gray-600 font-mono">—</span>
+          <span className="text-xs text-zinc-300 font-mono">—</span>
         )}
       </td>
 
       {/* Puck Line */}
       <td className="px-3 py-2.5 text-center">
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[10px] text-gray-300 font-mono">
-            {fmtLine(teamPuckLine)} <span className="text-gray-600">{fmtOdds(teamPuckLineOdds)}</span>
+          <span className="text-sm text-gray-300 font-mono">
+            {fmtLine(teamPuckLine)} <span className="text-zinc-300">{fmtOdds(teamPuckLineOdds)}</span>
           </span>
           {isCompleted && <ResultChip label={spreadLabel} variant={spreadVariant} />}
         </div>
@@ -219,10 +219,10 @@ function GameRow({
       {/* Total */}
       <td className="px-3 py-2.5 text-center">
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[10px] text-gray-300 font-mono">
+          <span className="text-sm text-gray-300 font-mono">
             {fmtTotal(game.dkTotal)}
           </span>
-          <span className="text-[9px] text-gray-600 font-mono">
+          <span className="text-xs text-zinc-300 font-mono">
             {fmtOdds(game.dkOverOdds)} / {fmtOdds(game.dkUnderOdds)}
           </span>
           {isCompleted && totalResult !== "—" && (
@@ -233,7 +233,7 @@ function GameRow({
 
       {/* ML */}
       <td className="px-3 py-2.5 text-center">
-        <span className="text-[10px] text-gray-300 font-mono">{fmtOdds(teamML)}</span>
+        <span className="text-sm text-gray-300 font-mono">{fmtOdds(teamML)}</span>
       </td>
     </tr>
   );
@@ -284,7 +284,7 @@ export default function NhlTeamSchedule() {
   if (!slug) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-gray-500 font-mono text-sm">Invalid team slug.</p>
+        <p className="text-zinc-300 font-mono text-sm">Invalid team slug.</p>
       </div>
     );
   }
@@ -298,7 +298,7 @@ export default function NhlTeamSchedule() {
             variant="ghost"
             size="sm"
             onClick={() => navigate("/")}
-            className="text-gray-400 hover:text-white p-1.5"
+            className="text-zinc-200 hover:text-white p-1.5"
           >
             <ArrowLeft className="w-4 h-4" />
           </Button>
@@ -314,7 +314,7 @@ export default function NhlTeamSchedule() {
             <h1 className="text-sm font-bold text-white font-mono">
               {team?.name ?? slug}
             </h1>
-            <p className="text-[9px] text-gray-500 font-mono">
+            <p className="text-xs text-zinc-300 font-mono">
               NHL · Full Schedule · DK NJ Odds
             </p>
           </div>
@@ -331,27 +331,27 @@ export default function NhlTeamSchedule() {
         <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="bg-card border border-white/[0.06] rounded-lg p-3 text-center">
             <div className="flex items-center justify-center gap-1 mb-1">
-              <TrendingUp className="w-3 h-3 text-gray-500" />
-              <span className="text-[9px] text-gray-500 font-mono uppercase tracking-widest">Record</span>
+              <TrendingUp className="w-3 h-3 text-zinc-300" />
+              <span className="text-xs text-zinc-300 font-mono uppercase tracking-widest">Record</span>
             </div>
             <p className="text-lg font-bold text-white font-mono">{wins}-{losses}</p>
-            <p className="text-[9px] text-gray-600 font-mono">{completedGames.length} games</p>
+            <p className="text-xs text-zinc-300 font-mono">{completedGames.length} games</p>
           </div>
           <div className="bg-card border border-white/[0.06] rounded-lg p-3 text-center">
             <div className="flex items-center justify-center gap-1 mb-1">
-              <Calendar className="w-3 h-3 text-gray-500" />
-              <span className="text-[9px] text-gray-500 font-mono uppercase tracking-widest">Puck Line</span>
+              <Calendar className="w-3 h-3 text-zinc-300" />
+              <span className="text-xs text-zinc-300 font-mono uppercase tracking-widest">Puck Line</span>
             </div>
             <p className="text-lg font-bold text-white font-mono">{atsWins}-{atsLosses}</p>
-            <p className="text-[9px] text-gray-600 font-mono">Puck line coverage</p>
+            <p className="text-xs text-zinc-300 font-mono">Puck line coverage</p>
           </div>
           <div className="bg-card border border-white/[0.06] rounded-lg p-3 text-center">
             <div className="flex items-center justify-center gap-1 mb-1">
-              <Calendar className="w-3 h-3 text-gray-500" />
-              <span className="text-[9px] text-gray-500 font-mono uppercase tracking-widest">O/U</span>
+              <Calendar className="w-3 h-3 text-zinc-300" />
+              <span className="text-xs text-zinc-300 font-mono uppercase tracking-widest">O/U</span>
             </div>
             <p className="text-lg font-bold text-white font-mono">{overs}-{unders}</p>
-            <p className="text-[9px] text-gray-600 font-mono">Over-Under</p>
+            <p className="text-xs text-zinc-300 font-mono">Over-Under</p>
           </div>
         </div>
 
@@ -359,7 +359,7 @@ export default function NhlTeamSchedule() {
         {scheduleQuery.isLoading ? (
           <div className="flex items-center justify-center py-12">
             <RefreshCw className="w-5 h-5 text-blue-400 animate-spin mr-3" />
-            <span className="text-gray-500 font-mono text-sm">Loading schedule...</span>
+            <span className="text-zinc-300 font-mono text-sm">Loading schedule...</span>
           </div>
         ) : scheduleQuery.error ? (
           <div className="bg-red-900/20 border border-red-700/40 rounded-lg p-4">
@@ -367,15 +367,15 @@ export default function NhlTeamSchedule() {
           </div>
         ) : games.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-500 font-mono text-sm">No schedule data found for this team.</p>
-            <p className="text-gray-700 font-mono text-xs mt-1">
+            <p className="text-zinc-300 font-mono text-sm">No schedule data found for this team.</p>
+            <p className="text-zinc-300 font-mono text-sm mt-1">
               Data will populate as games are played and stored from the DK NJ API.
             </p>
           </div>
         ) : (
           <div className="bg-card border border-white/[0.06] rounded-lg overflow-hidden">
             <div className="px-4 py-2 border-b border-white/[0.06] flex items-center justify-between">
-              <span className="text-[9px] text-gray-500 font-mono uppercase tracking-widest">
+              <span className="text-xs text-zinc-300 font-mono uppercase tracking-widest">
                 Full Schedule — {games.length} games
               </span>
               <Badge variant="outline" className="text-[8px] font-mono text-blue-400 border-blue-600/40">
@@ -387,12 +387,12 @@ export default function NhlTeamSchedule() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/[0.06]">
-                    <th className="px-3 py-2 text-left text-[9px] text-gray-600 font-mono uppercase tracking-widest">Date</th>
-                    <th className="px-3 py-2 text-left text-[9px] text-gray-600 font-mono uppercase tracking-widest">Opponent</th>
-                    <th className="px-3 py-2 text-center text-[9px] text-gray-600 font-mono uppercase tracking-widest">Result</th>
-                    <th className="px-3 py-2 text-center text-[9px] text-gray-600 font-mono uppercase tracking-widest">Puck Line</th>
-                    <th className="px-3 py-2 text-center text-[9px] text-gray-600 font-mono uppercase tracking-widest">O/U</th>
-                    <th className="px-3 py-2 text-center text-[9px] text-gray-600 font-mono uppercase tracking-widest">ML</th>
+                    <th className="px-3 py-2 text-left text-xs text-zinc-300 font-mono uppercase tracking-widest">Date</th>
+                    <th className="px-3 py-2 text-left text-xs text-zinc-300 font-mono uppercase tracking-widest">Opponent</th>
+                    <th className="px-3 py-2 text-center text-xs text-zinc-300 font-mono uppercase tracking-widest">Result</th>
+                    <th className="px-3 py-2 text-center text-xs text-zinc-300 font-mono uppercase tracking-widest">Puck Line</th>
+                    <th className="px-3 py-2 text-center text-xs text-zinc-300 font-mono uppercase tracking-widest">O/U</th>
+                    <th className="px-3 py-2 text-center text-xs text-zinc-300 font-mono uppercase tracking-widest">ML</th>
                   </tr>
                 </thead>
                 <tbody>

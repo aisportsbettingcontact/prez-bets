@@ -692,7 +692,7 @@ export default function ModelResults() {
                 {formatDateNav(gameDate)}
               </span>
               {gameDate === todayPst() && (
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: 'rgba(57,255,20,0.15)', color: '#39FF14' }}>
+                <span className="text-sm font-semibold px-1.5 py-0.5 rounded" style={{ background: 'rgba(57,255,20,0.15)', color: '#39FF14' }}>
                   TODAY
                 </span>
               )}

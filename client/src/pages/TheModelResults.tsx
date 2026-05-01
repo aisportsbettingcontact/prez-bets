@@ -1259,7 +1259,7 @@ export default function TheModelResults() {
               </button>
               <span className="text-xs font-bold text-foreground tracking-wide whitespace-nowrap">{formatDateNav(gameDate)}</span>
               {gameDate === todayPst() && (
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: "rgba(57,255,20,0.15)", color: "#39FF14" }}>TODAY</span>
+                <span className="text-sm font-semibold px-1.5 py-0.5 rounded" style={{ background: "rgba(57,255,20,0.15)", color: "#39FF14" }}>TODAY</span>
               )}
               <button type="button" onClick={() => setGameDate(d => addDays(d, 1))} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10 flex-shrink-0">
                 <ChevronRight size={14} style={{ color: "hsl(var(--muted-foreground))" }} />

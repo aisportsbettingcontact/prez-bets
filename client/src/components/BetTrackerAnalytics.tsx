@@ -309,7 +309,7 @@ export function EquityChart({ points }: { points: EquityPoint[] }) {
 
   if (points.length === 0) {
     return (
-      <div className="flex items-center justify-center h-40 text-zinc-600 text-xs">
+      <div className="flex items-center justify-center h-40 text-zinc-300 text-xs">
         No settled bets yet — equity curve will appear after first graded bet
       </div>
     );
@@ -350,14 +350,14 @@ export function EquityChart({ points }: { points: EquityPoint[] }) {
             {tooltip.point.pl >= 0 ? "+" : ""}
             {tooltip.point.pl.toFixed(2)}u
           </div>
-          <div className="text-zinc-500 font-mono">
+          <div className="text-zinc-300 font-mono">
             Cumulative:{" "}
             <span className={finalPL >= 0 ? "text-green-400" : "text-red-400"}>
               {tooltip.point.cumPL >= 0 ? "+" : ""}
               {tooltip.point.cumPL.toFixed(2)}u
             </span>
           </div>
-          <div className="text-zinc-600">{tooltip.point.date}</div>
+          <div className="text-zinc-300">{tooltip.point.date}</div>
         </div>
       )}
     </div>
@@ -380,8 +380,8 @@ export function BreakdownPanel({
     <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3">
       {/* Panel header */}
       <div className="flex items-center gap-1.5 mb-2.5">
-        <span className="text-zinc-400">{icon}</span>
-        <span className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">
+        <span className="text-zinc-200">{icon}</span>
+        <span className="text-sm font-bold tracking-widest text-zinc-200 uppercase">
           {title}
         </span>
       </div>
@@ -398,24 +398,24 @@ export function BreakdownPanel({
               {/* Row 1: label + stats inline */}
               <div className="flex items-baseline justify-between gap-1 flex-wrap">
                 {/* Label */}
-                <span className="text-white text-[11px] font-bold leading-tight shrink-0 mr-1">
+                <span className="text-white text-sm font-bold leading-tight shrink-0 mr-1">
                   {e.key}
                 </span>
 
                 {/* Stats cluster — right-aligned, wraps on very narrow */}
                 <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
                   {/* W-L (WP%) */}
-                  <span className="text-[10px] text-zinc-400 font-mono whitespace-nowrap">
+                  <span className="text-sm text-zinc-200 font-mono whitespace-nowrap">
                     {e.wins}W–{e.losses}L
                     {e.pushes > 0 ? `–${e.pushes}P` : ""}{" "}
-                    <span className="text-zinc-500">
+                    <span className="text-zinc-300">
                       ({winPct.toFixed(0)}%)
                     </span>
                   </span>
 
                   {/* Net P/L */}
                   <span
-                    className={`text-[10px] font-bold font-mono whitespace-nowrap ${
+                    className={`text-sm font-bold font-mono whitespace-nowrap ${
                       isPos ? "text-green-400" : "text-red-400"
                     }`}
                   >
@@ -425,7 +425,7 @@ export function BreakdownPanel({
 
                   {/* ROI */}
                   <span
-                    className={`text-[10px] font-mono whitespace-nowrap ${
+                    className={`text-sm font-mono whitespace-nowrap ${
                       isPos ? "text-green-400/75" : "text-red-400/75"
                     }`}
                   >
@@ -548,11 +548,11 @@ export function HandicapperSelector({
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700 text-xs text-white hover:bg-zinc-700/60 transition-all"
       >
-        <Users size={12} className="text-zinc-400" />
+        <Users size={12} className="text-zinc-200" />
         <span className="font-mono">
           {selected?.username ?? "Select Handicapper"}
         </span>
-        <ChevronDown size={12} className="text-zinc-500" />
+        <ChevronDown size={12} className="text-zinc-300" />
       </button>
       {open && (
         <div className="absolute top-full mt-1 left-0 z-20 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl min-w-[180px] py-1">
@@ -570,7 +570,7 @@ export function HandicapperSelector({
             >
               {h.username}
               {h.id === currentUserId && (
-                <span className="text-zinc-500 ml-1">(you)</span>
+                <span className="text-zinc-300 ml-1">(you)</span>
               )}
             </button>
           ))}

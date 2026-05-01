@@ -61,7 +61,7 @@ const ROLE_COLORS = {
   owner:       "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
   admin:       "bg-blue-500/15 text-blue-400 border-blue-500/30",
   handicapper: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  user:        "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+  user:        "bg-zinc-500/15 text-zinc-200 border-zinc-500/30",
 };
 
 const EST_OPTS: Intl.DateTimeFormatOptions = { timeZone: "America/New_York" };
@@ -167,7 +167,7 @@ function ColFilterDropdown({
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen((v) => !v)}
         className={`flex items-center gap-1 group transition-colors ${
-          isActive ? "text-white" : "text-zinc-400 hover:text-zinc-200"
+          isActive ? "text-white" : "text-zinc-200 hover:text-zinc-200"
         }`}
       >
         <span className="text-xs font-semibold tracking-wider">{label}</span>
@@ -190,7 +190,7 @@ function ColFilterDropdown({
         <div className="absolute left-0 top-full mt-1 z-50 min-w-[160px] bg-[#1a1a1a] border border-white/10 rounded-lg shadow-xl py-1">
           {/* Sort options */}
           <div className="px-2 py-1 border-b border-white/8">
-            <p className="text-[10px] text-zinc-500 tracking-wider mb-1 px-1">SORT</p>
+            <p className="text-sm text-zinc-300 tracking-wider mb-1 px-1">SORT</p>
             <button type="button" onClick={() => toggleSort("asc")}
               className={`flex items-center gap-2 w-full px-2 py-1 rounded text-xs transition-colors ${
                 state.sort === "asc" ? "bg-blue-500/20 text-blue-300" : "text-zinc-300 hover:bg-white/5"
@@ -210,9 +210,9 @@ function ColFilterDropdown({
           {/* Filter options */}
           <div className="px-2 py-1">
             <div className="flex items-center justify-between mb-1 px-1">
-              <p className="text-[10px] text-zinc-500 tracking-wider">FILTER</p>
+              <p className="text-sm text-zinc-300 tracking-wider">FILTER</p>
               {isFiltered && (
-                <button type="button" onClick={selectAll} className="text-[10px] text-blue-400 hover:text-blue-300">
+                <button type="button" onClick={selectAll} className="text-sm text-blue-400 hover:text-blue-300">
                   All
                 </button>
               )}
@@ -343,7 +343,7 @@ function MetricsPanel() {
       label: "NON-PAYING MEMBERS",
       sublabel: "Accounts without active access",
       value: loading ? "—" : String(memberData?.nonPaying ?? 0),
-      color: "text-zinc-400",
+      color: "text-zinc-200",
       border: "border-zinc-500/20",
     },
     {
@@ -359,9 +359,9 @@ function MetricsPanel() {
     <div className="mb-6 space-y-3">
       {/* Section label */}
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold tracking-[0.15em] text-zinc-500 uppercase">Platform Metrics</span>
+        <span className="text-sm font-semibold tracking-[0.15em] text-zinc-300 uppercase">Platform Metrics</span>
         <div className="flex-1 h-px bg-white/6" />
-        {loading && <RefreshCw className="w-3 h-3 text-zinc-600 animate-spin" />}
+        {loading && <RefreshCw className="w-3 h-3 text-zinc-300 animate-spin" />}
       </div>
 
       {/* Row 1 — Session KPIs */}
@@ -369,8 +369,8 @@ function MetricsPanel() {
         {sessionKpis.map((k) => (
           <div key={k.label} className={`bg-white/3 border ${k.border} rounded-lg px-3 sm:px-4 py-2.5 sm:py-3`}>
             <div className={`text-lg sm:text-xl font-bold font-mono ${k.color}`}>{k.value}</div>
-            <div className="text-[9px] sm:text-[10px] font-semibold tracking-wider text-zinc-300 mt-0.5">{k.label}</div>
-            <div className="text-[9px] sm:text-[10px] text-zinc-600 mt-0.5">{k.sublabel}</div>
+            <div className="text-xs sm:text-sm font-semibold tracking-wider text-zinc-300 mt-0.5">{k.label}</div>
+            <div className="text-xs sm:text-sm text-zinc-300 mt-0.5">{k.sublabel}</div>
           </div>
         ))}
       </div>
@@ -379,8 +379,8 @@ function MetricsPanel() {
         {memberKpis.map((k) => (
           <div key={k.label} className={`bg-white/3 border ${k.border} rounded-lg px-3 sm:px-4 py-2.5 sm:py-3`}>
             <div className={`text-lg sm:text-xl font-bold font-mono ${k.color}`}>{k.value}</div>
-            <div className="text-[9px] sm:text-[10px] font-semibold tracking-wider text-zinc-300 mt-0.5">{k.label}</div>
-            <div className="text-[9px] sm:text-[10px] text-zinc-600 mt-0.5">{k.sublabel}</div>
+            <div className="text-xs sm:text-sm font-semibold tracking-wider text-zinc-300 mt-0.5">{k.label}</div>
+            <div className="text-xs sm:text-sm text-zinc-300 mt-0.5">{k.sublabel}</div>
           </div>
         ))}
       </div>
@@ -592,7 +592,7 @@ export default function UserManagement() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <RefreshCw className="w-6 h-6 text-zinc-500 animate-spin" />
+        <RefreshCw className="w-6 h-6 text-zinc-300 animate-spin" />
       </div>
     );
   }
@@ -603,7 +603,7 @@ export default function UserManagement() {
       <div className="sticky top-0 z-40 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/8 w-full">
         <div className="w-full px-3 sm:px-5 lg:px-8 py-3 flex items-center gap-2 sm:gap-4">
           <button type="button" onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-sm"
+            className="flex items-center gap-1.5 text-zinc-200 hover:text-white transition-colors text-sm"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
@@ -656,7 +656,7 @@ export default function UserManagement() {
           ].map((stat) => (
             <div key={stat.label} className="bg-white/4 border border-white/8 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3">
               <div className="text-lg sm:text-xl font-bold text-white">{stat.value}</div>
-              <div className="text-[10px] sm:text-xs text-zinc-500 tracking-wide">{stat.label}</div>
+              <div className="text-sm sm:text-xs text-zinc-300 tracking-wide">{stat.label}</div>
             </div>
           ))}
         </div>
@@ -666,7 +666,7 @@ export default function UserManagement() {
 
         {/* Search bar */}
         <div className="mb-4 relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
           </svg>
           <input
@@ -674,11 +674,11 @@ export default function UserManagement() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by username or email…"
-            className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-9 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-white/25 transition-colors"
+            className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-9 py-2 text-sm text-white placeholder:text-zinc-300 focus:outline-none focus:border-white/25 transition-colors"
           />
           {searchQuery && (
             <button type="button" onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-300 transition-colors"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -687,7 +687,7 @@ export default function UserManagement() {
 
         {/* Filtered count indicator */}
         {users.length !== rawUsers.length && (
-          <div className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
+          <div className="mb-3 flex items-center gap-2 text-xs text-zinc-200">
             <span>Showing <span className="text-white font-semibold">{users.length}</span> of <span className="text-white font-semibold">{rawUsers.length}</span> accounts</span>
             <button type="button" onClick={() => {
                 setSearchQuery("");
@@ -731,22 +731,22 @@ export default function UserManagement() {
                 <TableHead>
                   <ColFilterDropdown label="LAST SIGN IN" colKey="lastSignIn" options={opts.lastSignIn} state={cols.lastSignIn} onChange={(s) => updateCol("lastSignIn", s)} />
                 </TableHead>
-                <TableHead className="text-zinc-400 font-semibold tracking-wider text-xs">DISCORD STATUS</TableHead>
-                <TableHead className="text-zinc-400 font-semibold tracking-wider text-xs">DISCORD USERNAME</TableHead>
-                <TableHead className="text-zinc-400 font-semibold tracking-wider text-xs text-right">ACTIONS</TableHead>
+                <TableHead className="text-zinc-200 font-semibold tracking-wider text-xs">DISCORD STATUS</TableHead>
+                <TableHead className="text-zinc-200 font-semibold tracking-wider text-xs">DISCORD USERNAME</TableHead>
+                <TableHead className="text-zinc-200 font-semibold tracking-wider text-xs text-right">ACTIONS</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-12 text-zinc-500">
+                  <TableCell colSpan={10} className="text-center py-12 text-zinc-300">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                     Loading accounts...
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-12 text-zinc-500">
+                  <TableCell colSpan={10} className="text-center py-12 text-zinc-300">
                     {rawUsers.length === 0 ? "No accounts yet. Create the first one." : "No accounts match the current filters."}
                   </TableCell>
                 </TableRow>
@@ -754,7 +754,7 @@ export default function UserManagement() {
                 users.map((user) => (
                   <TableRow key={user.id} className="border-white/5 hover:bg-white/3">
                     <TableCell className="font-semibold text-white">@{user.username}</TableCell>
-                    <TableCell className="text-zinc-400 text-sm">{user.email}</TableCell>
+                    <TableCell className="text-zinc-200 text-sm">{user.email}</TableCell>
                     <TableCell>
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border ${ROLE_COLORS[user.role]}`}>
                         {ROLE_ICONS[user.role]}
@@ -770,27 +770,27 @@ export default function UserManagement() {
                         {user.hasAccess ? "YES" : "NO"}
                       </span>
                     </TableCell>
-                    <TableCell className="text-zinc-400 text-sm">{formatExpiry(user.expiryDate)}</TableCell>
+                    <TableCell className="text-zinc-200 text-sm">{formatExpiry(user.expiryDate)}</TableCell>
                     <TableCell>
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${
                           user.termsAccepted
                             ? "bg-green-500/15 text-green-400 border-green-500/30"
-                            : "bg-zinc-500/15 text-zinc-500 border-zinc-500/20"
+                            : "bg-zinc-500/15 text-zinc-300 border-zinc-500/20"
                         }`}
                         title={user.termsAccepted && user.termsAcceptedAt ? `Accepted: ${new Date(user.termsAcceptedAt).toLocaleString()}` : "Not yet accepted"}
                       >
                         {user.termsAccepted ? "ACCEPTED" : "PENDING"}
                       </span>
                     </TableCell>
-                    <TableCell className="text-zinc-400 text-sm">{formatDate(user.lastSignedIn)}</TableCell>
+                    <TableCell className="text-zinc-200 text-sm">{formatDate(user.lastSignedIn)}</TableCell>
                     {/* DISCORD STATUS column */}
                     <TableCell>
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border ${
                           user.discordId
                             ? "bg-[rgba(88,101,242,0.15)] text-[#7289da] border-[rgba(88,101,242,0.4)]"
-                            : "bg-zinc-500/10 text-zinc-500 border-zinc-500/20"
+                            : "bg-zinc-500/10 text-zinc-300 border-zinc-500/20"
                         }`}
                         title={user.discordId && user.discordConnectedAt
                           ? `Discord ID: ${user.discordId} · Linked: ${new Date(user.discordConnectedAt).toLocaleString()}`
@@ -813,18 +813,18 @@ export default function UserManagement() {
                       {user.discordUsername ? (
                         <span className="text-[#7289da] font-medium">@{user.discordUsername}</span>
                       ) : (
-                        <span className="text-zinc-600">—</span>
+                        <span className="text-zinc-300">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button type="button" onClick={() => openEdit(user)}
-                          className="p-1.5 rounded hover:bg-white/8 text-zinc-400 hover:text-white transition-colors"
+                          className="p-1.5 rounded hover:bg-white/8 text-zinc-200 hover:text-white transition-colors"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button type="button" onClick={() => forceLogoutUserMutation.mutate({ id: user.id })}
-                          className="p-1.5 rounded hover:bg-orange-500/15 text-zinc-400 hover:text-orange-400 transition-colors"
+                          className="p-1.5 rounded hover:bg-orange-500/15 text-zinc-200 hover:text-orange-400 transition-colors"
                           disabled={user.id === appUser?.id || forceLogoutUserMutation.isPending}
                           title="Force logout this user"
                         >
@@ -841,7 +841,7 @@ export default function UserManagement() {
                                 disconnectDiscordMutation.mutate({ id: user.id });
                               }
                             }}
-                            className="p-1.5 rounded hover:bg-[rgba(88,101,242,0.2)] text-zinc-400 hover:text-[#7289da] transition-colors"
+                            className="p-1.5 rounded hover:bg-[rgba(88,101,242,0.2)] text-zinc-200 hover:text-[#7289da] transition-colors"
                             disabled={disconnectDiscordMutation.isPending}
                             title={`Unlink Discord @${user.discordUsername ?? user.discordId}`}
                           >
@@ -852,7 +852,7 @@ export default function UserManagement() {
                           </button>
                         )}
                         <button type="button" onClick={() => setDeleteConfirm(user)}
-                          className="p-1.5 rounded hover:bg-red-500/15 text-zinc-400 hover:text-red-400 transition-colors"
+                          className="p-1.5 rounded hover:bg-red-500/15 text-zinc-200 hover:text-red-400 transition-colors"
                           disabled={user.id === appUser?.id}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -880,28 +880,28 @@ export default function UserManagement() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-zinc-400 text-xs tracking-wider">EMAIL</Label>
+              <Label className="text-zinc-200 text-xs tracking-wider">EMAIL</Label>
               <Input
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                 placeholder="user@example.com"
-                className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600"
+                className="bg-white/5 border-white/10 text-white placeholder:text-zinc-300"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-zinc-400 text-xs tracking-wider">USERNAME</Label>
+              <Label className="text-zinc-200 text-xs tracking-wider">USERNAME</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">@</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-300">@</span>
                 <Input
                   value={form.username.replace(/^@/, "")}
                   onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
                   placeholder="username"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 pl-7"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-zinc-300 pl-7"
                 />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-zinc-400 text-xs tracking-wider">
+              <Label className="text-zinc-200 text-xs tracking-wider">
                 {editUser ? "NEW PASSWORD (leave blank to keep current)" : "PASSWORD"}
               </Label>
               <div className="relative">
@@ -910,10 +910,10 @@ export default function UserManagement() {
                   value={form.password}
                   onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                   placeholder={editUser ? "••••••••" : "Min 8 characters"}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 pr-10"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-zinc-300 pr-10"
                 />
                 <button type="button" onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-300 transition-colors"
                   tabIndex={-1}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
@@ -923,7 +923,7 @@ export default function UserManagement() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-zinc-400 text-xs tracking-wider">ROLE</Label>
+                <Label className="text-zinc-200 text-xs tracking-wider">ROLE</Label>
                 <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as FormState["role"] }))}>
                   <SelectTrigger className="bg-white/5 border-white/10 text-white">
                     <SelectValue />
@@ -937,7 +937,7 @@ export default function UserManagement() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-zinc-400 text-xs tracking-wider">ACCESS</Label>
+                <Label className="text-zinc-200 text-xs tracking-wider">ACCESS</Label>
                 <div className="flex items-center gap-2 h-10 px-3 bg-white/5 border border-white/10 rounded-md">
                   <Switch
                     checked={form.hasAccess}
@@ -950,7 +950,7 @@ export default function UserManagement() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-zinc-400 text-xs tracking-wider">EXPIRY DATE</Label>
+              <Label className="text-zinc-200 text-xs tracking-wider">EXPIRY DATE</Label>
               <Select value={form.expiryType} onValueChange={(v) => setForm((f) => ({ ...f, expiryType: v as "lifetime" | "custom" }))}>
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue />
@@ -974,7 +974,7 @@ export default function UserManagement() {
             <Button
               variant="outline"
               onClick={() => { setShowCreate(false); setEditUser(null); }}
-              className="border-white/10 text-zinc-400 hover:text-white"
+              className="border-white/10 text-zinc-200 hover:text-white"
             >
               Cancel
             </Button>
@@ -999,14 +999,14 @@ export default function UserManagement() {
               FORCE LOGOUT ALL
             </DialogTitle>
           </DialogHeader>
-          <p className="text-zinc-400 text-sm py-2">
+          <p className="text-zinc-200 text-sm py-2">
             This will immediately invalidate all active sessions for <span className="text-white font-semibold">every user except you</span>. They will be logged out on their next request.
           </p>
-          <p className="text-zinc-500 text-xs">
+          <p className="text-zinc-300 text-xs">
             Your own session will not be affected. Users can log back in normally.
           </p>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setForceLogoutAllConfirm(false)} className="border-white/10 text-zinc-400 hover:text-white">
+            <Button variant="outline" onClick={() => setForceLogoutAllConfirm(false)} className="border-white/10 text-zinc-200 hover:text-white">
               Cancel
             </Button>
             <Button
@@ -1029,11 +1029,11 @@ export default function UserManagement() {
           <DialogHeader>
             <DialogTitle className="tracking-wider text-red-400">DELETE ACCOUNT</DialogTitle>
           </DialogHeader>
-          <p className="text-zinc-400 text-sm py-2">
+          <p className="text-zinc-200 text-sm py-2">
             Are you sure you want to delete <span className="text-white font-semibold">@{deleteConfirm?.username}</span>? This action cannot be undone.
           </p>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteConfirm(null)} className="border-white/10 text-zinc-400 hover:text-white">
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)} className="border-white/10 text-zinc-200 hover:text-white">
               Cancel
             </Button>
             <Button

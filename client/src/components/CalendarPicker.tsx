@@ -325,7 +325,7 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin
     <div ref={containerRef} className="relative flex-shrink-0">
       {/* Trigger button */}
       <button type="button" onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1 sm:gap-1.5 md:gap-2 px-1.5 sm:px-2.5 md:px-3 py-1 sm:py-1.5 md:py-2 rounded-full text-[10px] sm:text-[11px] md:text-[13px] font-bold tracking-wide transition-all flex-shrink-0"
+        className="flex items-center gap-1 sm:gap-1.5 md:gap-2 px-1.5 sm:px-2.5 md:px-3 py-1 sm:py-1.5 md:py-2 rounded-full text-sm sm:text-sm md:text-[13px] font-bold tracking-wide transition-all flex-shrink-0"
         style={{
           background: "hsl(var(--card))",
           color: "#ffffff",
@@ -369,7 +369,7 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 px-2 pt-2 pb-1">
             {DAYS.map(d => (
-              <div key={d} className="text-center text-[9px] font-bold tracking-widest" style={{ color: "rgba(255,255,255,0.3)" }}>
+              <div key={d} className="text-center text-xs font-bold tracking-widest" style={{ color: "rgba(255,255,255,0.3)" }}>
                 {d}
               </div>
             ))}
@@ -402,7 +402,7 @@ export function CalendarPicker({ selectedDate, onSelect, availableDates, isAdmin
                 <button type="button" key={day}
                   onClick={() => handleDayClick(day)}
                   disabled={isLocked}
-                  className="relative flex flex-col items-center justify-center w-full aspect-square rounded-full text-[11px] font-bold transition-all"
+                  className="relative flex flex-col items-center justify-center w-full aspect-square rounded-full text-sm font-bold transition-all"
                   style={dayStyle}
                 >
                   {day}

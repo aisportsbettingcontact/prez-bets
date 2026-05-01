@@ -512,7 +512,7 @@ const modelStyle = (isEdge?: boolean): React.CSSProperties => {
   return {
     fontSize: '10.5px',  // unbolded dimmed values: 10.5px
     fontWeight: 400,
-    color: 'rgba(255,255,255,0.30)',
+    color: 'rgba(255,255,255,0.70)',
     letterSpacing: '0.02em',
     fontVariantNumeric: 'tabular-nums',
   };
@@ -661,8 +661,8 @@ const MktCard = ({
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', minWidth: 0, flex: 1 }}>
         {/* Spacer/line row: always rendered to keep height consistent */}
         {isML
-          ? <span style={{ fontSize: '9px', lineHeight: 1, visibility: 'hidden' }}>&nbsp;</span>  // empty spacer for ML
-          : <span style={{ fontSize: '9px', fontWeight: 400, color: 'rgba(255,255,255,0.55)', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{line}</span>
+          ? <span style={{ fontSize: '11px', lineHeight: 1, visibility: 'hidden' }}>&nbsp;</span>  // empty spacer for ML
+          : <span style={{ fontSize: '11px', fontWeight: 400, color: 'rgba(255,255,255,0.55)', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{line}</span>
         }
         <span style={{ fontSize: '14px', fontWeight: 700, color: juiceColor, lineHeight: 1.15, whiteSpace: 'nowrap', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{juice}</span>
       </div>
@@ -684,7 +684,7 @@ const MktCard = ({
     }}>
       {/* BOOK / MODEL header */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '3px 4px 2px' }}>
-        <span style={{ fontSize: '6.5px', fontWeight: 700, color: 'rgba(255,255,255,0.35)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>BOOK</span>
+        <span style={{ fontSize: '6.5px', fontWeight: 700, color: 'rgba(255,255,255,0.75)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>BOOK</span>
         <span style={{ fontSize: '6.5px', fontWeight: 700, color: 'rgba(255,255,255,0.70)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>MODEL</span>
       </div>
       {/* Away row */}
@@ -863,17 +863,17 @@ return (
           </button>
         )}
         {isLive ? (
-          <span className="flex items-center gap-0.5 font-black tracking-widest uppercase" style={{ color: '#39FF14', fontSize: '9px', whiteSpace: 'nowrap', flexWrap: 'nowrap' }}>
+          <span className="flex items-center gap-0.5 font-black tracking-widest uppercase" style={{ color: '#39FF14', fontSize: '11px', whiteSpace: 'nowrap', flexWrap: 'nowrap' }}>
             <span className="w-1 h-1 rounded-full animate-pulse inline-block" style={{ background: '#39FF14', flexShrink: 0 }} />
             LIVE
             {formattedClock && (
-              <span style={{ color: 'rgba(255,255,255,0.90)', fontWeight: 600, fontSize: '9px', letterSpacing: '0.03em', fontVariantNumeric: 'tabular-nums', marginLeft: '2px', whiteSpace: 'nowrap', display: 'inline', lineHeight: 1 }}>{formattedClock}</span>
+              <span style={{ color: 'rgba(255,255,255,0.90)', fontWeight: 600, fontSize: '11px', letterSpacing: '0.03em', fontVariantNumeric: 'tabular-nums', marginLeft: '2px', whiteSpace: 'nowrap', display: 'inline', lineHeight: 1 }}>{formattedClock}</span>
             )}
           </span>
         ) : isFinal ? (
           <span className="font-bold tracking-wide" style={{ fontSize: '8px', color: '#39FF14', background: 'rgba(255,255,255,0.12)', borderRadius: '999px', padding: '1px 6px', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>FINAL</span>
         ) : (
-          <span style={{ fontSize: '9px', fontWeight: 400, color: 'hsl(var(--foreground))', whiteSpace: 'nowrap' }}>{time}</span>
+          <span style={{ fontSize: '11px', fontWeight: 400, color: 'hsl(var(--foreground))', whiteSpace: 'nowrap' }}>{time}</span>
         )}
       </div>
 

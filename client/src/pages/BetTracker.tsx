@@ -189,8 +189,8 @@ function resultColor(r: Result): string {
     case "WIN":     return "text-green-400";
     case "LOSS":    return "text-red-400";
     case "PUSH":    return "text-yellow-400";
-    case "PENDING": return "text-zinc-400";
-    case "VOID":    return "text-zinc-500";
+    case "PENDING": return "text-zinc-200";
+    case "VOID":    return "text-zinc-300";
   }
 }
 
@@ -199,8 +199,8 @@ function resultBg(r: Result): string {
     case "WIN":     return "bg-green-500/10 border-green-500/30 text-green-400";
     case "LOSS":    return "bg-red-500/10 border-red-500/30 text-red-400";
     case "PUSH":    return "bg-yellow-500/10 border-yellow-500/30 text-yellow-400";
-    case "PENDING": return "bg-zinc-800 border-zinc-700 text-zinc-400";
-    case "VOID":    return "bg-zinc-900 border-zinc-800 text-zinc-500";
+    case "PENDING": return "bg-zinc-800 border-zinc-700 text-zinc-200";
+    case "VOID":    return "bg-zinc-900 border-zinc-800 text-zinc-300";
   }
 }
 
@@ -324,8 +324,8 @@ function StatCard({
   return (
     <div className="bg-white/4 border border-white/8 rounded-xl px-4 py-3 flex flex-col justify-center gap-0.5 min-w-0 min-h-[76px] h-auto overflow-visible">
       <div className={`text-lg sm:text-xl lg:text-2xl font-bold leading-tight whitespace-nowrap ${color ?? "text-white"}`}>{value}</div>
-      <div className="text-[10px] text-zinc-500 tracking-widest uppercase leading-tight">{label}</div>
-      {sub && <div className="text-[9px] text-zinc-600 leading-tight mt-0.5">{sub}</div>}
+      <div className="text-sm text-zinc-300 tracking-widest uppercase leading-tight">{label}</div>
+      {sub && <div className="text-xs text-zinc-300 leading-tight mt-0.5">{sub}</div>}
     </div>
   );
 }
@@ -342,7 +342,7 @@ function SelectField({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">{label}</label>
+      <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">{label}</label>
       <div className="relative">
         <select
           value={value}
@@ -355,7 +355,7 @@ function SelectField({
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+        <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 pointer-events-none" />
       </div>
     </div>
   );
@@ -400,33 +400,33 @@ function PickButton({
         <img src={logo} alt={teamAbbr} className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
           onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
       ) : (
-        <div className={`text-lg font-black ${isTotal ? (side === "OVER" ? "text-emerald-400" : "text-blue-400") : "text-zinc-400"}`}>
+        <div className={`text-lg font-black ${isTotal ? (side === "OVER" ? "text-emerald-400" : "text-blue-400") : "text-zinc-200"}`}>
           {side === "OVER" ? "O" : side === "UNDER" ? "U" : ""}
         </div>
       )}
       <div className="text-center">
         {!isTotal ? (
           <>
-            <div className="text-[11px] font-black text-white tracking-wider leading-tight">{teamAbbr}</div>
-            {teamNickname && <div className="text-[9px] text-zinc-500 leading-tight truncate max-w-[64px]">{teamNickname}</div>}
+            <div className="text-sm font-black text-white tracking-wider leading-tight">{teamAbbr}</div>
+            {teamNickname && <div className="text-xs text-zinc-300 leading-tight truncate max-w-[64px]">{teamNickname}</div>}
           </>
         ) : (
-          <div className="text-[11px] font-black text-zinc-300 tracking-wider">{sideLabel}</div>
+          <div className="text-sm font-black text-zinc-300 tracking-wider">{sideLabel}</div>
         )}
       </div>
       {/* Line display: prefer customLine over API line; TOTAL shows bare number, RL shows signed */}
       {(customLine !== undefined && customLine !== "" && customLine !== null) ? (
-        <div className="text-[10px] font-bold text-emerald-400">
+        <div className="text-sm font-bold text-emerald-400">
           {isTotal
             ? `${parseFloat(customLine)}`
             : (parseFloat(customLine) > 0 ? `+${parseFloat(customLine)}` : `${parseFloat(customLine)}`)}
         </div>
       ) : (line !== null && line !== undefined) ? (
-        <div className="text-[10px] font-bold text-zinc-400">
+        <div className="text-sm font-bold text-zinc-200">
           {isTotal ? `${line}` : (line > 0 ? `+${line}` : `${line}`)}
         </div>
       ) : null}
-      <div className={`text-[11px] font-bold font-mono ${odds !== null ? (odds >= 0 ? "text-emerald-400" : "text-zinc-300") : "text-zinc-600"}`}>
+      <div className={`text-sm font-bold font-mono ${odds !== null ? (odds >= 0 ? "text-emerald-400" : "text-zinc-300") : "text-zinc-300"}`}>
         {odds !== null ? fmtOdds(odds) : "—"}
       </div>
     </button>
@@ -460,12 +460,12 @@ function GameSelector({
       if (awayR !== null && homeR !== null) {
         return (
           <span className="flex items-center gap-1 shrink-0">
-            <span className="text-[10px] font-bold font-mono text-zinc-300">{awayR}–{homeR}</span>
-            <span className="text-[9px] font-bold text-yellow-400 uppercase">FINAL</span>
+            <span className="text-sm font-bold font-mono text-zinc-300">{awayR}–{homeR}</span>
+            <span className="text-xs font-bold text-yellow-400 uppercase">FINAL</span>
           </span>
         );
       }
-      return <span className="text-[9px] font-bold text-yellow-400 uppercase">FINAL</span>;
+      return <span className="text-xs font-bold text-yellow-400 uppercase">FINAL</span>;
     }
     if (isLive) {
       const awayR = ls?.awayR ?? null;
@@ -476,11 +476,11 @@ function GameSelector({
       return (
         <span className="flex items-center gap-1 shrink-0">
           {awayR !== null && homeR !== null && (
-            <span className="text-[10px] font-bold font-mono text-white">{awayR}–{homeR}</span>
+            <span className="text-sm font-bold font-mono text-white">{awayR}–{homeR}</span>
           )}
           <span className="flex items-center gap-0.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[9px] font-bold text-emerald-400 uppercase">
+            <span className="text-xs font-bold text-emerald-400 uppercase">
               {innLabel ? `${innLabel}${compact ? "" : " INN"}` : "LIVE"}
             </span>
           </span>
@@ -488,7 +488,7 @@ function GameSelector({
       );
     }
     // Not started — show start time in EST
-    return <span className="text-zinc-500 text-xs">{g.gameTime} ET</span>;
+    return <span className="text-zinc-300 text-xs">{g.gameTime} ET</span>;
   }
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -507,14 +507,14 @@ function GameSelector({
     return (
       <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5">
         <div className="w-3 h-3 border border-emerald-500 border-t-transparent rounded-full animate-spin" />
-        <span className="text-zinc-500 text-sm">Loading slate…</span>
+        <span className="text-zinc-300 text-sm">Loading slate…</span>
       </div>
     );
   }
 
   if (games.length === 0) {
     return (
-      <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-500 text-sm">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-300 text-sm">
         No {sport} games on {fmtDate(formDate)}
       </div>
     );
@@ -530,16 +530,16 @@ function GameSelector({
             <img src={selected.awayLogo} alt={selected.awayTeam} className="w-5 h-5 object-contain shrink-0"
               onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
             <span className="font-bold text-white">{selected.awayTeam}</span>
-            <span className="text-zinc-500">@</span>
+            <span className="text-zinc-300">@</span>
             <img src={selected.homeLogo} alt={selected.homeTeam} className="w-5 h-5 object-contain shrink-0"
               onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
             <span className="font-bold text-white">{selected.homeTeam}</span>
             <span className="ml-1"><GameStatus g={selected} compact /></span>
           </>
         ) : (
-          <span className="text-zinc-500">Select game…</span>
+          <span className="text-zinc-300">Select game…</span>
         )}
-        <ChevronDown size={14} className={`ml-auto text-zinc-500 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown size={14} className={`ml-auto text-zinc-300 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto">
@@ -551,14 +551,14 @@ function GameSelector({
               <img src={g.awayLogo} alt={g.awayTeam} className="w-6 h-6 object-contain shrink-0"
                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
               <span className="font-bold text-white text-sm w-8 shrink-0">{g.awayTeam}</span>
-              <span className="text-zinc-600 text-xs">@</span>
+              <span className="text-zinc-300 text-xs">@</span>
               <img src={g.homeLogo} alt={g.homeTeam} className="w-6 h-6 object-contain shrink-0"
                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
               <span className="font-bold text-white text-sm w-8 shrink-0">{g.homeTeam}</span>
               <span className="ml-auto"><GameStatus g={g} compact /></span>
               {/* Show ML odds only for scheduled games */}
               {g.status === "scheduled" && g.odds?.awayMl && (
-                <span className="text-[10px] text-zinc-600 shrink-0 font-mono">
+                <span className="text-sm text-zinc-300 shrink-0 font-mono">
                   {fmtOdds(g.odds.awayMl.odds)} / {g.odds.homeMl ? fmtOdds(g.odds.homeMl.odds) : "—"}
                 </span>
               )}
@@ -598,41 +598,41 @@ function LinescoreGrid({
       <table className="w-full text-center" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
         <thead>
           <tr>
-            <th className="text-[9px] text-zinc-600 font-medium text-left pr-2 pb-1 w-8" />
+            <th className="text-xs text-zinc-300 font-medium text-left pr-2 pb-1 w-8" />
             {cols.map(c => (
-              <th key={c.num} className={`text-[9px] font-bold pb-1 w-6 ${
-                isLive && ls.currentInning === c.num ? "text-emerald-400" : "text-zinc-600"
+              <th key={c.num} className={`text-xs font-bold pb-1 w-6 ${
+                isLive && ls.currentInning === c.num ? "text-emerald-400" : "text-zinc-300"
               }`}>
                 {c.num}
               </th>
             ))}
-            <th className="text-[9px] font-bold text-zinc-400 pb-1 px-1">R</th>
-            <th className="text-[9px] font-bold text-zinc-600 pb-1 px-1">H</th>
-            <th className="text-[9px] font-bold text-zinc-600 pb-1 px-1">E</th>
+            <th className="text-xs font-bold text-zinc-200 pb-1 px-1">R</th>
+            <th className="text-xs font-bold text-zinc-300 pb-1 px-1">H</th>
+            <th className="text-xs font-bold text-zinc-300 pb-1 px-1">E</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td className="text-[9px] font-bold text-zinc-400 text-left pr-2">{awayAbbrev}</td>
+            <td className="text-xs font-bold text-zinc-200 text-left pr-2">{awayAbbrev}</td>
             {cols.map(c => (
-              <td key={c.num} className={`text-[10px] font-mono ${cellCls(c.awayRuns, isLive && ls.currentInning === c.num)}`}>
+              <td key={c.num} className={`text-sm font-mono ${cellCls(c.awayRuns, isLive && ls.currentInning === c.num)}`}>
                 {c.awayRuns !== null ? c.awayRuns : (isFinal ? "0" : "·")}
               </td>
             ))}
-            <td className="text-[11px] font-bold font-mono text-white px-1">{ls.awayR !== null ? ls.awayR : "—"}</td>
-            <td className="text-[10px] font-mono text-zinc-500 px-1">{ls.awayH !== null ? ls.awayH : "—"}</td>
-            <td className="text-[10px] font-mono text-zinc-500 px-1">{ls.awayE !== null ? ls.awayE : "—"}</td>
+            <td className="text-sm font-bold font-mono text-white px-1">{ls.awayR !== null ? ls.awayR : "—"}</td>
+            <td className="text-sm font-mono text-zinc-300 px-1">{ls.awayH !== null ? ls.awayH : "—"}</td>
+            <td className="text-sm font-mono text-zinc-300 px-1">{ls.awayE !== null ? ls.awayE : "—"}</td>
           </tr>
           <tr>
-            <td className="text-[9px] font-bold text-zinc-400 text-left pr-2">{homeAbbrev}</td>
+            <td className="text-xs font-bold text-zinc-200 text-left pr-2">{homeAbbrev}</td>
             {cols.map(c => (
-              <td key={c.num} className={`text-[10px] font-mono ${cellCls(c.homeRuns, isLive && ls.currentInning === c.num)}`}>
+              <td key={c.num} className={`text-sm font-mono ${cellCls(c.homeRuns, isLive && ls.currentInning === c.num)}`}>
                 {c.homeRuns !== null ? c.homeRuns : (isFinal ? "0" : "·")}
               </td>
             ))}
-            <td className="text-[11px] font-bold font-mono text-white px-1">{ls.homeR !== null ? ls.homeR : "—"}</td>
-            <td className="text-[10px] font-mono text-zinc-500 px-1">{ls.homeH !== null ? ls.homeH : "—"}</td>
-            <td className="text-[10px] font-mono text-zinc-500 px-1">{ls.homeE !== null ? ls.homeE : "—"}</td>
+            <td className="text-sm font-bold font-mono text-white px-1">{ls.homeR !== null ? ls.homeR : "—"}</td>
+            <td className="text-sm font-mono text-zinc-300 px-1">{ls.homeH !== null ? ls.homeH : "—"}</td>
+            <td className="text-sm font-mono text-zinc-300 px-1">{ls.homeE !== null ? ls.homeE : "—"}</td>
           </tr>
         </tbody>
       </table>
@@ -767,10 +767,10 @@ const BetCard = memo(function BetCard({
                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
             ) : (
               <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
-                <span className="text-[9px] font-bold text-zinc-500">{(bet.awayTeam ?? "?").slice(0, 3)}</span>
+                <span className="text-xs font-bold text-zinc-300">{(bet.awayTeam ?? "?").slice(0, 3)}</span>
               </div>
             )}
-            <span className="text-[9px] font-bold text-zinc-400 tracking-wider">{bet.awayTeam ?? "?"}</span>
+            <span className="text-xs font-bold text-zinc-200 tracking-wider">{bet.awayTeam ?? "?"}</span>
           </div>
 
           {/* Center: score / status / time */}
@@ -787,11 +787,11 @@ const BetCard = memo(function BetCard({
                 <img src="https://cdn.nba.com/logos/leagues/logo-nba.svg" alt="NBA" className="w-4 h-4 object-contain shrink-0" />
               )}
               <span className="text-sm font-bold tracking-widest text-white uppercase">{bet.sport}</span>
-              <span className="text-zinc-600 text-sm">·</span>
+              <span className="text-zinc-300 text-sm">·</span>
               <span className="text-sm font-semibold text-white">{fmtDate(bet.gameDate)}</span>
               {/* Wager type badge */}
               {wagerType === "LIVE" && (
-                <span className="flex items-center gap-0.5 text-[9px] font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded">
+                <span className="flex items-center gap-0.5 text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded">
                   <Radio size={8} />LIVE
                 </span>
               )}
@@ -804,12 +804,12 @@ const BetCard = memo(function BetCard({
                   <span className={`text-xl font-black font-mono ${
                     pickIsAway ? (result === "WIN" ? "text-green-400" : result === "LOSS" ? "text-red-400" : "text-white") : "text-zinc-300"
                   }`}>{awayR}</span>
-                  <span className="text-zinc-600 text-sm font-bold">-</span>
+                  <span className="text-zinc-300 text-sm font-bold">-</span>
                   <span className={`text-xl font-black font-mono ${
                     pickIsHome ? (result === "WIN" ? "text-green-400" : result === "LOSS" ? "text-red-400" : "text-white") : "text-zinc-300"
                   }`}>{homeR}</span>
                 </div>
-                <span className="text-[9px] font-bold text-zinc-500 tracking-widest uppercase">
+                <span className="text-xs font-bold text-zinc-300 tracking-widest uppercase">
                   {bet.timeframe === "FIRST_5" ? "F5" :
                    bet.timeframe === "FIRST_INNING" ? "INN 1" :
                    bet.timeframe === "NRFI" ? "NRFI" :
@@ -825,12 +825,12 @@ const BetCard = memo(function BetCard({
               <div className="flex flex-col items-center gap-0.5">
                 <div className="flex items-center gap-2">
                   <span className="text-xl font-black font-mono text-white">{awayR}</span>
-                  <span className="text-zinc-600 text-sm font-bold">-</span>
+                  <span className="text-zinc-300 text-sm font-bold">-</span>
                   <span className="text-xl font-black font-mono text-white">{homeR}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-[9px] font-bold text-emerald-400 tracking-widest uppercase">
+                  <span className="text-xs font-bold text-emerald-400 tracking-widest uppercase">
                     {inningLabel ? `${inningLabel} INN` : "LIVE"}
                   </span>
                 </div>
@@ -838,16 +838,16 @@ const BetCard = memo(function BetCard({
             ) : isLive ? (
               <div className="flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[9px] font-bold text-emerald-400 tracking-widest uppercase">
+                <span className="text-xs font-bold text-emerald-400 tracking-widest uppercase">
                   {inningLabel ? `${inningLabel} INN` : "LIVE"}
                 </span>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-0.5">
-                <span className="text-sm font-bold text-zinc-400">
+                <span className="text-sm font-bold text-zinc-200">
                   {fmtStartTime(bet.startUtc, bet.gameTime) || "—"}
                 </span>
-                <span className="text-[9px] text-zinc-600 tracking-widest uppercase">Start Time</span>
+                <span className="text-xs text-zinc-300 tracking-widest uppercase">Start Time</span>
               </div>
             )}
           </div>
@@ -859,10 +859,10 @@ const BetCard = memo(function BetCard({
                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
             ) : (
               <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
-                <span className="text-[9px] font-bold text-zinc-500">{(bet.homeTeam ?? "?").slice(0, 3)}</span>
+                <span className="text-xs font-bold text-zinc-300">{(bet.homeTeam ?? "?").slice(0, 3)}</span>
               </div>
             )}
-            <span className="text-[9px] font-bold text-zinc-400 tracking-wider">{bet.homeTeam ?? "?"}</span>
+            <span className="text-xs font-bold text-zinc-200 tracking-wider">{bet.homeTeam ?? "?"}</span>
           </div>
 
           {/* Edit/Delete buttons */}
@@ -913,16 +913,16 @@ const BetCard = memo(function BetCard({
               <img src={bet.homeLogo} alt="" className="w-4 h-4 object-contain opacity-80" />
             )}
             <span className="text-white font-bold text-sm">{fullPickLabel}</span>
-            <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-medium tracking-wider">{mktLabel}</span>
+            <span className="text-xs bg-zinc-800 text-zinc-200 px-1.5 py-0.5 rounded font-medium tracking-wider">{mktLabel}</span>
             {tfShort && (
-              <span className="text-[9px] bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded font-medium">{tfShort}</span>
+              <span className="text-xs bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded font-medium">{tfShort}</span>
             )}
-            <span className={`text-[11px] font-bold font-mono ${
+            <span className={`text-sm font-bold font-mono ${
               bet.odds >= 0 ? "text-emerald-400" : "text-zinc-300"
             }`}>
               {fmtOdds(bet.odds)}
             </span>
-            <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold border ${resultBg(result)}`}>
+            <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border ${resultBg(result)}`}>
               {result}
             </span>
           </div>
@@ -930,19 +930,19 @@ const BetCard = memo(function BetCard({
           {/* Stake row */}
           <div className="flex items-center justify-center gap-2 w-full">
             <div className="flex items-center gap-1.5 bg-zinc-800/50 rounded-lg px-3 py-1.5">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Risk</span>
+              <span className="text-sm text-zinc-300 uppercase tracking-wider">Risk</span>
               <span className="text-xs font-bold font-mono text-white">{fmtStake(risk)}</span>
             </div>
             <span className="text-zinc-700 text-xs">→</span>
             <div className="flex items-center gap-1.5 bg-zinc-800/50 rounded-lg px-3 py-1.5">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Win</span>
+              <span className="text-sm text-zinc-300 uppercase tracking-wider">Win</span>
               <span className="text-xs font-bold font-mono text-emerald-400">{fmtStake(toWin)}</span>
             </div>
             {result !== "PENDING" && result !== "VOID" && (
               <div className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 ${
                 result === "WIN" ? "bg-green-500/10" : result === "LOSS" ? "bg-red-500/10" : "bg-yellow-500/10"
               }`}>
-                <span className="text-[10px] text-zinc-500 uppercase tracking-wider">P/L</span>
+                <span className="text-sm text-zinc-300 uppercase tracking-wider">P/L</span>
                 <span className={`text-xs font-bold font-mono ${resultColor(result)}`}>
                   {result === "WIN"  ? `+${fmtStake(toWin)}` :
                    result === "LOSS" ? `-${fmtStake(risk)}` :
@@ -957,7 +957,7 @@ const BetCard = memo(function BetCard({
             <div className="flex items-center gap-1.5 w-full justify-center">
               {(["WIN", "LOSS", "PUSH", "VOID"] as Result[]).map(r => (
                 <button key={r} type="button" onClick={() => onResult(bet.id, r)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all hover:opacity-80 ${resultBg(r)}`}
+                  className={`px-2.5 py-1 rounded-lg text-sm font-bold border transition-all hover:opacity-80 ${resultBg(r)}`}
                 >
                   {r}
                 </button>
@@ -970,7 +970,7 @@ const BetCard = memo(function BetCard({
 
         {/* Notes */}
         {bet.notes && (
-          <div className="text-[10px] text-zinc-500 bg-zinc-800/40 rounded-lg px-3 py-1.5 italic">
+          <div className="text-sm text-zinc-300 bg-zinc-800/40 rounded-lg px-3 py-1.5 italic">
             {bet.notes}
           </div>
         )}
@@ -1031,12 +1031,12 @@ function LogsTab({
           className={`px-4 py-2 text-xs font-bold tracking-wider rounded-lg transition-all ${
             activeSection === "REQUESTS"
               ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-              : "text-zinc-500 hover:text-zinc-300"
+              : "text-zinc-300 hover:text-zinc-300"
           }`}
         >
           EDIT REQUESTS
           {pendingRequests.length > 0 && (
-            <span className="ml-2 bg-yellow-500 text-black text-[10px] font-black px-1.5 py-0.5 rounded-full">
+            <span className="ml-2 bg-yellow-500 text-black text-sm font-black px-1.5 py-0.5 rounded-full">
               {pendingRequests.length}
             </span>
           )}
@@ -1046,11 +1046,11 @@ function LogsTab({
           className={`px-4 py-2 text-xs font-bold tracking-wider rounded-lg transition-all ${
             activeSection === "BETS"
               ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-              : "text-zinc-500 hover:text-zinc-300"
+              : "text-zinc-300 hover:text-zinc-300"
           }`}
         >
           ALL BETS LOG
-          <span className="ml-2 text-zinc-600 text-[10px]">({bets.length})</span>
+          <span className="ml-2 text-zinc-300 text-sm">({bets.length})</span>
         </button>
       </div>
 
@@ -1058,7 +1058,7 @@ function LogsTab({
       {activeSection === "REQUESTS" && (
         <div className="space-y-3">
           {editRequests.length === 0 ? (
-            <div className="text-center py-12 text-zinc-600 text-sm">No edit requests submitted yet.</div>
+            <div className="text-center py-12 text-zinc-300 text-sm">No edit requests submitted yet.</div>
           ) : (
             editRequests.map((req: any) => (
               <div key={req.id} className={`bg-zinc-900/80 border rounded-xl p-4 space-y-2 ${
@@ -1068,35 +1068,35 @@ function LogsTab({
               }`}>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    <span className={`text-sm font-bold px-2 py-0.5 rounded-full border ${
                       req.status === "PENDING"  ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-400" :
                       req.status === "APPROVED" ? "bg-green-500/10 border-green-500/30 text-green-400" :
-                      "bg-zinc-800 border-zinc-700 text-zinc-500"
+                      "bg-zinc-800 border-zinc-700 text-zinc-300"
                     }`}>{req.status}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                    <span className={`text-sm font-bold px-2 py-0.5 rounded border ${
                       req.requestType === "DELETE"
                         ? "bg-red-500/10 border-red-500/20 text-red-400"
                         : "bg-blue-500/10 border-blue-500/20 text-blue-400"
                     }`}>{req.requestType}</span>
-                    <span className="text-xs text-zinc-400 font-medium">@{req.requesterUsername}</span>
-                    <span className="text-[10px] text-zinc-600">Bet #{req.betId}</span>
+                    <span className="text-xs text-zinc-200 font-medium">@{req.requesterUsername}</span>
+                    <span className="text-sm text-zinc-300">Bet #{req.betId}</span>
                   </div>
-                  <span className="text-[10px] text-zinc-600">
+                  <span className="text-sm text-zinc-300">
                     {new Date(req.createdAt).toLocaleString()}
                   </span>
                 </div>
                 {req.reason && (
-                  <div className="text-xs text-zinc-400 bg-zinc-800/50 rounded-lg px-3 py-2 italic">
+                  <div className="text-xs text-zinc-200 bg-zinc-800/50 rounded-lg px-3 py-2 italic">
                     "{req.reason}"
                   </div>
                 )}
                 {req.proposedChanges && (
-                  <div className="text-[10px] text-zinc-500 bg-zinc-800/30 rounded px-2 py-1 font-mono">
+                  <div className="text-sm text-zinc-300 bg-zinc-800/30 rounded px-2 py-1 font-mono">
                     Changes: {req.proposedChanges}
                   </div>
                 )}
                 {req.reviewerUsername && (
-                  <div className="text-[10px] text-zinc-500">
+                  <div className="text-sm text-zinc-300">
                     Reviewed by @{req.reviewerUsername}
                     {req.reviewNote && `: "${req.reviewNote}"`}
                   </div>
@@ -1127,12 +1127,12 @@ function LogsTab({
       {activeSection === "BETS" && (
         <div className="space-y-2">
           {bets.length === 0 ? (
-            <div className="text-center py-12 text-zinc-600 text-sm">No bets tracked yet.</div>
+            <div className="text-center py-12 text-zinc-300 text-sm">No bets tracked yet.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-[10px] text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+                  <tr className="text-sm text-zinc-300 uppercase tracking-wider border-b border-zinc-800">
                     <th className="text-left py-2 px-2">ID</th>
                     <th className="text-left py-2 px-2">User</th>
                     <th className="text-left py-2 px-2">Date</th>
@@ -1149,32 +1149,32 @@ function LogsTab({
                 <tbody>
                   {bets.map((b: any) => (
                     <tr key={b.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20 transition-colors">
-                      <td className="py-2 px-2 text-zinc-600 font-mono">#{b.id}</td>
+                      <td className="py-2 px-2 text-zinc-300 font-mono">#{b.id}</td>
                       <td className="py-2 px-2">
                         <span className="text-zinc-300 font-medium">@{b.username}</span>
-                        <span className={`ml-1 text-[9px] font-bold uppercase px-1 py-0.5 rounded ${
+                        <span className={`ml-1 text-xs font-bold uppercase px-1 py-0.5 rounded ${
                           b.userRole === "owner" ? "text-yellow-400" :
                           b.userRole === "admin" ? "text-blue-400" :
                           "text-emerald-400"
                         }`}>{b.userRole}</span>
                       </td>
-                      <td className="py-2 px-2 text-zinc-400 font-mono">{fmtDate(b.gameDate)}</td>
-                      <td className="py-2 px-2 text-zinc-500">{b.sport}</td>
+                      <td className="py-2 px-2 text-zinc-200 font-mono">{fmtDate(b.gameDate)}</td>
+                      <td className="py-2 px-2 text-zinc-300">{b.sport}</td>
                       <td className="py-2 px-2 text-white font-medium">{b.pick}</td>
                       <td className={`py-2 px-2 font-mono font-bold ${b.odds >= 0 ? "text-emerald-400" : "text-zinc-300"}`}>
                         {fmtOdds(b.odds)}
                       </td>
-                      <td className="py-2 px-2 text-zinc-400 font-mono">{parseFloat(b.risk).toFixed(2)}</td>
+                      <td className="py-2 px-2 text-zinc-200 font-mono">{parseFloat(b.risk).toFixed(2)}</td>
                       <td className="py-2 px-2 text-emerald-400 font-mono">{parseFloat(b.toWin).toFixed(2)}</td>
                       <td className="py-2 px-2">
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
                           (b as any).wagerType === "LIVE"
                             ? "bg-red-500/10 text-red-400"
-                            : "bg-zinc-800 text-zinc-500"
+                            : "bg-zinc-800 text-zinc-300"
                         }`}>{(b as any).wagerType ?? "PRE"}</span>
                       </td>
-                      <td className={`py-2 px-2 font-bold text-[10px] ${resultColor(b.result as Result)}`}>{b.result}</td>
-                      <td className="py-2 px-2 text-zinc-600 font-mono text-[10px]">
+                      <td className={`py-2 px-2 font-bold text-sm ${resultColor(b.result as Result)}`}>{b.result}</td>
+                      <td className="py-2 px-2 text-zinc-300 font-mono text-sm">
                         {new Date(b.createdAt).toLocaleString()}
                       </td>
                     </tr>
@@ -1193,9 +1193,9 @@ function LogsTab({
             <h3 className="font-bold text-sm tracking-wider">
               {reviewAction === "APPROVE" ? "✅ Approve Request" : "❌ Deny Request"}
             </h3>
-            <p className="text-zinc-400 text-xs">Request #{reviewId}</p>
+            <p className="text-zinc-200 text-xs">Request #{reviewId}</p>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Note (optional)</label>
+              <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Note (optional)</label>
               <textarea
                 value={reviewNote}
                 onChange={e => setReviewNote(e.target.value)}
@@ -1206,7 +1206,7 @@ function LogsTab({
             </div>
             <div className="flex gap-3">
               <button type="button" onClick={() => setReviewId(null)}
-                className="flex-1 py-2.5 rounded-xl border border-zinc-700 text-zinc-400 text-sm font-medium hover:border-zinc-500 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-zinc-700 text-zinc-200 text-sm font-medium hover:border-zinc-500 transition-colors"
               >
                 Cancel
               </button>
@@ -2045,7 +2045,7 @@ export default function BetTracker() {
         <div className="text-center space-y-3">
           <AlertCircle className="mx-auto text-red-400" size={32} />
           <p className="text-white font-bold">Access Restricted</p>
-          <p className="text-zinc-500 text-sm">Bet Tracker is available to Handicappers, Admins, and Owners only.</p>
+          <p className="text-zinc-300 text-sm">Bet Tracker is available to Handicappers, Admins, and Owners only.</p>
           <button type="button" onClick={() => navigate("/")} className="text-emerald-400 text-sm underline">Go back</button>
         </div>
       </div>
@@ -2060,7 +2060,7 @@ export default function BetTracker() {
       <header className="sticky top-0 z-30 bg-zinc-950/95 backdrop-blur border-b border-zinc-800/60">
         <div className="w-full px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => navigate("/")} className="text-zinc-500 hover:text-white transition-colors p-1">
+            <button type="button" onClick={() => navigate("/")} className="text-zinc-300 hover:text-white transition-colors p-1">
               <ChevronLeft size={18} />
             </button>
             <TrendingUp size={18} className="text-emerald-400" />
@@ -2071,12 +2071,12 @@ export default function BetTracker() {
             {/* $ / Units toggle */}
             <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg p-0.5">
               <button type="button" onClick={() => setStakeMode("$")}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold transition-all ${stakeMode === "$" ? "bg-emerald-500 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold transition-all ${stakeMode === "$" ? "bg-emerald-500 text-white" : "text-zinc-300 hover:text-zinc-300"}`}
               >
                 <DollarSign size={10} />$
               </button>
               <button type="button" onClick={() => setStakeMode("U")}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold transition-all ${stakeMode === "U" ? "bg-emerald-500 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold transition-all ${stakeMode === "U" ? "bg-emerald-500 text-white" : "text-zinc-300 hover:text-zinc-300"}`}
               >
                 <Hash size={10} />U
               </button>
@@ -2084,7 +2084,7 @@ export default function BetTracker() {
             {/* Unit size (only in U mode) — narrower on mobile */}
             {stakeMode === "U" && (
               <div className="flex items-center gap-1">
-                <span className="text-[9px] text-zinc-500 hidden xs:inline">1u=$</span>
+                <span className="text-xs text-zinc-300 hidden xs:inline">1u=$</span>
                 <input
                   type="number"
                   value={unitSize}
@@ -2101,7 +2101,7 @@ export default function BetTracker() {
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                 showAnalytics
                   ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-zinc-200"
+                  : "bg-zinc-900 border-zinc-700 text-zinc-200 hover:text-zinc-200"
               }`}
               title="Toggle Analytics Panel"
             >
@@ -2109,7 +2109,7 @@ export default function BetTracker() {
               <span className="hidden sm:inline">Analytics</span>
             </button>
             {/* Role badge */}
-            <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded-full border uppercase ${
+            <span className={`text-sm font-bold tracking-widest px-2 py-0.5 rounded-full border uppercase ${
               role === "owner"      ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
               : role === "admin"    ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
               : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
@@ -2128,7 +2128,7 @@ export default function BetTracker() {
                 onClick={() => setActiveSport(s)}
                 onMouseEnter={() => s !== activeSport && handlePrefetch(s, dateRange)}
                 className={`flex-shrink-0 px-4 py-2.5 text-xs font-bold tracking-wider transition-all border-b-2 ${
-                  activeSport === s ? "border-emerald-400 text-emerald-400" : "border-transparent text-zinc-500 hover:text-zinc-300"
+                  activeSport === s ? "border-emerald-400 text-emerald-400" : "border-transparent text-zinc-300 hover:text-zinc-300"
                 }`}
               >
                 {s}
@@ -2169,7 +2169,7 @@ export default function BetTracker() {
                 className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                   dateRange === r
                     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                    : "bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                    : "bg-zinc-900 border-zinc-700 text-zinc-300 hover:text-zinc-300"
                 }`}
               >
                 {r === "ALL_TIME" ? "All-Time"
@@ -2195,7 +2195,7 @@ export default function BetTracker() {
               <div className="min-w-[100px]"><StatCard label="Pushes"   value={stats.pushes} color="text-yellow-400" /></div>
             )}
             {stats.pending > 0 && (
-              <div className="min-w-[100px]"><StatCard label="Pending"  value={stats.pending} color="text-zinc-400" /></div>
+              <div className="min-w-[100px]"><StatCard label="Pending"  value={stats.pending} color="text-zinc-200" /></div>
             )}
             <div className="min-w-[100px]">
               <StatCard
@@ -2286,7 +2286,7 @@ export default function BetTracker() {
                       </span>
                     </div>
                     {/* PREZ BETS sub-label */}
-                    <span className="text-[10px] text-zinc-500 tracking-widest uppercase font-semibold mb-1">PREZ BETS</span>
+                    <span className="text-sm text-zinc-300 tracking-widest uppercase font-semibold mb-1">PREZ BETS</span>
                     {/* +/- Units for the season */}
                     <div className="flex items-center gap-2">
                       <TrendingUp size={24} className={stats.netProfit >= 0 ? "text-emerald-400" : "text-red-400"} />
@@ -2304,7 +2304,7 @@ export default function BetTracker() {
                         {stats.netProfit >= 0 ? "+" : ""}{fmtUnits(stats.netProfit)}
                       </span>
                     </div>
-                    <span className="text-[10px] text-zinc-500">
+                    <span className="text-sm text-zinc-300">
                       {dateRange === "ALL_TIME"
                         ? (activeSport === "ALL" ? "All Sports · All-Time" : `${activeSport} · All-Time`)
                         : dateRange === "TODAY"
@@ -2348,7 +2348,7 @@ export default function BetTracker() {
               {/* Chevron: only visible on mobile/tablet (hidden on lg+) */}
               <ChevronDown
                 size={16}
-                className={`text-zinc-400 transition-transform duration-200 lg:hidden ${addBetOpen ? "rotate-180" : ""}`}
+                className={`text-zinc-200 transition-transform duration-200 lg:hidden ${addBetOpen ? "rotate-180" : ""}`}
               />
             </button>
             {/* Body — always visible on lg+; toggle on mobile */}
@@ -2358,7 +2358,7 @@ export default function BetTracker() {
 
             {/* DATE */}
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Date</label>
+              <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Date</label>
               <input
                 type="date"
                 value={formDate}
@@ -2369,13 +2369,13 @@ export default function BetTracker() {
 
             {/* WAGER TYPE: PREGAME / LIVE */}
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Wager Type</label>
+              <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Wager Type</label>
               <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg p-0.5 w-fit">
                 <button type="button" onClick={() => setFormWagerType("PREGAME")}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
                     formWagerType === "PREGAME"
                       ? "bg-zinc-700 text-white"
-                      : "text-zinc-500 hover:text-zinc-300"
+                      : "text-zinc-300 hover:text-zinc-300"
                   }`}
                 >
                   PRE-GAME
@@ -2384,7 +2384,7 @@ export default function BetTracker() {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
                     formWagerType === "LIVE"
                       ? "bg-red-500/20 border border-red-500/30 text-red-400"
-                      : "text-zinc-500 hover:text-zinc-300"
+                      : "text-zinc-300 hover:text-zinc-300"
                   }`}
                 >
                   <Radio size={10} />LIVE
@@ -2394,7 +2394,7 @@ export default function BetTracker() {
 
             {/* GAME */}
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Game</label>
+              <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Game</label>
               <GameSelector
                 games={slateGames}
                 selectedId={formGame?.id ?? null}
@@ -2431,7 +2431,7 @@ export default function BetTracker() {
             {(formTimeframe === "NRFI" || formTimeframe === "YRFI") && (
               <div className="flex items-start gap-2 bg-emerald-500/8 border border-emerald-500/20 rounded-lg px-3 py-2.5">
                 <CheckCircle2 size={13} className="text-emerald-400 shrink-0 mt-0.5" />
-                <div className="text-[11px] text-zinc-300 leading-relaxed">
+                <div className="text-sm text-zinc-300 leading-relaxed">
                   <span className="font-bold text-emerald-400">{formTimeframe}</span>
                   {formTimeframe === "NRFI"
                     ? " — No Run First Inning. Auto-set: TOTAL UNDER 0.5 runs in inning 1."
@@ -2443,7 +2443,7 @@ export default function BetTracker() {
             {/* PICK — hidden for NRFI/YRFI */}
             {formTimeframe !== "NRFI" && formTimeframe !== "YRFI" && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Pick</label>
+                <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Pick</label>
                 {formGame ? (
                   pickButtons
                 ) : (
@@ -2451,7 +2451,7 @@ export default function BetTracker() {
                     {(formMarket === "TOTAL" ? ["OVER", "UNDER"] : ["AWAY", "HOME"]).map(s => (
                       <div key={s} className="flex-1 flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border-2 border-zinc-800 bg-zinc-900/50 opacity-40">
                         <div className="w-8 h-8 rounded-full bg-zinc-800" />
-                        <div className="text-[10px] text-zinc-600 font-bold">{s}</div>
+                        <div className="text-sm text-zinc-300 font-bold">{s}</div>
                       </div>
                     ))}
                   </div>
@@ -2462,7 +2462,7 @@ export default function BetTracker() {
             {/* CUSTOM LINE (for RL and TOTAL only) */}
             {(formMarket === "RL" || formMarket === "TOTAL") && formTimeframe !== "NRFI" && formTimeframe !== "YRFI" && (
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">
+                <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">
                   {formMarket === "TOTAL" ? "Total Line (e.g. 8, 8.5)" : "Run Line (e.g. -1.5, +1.5)"}
                 </label>
                 <input
@@ -2480,7 +2480,7 @@ export default function BetTracker() {
             {/* ODDS + RISK + TO WIN */}
             <div className="grid grid-cols-3 gap-3">
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Odds</label>
+                <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Odds</label>
                 <input
                   type="number"
                   value={formOdds}
@@ -2490,7 +2490,7 @@ export default function BetTracker() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">{riskLabel}</label>
+                <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">{riskLabel}</label>
                 <input
                   type="number"
                   value={formRisk}
@@ -2502,12 +2502,12 @@ export default function BetTracker() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">
+                <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">
                   {toWinLabel}
                   {formToWinManual && (
                     <button type="button"
                       onClick={() => { setFormToWinManual(false); if (autoToWin !== null) setFormToWin(String(autoToWin)); }}
-                      className="ml-1 text-[9px] text-emerald-400 underline"
+                      className="ml-1 text-xs text-emerald-400 underline"
                     >
                       reset
                     </button>
@@ -2529,12 +2529,12 @@ export default function BetTracker() {
 
             {/* Unit math explainer */}
             {stakeMode === "U" && !isNaN(toWinNum) && toWinNum > 0 && riskNum > 0 && (
-              <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 bg-zinc-800/50 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-1.5 text-sm text-zinc-300 bg-zinc-800/50 rounded-lg px-3 py-2">
                 <Hash size={10} className="text-emerald-400 shrink-0" />
                 <span>
                   {fmtUnits(riskNum)} to win {fmtUnits(toWinNum)}
                   {unitSize > 0 && (
-                    <span className="text-zinc-600 ml-1">
+                    <span className="text-zinc-300 ml-1">
                       ({fmtDollar(riskNum * unitSize)} to win {fmtDollar(toWinNum * unitSize)})
                     </span>
                   )}
@@ -2544,13 +2544,13 @@ export default function BetTracker() {
 
             {/* NOTES */}
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Notes (optional)</label>
+              <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Notes (optional)</label>
               <textarea
                 value={formNotes}
                 onChange={e => setFormNotes(e.target.value)}
                 placeholder="Model edge, reasoning, context…"
                 rows={2}
-                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors placeholder:text-zinc-600"
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors placeholder:text-zinc-300"
               />
             </div>
 
@@ -2577,7 +2577,7 @@ export default function BetTracker() {
             <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-3">
               <div className="flex items-center gap-2 pb-1 border-b border-zinc-800">
                 <BarChart2 size={13} className="text-emerald-400" />
-                <span className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">Breakdowns</span>
+                <span className="text-sm font-bold tracking-widest text-zinc-200 uppercase">Breakdowns</span>
               </div>
               <BreakdownGrid stats={stats} vertical />
             </div>
@@ -2593,7 +2593,7 @@ export default function BetTracker() {
                 className={`px-4 py-2.5 text-xs font-bold tracking-wider border-b-2 transition-all ${
                   activeTab === "BETS"
                     ? "border-emerald-400 text-emerald-400"
-                    : "border-transparent text-zinc-500 hover:text-zinc-300"
+                    : "border-transparent text-zinc-300 hover:text-zinc-300"
                 }`}
               >
                 BETS
@@ -2604,7 +2604,7 @@ export default function BetTracker() {
                   className={`px-4 py-2.5 text-xs font-bold tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
                     activeTab === "LOGS"
                       ? "border-emerald-400 text-emerald-400"
-                      : "border-transparent text-zinc-500 hover:text-zinc-300"
+                      : "border-transparent text-zinc-300 hover:text-zinc-300"
                   }`}
                 >
                   <FileText size={11} />LOGS
@@ -2619,7 +2619,7 @@ export default function BetTracker() {
                 <div className="flex items-center gap-3 flex-wrap">
                   {!filterAllTime && (
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Filter Date</label>
+                      <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Filter Date</label>
                       <input
                         type="date"
                         value={filterDate}
@@ -2629,7 +2629,7 @@ export default function BetTracker() {
                     </div>
                   )}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Result</label>
+                    <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Result</label>
                     <div className="relative">
                       <select
                         value={filterResult}
@@ -2639,11 +2639,11 @@ export default function BetTracker() {
                         <option value="">All Results</option>
                         {RESULTS.map(r => <option key={r} value={r}>{r}</option>)}
                       </select>
-                      <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                      <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 pointer-events-none" />
                     </div>
                   </div>
                   <div className="ml-auto flex items-center gap-2 self-end pb-2">
-                    <span className="text-xs text-zinc-500">{bets.length} bet{bets.length !== 1 ? "s" : ""}</span>
+                    <span className="text-xs text-zinc-300">{bets.length} bet{bets.length !== 1 ? "s" : ""}</span>
                     {(linescoreQuery.isFetching || autoGradeMut.isPending) && (
                       <div className="w-3 h-3 border border-emerald-500 border-t-transparent rounded-full animate-spin" title={autoGradeMut.isPending ? "Auto-grading…" : "Refreshing linescores…"} />
                     )}
@@ -2685,12 +2685,12 @@ export default function BetTracker() {
                 ) : bets.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center space-y-2">
                     <Clock size={28} className="text-zinc-700" />
-                    <p className="text-zinc-500 text-sm">
+                    <p className="text-zinc-300 text-sm">
                       {filterAllTime
                         ? "No bets tracked yet."
                         : `No bets tracked yet${activeSport !== "ALL" ? ` for ${activeSport}` : ""} on ${fmtDate(filterDate)}.`}
                     </p>
-                    <p className="text-zinc-600 text-xs">Use the form to add your first bet.</p>
+                    <p className="text-zinc-300 text-xs">Use the form to add your first bet.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -2718,7 +2718,7 @@ export default function BetTracker() {
                         const record = `${sep.wins}W-${sep.losses}L${sep.pushes > 0 ? `-${sep.pushes}P` : ""}`;
                         const pl = sep.netProfit;
                         const plStr = `${pl >= 0 ? "+" : ""}${pl.toFixed(2)}u`;
-                        const plColor = pl > 0 ? "text-emerald-400" : pl < 0 ? "text-red-400" : "text-zinc-400";
+                        const plColor = pl > 0 ? "text-emerald-400" : pl < 0 ? "text-red-400" : "text-zinc-200";
 
                         return (
                           <div key={`day-${sep.date}`} className="rounded-xl overflow-hidden border border-zinc-800/60">
@@ -2735,13 +2735,13 @@ export default function BetTracker() {
                               {/* Divider line */}
                               <div className="flex-1 h-px bg-zinc-700/50" />
                               {/* W-L record */}
-                              <span className="text-xs font-mono text-zinc-400 whitespace-nowrap">{record}</span>
+                              <span className="text-xs font-mono text-zinc-200 whitespace-nowrap">{record}</span>
                               {/* +/- units */}
                               <span className={`text-xs font-bold font-mono whitespace-nowrap ${plColor}`}>{plStr}</span>
                               {/* Chevron */}
                               <ChevronDown
                                 size={14}
-                                className={`text-zinc-500 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                                className={`text-zinc-300 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
                               />
                             </button>
 
@@ -2781,7 +2781,7 @@ export default function BetTracker() {
                 {/* Placed 200px before list end; observer pre-loads next page before user reaches bottom */}
                 <div ref={loadMoreRef} className="flex justify-center py-4 min-h-[1px]">
                   {isFetchingNextPage && (
-                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+                    <div className="flex items-center gap-2 text-xs text-zinc-300">
                       <div className="w-3 h-3 border border-emerald-500 border-t-transparent rounded-full animate-spin" />
                       Loading more bets…
                     </div>
@@ -2812,12 +2812,12 @@ export default function BetTracker() {
             {editIsRequest && (
               <div className="flex items-start gap-2 bg-yellow-500/8 border border-yellow-500/20 rounded-lg px-3 py-2.5">
                 <Lock size={12} className="text-yellow-400 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-zinc-300">
+                <p className="text-sm text-zinc-300">
                   Your bets are immutable. This will submit an edit request for owner/admin review.
                 </p>
               </div>
             )}
-            <div className="text-xs text-zinc-400">{editBet.pick} · {fmtOdds(editBet.odds)}</div>
+            <div className="text-xs text-zinc-200">{editBet.pick} · {fmtOdds(editBet.odds)}</div>
             <SelectField
               label="Result"
               value={editResult}
@@ -2825,7 +2825,7 @@ export default function BetTracker() {
               options={RESULTS.map(r => ({ value: r, label: r }))}
             />
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Notes</label>
+              <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Notes</label>
               <textarea
                 value={editNotes}
                 onChange={e => setEditNotes(e.target.value)}
@@ -2835,7 +2835,7 @@ export default function BetTracker() {
             </div>
             {editIsRequest && (
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Reason for Request</label>
+                <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Reason for Request</label>
                 <textarea
                   value={editRequestReason}
                   onChange={e => setEditRequestReason(e.target.value)}
@@ -2847,7 +2847,7 @@ export default function BetTracker() {
             )}
             <div className="flex gap-3">
               <button type="button" onClick={() => setEditBet(null)}
-                className="flex-1 py-2.5 rounded-xl border border-zinc-700 text-zinc-400 text-sm font-medium hover:border-zinc-500 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-zinc-700 text-zinc-200 text-sm font-medium hover:border-zinc-500 transition-colors"
               >
                 Cancel
               </button>
@@ -2872,31 +2872,31 @@ export default function BetTracker() {
           <div className="flex items-center gap-2 mb-2">
             <Zap size={14} className="text-emerald-400" />
             <span className="text-sm font-bold text-white tracking-wider">BETS GRADED</span>
-            <button type="button" onClick={() => setGradeToast(null)} className="ml-auto text-zinc-500 hover:text-zinc-300 transition-colors">
+            <button type="button" onClick={() => setGradeToast(null)} className="ml-auto text-zinc-300 hover:text-zinc-300 transition-colors">
               <Minus size={12} />
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-zinc-800 rounded-lg px-3 py-2">
-              <div className="text-zinc-500 text-[10px] uppercase tracking-wider">Graded</div>
+              <div className="text-zinc-300 text-sm uppercase tracking-wider">Graded</div>
               <div className="text-white font-bold">{gradeToast.graded}</div>
             </div>
             <div className="bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-              <div className="text-zinc-500 text-[10px] uppercase tracking-wider">Wins</div>
+              <div className="text-zinc-300 text-sm uppercase tracking-wider">Wins</div>
               <div className="text-green-400 font-bold">{gradeToast.wins}</div>
             </div>
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-              <div className="text-zinc-500 text-[10px] uppercase tracking-wider">Losses</div>
+              <div className="text-zinc-300 text-sm uppercase tracking-wider">Losses</div>
               <div className="text-red-400 font-bold">{gradeToast.losses}</div>
             </div>
             <div className="bg-yellow-500/10 border border-yellow-500/20 rounded
 -lg px-3 py-2">
-              <div className="text-zinc-500 text-[10px] uppercase tracking-wider">Pushes</div>
+              <div className="text-zinc-300 text-sm uppercase tracking-wider">Pushes</div>
               <div className="text-yellow-400 font-bold">{gradeToast.pushes}</div>
             </div>
           </div>
           {gradeToast.stillPending > 0 && (
-            <div className="mt-2 text-[10px] text-zinc-500">
+            <div className="mt-2 text-sm text-zinc-300">
               {gradeToast.stillPending} bet{gradeToast.stillPending !== 1 ? "s" : ""} still pending (game not final yet)
             </div>
           )}
@@ -2914,12 +2914,12 @@ export default function BetTracker() {
               <>
                 <div className="flex items-start gap-2 bg-yellow-500/8 border border-yellow-500/20 rounded-lg px-3 py-2.5">
                   <Lock size={12} className="text-yellow-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-zinc-300">
+                  <p className="text-sm text-zinc-300">
                     Your bets are immutable. This will submit a deletion request for owner/admin review.
                   </p>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] tracking-widest text-zinc-500 uppercase font-medium">Reason for Request</label>
+                  <label className="text-sm tracking-widest text-zinc-300 uppercase font-medium">Reason for Request</label>
                   <textarea
                     value={deleteRequestReason}
                     onChange={e => setDeleteRequestReason(e.target.value)}
@@ -2930,11 +2930,11 @@ export default function BetTracker() {
                 </div>
               </>
             ) : (
-              <p className="text-zinc-400 text-sm">This action cannot be undone. The bet will be permanently removed.</p>
+              <p className="text-zinc-200 text-sm">This action cannot be undone. The bet will be permanently removed.</p>
             )}
             <div className="flex gap-3">
               <button type="button" onClick={() => { setDeleteId(null); setDeleteIsRequest(false); setDeleteRequestReason(""); }}
-                className="flex-1 py-2.5 rounded-xl border border-zinc-700 text-zinc-400 text-sm font-medium hover:border-zinc-500 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-zinc-700 text-zinc-200 text-sm font-medium hover:border-zinc-500 transition-colors"
               >
                 Cancel
               </button>

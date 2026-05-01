@@ -169,7 +169,7 @@ function ResultBadge({
     win:     "bg-emerald-500 text-white",
     loss:    "bg-red-500 text-white",
     push:    "bg-yellow-500 text-black",
-    neutral: "bg-white/10 text-gray-500",
+    neutral: "bg-white/10 text-gray-300",
   }[variant];
 
   const sizeClass = size === "xs"
@@ -283,14 +283,14 @@ function GameRow({
   return (
     <tr className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
       {/* Date */}
-      <td className="px-3 py-2 text-[11px] text-gray-400 font-mono whitespace-nowrap">
+      <td className="px-3 py-2 text-[11px] text-gray-200 font-mono whitespace-nowrap">
         {fmtDate(game.gameDate)}
       </td>
 
       {/* H/A + Opponent */}
       <td className="px-2 py-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-[9px] text-gray-500 font-mono">
+          <span className="text-[9px] text-gray-300 font-mono">
             {isAway ? "@" : "vs"}
           </span>
           {oppLogo ? (
@@ -321,7 +321,7 @@ function GameRow({
               "text-[11px] font-mono font-bold",
               myWon === true ? "text-emerald-400"
               : myWon === false ? "text-red-400"
-              : "text-gray-500"
+              : "text-gray-300"
             )}
           >
             {scoreStr}
@@ -358,8 +358,8 @@ function TeamScheduleTable({
   if (games.length === 0) {
     return (
       <div className="px-4 py-6 text-center">
-        <p className="text-[11px] text-gray-600 font-mono">No completed games found.</p>
-        <p className="text-[10px] text-gray-700 font-mono mt-1">
+        <p className="text-[11px] text-gray-300 font-mono">No completed games found.</p>
+        <p className="text-[10px] text-gray-300 font-mono mt-1">
           Data populates automatically each day via the DK NJ schedule refresh.
         </p>
       </div>
@@ -371,11 +371,11 @@ function TeamScheduleTable({
       <table className="w-full min-w-[360px]">
         <thead>
           <tr className="border-b border-white/[0.06]">
-            <th className="px-3 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">GAME</th>
-            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">OPP</th>
-            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">RESULT</th>
-            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">ATS</th>
-            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">O/U</th>
+            <th className="px-3 py-1.5 text-left text-[9px] font-bold text-gray-300 font-mono tracking-widest">GAME</th>
+            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-300 font-mono tracking-widest">OPP</th>
+            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-300 font-mono tracking-widest">RESULT</th>
+            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-300 font-mono tracking-widest">ATS</th>
+            <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-300 font-mono tracking-widest">O/U</th>
           </tr>
         </thead>
         <tbody>
@@ -436,7 +436,7 @@ function H2HRow({
   return (
     <tr className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
       {/* Date */}
-      <td className="px-3 py-2 text-[11px] text-gray-400 font-mono whitespace-nowrap">
+      <td className="px-3 py-2 text-[11px] text-gray-200 font-mono whitespace-nowrap">
         {fmtDate(game.gameDate)}
       </td>
 
@@ -462,7 +462,7 @@ function H2HRow({
           </div>
 
           {/* @ separator */}
-          <span className="text-[9px] text-gray-600 font-mono">@</span>
+          <span className="text-[9px] text-gray-300 font-mono">@</span>
 
           {/* Home team */}
           <div className="flex items-center gap-1">
@@ -532,7 +532,7 @@ function H2HSection({
     return (
       <div className="flex items-center justify-center py-6">
         <RefreshCw className="w-4 h-4 text-blue-400 animate-spin mr-2" />
-        <span className="text-[10px] text-gray-500 font-mono">Loading H2H history...</span>
+        <span className="text-[10px] text-gray-300 font-mono">Loading H2H history...</span>
       </div>
     );
   }
@@ -548,10 +548,10 @@ function H2HSection({
   if (games.length === 0) {
     return (
       <div className="px-4 py-6 text-center">
-        <p className="text-[11px] text-gray-600 font-mono">
+        <p className="text-[11px] text-gray-300 font-mono">
           No head-to-head history found in the database.
         </p>
-        <p className="text-[10px] text-gray-700 font-mono mt-1">
+        <p className="text-[10px] text-gray-300 font-mono mt-1">
           H2H data populates automatically as the season progresses.
         </p>
       </div>
@@ -573,7 +573,7 @@ function H2HSection({
       {/* H2H summary header */}
       <div className="flex items-center justify-center gap-3 px-3 py-1.5 border-b border-white/[0.04] bg-white/[0.015]">
         <span className="text-[10px] font-mono font-bold text-emerald-400">{awayTeamWins}W</span>
-        <span className="text-[9px] font-mono text-gray-600">LAST {games.length}</span>
+        <span className="text-[9px] font-mono text-gray-300">LAST {games.length}</span>
         <span className="text-[10px] font-mono font-bold text-emerald-400">{homeTeamWins}W</span>
       </div>
 
@@ -581,11 +581,11 @@ function H2HSection({
         <table className="w-full min-w-[380px]">
           <thead>
             <tr className="border-b border-white/[0.06]">
-              <th className="px-3 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">DATE</th>
-              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">MATCHUP</th>
-              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">SCORE</th>
-              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">ATS</th>
-              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-600 font-mono tracking-widest">O/U</th>
+              <th className="px-3 py-1.5 text-left text-[9px] font-bold text-gray-300 font-mono tracking-widest">DATE</th>
+              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-300 font-mono tracking-widest">MATCHUP</th>
+              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-300 font-mono tracking-widest">SCORE</th>
+              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-300 font-mono tracking-widest">ATS</th>
+              <th className="px-2 py-1.5 text-left text-[9px] font-bold text-gray-300 font-mono tracking-widest">O/U</th>
             </tr>
           </thead>
           <tbody>
@@ -690,7 +690,7 @@ export default function RecentSchedulePanel({
         className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/[0.02] transition-colors"
       >
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-gray-400 font-mono tracking-widest uppercase">
+          <span className="text-[10px] font-bold text-gray-200 font-mono tracking-widest uppercase">
             Last 5 Games
           </span>
 
@@ -698,8 +698,8 @@ export default function RecentSchedulePanel({
         <div className="flex items-center gap-2">
           {isFetching && <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />}
           {isExpanded
-            ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" />
-            : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+            ? <ChevronUp className="w-3.5 h-3.5 text-gray-300" />
+            : <ChevronDown className="w-3.5 h-3.5 text-gray-300" />
           }
         </div>
       </button>
@@ -715,7 +715,7 @@ export default function RecentSchedulePanel({
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold font-mono transition-all flex-1 justify-center",
                 tab === "away"
                   ? "bg-white/10 text-white"
-                  : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
+                  : "text-gray-300 hover:text-gray-300 hover:bg-white/5"
               )}
             >
               {awayLogo && (
@@ -735,7 +735,7 @@ export default function RecentSchedulePanel({
                 "px-3 py-1.5 rounded-full text-[10px] font-bold font-mono transition-all flex-1 justify-center",
                 tab === "h2h"
                   ? "bg-white/10 text-white"
-                  : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
+                  : "text-gray-300 hover:text-gray-300 hover:bg-white/5"
               )}
             >
               Head-to-Head
@@ -747,7 +747,7 @@ export default function RecentSchedulePanel({
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold font-mono transition-all flex-1 justify-center",
                 tab === "home"
                   ? "bg-white/10 text-white"
-                  : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
+                  : "text-gray-300 hover:text-gray-300 hover:bg-white/5"
               )}
             >
               {homeLogo && (
@@ -766,7 +766,7 @@ export default function RecentSchedulePanel({
           {isLoading && (
             <div className="flex items-center justify-center py-6">
               <RefreshCw className="w-4 h-4 text-blue-400 animate-spin mr-2" />
-              <span className="text-[10px] text-gray-500 font-mono">Loading schedule...</span>
+              <span className="text-[10px] text-gray-300 font-mono">Loading schedule...</span>
             </div>
           )}
 

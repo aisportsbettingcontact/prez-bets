@@ -98,19 +98,19 @@ function SearchResultRow({ game, onClick }: { game: GameRow; onClick: () => void
         <div className="flex items-center gap-1.5 sm:gap-2" style={{ flex: "1 1 0", minWidth: 0, overflow: "hidden" }}>
           <TeamBadge slug={game.awayTeam} size={22} />
           <div className="flex flex-col" style={{ minWidth: 0, overflow: "hidden" }}>
-            <span className="font-bold text-white leading-tight sm:text-[12px]" style={{ fontSize: "clamp(9px, 2.6vw, 12px)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{awaySchool}</span>
-            {awayNick && <span className="font-normal text-gray-400 leading-tight sm:text-[10px]" style={{ fontSize: "clamp(8px, 2.2vw, 10px)", whiteSpace: "nowrap", display: "block" }}>{awayNick}</span>}
+            <span className="font-bold text-white leading-tight sm:text-sm" style={{ fontSize: "clamp(9px, 2.6vw, 12px)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{awaySchool}</span>
+            {awayNick && <span className="font-normal text-zinc-200 leading-tight sm:text-sm" style={{ fontSize: "clamp(8px, 2.2vw, 10px)", whiteSpace: "nowrap", display: "block" }}>{awayNick}</span>}
           </div>
         </div>
         <div className="flex flex-col items-center flex-shrink-0" style={{ minWidth: 66 }}>
-          <span className="text-[11px] text-gray-500 font-medium leading-tight">@</span>
-          <span className="text-[9px] text-gray-500 leading-tight text-center whitespace-nowrap mt-0.5">{dateShort}</span>
-          <span className="text-[9px] text-gray-500 leading-tight text-center whitespace-nowrap">{time}</span>
+          <span className="text-sm text-zinc-300 font-medium leading-tight">@</span>
+          <span className="text-xs text-zinc-300 leading-tight text-center whitespace-nowrap mt-0.5">{dateShort}</span>
+          <span className="text-xs text-zinc-300 leading-tight text-center whitespace-nowrap">{time}</span>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 justify-end" style={{ flex: "1 1 0", minWidth: 0, overflow: "hidden" }}>
           <div className="flex flex-col items-end" style={{ minWidth: 0, overflow: "hidden" }}>
-            <span className="font-bold text-white leading-tight sm:text-[12px]" style={{ fontSize: "clamp(9px, 2.6vw, 12px)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{homeSchool}</span>
-            {homeNick && <span className="font-normal text-gray-400 leading-tight sm:text-[10px]" style={{ fontSize: "clamp(8px, 2.2vw, 10px)", whiteSpace: "nowrap", display: "block" }}>{homeNick}</span>}
+            <span className="font-bold text-white leading-tight sm:text-sm" style={{ fontSize: "clamp(9px, 2.6vw, 12px)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{homeSchool}</span>
+            {homeNick && <span className="font-normal text-zinc-200 leading-tight sm:text-sm" style={{ fontSize: "clamp(8px, 2.2vw, 10px)", whiteSpace: "nowrap", display: "block" }}>{homeNick}</span>}
           </div>
           <TeamBadge slug={game.homeTeam} size={22} />
         </div>
@@ -881,7 +881,7 @@ export default function ModelProjections() {
                           {appUser.role === "owner" && <Crown className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
                           <p className="text-xs font-semibold text-foreground truncate">@{appUser.username}</p>
                         </div>
-                        <p className="text-[11px] text-muted-foreground truncate">{appUser.email}</p>
+                        <p className="text-sm text-muted-foreground truncate">{appUser.email}</p>
                       </div>
                       {(isOwner || appUser.role === "admin" || appUser.role === "handicapper") && (
                         <button type="button" onClick={() => { setShowUserMenu(false); setLocation("/bet-tracker"); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
@@ -915,7 +915,7 @@ export default function ModelProjections() {
                     <>
                       <div className="px-3 py-2.5 border-b border-border">
                         <p className="text-xs font-semibold text-foreground truncate">{user.name ?? "User"}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">{user.email ?? ""}</p>
+                        <p className="text-sm text-muted-foreground truncate">{user.email ?? ""}</p>
                       </div>
                       <button type="button" onClick={() => { setShowUserMenu(false); appLogout(); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
                         <LogOut className="w-3.5 h-3.5" /> Sign out
@@ -940,7 +940,7 @@ export default function ModelProjections() {
           {/* NOTE: must use isAppAuthedForFav (Boolean(appUser)) — NOT isAuthenticated (Manus OAuth always null) */}
           {isAppAuthedForFav && activeFavCount >= 1 && (
             <button type="button" onClick={() => setShowFavoritesTab(v => !v)}
-              className="flex items-center gap-1 sm:gap-1.5 md:gap-2 px-1.5 sm:px-2.5 md:px-3 py-1 sm:py-1.5 md:py-2 rounded-full text-[10px] sm:text-[11px] md:text-[13px] font-bold tracking-wide transition-all flex-shrink-0"
+              className="flex items-center gap-1 sm:gap-1.5 md:gap-2 px-1.5 sm:px-2.5 md:px-3 py-1 sm:py-1.5 md:py-2 rounded-full text-sm sm:text-sm md:text-[13px] font-bold tracking-wide transition-all flex-shrink-0"
               style={showFavoritesTab
                 ? { background: "rgba(255,215,0,0.18)", color: "#FFD700", border: "1px solid rgba(255,215,0,0.55)", boxShadow: "0 0 8px rgba(255,215,0,0.15)" }
                 : { background: "hsl(var(--card))", color: "rgba(255,215,0,0.75)", border: "1px solid rgba(255,215,0,0.35)" }
@@ -1006,13 +1006,13 @@ export default function ModelProjections() {
           {showDropdown && (
             <div className="absolute left-3 right-3 top-full mt-0.5 z-50 rounded-xl border border-white/10 shadow-2xl overflow-hidden" style={{ background: "#0f0f0f", maxHeight: "calc(3 * 68px + 44px)", overflowY: "auto" }}>
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 sticky top-0" style={{ background: "#0f0f0f", zIndex: 10 }}>
-                <span className="text-[10px] text-gray-500 uppercase tracking-widest">{dropdownResults.length === 0 ? "No results" : `${dropdownResults.length} game${dropdownResults.length !== 1 ? "s" : ""}`}</span>
-                {dropdownResults.length > 0 && <span className="text-[10px] text-gray-600">tap to jump</span>}
+                <span className="text-sm text-zinc-300 uppercase tracking-widest">{dropdownResults.length === 0 ? "No results" : `${dropdownResults.length} game${dropdownResults.length !== 1 ? "s" : ""}`}</span>
+                {dropdownResults.length > 0 && <span className="text-sm text-zinc-300">tap to jump</span>}
               </div>
               {dropdownResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 gap-2">
-                  <Search className="w-5 h-5 text-gray-600" />
-                  <p className="text-xs text-gray-500">No games found for "{searchQuery}"</p>
+                  <Search className="w-5 h-5 text-zinc-300" />
+                  <p className="text-xs text-zinc-300">No games found for "{searchQuery}"</p>
                 </div>
               ) : dropdownResults.map((game) => <SearchResultRow key={game!.id} game={game!} onClick={() => scrollToGame(game!.id)} />)}
             </div>

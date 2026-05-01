@@ -257,7 +257,7 @@ function VerdictSide({ diff, label, isStrong, logoUrl, teamSlug, teamName, compa
   if (isPass) {
     return (
       <div className="flex flex-col items-center gap-0.5 py-0.5">
-        <span className="text-[11px] font-medium tracking-wide" style={{ color: "hsl(var(--muted-foreground) / 0.35)" }}>
+        <span className="text-[11px] font-medium tracking-wide" style={{ color: "hsl(var(--muted-foreground) / 0.80)" }}>
           PASS
         </span>
       </div>
@@ -338,7 +338,7 @@ function EdgeVerdict({
   if (spreadPass && totalPass) {
     return (
       <div className="mt-2 pt-2 flex items-center justify-center" style={{ borderTop: "1px solid hsl(var(--border))" }}>
-        <span className="text-xs font-medium tracking-widest uppercase" style={{ color: "hsl(var(--muted-foreground) / 0.35)" }}>
+        <span className="text-xs font-medium tracking-widest uppercase" style={{ color: "hsl(var(--muted-foreground) / 0.80)" }}>
           PASS
         </span>
       </div>
@@ -536,7 +536,7 @@ function MergedSplitBar({
         );
       })() : (
         <div style={{ height: 'clamp(22px,2.2vw,32px)', background: 'rgba(255,255,255,0.05)', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 9, color: 'hsl(var(--muted-foreground))', opacity: 0.35 }}>—</span>
+          <span style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', opacity: 0.80 }}>—</span>
         </div>
       )}
     </div>
@@ -1170,7 +1170,7 @@ function DesktopMergedPanel({
           <span style={{ fontSize: 'clamp(9px,0.7vw,11px)', fontWeight: 800, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8, alignSelf: 'center' }}>EDGE</span>
           {spreadPass && totalPass && !hasMlEdge ? (
             <div style={{ alignSelf: 'center', padding: '4px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 600, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.1em' }}>PASS</span>
+              <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 600, color: 'rgba(255,255,255,0.70)', letterSpacing: '0.1em' }}>PASS</span>
             </div>
           ) : (
             <div className="flex flex-col w-full" style={{ gap: 6 }}>
@@ -1193,7 +1193,7 @@ function DesktopMergedPanel({
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 'clamp(8px,0.65vw,10px)', color: 'rgba(255,255,255,0.35)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{mktLabel}</span>
+                      <span style={{ fontSize: 'clamp(11px,0.85vw,13px)', color: 'rgba(255,255,255,0.75)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{mktLabel}</span>
                       <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff !== null ? `${diff}${diff === 1 ? 'PT' : 'PTS'}` : '—'}</span>
                     </div>
                   </div>
@@ -1214,7 +1214,7 @@ function DesktopMergedPanel({
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 'clamp(8px,0.65vw,10px)', color: 'rgba(255,255,255,0.35)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>TOTAL</span>
+                      <span style={{ fontSize: 'clamp(11px,0.85vw,13px)', color: 'rgba(255,255,255,0.75)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>TOTAL</span>
                       <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff !== null ? `${diff}${diff === 1 ? 'PT' : 'PTS'}` : '—'}</span>
                     </div>
                   </div>
@@ -1237,7 +1237,7 @@ function DesktopMergedPanel({
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 'clamp(8px,0.65vw,10px)', color: 'rgba(255,255,255,0.35)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>MONEYLINE</span>
+                      <span style={{ fontSize: 'clamp(11px,0.85vw,13px)', color: 'rgba(255,255,255,0.75)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>MONEYLINE</span>
                       <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff}{diff === 1 ? 'PT' : 'PTS'}</span>
                     </div>
                   </div>
@@ -1364,7 +1364,7 @@ function OddsCell({
           style={{
             fontSize: openFs,
             fontWeight: 500,
-            color: 'rgba(255,255,255,0.30)',
+            color: 'rgba(255,255,255,0.70)',
             letterSpacing: '0.03em',
             whiteSpace: 'nowrap',
             lineHeight: 1,

@@ -63,7 +63,7 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
 function MlbStatusTable({ games, dates }: { games: any[]; dates: string[] }) {
   if (games.length === 0) {
     return (
-      <div className="text-center text-zinc-500 py-8 text-sm">
+      <div className="text-center text-zinc-300 py-8 text-sm">
         No MLB games found for {dates.join(", ")}
       </div>
     );
@@ -73,7 +73,7 @@ function MlbStatusTable({ games, dates }: { games: any[]; dates: string[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-xs font-mono border-collapse">
         <thead>
-          <tr className="border-b border-zinc-700 text-zinc-400 text-left">
+          <tr className="border-b border-zinc-700 text-zinc-200 text-left">
             <th className="py-2 px-3 whitespace-nowrap">Date</th>
             <th className="py-2 px-3 whitespace-nowrap">Matchup</th>
             <th className="py-2 px-3 whitespace-nowrap">Away SP</th>
@@ -107,14 +107,14 @@ function MlbStatusTable({ games, dates }: { games: any[]; dates: string[] }) {
                 ? "text-yellow-400"
                 : lineupStatus === "EXPECTED"
                 ? "text-blue-400"
-                : "text-zinc-500";
+                : "text-zinc-300";
 
             return (
               <tr
                 key={g.id}
                 className="border-b border-zinc-800 hover:bg-zinc-800/30 transition-colors"
               >
-                <td className="py-2 px-3 text-zinc-400 whitespace-nowrap">{g.gameDate}</td>
+                <td className="py-2 px-3 text-zinc-200 whitespace-nowrap">{g.gameDate}</td>
                 <td className="py-2 px-3 text-white font-semibold whitespace-nowrap">
                   {g.awayTeam} @ {g.homeTeam}
                 </td>
@@ -139,7 +139,7 @@ function MlbStatusTable({ games, dates }: { games: any[]; dates: string[] }) {
                 <td className="py-2 px-3 text-zinc-300 whitespace-nowrap">
                   {g.modelTotal != null ? `O/U ${g.modelTotal}` : "—"}
                 </td>
-                <td className="py-2 px-3 text-zinc-400 whitespace-nowrap">
+                <td className="py-2 px-3 text-zinc-200 whitespace-nowrap">
                   {fmtTs(g.modelRunAt)}
                 </td>
                 <td className="py-2 px-3 whitespace-nowrap">
@@ -162,7 +162,7 @@ function MlbStatusTable({ games, dates }: { games: any[]; dates: string[] }) {
 function NhlStatusTable({ games, dates }: { games: any[]; dates: string[] }) {
   if (games.length === 0) {
     return (
-      <div className="text-center text-zinc-500 py-8 text-sm">
+      <div className="text-center text-zinc-300 py-8 text-sm">
         No NHL games found for {dates.join(", ")}
       </div>
     );
@@ -172,7 +172,7 @@ function NhlStatusTable({ games, dates }: { games: any[]; dates: string[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-xs font-mono border-collapse">
         <thead>
-          <tr className="border-b border-zinc-700 text-zinc-400 text-left">
+          <tr className="border-b border-zinc-700 text-zinc-200 text-left">
             <th className="py-2 px-3 whitespace-nowrap">Date</th>
             <th className="py-2 px-3 whitespace-nowrap">Matchup</th>
             <th className="py-2 px-3 whitespace-nowrap">Away Goalie</th>
@@ -192,7 +192,7 @@ function NhlStatusTable({ games, dates }: { games: any[]; dates: string[] }) {
               key={g.id}
               className="border-b border-zinc-800 hover:bg-zinc-800/30 transition-colors"
             >
-              <td className="py-2 px-3 text-zinc-400 whitespace-nowrap">{g.gameDate}</td>
+              <td className="py-2 px-3 text-zinc-200 whitespace-nowrap">{g.gameDate}</td>
               <td className="py-2 px-3 text-white font-semibold whitespace-nowrap">
                 {g.awayTeam} @ {g.homeTeam}
               </td>
@@ -217,7 +217,7 @@ function NhlStatusTable({ games, dates }: { games: any[]; dates: string[] }) {
               <td className="py-2 px-3 text-zinc-300 whitespace-nowrap">
                 {g.modelTotal != null ? `O/U ${g.modelTotal}` : "—"}
               </td>
-              <td className="py-2 px-3 text-zinc-400 whitespace-nowrap">
+              <td className="py-2 px-3 text-zinc-200 whitespace-nowrap">
                 {fmtTs(g.modelRunAt)}
               </td>
               <td className="py-2 px-3 whitespace-nowrap">
@@ -250,7 +250,7 @@ function SummaryBar({
   const pct = total > 0 ? Math.round((modeled / total) * 100) : 0;
   return (
     <div className="flex items-center gap-4 text-sm mb-3">
-      <span className="text-zinc-400 font-mono">
+      <span className="text-zinc-200 font-mono">
         {sport}: {total} games
       </span>
       <span className="text-green-400 font-mono font-semibold">
@@ -267,7 +267,7 @@ function SummaryBar({
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-zinc-400 font-mono text-xs">{pct}%</span>
+      <span className="text-zinc-200 font-mono text-xs">{pct}%</span>
     </div>
   );
 }
@@ -317,7 +317,7 @@ export default function AdminModelStatus() {
           <h1 className="text-2xl font-bold tracking-tight text-white">
             Model Pipeline Status
           </h1>
-          <p className="text-zinc-400 text-sm mt-1">
+          <p className="text-zinc-200 text-sm mt-1">
             Today + Tomorrow · Auto-refreshes every 30s · Last updated: {lastUpdated} ET
           </p>
         </div>
@@ -356,7 +356,7 @@ export default function AdminModelStatus() {
         <TabsList className="bg-zinc-900 border border-zinc-700 mb-4">
           <TabsTrigger
             value="mlb"
-            className="data-[state=active]:bg-zinc-700 data-[state=active]:text-white text-zinc-400 font-mono text-xs"
+            className="data-[state=active]:bg-zinc-700 data-[state=active]:text-white text-zinc-200 font-mono text-xs"
           >
             MLB{" "}
             {mlbData && (
@@ -371,7 +371,7 @@ export default function AdminModelStatus() {
           </TabsTrigger>
           <TabsTrigger
             value="nhl"
-            className="data-[state=active]:bg-zinc-700 data-[state=active]:text-white text-zinc-400 font-mono text-xs"
+            className="data-[state=active]:bg-zinc-700 data-[state=active]:text-white text-zinc-200 font-mono text-xs"
           >
             NHL{" "}
             {nhlData && (
@@ -395,7 +395,7 @@ export default function AdminModelStatus() {
             </CardHeader>
             <CardContent className="p-0">
               {mlbQuery.isLoading ? (
-                <div className="text-center text-zinc-500 py-8 text-sm font-mono">
+                <div className="text-center text-zinc-300 py-8 text-sm font-mono">
                   Loading MLB pipeline status…
                 </div>
               ) : mlbQuery.isError ? (
@@ -421,7 +421,7 @@ export default function AdminModelStatus() {
             </CardHeader>
             <CardContent className="p-0">
               {nhlQuery.isLoading ? (
-                <div className="text-center text-zinc-500 py-8 text-sm font-mono">
+                <div className="text-center text-zinc-300 py-8 text-sm font-mono">
                   Loading NHL pipeline status…
                 </div>
               ) : nhlQuery.isError ? (

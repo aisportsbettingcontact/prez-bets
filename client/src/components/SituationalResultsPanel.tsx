@@ -167,8 +167,8 @@ function RecordRow({
     <div className="mb-3">
       {/* Label row */}
       <div className="flex items-center justify-between mb-1 px-1">
-        <span className="text-[9px] text-gray-500 font-mono">{label}</span>
-        <span className="text-[9px] text-gray-500 font-mono text-right">{label}</span>
+        <span className="text-[9px] text-gray-300 font-mono">{label}</span>
+        <span className="text-[9px] text-gray-300 font-mono text-right">{label}</span>
       </div>
       {/* Bar row */}
       <div className="flex gap-2">
@@ -281,7 +281,7 @@ function StatsSection({
     return (
       <div className="flex items-center justify-center py-6">
         <RefreshCw className="w-4 h-4 text-blue-400 animate-spin mr-2" />
-        <span className="text-[10px] text-gray-500 font-mono">Loading trends...</span>
+        <span className="text-[10px] text-gray-300 font-mono">Loading trends...</span>
       </div>
     );
   }
@@ -431,13 +431,13 @@ export default function SituationalResultsPanel({
       <button type="button" onClick={() => setIsExpanded((v) => !v)}
         className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/[0.02] transition-colors"
       >
-        <span className="text-[10px] font-bold text-gray-400 font-mono tracking-widest uppercase">
+        <span className="text-[10px] font-bold text-gray-200 font-mono tracking-widest uppercase">
           Trends
         </span>
         <div className="flex items-center gap-1">
           {isExpanded
-            ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" />
-            : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+            ? <ChevronUp className="w-3.5 h-3.5 text-gray-300" />
+            : <ChevronDown className="w-3.5 h-3.5 text-gray-300" />
           }
         </div>
       </button>
@@ -454,7 +454,7 @@ export default function SituationalResultsPanel({
                   "flex-1 py-1.5 rounded-full text-[10px] font-bold font-mono transition-all",
                   tab === t.key
                     ? "bg-white/10 text-white"
-                    : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
+                    : "text-gray-300 hover:text-gray-300 hover:bg-white/5"
                 )}
               >
                 {t.label}

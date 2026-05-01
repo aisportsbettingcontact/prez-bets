@@ -129,7 +129,7 @@ function MarkStatusDialog({
           <AlertDialogTitle className="text-white">
             Override Game Status
           </AlertDialogTitle>
-          <AlertDialogDescription className="text-zinc-400">
+          <AlertDialogDescription className="text-zinc-200">
             Manually set the status for{" "}
             <span className="text-white font-mono">
               {game.awayTeam}@{game.homeTeam}
@@ -218,7 +218,7 @@ export default function PostponedGames() {
           <h1 className="text-2xl font-bold text-white tracking-tight">
             Postponed &amp; Suspended Games
           </h1>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-sm text-zinc-200 mt-1">
             Owner audit view — all games excluded from the public feed due to
             postponed or suspended status. Auto-refreshes every 60 seconds.
           </p>
@@ -242,23 +242,23 @@ export default function PostponedGames() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <Card className="bg-zinc-900 border-zinc-800">
           <CardContent className="pt-4 pb-4">
-            <div className="text-xs text-zinc-400 uppercase tracking-wider mb-1">Total Hidden</div>
+            <div className="text-xs text-zinc-200 uppercase tracking-wider mb-1">Total Hidden</div>
             <div className="text-3xl font-bold text-white">{data?.length ?? "—"}</div>
-            <div className="text-xs text-zinc-500 mt-1">games excluded from feed</div>
+            <div className="text-xs text-zinc-300 mt-1">games excluded from feed</div>
           </CardContent>
         </Card>
         <Card className="bg-zinc-900 border-zinc-800">
           <CardContent className="pt-4 pb-4">
             <div className="text-xs text-amber-400 uppercase tracking-wider mb-1">Postponed</div>
             <div className="text-3xl font-bold text-amber-400">{isLoading ? "—" : postponedCount}</div>
-            <div className="text-xs text-zinc-500 mt-1">not played — awaiting reschedule</div>
+            <div className="text-xs text-zinc-300 mt-1">not played — awaiting reschedule</div>
           </CardContent>
         </Card>
         <Card className="bg-zinc-900 border-zinc-800">
           <CardContent className="pt-4 pb-4">
             <div className="text-xs text-orange-400 uppercase tracking-wider mb-1">Suspended</div>
             <div className="text-3xl font-bold text-orange-400">{isLoading ? "—" : suspendedCount}</div>
-            <div className="text-xs text-zinc-500 mt-1">started but not completed</div>
+            <div className="text-xs text-zinc-300 mt-1">started but not completed</div>
           </CardContent>
         </Card>
       </div>
@@ -271,7 +271,7 @@ export default function PostponedGames() {
               <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
               <div>
                 <div className="text-zinc-300 font-medium">Postponed</div>
-                <div className="text-zinc-500 text-xs">
+                <div className="text-zinc-300 text-xs">
                   Game was never played. Hidden from public feed. The MLB score
                   refresh cycle checks for a new gamePk every 10 minutes — when
                   rescheduled, the new game auto-inserts on its new date.
@@ -282,7 +282,7 @@ export default function PostponedGames() {
               <Clock className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" />
               <div>
                 <div className="text-zinc-300 font-medium">Suspended</div>
-                <div className="text-zinc-500 text-xs">
+                <div className="text-zinc-300 text-xs">
                   Game started but was halted (e.g. rain). Hidden from feed.
                   When the MLB API marks it Final, the cycle auto-updates the
                   status to 'final' and sends an owner notification.
@@ -293,7 +293,7 @@ export default function PostponedGames() {
               <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
               <div>
                 <div className="text-zinc-300 font-medium">Override</div>
-                <div className="text-zinc-500 text-xs">
+                <div className="text-zinc-300 text-xs">
                   Use the Override button to manually correct a game's status.
                   Note: the MLB refresh cycle may overwrite this on the next run
                   if the API still reports the old state.
@@ -314,7 +314,7 @@ export default function PostponedGames() {
               className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
                 filterStatus === f
                   ? "bg-emerald-600 text-white"
-                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+                  : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-zinc-200"
               }`}
             >
               {f === "all" ? `All (${data?.length ?? 0})` : f === "postponed" ? `Postponed (${postponedCount})` : `Suspended (${suspendedCount})`}
@@ -322,7 +322,7 @@ export default function PostponedGames() {
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-zinc-500">Sort by date:</span>
+          <span className="text-xs text-zinc-300">Sort by date:</span>
           <button
             onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
             className="px-3 py-1.5 text-xs bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition-colors"
@@ -336,7 +336,7 @@ export default function PostponedGames() {
       <Card className="bg-zinc-900 border-zinc-800">
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center h-40 text-zinc-500">
+            <div className="flex items-center justify-center h-40 text-zinc-300">
               <RefreshCw className="w-5 h-5 animate-spin mr-2" />
               Loading postponed games…
             </div>
@@ -346,10 +346,10 @@ export default function PostponedGames() {
               Error loading data: {error.message}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-zinc-500">
+            <div className="flex flex-col items-center justify-center h-40 text-zinc-300">
               <CheckCircle className="w-8 h-8 text-emerald-500 mb-2" />
               <div className="text-sm font-medium text-zinc-300">No games found</div>
-              <div className="text-xs text-zinc-500 mt-1">
+              <div className="text-xs text-zinc-300 mt-1">
                 {filterStatus === "all"
                   ? "No postponed or suspended games in the database."
                   : `No ${filterStatus} games found.`}
@@ -359,16 +359,16 @@ export default function PostponedGames() {
             <Table>
               <TableHeader>
                 <TableRow className="border-zinc-800 hover:bg-transparent">
-                  <TableHead className="text-zinc-400 text-xs font-medium">Date</TableHead>
-                  <TableHead className="text-zinc-400 text-xs font-medium">Matchup</TableHead>
-                  <TableHead className="text-zinc-400 text-xs font-medium">Sport</TableHead>
-                  <TableHead className="text-zinc-400 text-xs font-medium">Status</TableHead>
-                  <TableHead className="text-zinc-400 text-xs font-medium">MLB GamePk</TableHead>
-                  <TableHead className="text-zinc-400 text-xs font-medium">Start (EST)</TableHead>
-                  <TableHead className="text-zinc-400 text-xs font-medium">Odds (ML)</TableHead>
-                  <TableHead className="text-zinc-400 text-xs font-medium">Total</TableHead>
-                  <TableHead className="text-zinc-400 text-xs font-medium">Feed</TableHead>
-                  <TableHead className="text-zinc-400 text-xs font-medium">Action</TableHead>
+                  <TableHead className="text-zinc-200 text-xs font-medium">Date</TableHead>
+                  <TableHead className="text-zinc-200 text-xs font-medium">Matchup</TableHead>
+                  <TableHead className="text-zinc-200 text-xs font-medium">Sport</TableHead>
+                  <TableHead className="text-zinc-200 text-xs font-medium">Status</TableHead>
+                  <TableHead className="text-zinc-200 text-xs font-medium">MLB GamePk</TableHead>
+                  <TableHead className="text-zinc-200 text-xs font-medium">Start (EST)</TableHead>
+                  <TableHead className="text-zinc-200 text-xs font-medium">Odds (ML)</TableHead>
+                  <TableHead className="text-zinc-200 text-xs font-medium">Total</TableHead>
+                  <TableHead className="text-zinc-200 text-xs font-medium">Feed</TableHead>
+                  <TableHead className="text-zinc-200 text-xs font-medium">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -382,19 +382,19 @@ export default function PostponedGames() {
                     </TableCell>
                     <TableCell className="font-mono text-sm font-semibold text-white">
                       {game.awayTeam}
-                      <span className="text-zinc-500 mx-1">@</span>
+                      <span className="text-zinc-300 mx-1">@</span>
                       {game.homeTeam}
                     </TableCell>
-                    <TableCell className="text-xs text-zinc-400">{game.sport}</TableCell>
+                    <TableCell className="text-xs text-zinc-200">{game.sport}</TableCell>
                     <TableCell>
                       <StatusBadge status={game.gameStatus} />
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-zinc-400">
+                    <TableCell className="font-mono text-xs text-zinc-200">
                       {game.mlbGamePk ?? (
-                        <span className="text-zinc-600">—</span>
+                        <span className="text-zinc-300">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-zinc-400">
+                    <TableCell className="text-xs text-zinc-200">
                       {game.startTimeEst
                         ? new Date(game.startTimeEst).toLocaleTimeString("en-US", {
                             timeZone: "America/New_York",
@@ -410,18 +410,18 @@ export default function PostponedGames() {
                           {game.awayML ?? "—"} / {game.homeML ?? "—"}
                         </span>
                       ) : (
-                        <span className="text-zinc-600">—</span>
+                        <span className="text-zinc-300">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-zinc-400">
-                      {game.bookTotal ?? <span className="text-zinc-600">—</span>}
+                    <TableCell className="font-mono text-xs text-zinc-200">
+                      {game.bookTotal ?? <span className="text-zinc-300">—</span>}
                     </TableCell>
                     <TableCell>
                       <Badge
                         className={`text-xs font-mono ${
                           game.publishedToFeed
                             ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                            : "bg-zinc-700 text-zinc-400 border-zinc-600"
+                            : "bg-zinc-700 text-zinc-200 border-zinc-600"
                         }`}
                       >
                         {game.publishedToFeed ? "LIVE" : "HIDDEN"}
@@ -440,7 +440,7 @@ export default function PostponedGames() {
 
       {/* Footer */}
       {!isLoading && data && (
-        <div className="mt-4 text-xs text-zinc-600 text-center">
+        <div className="mt-4 text-xs text-zinc-300 text-center">
           Showing {filtered.length} of {data.length} games · Auto-refreshes every 60s ·
           MLB rescheduled detection runs every 10 minutes (MLB cycle Step 0)
         </div>
