@@ -324,6 +324,7 @@ function EdgeVerdict({
   spreadDiff, spreadEdge, totalDiff, totalEdge,
   awayLogoUrl, homeLogoUrl, awaySlug, homeSlug, awayDisplayName, homeDisplayName,
   compact = false,
+  authSpreadEdgeIsAway,
 }: {
   spreadDiff: number | null; spreadEdge: string | null;
   totalDiff: number | null; totalEdge: string | null;
@@ -331,6 +332,8 @@ function EdgeVerdict({
   awaySlug?: string; homeSlug?: string;
   awayDisplayName?: string; homeDisplayName?: string;
   compact?: boolean;
+  /** AUTHORITATIVE edge direction — computed at GameCard level with correct sport. When provided, skips local heuristic. */
+  authSpreadEdgeIsAway?: boolean | null;
 }) {
   const spreadPass = normalizeEdgeLabel(spreadEdge) === "PASS" || (spreadDiff ?? 0) <= 0;
   const totalPass  = normalizeEdgeLabel(totalEdge)  === "PASS" || (totalDiff ?? 0)  <= 0;
@@ -347,14 +350,36 @@ function EdgeVerdict({
 
   const spreadIsStronger = (spreadDiff ?? 0) >= (totalDiff ?? 0);
 
-  // Determine which team logo to show for the spread edge
-  // Use edgeLabelIsAway: for NHL/MLB parses abbrev from label; for NBA uses display name match.
-  // Resolve official abbreviation from DB slug via NHL_BY_DB_SLUG (e.g. "utah_mammoth" → "UTA").
-  // [VERIFY] This replaces the flawed "+1.5" check and the startsWith(displayName) check.
-  const awayAbbrForVerdict = (awaySlug ? (NHL_BY_DB_SLUG.get(awaySlug)?.abbrev ?? awaySlug.split('_').map(w=>w[0]?.toUpperCase()||'').join('')) : '');
-  const spreadEdgeIsAway = spreadEdge
-    ? edgeLabelIsAway(spreadEdge, awayAbbrForVerdict, awayDisplayName, 'NHL')
-    : false;
+  // AUTHORITATIVE: use authSpreadEdgeIsAway when provided (computed at GameCard level with correct sport).
+  // Fallback: resolve awayAbbr from all sport registries and use edgeLabelIsAway.
+  // The heuristic _verdictSport detection was flawed for MLB (slugs like 'arizona_diamondbacks'
+  // never match /^[A-Z]{2,3}$/, so MLB was always treated as NBA).
+  const spreadEdgeIsAway: boolean = (() => {
+    // Prefer authoritative value when available
+    if (authSpreadEdgeIsAway !== undefined && authSpreadEdgeIsAway !== null) return authSpreadEdgeIsAway;
+    if (!spreadEdge) return false;
+    // Fallback: resolve awayAbbr from all sport registries
+    const awayAbbrForVerdict = (() => {
+      const nhl = NHL_BY_DB_SLUG.get(awaySlug ?? '');
+      if (nhl?.abbrev) return nhl.abbrev;
+      const nba = awaySlug ? getNbaTeamByDbSlug(awaySlug) : null;
+      if (nba?.abbrev) return nba.abbrev;
+      const mlb = awaySlug ? MLB_BY_ABBREV.get(awaySlug) : null;
+      if (mlb?.abbrev) return mlb.abbrev;
+      return awaySlug ? awaySlug.split('_').map(w=>w[0]?.toUpperCase()||'').join('') : '';
+    })();
+    // Determine sport: NHL → MLB (check MLB registry) → NBA fallback
+    const _verdictSport = (() => {
+      if (awaySlug && NHL_BY_DB_SLUG.has(awaySlug)) return 'NHL';
+      if (awaySlug) {
+        // Check MLB registry by slug (stored as full name e.g. 'arizona_diamondbacks')
+        const mlbBySlug = Array.from(MLB_BY_ABBREV.values()).find(t => t.dbSlug === awaySlug);
+        if (mlbBySlug) return 'MLB';
+      }
+      return 'NBA';
+    })();
+    return edgeLabelIsAway(spreadEdge, awayAbbrForVerdict, awayDisplayName, _verdictSport);
+  })();
   const spreadLogoUrl = spreadEdgeIsAway ? awayLogoUrl : homeLogoUrl;
   const spreadSlug = spreadEdgeIsAway ? awaySlug : homeSlug;
   const spreadTeamName = spreadEdgeIsAway ? awayDisplayName : homeDisplayName;
@@ -434,16 +459,16 @@ function MergedSplitBar({
 }) {
   const hasData = awayPct != null && homePct != null;
   const headerLabelStyle: React.CSSProperties = {
-    fontSize: 'clamp(8px, 0.65vw, 10px)',
+    fontSize: 'clamp(10px, 0.85vw, 13px)',
     color: '#FFFFFF',
-    fontWeight: 700,
+    fontWeight: 800,
     letterSpacing: '0.1em',
     textTransform: 'uppercase',
     whiteSpace: 'nowrap',
   };
   const teamLabelStyle: React.CSSProperties = {
-    fontSize: 'clamp(8px, 0.68vw, 11px)',
-    color: 'rgba(255,255,255,0.55)',
+    fontSize: 'clamp(9px, 0.78vw, 12px)',
+    color: 'rgba(255,255,255,0.80)',
     fontWeight: 600,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
@@ -842,14 +867,14 @@ function DesktopMergedPanel({
   //   Section title (SPREAD/TOTAL/MONEYLINE): TITLE_FS
   //
   // Using clamp: HDR_FS = clamp(14px,1.15vw,18px), VAL_FS = clamp(10px,0.85vw,14px), ABBR_FS = clamp(9px,0.78vw,13px)
-  const HDR_FS  = 'clamp(14px,1.15vw,18px)';  // BOOK / MODEL column header labels
-  const VAL_FS  = 'clamp(10px,0.85vw,14px)';  // Value rows (spread, total, ML numbers) — 4pt below HDR
-  const ABBR_FS = 'clamp(9px,0.78vw,13px)';   // Abbreviation / OVER / UNDER prefix — 1pt below VAL
-  // TITLE_FS must be 1.5pt larger than HDR_FS at every breakpoint:
-  // At min (mobile): HDR_FS=14px → TITLE_FS=15.5px
-  // At mid (1366px): HDR_FS≈15.7px → TITLE_FS≈17.2px
-  // At max (1920px): HDR_FS=18px → TITLE_FS=19.5px
-  const TITLE_FS = 'clamp(15.5px,1.32vw,19.5px)'; // Section title (SPREAD / TOTAL / MONEYLINE) — 1.5pt above HDR_FS
+  const HDR_FS  = 'clamp(15px,1.25vw,20px)';  // BOOK / MODEL column header labels — raised for readability
+  const VAL_FS  = 'clamp(12px,1.0vw,16px)';   // Value rows (spread, total, ML numbers) — raised for readability
+  const ABBR_FS = 'clamp(11px,0.9vw,14px)';   // Abbreviation / OVER / UNDER prefix — raised for readability
+  // TITLE_FS must be 2pt larger than HDR_FS at every breakpoint:
+  // At min (mobile): HDR_FS=15px → TITLE_FS=17px
+  // At mid (1366px): HDR_FS≈17px → TITLE_FS≈19px
+  // At max (1920px): HDR_FS=20px → TITLE_FS=22px
+  const TITLE_FS = 'clamp(17px,1.45vw,22px)'; // Section title (SPREAD / TOTAL / MONEYLINE) — 2pt above HDR_FS
   // Colors:
   //   Book values: #D3D3D3 (light gray), weight 500
   //   Model non-edge values: #FFFFFF (white), weight 600
@@ -989,8 +1014,8 @@ function DesktopMergedPanel({
     // Used for team abbreviations (SPREAD/ML) and OVER/UNDER labels (TOTAL)
     const _rowLabelStyle: React.CSSProperties = {
       fontSize: ABBR_FS,
-      fontWeight: 600,
-      color: 'rgba(255,255,255,0.55)',
+      fontWeight: 700,
+      color: 'rgba(255,255,255,0.85)',
       letterSpacing: '0.06em',
       textTransform: 'uppercase' as const,
       whiteSpace: 'nowrap' as const,
@@ -1165,12 +1190,12 @@ function DesktopMergedPanel({
       <div style={{ width: 1, background: 'rgba(255,255,255,0.12)', flexShrink: 0, alignSelf: 'stretch' }} />
       {/* EdgeVerdict column */}
       {showModel ? (
-        <div className="flex flex-col items-start justify-center" style={{ flex: '0 0 clamp(148px,13vw,210px)', width: 'clamp(148px,13vw,210px)', padding: '10px 10px', gap: 0 }}>
+        <div className="flex flex-col items-start justify-center" style={{ flex: '0 0 clamp(190px,16vw,250px)', width: 'clamp(190px,16vw,250px)', padding: '10px 12px', gap: 0 }}>
           {/* EDGE header */}
-          <span style={{ fontSize: 'clamp(9px,0.7vw,11px)', fontWeight: 800, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8, alignSelf: 'center' }}>EDGE</span>
+          <span style={{ fontSize: 'clamp(11px,0.9vw,14px)', fontWeight: 800, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8, alignSelf: 'center' }}>EDGE</span>
           {spreadPass && totalPass && !hasMlEdge ? (
             <div style={{ alignSelf: 'center', padding: '4px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 600, color: 'rgba(255,255,255,0.70)', letterSpacing: '0.1em' }}>PASS</span>
+              <span style={{ fontSize: 'clamp(12px,1.0vw,15px)', fontWeight: 700, color: 'rgba(255,255,255,0.85)', letterSpacing: '0.1em' }}>PASS</span>
             </div>
           ) : (
             <div className="flex flex-col w-full" style={{ gap: 6 }}>
@@ -1187,14 +1212,14 @@ function DesktopMergedPanel({
                       {(spreadLogoUrl || spreadVerdictSlug) && (
                         <TeamLogo slug={spreadVerdictSlug ?? ''} name={spreadVerdictTeam ?? ''} logoUrl={spreadLogoUrl} size={16} />
                       )}
-                      <span style={{ fontSize: 'clamp(9px,0.78vw,12px)', fontWeight: 700, color: 'hsl(var(--foreground))', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
-                        {showArrow && <span style={{ color: edgeColor, marginRight: 2, fontSize: '0.8em' }}>▲</span>}
+                      <span style={{ fontSize: 'clamp(11px,0.95vw,14px)', fontWeight: 700, color: '#ffffff', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
+                        {showArrow && <span style={{ color: edgeColor, marginRight: 2, fontSize: '0.85em' }}>▲</span>}
                         {normalized}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 'clamp(11px,0.85vw,13px)', color: 'rgba(255,255,255,0.75)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{mktLabel}</span>
-                      <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff !== null ? `${diff}${diff === 1 ? 'PT' : 'PTS'}` : '—'}</span>
+                      <span style={{ fontSize: 'clamp(11px,0.9vw,14px)', color: 'rgba(255,255,255,0.90)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{mktLabel}</span>
+                      <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff !== null ? `${diff}${diff === 1 ? 'PT' : 'PTS'}` : '—'}</span>
                     </div>
                   </div>
                 );
@@ -1208,14 +1233,14 @@ function DesktopMergedPanel({
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '5px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: `1px solid ${edgeColor}33` }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                      <span style={{ fontSize: 'clamp(9px,0.78vw,12px)', fontWeight: 700, color: 'hsl(var(--foreground))', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
-                        {showArrow && <span style={{ color: edgeColor, marginRight: 2, fontSize: '0.8em' }}>▲</span>}
+                      <span style={{ fontSize: 'clamp(11px,0.95vw,14px)', fontWeight: 700, color: '#ffffff', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
+                        {showArrow && <span style={{ color: edgeColor, marginRight: 2, fontSize: '0.85em' }}>▲</span>}
                         {normalized}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 'clamp(11px,0.85vw,13px)', color: 'rgba(255,255,255,0.75)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>TOTAL</span>
-                      <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff !== null ? `${diff}${diff === 1 ? 'PT' : 'PTS'}` : '—'}</span>
+                      <span style={{ fontSize: 'clamp(11px,0.9vw,14px)', color: 'rgba(255,255,255,0.90)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>TOTAL</span>
+                      <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff !== null ? `${diff}${diff === 1 ? 'PT' : 'PTS'}` : '—'}</span>
                     </div>
                   </div>
                 );
@@ -1231,14 +1256,14 @@ function DesktopMergedPanel({
                       {(mlEdgeLogoUrl || mlEdgeSlug) && (
                         <TeamLogo slug={mlEdgeSlug ?? ''} name={mlEdgeTeam ?? ''} logoUrl={mlEdgeLogoUrl} size={16} />
                       )}
-                      <span style={{ fontSize: 'clamp(9px,0.78vw,12px)', fontWeight: 700, color: 'hsl(var(--foreground))', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
-                        {showArrow && <span style={{ color: edgeColor, marginRight: 2, fontSize: '0.8em' }}>▲</span>}
+                      <span style={{ fontSize: 'clamp(11px,0.95vw,14px)', fontWeight: 700, color: '#ffffff', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
+                        {showArrow && <span style={{ color: edgeColor, marginRight: 2, fontSize: '0.85em' }}>▲</span>}
                         {mlEdgeLabel}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 'clamp(11px,0.85vw,13px)', color: 'rgba(255,255,255,0.75)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>MONEYLINE</span>
-                      <span style={{ fontSize: 'clamp(9px,0.75vw,11px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff}{diff === 1 ? 'PT' : 'PTS'}</span>
+                      <span style={{ fontSize: 'clamp(11px,0.9vw,14px)', color: 'rgba(255,255,255,0.90)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>MONEYLINE</span>
+                      <span style={{ fontSize: 'clamp(10px,0.85vw,13px)', fontWeight: 800, color: edgeColor, letterSpacing: '0.02em' }}>{diff}{diff === 1 ? 'PT' : 'PTS'}</span>
                     </div>
                   </div>
                 );
@@ -1247,7 +1272,7 @@ function DesktopMergedPanel({
           )}
         </div>
       ) : (
-        <div style={{ flex: '0 0 clamp(120px,10vw,160px)', width: 'clamp(120px,10vw,160px)', flexShrink: 0 }} />
+        <div style={{ flex: '0 0 clamp(160px,14vw,200px)', width: 'clamp(160px,14vw,200px)', flexShrink: 0 }} />
       )}
     </div>
   );
@@ -1324,8 +1349,8 @@ function OddsCell({
     ? 'clamp(9px, 2.1vw, 10.5px)'
     : 'clamp(10px, 0.85vw, 12px)';
   const openFs = size === 'sm'
-    ? 'clamp(7px, 1.7vw, 8.5px)'
-    : 'clamp(8px, 0.65vw, 10px)';
+    ? 'clamp(9px, 2.0vw, 11px)'
+    : 'clamp(10px, 0.85vw, 12px)';
   const pillPadding = size === 'sm' ? '3px 5px' : '4px 8px';
   const borderRadius = size === 'sm' ? '8px' : '10px';
 
@@ -1364,7 +1389,7 @@ function OddsCell({
           style={{
             fontSize: openFs,
             fontWeight: 500,
-            color: 'rgba(255,255,255,0.70)',
+            color: 'rgba(255,255,255,0.88)',
             letterSpacing: '0.03em',
             whiteSpace: 'nowrap',
             lineHeight: 1,
@@ -1715,11 +1740,10 @@ function OddsLinesPanel({
         className={`grid ${GRID} pb-0.5`}
         style={{ transition: 'grid-template-columns 200ms ease' }}
       >
-        {/* SPREAD/TOTAL/MONEYLINE: 1.5pt bigger than BOOK/MODEL sub-headers at clamp(8px,0.75vw,11px) */}
-        {/* At min: 8+1.5=9.5px → use 9.5px; at max: 11+1.5=12.5px → use 12.5px */}
-        <span className={`${showModel ? 'col-span-2' : ''} text-center font-extrabold uppercase tracking-widest`} style={{ fontSize: 'clamp(9.5px, 0.88vw, 12.5px)', color: '#E8E8E8' }}>Spread</span>
-        <span className={`${showModel ? 'col-span-2' : ''} text-center font-extrabold uppercase tracking-widest`} style={{ fontSize: 'clamp(9.5px, 0.88vw, 12.5px)', color: '#E8E8E8' }}>Total</span>
-        <span className={`${showModel ? 'col-span-2' : ''} text-center font-extrabold uppercase tracking-widest`} style={{ fontSize: 'clamp(9.5px, 0.88vw, 12.5px)', color: '#E8E8E8' }}>Moneyline</span>
+        {/* SPREAD/TOTAL/MONEYLINE: raised to clamp(12px,1.05vw,16px) for maximum readability */}
+        <span className={`${showModel ? 'col-span-2' : ''} text-center font-extrabold uppercase tracking-widest`} style={{ fontSize: 'clamp(12px, 1.05vw, 16px)', color: '#FFFFFF' }}>Spread</span>
+        <span className={`${showModel ? 'col-span-2' : ''} text-center font-extrabold uppercase tracking-widest`} style={{ fontSize: 'clamp(12px, 1.05vw, 16px)', color: '#FFFFFF' }}>Total</span>
+        <span className={`${showModel ? 'col-span-2' : ''} text-center font-extrabold uppercase tracking-widest`} style={{ fontSize: 'clamp(12px, 1.05vw, 16px)', color: '#FFFFFF' }}>Moneyline</span>
       </div>
 
       {/* Sub-headers: BOOK only when model off; BOOK | MODEL when model on */}
@@ -1732,7 +1756,7 @@ function OddsLinesPanel({
               <span
                 key={i}
                 className="text-center font-bold uppercase tracking-widest"
-                style={{ fontSize: 'clamp(8px, 0.75vw, 11px)', color: lbl === 'Model' ? '#39FF14' : 'rgba(255,255,255,0.5)' }}
+                style={{ fontSize: 'clamp(11px, 0.95vw, 14px)', color: lbl === 'Model' ? '#39FF14' : 'rgba(255,255,255,0.85)' }}
               >
                 {lbl}
               </span>
@@ -1741,7 +1765,7 @@ function OddsLinesPanel({
               <span
                 key={i}
                 className="text-center font-bold uppercase tracking-widest"
-                style={{ fontSize: 'clamp(8px, 0.75vw, 11px)', color: 'rgba(255,255,255,0.5)' }}
+                style={{ fontSize: 'clamp(11px, 0.95vw, 14px)', color: 'rgba(255,255,255,0.85)' }}
               >
                 {lbl}
               </span>
@@ -2527,7 +2551,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
           {(game.venue || game.broadcaster) && (
             <div className="flex items-center gap-1 flex-wrap">
               {game.venue && (
-                <span style={{ fontSize: 'clamp(9px, 0.7vw, 11px)', color: 'hsl(var(--muted-foreground))', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 'clamp(10px,0.8vw,12px)', color: 'hsl(var(--muted-foreground))', whiteSpace: 'nowrap' }}>
                   {game.venue}
                 </span>
               )}
@@ -2535,7 +2559,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 <span style={{ fontSize: 'clamp(9px, 0.7vw, 11px)', color: 'hsl(var(--border))' }}>·</span>
               )}
               {game.broadcaster && (
-                <span style={{ fontSize: 'clamp(9px, 0.7vw, 11px)', color: '#60a5fa', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 'clamp(10px, 0.8vw, 12px)', color: '#60a5fa', fontWeight: 600, whiteSpace: 'nowrap' }}>
                   {game.broadcaster}
                 </span>
               )}
@@ -2850,6 +2874,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                     homeSlug={game.homeTeam}
                     awayDisplayName={awayDisplayName}
                     homeDisplayName={homeDisplayName}
+                    authSpreadEdgeIsAway={authSpreadEdgeIsAway}
                     compact
                   />
                 </div>

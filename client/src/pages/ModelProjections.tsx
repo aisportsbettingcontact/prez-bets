@@ -1173,15 +1173,15 @@ export default function ModelProjections() {
           borderTop: '1px solid rgba(255,255,255,0.06)',
         }}>
           {/* Left: MATCHUP label */}
-          <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', borderRight: '1px solid rgba(255,255,255,0.10)' }}>
-            <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>MATCHUP</span>
+          <div style={{ padding: '5px 8px', display: 'flex', alignItems: 'center', borderRight: '1px solid rgba(255,255,255,0.10)' }}>
+            <span style={{ fontSize: 'clamp(10px, 2.2vw, 12px)', fontWeight: 700, color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>MATCHUP</span>
           </div>
           {/* Right: SPREAD/PUCK LINE | TOTAL | ML labels aligned to card columns */}
-          <div style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div style={{ padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
             <div style={{ display: 'flex', gap: '5px', flex: '1 1 0', minWidth: 0 }}>
               {[selectedSport === 'NHL' ? 'PUCK LINE' : selectedSport === 'MLB' ? 'RUN LINE' : 'SPREAD', 'TOTAL', 'ML'].map(h => (
                 <div key={h} style={{ flex: '1 1 0', textAlign: 'center' }}>
-                  <span style={{ fontSize: 'clamp(7.5px, 1.9vw, 9px)', fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
+                  <span style={{ fontSize: 'clamp(10px, 2.2vw, 12px)', fontWeight: 700, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
                 </div>
               ))}
             </div>
