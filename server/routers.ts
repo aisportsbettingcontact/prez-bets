@@ -48,6 +48,7 @@ import { runStrikeoutModel, type StrikeoutRunnerInput } from "./strikeoutModelRu
 import { getLastRefreshResult, runVsinRefresh, runVsinRefreshManual, refreshAllScoresNow } from "./vsinAutoRefresh";
 import { syncNbaModelFromSheet, getLastNbaModelSyncResult } from "./nbaModelSync";
 import { syncNhlModelForToday, getLastNhlSyncResult } from "./nhlModelSync";
+import { runMlbModelForDate } from "./mlbModelRunner";
 import { checkGoalieChanges, getLastGoalieWatchResult } from "./nhlGoalieWatcher";
 import { MARCH_MADNESS_DB_SLUGS } from "@shared/marchMadnessTeams";
 import { parseAnAllMarketsHtml, type AnSport } from "./anHtmlParser";
@@ -771,6 +772,56 @@ export const appRouter = router({
   }),
 
 
+  // ─── MLB Model Sync ─────────────────────────────────────────────────────────
+  mlbModel: router({
+    /**
+     * Force re-run the MLB model for a specific date (or today if not specified).
+     * Owner-only — clears modelRunAt for all upcoming games on that date and re-runs.
+     */
+    forceRerun: ownerProcedure
+      .input(z.object({ date: zodGameDate.optional() }))
+      .mutation(async ({ input }) => {
+        // Compute today in ET if no date provided
+        const dateStr = input.date ?? (() => {
+          const etStr = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+          const [m, d, y] = etStr.split('/');
+          return `${y}-${m}-${d}`;
+        })();
+        console.log(`[tRPC][mlbModel.forceRerun] ► Forcing MLB model rerun for ${dateStr}`);
+        const result = await runMlbModelForDate(dateStr, { forceRerun: true });
+        console.log(`[tRPC][mlbModel.forceRerun] ✅ Complete: written=${result.written} skipped=${result.skipped} errors=${result.errors}`);
+        return result;
+      }),
+    /**
+     * Get the MLB model run status for a specific date.
+     * Owner-only.
+     */
+    getStatus: ownerProcedure
+      .input(z.object({ date: zodGameDate.optional() }))
+      .query(async ({ input }) => {
+        const dateStr = input.date ?? (() => {
+          const etStr = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+          const [m, d, y] = etStr.split('/');
+          return `${y}-${m}-${d}`;
+        })();
+        const games = await listGamesByDate(dateStr, 'MLB');
+        return {
+          date: dateStr,
+          total: games.length,
+          modeled: games.filter(g => g.modelRunAt !== null).length,
+          published: games.filter(g => g.publishedToFeed).length,
+          games: games.map(g => ({
+            id: g.id,
+            matchup: `${g.awayTeam}@${g.homeTeam}`,
+            modelRunAt: g.modelRunAt,
+            awayModelSpread: g.awayModelSpread,
+            modelTotal: g.modelTotal,
+            modelAwayML: g.modelAwayML,
+            publishedToFeed: g.publishedToFeed,
+          })),
+        };
+      }),
+  }),
   // ─── NHL Model Sync ─────────────────────────────────────────────────────────
   nhlModel: router({
     /**
