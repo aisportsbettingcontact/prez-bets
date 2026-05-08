@@ -1,280 +1,363 @@
 /**
- * Resources.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Private RESOURCES page — accessible ONLY to @prez and @lucianobets.
- *
- * Renders 4 Rotogrinders THE BAT X projection tabs via server-side proxy:
- *   1. Today — Pitchers
- *   2. Today — Hitters
- *   3. Tomorrow — Pitchers
- *   4. Tomorrow — Hitters
- *
- * Access control is enforced at two layers:
- *   - Frontend: redirects to /feed if user is not in the allowlist
- *   - Backend: /api/rg-proxy returns 403 for any non-allowlisted user
+ * Resources.tsx — Private RESOURCES page for @prez and @lucianobets only.
+ * Fetches Rotogrinders THE BAT X projection tables via /api/rg-proxy and
+ * renders them as native styled sortable tables.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
-import { Loader2, ExternalLink, RefreshCw, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  RefreshCw,
+  ExternalLink,
+  Search,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  AlertTriangle,
+  Lock,
+  Loader2,
+} from "lucide-react";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const ALLOWED_USERNAMES = new Set(["prez", "lucianobets"]);
-
-type PageKey = "today-pitchers" | "today-hitters" | "tomorrow-pitchers" | "tomorrow-hitters";
-
-interface Tab {
-  key: PageKey;
-  label: string;
-  sublabel: string;
-  rgUrl: string;
+interface RgTableData {
+  title: string;
+  pageKey: string;
+  type: "pitchers" | "hitters";
+  updatedAt: string;
+  columns: string[];
+  rows: Record<string, string>[];
 }
 
-const TABS: Tab[] = [
-  {
-    key: "today-pitchers",
-    label: "Today",
-    sublabel: "Pitchers",
-    rgUrl: "https://rotogrinders.com/grids/standard-projections-the-bat-x-3372510",
-  },
-  {
-    key: "today-hitters",
-    label: "Today",
-    sublabel: "Hitters",
-    rgUrl: "https://rotogrinders.com/grids/standard-projections-the-bat-x-hitters-3372512",
-  },
-  {
-    key: "tomorrow-pitchers",
-    label: "Tomorrow",
-    sublabel: "Pitchers",
-    rgUrl: "https://rotogrinders.com/grids/tomorrow-projections-the-bat-x-3375509",
-  },
-  {
-    key: "tomorrow-hitters",
-    label: "Tomorrow",
-    sublabel: "Hitters",
-    rgUrl: "https://rotogrinders.com/grids/tomorrow-projections-the-bat-x-hitters-3375510",
-  },
-];
+type SortDir = "asc" | "desc" | null;
 
-// ─── Proxy URL builder ────────────────────────────────────────────────────────
+const TABS = [
+  { key: "today-pitchers",    label: "Today Pitchers",    short: "T.P" },
+  { key: "today-hitters",     label: "Today Hitters",     short: "T.H" },
+  { key: "tomorrow-pitchers", label: "Tomorrow Pitchers", short: "TM.P" },
+  { key: "tomorrow-hitters",  label: "Tomorrow Hitters",  short: "TM.H" },
+] as const;
 
-function proxyUrl(pageKey: PageKey): string {
-  return `/api/rg-proxy?page=${pageKey}&_t=${Date.now()}`;
-}
+type TabKey = typeof TABS[number]["key"];
 
-// ─── ProxyFrame component ─────────────────────────────────────────────────────
+const RG_URLS: Record<TabKey, string> = {
+  "today-pitchers":    "https://rotogrinders.com/grids/standard-projections-the-bat-x-3372510#expand",
+  "today-hitters":     "https://rotogrinders.com/grids/standard-projections-the-bat-x-hitters-3372512#expand",
+  "tomorrow-pitchers": "https://rotogrinders.com/grids/tomorrow-projections-the-bat-x-3375509#expand",
+  "tomorrow-hitters":  "https://rotogrinders.com/grids/tomorrow-projections-the-bat-x-hitters-3375510#expand",
+};
 
-interface ProxyFrameProps {
-  pageKey: PageKey;
-  refreshKey: number;
-}
-
-function ProxyFrame({ pageKey, refreshKey }: ProxyFrameProps) {
-  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
-  const [errorMsg, setErrorMsg] = useState<string>("");
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const url = `${proxyUrl(pageKey)}&_r=${refreshKey}`;
-
-  useEffect(() => {
-    setStatus("loading");
-    setErrorMsg("");
-  }, [pageKey, refreshKey]);
-
-  return (
-    <div className="relative w-full h-full min-h-[calc(100vh-160px)]">
-      {/* Loading overlay */}
-      {status === "loading" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background z-10 gap-3">
-          <Loader2 className="w-7 h-7 text-primary animate-spin" />
-          <p className="text-sm text-muted-foreground">Loading Rotogrinders projections...</p>
-        </div>
-      )}
-
-      {/* Error state */}
-      {status === "error" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background z-10 gap-4">
-          <div className="flex flex-col items-center gap-2 max-w-sm text-center">
-            <p className="text-sm font-semibold text-destructive">Failed to load projections</p>
-            <p className="text-xs text-muted-foreground">{errorMsg || "The Rotogrinders proxy returned an error."}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Proxy iframe */}
-      <iframe
-        ref={iframeRef}
-        src={url}
-        className="w-full border-0 bg-white"
-        style={{
-          height: "calc(100vh - 160px)",
-          minHeight: 600,
-          display: status === "error" ? "none" : "block",
-        }}
-        title={`Rotogrinders — ${pageKey}`}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-        onLoad={() => setStatus("loaded")}
-        onError={() => {
-          setStatus("error");
-          setErrorMsg("Network error or proxy unavailable.");
-        }}
-      />
-    </div>
-  );
-}
-
-// ─── Main Resources page ──────────────────────────────────────────────────────
+const KEY_COLS_PITCHERS = new Set(["NAME", "TEAM", "OPP", "IP", "K", "ERA", "FPTS", "W", "WHIP"]);
+const KEY_COLS_HITTERS  = new Set(["NAME", "TEAM", "OPP_TM", "POS", "FPTS", "HR", "RBI", "R", "SB", "BA", "WOBA"]);
+const ALLOWED = new Set(["prez", "lucianobets"]);
 
 export default function Resources() {
+  const { appUser, loading: authLoading } = useAppAuth();
   const [, setLocation] = useLocation();
-  const { appUser, loading } = useAppAuth();
-  const [activeTab, setActiveTab] = useState<PageKey>("today-pitchers");
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [mobileDropdownOpen, setMobileDropdownOpen] = useState(false);
 
-  // ── Access control: redirect non-allowlisted users ────────────────────────
+  const [activeTab, setActiveTab] = useState<TabKey>("today-pitchers");
+  const [tableCache, setTableCache] = useState<Partial<Record<TabKey, RgTableData>>>({});
+  const [loadingTab, setLoadingTab] = useState<TabKey | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
+
   useEffect(() => {
-    if (!loading && appUser && !ALLOWED_USERNAMES.has(appUser.username)) {
-      console.warn(`[Resources] Access denied for @${appUser.username} — redirecting to /feed`);
-      setLocation("/feed");
+    if (!authLoading && appUser && !ALLOWED.has(appUser.username)) {
+      setLocation("/");
     }
-    if (!loading && !appUser) {
-      setLocation("/feed");
-    }
-  }, [loading, appUser, setLocation]);
+  }, [authLoading, appUser, setLocation]);
 
-  if (loading) {
+  const fetchTab = useCallback(async (tab: TabKey, force = false) => {
+    if (!force && tableCache[tab]) return;
+    setLoadingTab(tab);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/rg-proxy?page=${tab}`, {
+        credentials: "include",
+        headers: { "Accept": "application/json" },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+      }
+      const data: RgTableData = await res.json();
+      setTableCache(prev => ({ ...prev, [tab]: data }));
+    } catch (err) {
+      setErrorMsg((err as Error).message);
+    } finally {
+      setLoadingTab(null);
+    }
+  }, [tableCache]);
+
+  useEffect(() => {
+    if (appUser && ALLOWED.has(appUser.username)) {
+      fetchTab(activeTab);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, appUser]);
+
+  useEffect(() => {
+    setSearch("");
+    setSortCol(null);
+    setSortDir(null);
+  }, [activeTab]);
+
+  const handleSort = (col: string) => {
+    if (sortCol === col) {
+      if (sortDir === "asc") { setSortDir("desc"); }
+      else if (sortDir === "desc") { setSortCol(null); setSortDir(null); }
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  };
+
+  const tableData = tableCache[activeTab];
+
+  const filteredRows = useMemo(() => {
+    if (!tableData) return [];
+    let rows = tableData.rows;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      rows = rows.filter(r =>
+        (r["NAME"] ?? "").toLowerCase().includes(q) ||
+        (r["TEAM"] ?? "").toLowerCase().includes(q) ||
+        (r["OPP_TM"] ?? r["OPP"] ?? "").toLowerCase().includes(q)
+      );
+    }
+    if (sortCol && sortDir) {
+      rows = [...rows].sort((a, b) => {
+        const av = a[sortCol] ?? "";
+        const bv = b[sortCol] ?? "";
+        const an = parseFloat(av);
+        const bn = parseFloat(bv);
+        const cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv);
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+    return rows;
+  }, [tableData, search, sortCol, sortDir]);
+
+  const keyCols = activeTab.includes("pitcher") ? KEY_COLS_PITCHERS : KEY_COLS_HITTERS;
+
+  if (authLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 className="w-7 h-7 text-primary animate-spin" />
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
       </div>
     );
   }
 
-  if (!appUser || !ALLOWED_USERNAMES.has(appUser.username)) {
-    return null; // redirect in progress
+  if (!appUser || !ALLOWED.has(appUser.username)) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center gap-4">
+        <Lock className="w-12 h-12 text-red-400" />
+        <p className="text-white text-lg font-semibold">Access Denied</p>
+        <p className="text-zinc-400 text-sm">This page is restricted to authorized users only.</p>
+        <Button variant="outline" onClick={() => setLocation("/")} className="mt-2 border-zinc-700 text-white">
+          Return to Feed
+        </Button>
+      </div>
+    );
   }
 
-  const activeTabMeta = TABS.find(t => t.key === activeTab)!;
-
   return (
-    <div className="flex flex-col min-h-screen bg-background">
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur"
-        style={{ boxShadow: "0 1px 0 rgba(255,255,255,0.04)" }}
-      >
-        <div className="flex items-center justify-between px-3 sm:px-4 h-12">
-          {/* Left: back + title */}
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => setLocation("/feed")}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0 flex items-center gap-1"
-            >
+    <div className="min-h-screen bg-[#0a0a0f] text-white flex flex-col">
+
+      {/* Header */}
+      <header className="sticky top-0 z-30 bg-[#0a0a0f]/95 backdrop-blur border-b border-zinc-800 px-4 py-3">
+        <div className="max-w-screen-2xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            <button onClick={() => setLocation("/")} className="text-zinc-400 hover:text-white transition-colors">
               ← Feed
             </button>
-            <span className="text-muted-foreground/40 text-xs shrink-0">|</span>
-            <span className="text-xs font-bold tracking-widest uppercase text-foreground truncate">
-              RESOURCES
-            </span>
-            <span className="text-[10px] text-muted-foreground/50 font-mono shrink-0">
-              THE BAT X
-            </span>
+            <span className="text-zinc-600">/</span>
+            <span className="text-white font-semibold tracking-wide">RESOURCES</span>
+            <span className="text-zinc-600">/</span>
+            <span className="text-violet-400 font-medium">THE BAT X</span>
           </div>
-
-          {/* Right: refresh + open in RG */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setRefreshKey(k => k + 1)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              title="Refresh projections"
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => fetchTab(activeTab, true)}
+              disabled={loadingTab === activeTab}
+              className="text-zinc-400 hover:text-white gap-1.5"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingTab === activeTab ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">Refresh</span>
-            </button>
-            <a
-              href={activeTabMeta.rgUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              title="Open on Rotogrinders"
+            </Button>
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => window.open(RG_URLS[activeTab], "_blank")}
+              className="text-zinc-400 hover:text-white gap-1.5"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Open RG</span>
-            </a>
+            </Button>
           </div>
         </div>
+      </header>
 
-        {/* ── Tab bar (desktop) ──────────────────────────────────────────────── */}
-        <div className="hidden sm:flex items-center gap-0 px-3 sm:px-4 border-t border-border/50">
-          {TABS.map(tab => {
-            const isActive = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`
-                  relative flex flex-col items-start px-4 py-2.5 text-xs transition-colors
-                  ${isActive
-                    ? "text-foreground font-semibold"
-                    : "text-muted-foreground hover:text-foreground font-normal"
-                  }
-                `}
-              >
-                <span className="text-[10px] uppercase tracking-widest opacity-60">{tab.label}</span>
-                <span className="text-sm font-bold leading-tight">{tab.sublabel}</span>
-                {isActive && (
-                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary rounded-t-full" />
-                )}
-              </button>
-            );
-          })}
+      {/* Tab Bar */}
+      <div className="sticky top-[57px] z-20 bg-[#0d0d14] border-b border-zinc-800 px-4">
+        <div className="max-w-screen-2xl mx-auto flex items-center gap-1 overflow-x-auto py-1">
+          {TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all ${
+                activeTab === tab.key
+                  ? "bg-violet-600 text-white shadow-lg shadow-violet-900/40"
+                  : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+              }`}
+            >
+              <span className="hidden sm:inline">{tab.label}</span>
+              <span className="sm:hidden">{tab.short}</span>
+              {loadingTab === tab.key && <Loader2 className="inline w-3 h-3 ml-1.5 animate-spin" />}
+            </button>
+          ))}
         </div>
+      </div>
 
-        {/* ── Tab selector (mobile dropdown) ────────────────────────────────── */}
-        <div className="sm:hidden px-3 py-2 border-t border-border/50">
-          <button
-            type="button"
-            onClick={() => setMobileDropdownOpen(v => !v)}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-secondary text-sm font-semibold text-foreground"
-          >
-            <span>
-              <span className="text-muted-foreground text-xs mr-1.5">{activeTabMeta.label}</span>
-              {activeTabMeta.sublabel}
-            </span>
-            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${mobileDropdownOpen ? "rotate-180" : ""}`} />
-          </button>
-          {mobileDropdownOpen && (
-            <div className="mt-1 rounded-lg border border-border bg-popover overflow-hidden shadow-lg">
-              {TABS.map(tab => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => { setActiveTab(tab.key); setMobileDropdownOpen(false); }}
-                  className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm transition-colors
-                    ${activeTab === tab.key
-                      ? "bg-primary/10 text-foreground font-semibold"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                    }`}
-                >
-                  <span className="text-xs text-muted-foreground w-14 shrink-0">{tab.label}</span>
-                  <span className="font-semibold">{tab.sublabel}</span>
-                </button>
-              ))}
+      {/* Main Content */}
+      <main className="flex-1 px-4 py-4 max-w-screen-2xl mx-auto w-full">
+
+        {/* Metadata + Search bar */}
+        {tableData && (
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-sm font-semibold text-white">{tableData.title}</h1>
+              {tableData.updatedAt && (
+                <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs">
+                  Updated: {tableData.updatedAt}
+                </Badge>
+              )}
+              <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs">
+                {filteredRows.length} / {tableData.rows.length} rows
+              </Badge>
             </div>
-          )}
-        </div>
-      </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+              <Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search name / team..."
+                className="pl-8 h-8 text-sm bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 focus:border-violet-500"
+              />
+            </div>
+          </div>
+        )}
 
-      {/* ── Proxy iframe content ─────────────────────────────────────────────── */}
-      <div className="flex-1">
-        <ProxyFrame pageKey={activeTab} refreshKey={refreshKey} />
-      </div>
+        {/* Error */}
+        {errorMsg && (
+          <div className="flex items-center gap-3 bg-red-950/40 border border-red-800/50 rounded-lg px-4 py-3 mb-4">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+            <p className="text-red-300 text-sm">{errorMsg}</p>
+            <Button variant="ghost" size="sm" onClick={() => fetchTab(activeTab, true)} className="ml-auto text-red-400 hover:text-red-200">
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {/* Loading skeleton */}
+        {loadingTab === activeTab && !tableData && (
+          <div className="space-y-2">
+            <div className="h-10 bg-zinc-800/60 rounded animate-pulse" />
+            {Array.from({ length: 25 }).map((_, i) => (
+              <div key={i} className="h-8 bg-zinc-800/40 rounded animate-pulse" style={{ opacity: Math.max(0.1, 1 - i * 0.035) }} />
+            ))}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!loadingTab && tableData && tableData.rows.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-zinc-500">
+            <AlertTriangle className="w-8 h-8" />
+            <p className="text-sm">No projection data found for this page.</p>
+            <p className="text-xs text-center max-w-xs">
+              The table may not have loaded from Rotogrinders. Try refreshing or opening directly in RG.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => fetchTab(activeTab, true)} className="mt-2 border-zinc-700 text-white">
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Retry
+            </Button>
+          </div>
+        )}
+
+        {/* Data Table */}
+        {tableData && tableData.rows.length > 0 && (
+          <div className="overflow-auto rounded-lg border border-zinc-800 shadow-2xl">
+            <table className="w-full text-xs border-collapse min-w-max">
+              <thead>
+                <tr className="bg-zinc-900 border-b border-zinc-700">
+                  {tableData.columns.map((col, i) => {
+                    const isKey = keyCols.has(col);
+                    const isSorted = sortCol === col;
+                    return (
+                      <th
+                        key={`h-${col}-${i}`}
+                        onClick={() => handleSort(col)}
+                        className={`
+                          px-3 py-2.5 text-left font-semibold cursor-pointer select-none whitespace-nowrap
+                          transition-colors group
+                          ${isKey ? "text-violet-300 bg-violet-950/30 hover:bg-violet-950/50" : "text-zinc-300 hover:bg-zinc-800"}
+                          ${isSorted ? "bg-zinc-800" : ""}
+                        `}
+                      >
+                        <span className="flex items-center gap-1">
+                          {col}
+                          {isSorted && sortDir === "asc"  && <ChevronUp   className="w-3 h-3 text-violet-400" />}
+                          {isSorted && sortDir === "desc" && <ChevronDown  className="w-3 h-3 text-violet-400" />}
+                          {!isSorted && <ChevronsUpDown className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                        </span>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row, ri) => (
+                  <tr
+                    key={ri}
+                    className={`border-b border-zinc-800/60 transition-colors hover:bg-zinc-800/40 ${ri % 2 === 0 ? "bg-[#0d0d14]" : "bg-[#0a0a0f]"}`}
+                  >
+                    {tableData.columns.map((col, ci) => {
+                      const val = row[col] ?? "";
+                      const isKey  = keyCols.has(col);
+                      const isName = col === "NAME";
+                      const isTeam = col === "TEAM" || col === "OPP_TM" || col === "OPP";
+                      const isFpts = col === "FPTS";
+                      const isBool = val === "true" || val === "false";
+
+                      return (
+                        <td
+                          key={`d-${col}-${ci}`}
+                          className={`
+                            px-3 py-2 whitespace-nowrap
+                            ${isName ? "font-semibold text-white sticky left-0 bg-inherit z-10 min-w-[130px] shadow-[2px_0_8px_rgba(0,0,0,0.4)]" : ""}
+                            ${isTeam ? "text-zinc-300 font-medium" : ""}
+                            ${isFpts ? "text-emerald-400 font-bold" : ""}
+                            ${isKey && !isName && !isFpts ? "text-violet-200" : ""}
+                            ${!isKey && !isName && !isFpts ? "text-zinc-400" : ""}
+                          `}
+                        >
+                          {isBool
+                            ? (val === "true" ? <span className="text-emerald-400">✔</span> : <span className="text-zinc-700">—</span>)
+                            : (val || <span className="text-zinc-700">—</span>)
+                          }
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
