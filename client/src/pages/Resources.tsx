@@ -4,11 +4,15 @@
  * Features:
  *  1. CSV Export — per-tab download + "Refresh All" global button
  *  2. Column Visibility Groups — toggle named column groups per tab type
+ *     - All groups visible by default
+ *     - User preferences persisted in localStorage
  *  3. Staleness Auto-Refresh — re-fetch if cached data is >15 minutes old
+ *  4. Player Headshots — MLB static CDN headshots in the NAME column
+ *  5. Team Logos — ESPN CDN logos in TEAM/OPP columns
+ *  6. Player IDs — PLAYER_ID (RG) and MLB_ID columns in Identity group
  *
  * Diagnostic logging: all state transitions logged to console with structured labels.
  */
-
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
@@ -17,7 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   RefreshCw,
-  ExternalLink,
   Search,
   ChevronUp,
   ChevronDown,
@@ -42,17 +45,16 @@ interface RgTableData {
   columns: string[];
   rows: Record<string, string>[];
 }
-
 interface CacheEntry {
   data: RgTableData;
   fetchedAt: number; // Unix ms
 }
-
 type SortDir = "asc" | "desc" | null;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STALE_MS = 15 * 60 * 1000; // 15 minutes
+const LS_COL_VIS_KEY = "rg_col_vis_v2"; // localStorage key for column visibility
 
 const TABS = [
   { key: "today-pitchers",    label: "Today Pitchers",    short: "T.P",  type: "pitchers" as const },
@@ -60,60 +62,49 @@ const TABS = [
   { key: "tomorrow-pitchers", label: "Tomorrow Pitchers", short: "TM.P", type: "pitchers" as const },
   { key: "tomorrow-hitters",  label: "Tomorrow Hitters",  short: "TM.H", type: "hitters"  as const },
 ] as const;
-
 type TabKey = typeof TABS[number]["key"];
-
-const RG_URLS: Record<TabKey, string> = {
-  "today-pitchers":    "https://rotogrinders.com/grids/standard-projections-the-bat-x-3372510#expand",
-  "today-hitters":     "https://rotogrinders.com/grids/standard-projections-the-bat-x-hitters-3372512#expand",
-  "tomorrow-pitchers": "https://rotogrinders.com/grids/tomorrow-projections-the-bat-x-3375509#expand",
-  "tomorrow-hitters":  "https://rotogrinders.com/grids/tomorrow-projections-the-bat-x-hitters-3375510#expand",
-};
 
 const ALLOWED = new Set(["prez", "lucianobets"]);
 
+// ─── Internal-only columns (used for rendering, never shown as raw text columns) ──
+
+const INTERNAL_COLS = new Set(["HEADSHOT_URL", "TEAM_LOGO_URL", "OPP_LOGO_URL"]);
+
 // ─── Column Groups ─────────────────────────────────────────────────────────────
+// ALL groups default to visible. User can hide them; preference is saved to localStorage.
 
 interface ColGroup {
   label: string;
   cols: string[];
-  defaultVisible: boolean;
 }
 
 const PITCHER_GROUPS: ColGroup[] = [
   {
     label: "Identity",
-    defaultVisible: true,
-    cols: ["NAME", "TEAM", "OPP", "HAND"],
+    cols: ["NAME", "PLAYER_ID", "MLB_ID", "TEAM", "OPP", "OPP_TM", "HAND"],
   },
   {
     label: "Core Stats",
-    defaultVisible: true,
     cols: ["IP", "W", "K", "ERA", "WHIP", "FPTS", "QS", "L"],
   },
   {
     label: "DFS Lines",
-    defaultVisible: true,
     cols: ["TOMORROW_DK", "TOMORROW_FD", "TOMORROW_YAHOO", "TOMORROW_5X5", "TOMORROW_ESPN", "TOMORROW_YAHOO_SL"],
   },
   {
     label: "Ownership",
-    defaultVisible: true,
     cols: ["12TEAM_OWN", "15TEAM_OWN"],
   },
   {
     label: "Context",
-    defaultVisible: true,
     cols: ["PARK", "ROOF", "UMPIRE", "PLATOON", "GVF", "HFA", "DH", "TILT_BIAS"],
   },
   {
     label: "Advanced",
-    defaultVisible: false,
     cols: ["ER", "H", "HR", "BB", "TBF", "IBB", "HBP", "TB", "SH", "SF", "GIDP", "SB", "CS", "CG", "CGSH"],
   },
   {
     label: "Flags",
-    defaultVisible: false,
     cols: ["OPENER", "CATCHER", "BPC", "PPC", "MPC", "2H", "ERROR"],
   },
 ];
@@ -121,37 +112,30 @@ const PITCHER_GROUPS: ColGroup[] = [
 const HITTER_GROUPS: ColGroup[] = [
   {
     label: "Identity",
-    defaultVisible: true,
-    cols: ["NAME", "TEAM", "OPP_TM", "POS", "HAND"],
+    cols: ["NAME", "PLAYER_ID", "MLB_ID", "TEAM", "OPP_TM", "POS", "HAND"],
   },
   {
     label: "Core Stats",
-    defaultVisible: true,
     cols: ["FPTS", "FPTS/$", "HR", "RBI", "R", "SB", "BA", "OBP", "SLG", "WOBA"],
   },
   {
     label: "DFS Salary",
-    defaultVisible: true,
     cols: ["SALARY", "LP", "OL", "OD", "IPL", "POWN", "FLOOR", "CEILING", "SLATE"],
   },
   {
     label: "Advanced",
-    defaultVisible: false,
     cols: ["CNWOBA", "XWOBA_CS", "XWOBA_LS", "ISO", "PA", "PAVSSP", "PAVSSP%", "OBFPTS", "0%_PH%_FPTS"],
   },
   {
     label: "Context",
-    defaultVisible: false,
     cols: ["PITCHER", "CATCHER", "UMPIRE", "PARK", "ROOF", "GVF", "HFA", "PLATOON", "PH%", "COLD", "TILT_BIAS"],
   },
   {
     label: "Raw Counting",
-    defaultVisible: false,
     cols: ["AB", "K", "BB", "IBB", "HBP", "H", "1B", "2B", "3B", "HR_DEPENDENCE", "TB", "CS", "SH", "SF", "GIDP"],
   },
   {
     label: "Flags",
-    defaultVisible: false,
     cols: ["2H", "ERROR"],
   },
 ];
@@ -160,22 +144,45 @@ function getGroups(type: "pitchers" | "hitters"): ColGroup[] {
   return type === "pitchers" ? PITCHER_GROUPS : HITTER_GROUPS;
 }
 
+/** All groups visible by default */
 function buildDefaultVisibility(type: "pitchers" | "hitters"): Record<string, boolean> {
   const groups = getGroups(type);
   const result: Record<string, boolean> = {};
   for (const g of groups) {
-    result[g.label] = g.defaultVisible;
+    result[g.label] = true; // ALL groups visible by default
   }
   return result;
+}
+
+// ─── localStorage helpers ─────────────────────────────────────────────────────
+
+function loadColVisFromStorage(): Partial<Record<TabKey, Record<string, boolean>>> {
+  try {
+    const raw = localStorage.getItem(LS_COL_VIS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    console.log("[COLVIS][LOAD] Loaded column visibility from localStorage");
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function saveColVisToStorage(colVis: Partial<Record<TabKey, Record<string, boolean>>>) {
+  try {
+    localStorage.setItem(LS_COL_VIS_KEY, JSON.stringify(colVis));
+  } catch { /* ignore quota errors */ }
 }
 
 // ─── CSV Utility ──────────────────────────────────────────────────────────────
 
 function exportCsv(tabKey: TabKey, columns: string[], rows: Record<string, string>[]) {
-  console.log(`[CSV][STEP] Exporting ${rows.length} rows × ${columns.length} cols for tab="${tabKey}"`);
+  // Exclude internal-only columns from CSV
+  const exportCols = columns.filter(c => !INTERNAL_COLS.has(c));
+  console.log(`[CSV][STEP] Exporting ${rows.length} rows × ${exportCols.length} cols for tab="${tabKey}"`);
   const escape = (v: string) => `"${(v ?? "").replace(/"/g, '""')}"`;
-  const header = columns.map(escape).join(",");
-  const body = rows.map(r => columns.map(c => escape(r[c] ?? "")).join(",")).join("\n");
+  const header = exportCols.map(escape).join(",");
+  const body = rows.map(r => exportCols.map(c => escape(r[c] ?? "")).join(",")).join("\n");
   const csv = `${header}\n${body}`;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -186,6 +193,13 @@ function exportCsv(tabKey: TabKey, columns: string[], rows: Record<string, strin
   a.click();
   URL.revokeObjectURL(url);
   console.log(`[CSV][OUTPUT] Downloaded: rg-${tabKey}-${ts}.csv (${(csv.length / 1024).toFixed(1)} KB)`);
+}
+
+// ─── Age Label Utility ────────────────────────────────────────────────────────
+
+function formatAge(ageMs: number): string {
+  if (ageMs < 60_000) return `${Math.round(ageMs / 1000)}s`;
+  return `${Math.round(ageMs / 60_000)}m`;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -210,7 +224,10 @@ export default function Resources() {
   const [sortDir, setSortDir] = useState<SortDir>(null);
 
   // Column visibility: tab → groupLabel → boolean
-  const [colVis, setColVis] = useState<Partial<Record<TabKey, Record<string, boolean>>>>({});
+  // Initialized from localStorage; all groups default to true
+  const [colVis, setColVis] = useState<Partial<Record<TabKey, Record<string, boolean>>>>(
+    () => loadColVisFromStorage()
+  );
 
   // Column panel open state
   const [colPanelOpen, setColPanelOpen] = useState(false);
@@ -218,48 +235,40 @@ export default function Resources() {
 
   // ── Auth guard ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!authLoading && appUser && !ALLOWED.has(appUser.username)) {
-      console.warn(`[ACCESS] Denied for user="${appUser.username}" — redirecting to /`);
-      setLocation("/");
+    if (!authLoading && (!appUser || !ALLOWED.has(appUser.username))) {
+      console.log("[AUTH][VERIFY] FAIL — user not in allowlist, redirecting");
     }
-  }, [authLoading, appUser, setLocation]);
+  }, [authLoading, appUser]);
 
-  // ── Fetch function ──────────────────────────────────────────────────────────
+  // ── Persist column visibility to localStorage ────────────────────────────────
+  useEffect(() => {
+    saveColVisToStorage(colVis);
+  }, [colVis]);
+
+  // ── Fetch logic ──────────────────────────────────────────────────────────────
   const fetchTab = useCallback(async (tab: TabKey, force = false) => {
     const existing = cache[tab];
-    const ageMs = existing ? Date.now() - existing.fetchedAt : Infinity;
-    const isStale = ageMs > STALE_MS;
-
-    if (!force && existing && !isStale) {
-      console.log(`[CACHE][HIT] tab="${tab}" age=${Math.round(ageMs / 1000)}s — using cached data`);
-      return;
+    if (!force && existing) {
+      const ageMs = Date.now() - existing.fetchedAt;
+      if (ageMs < STALE_MS) {
+        console.log(`[FETCH][SKIP] tab="${tab}" age=${Math.round(ageMs/1000)}s < stale threshold`);
+        return;
+      }
+      console.log(`[STALE] tab="${tab}" fetched ${formatAge(ageMs)} ago — auto-refreshing`);
     }
 
-    if (force) {
-      console.log(`[FETCH][STEP] tab="${tab}" — force refresh requested`);
-    } else if (isStale && existing) {
-      console.log(`[STALE] tab="${tab}" fetched ${Math.round(ageMs / 60000)}m ago — auto-refreshing`);
-    } else {
-      console.log(`[FETCH][STEP] tab="${tab}" — initial fetch`);
-    }
+    setLoadingTabs(prev => new Set(prev).add(tab));
+    setErrors(prev => { const n = { ...prev }; delete n[tab]; return n; });
 
-    setLoadingTabs(prev => new Set([...Array.from(prev), tab]));
-    setErrors(prev => ({ ...prev, [tab]: undefined }));
+    const t0 = performance.now();
+    console.log(`[FETCH][INPUT] tab="${tab}" force=${force}`);
 
     try {
-      const t0 = performance.now();
-      const res = await fetch(`/api/rg-proxy?page=${tab}`, {
-        credentials: "include",
-        headers: { "Accept": "application/json" },
-      });
-
+      const res = await fetch(`/api/rg-proxy?page=${tab}`, { credentials: "include" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        const msg = (body as { error?: string }).error ?? `HTTP ${res.status}`;
-        console.error(`[FETCH][ERROR] tab="${tab}" status=${res.status} error="${msg}"`);
-        throw new Error(msg);
+        throw new Error(body.error ?? `HTTP ${res.status}`);
       }
-
       const data: RgTableData = await res.json();
       const elapsed = Math.round(performance.now() - t0);
       console.log(`[FETCH][OUTPUT] tab="${tab}" rows=${data.rows.length} cols=${data.columns.length} elapsed=${elapsed}ms updatedAt="${data.updatedAt}"`);
@@ -269,14 +278,13 @@ export default function Resources() {
         [tab]: { data, fetchedAt: Date.now() },
       }));
 
-      // Initialize column visibility for this tab type if not set
+      // Initialize column visibility for this tab type if not already set in localStorage
       setColVis(prev => {
-        if (prev[tab]) return prev;
+        if (prev[tab]) return prev; // User has a saved preference — don't overwrite
         const defaults = buildDefaultVisibility(data.type);
         console.log(`[COLVIS][INIT] tab="${tab}" type="${data.type}" groups=${Object.keys(defaults).join(", ")}`);
         return { ...prev, [tab]: defaults };
       });
-
     } catch (err) {
       const msg = (err as Error).message;
       console.error(`[FETCH][FATAL] tab="${tab}" error="${msg}"`);
@@ -340,16 +348,17 @@ export default function Resources() {
     const allCols = entry.data.columns;
     const visibleSet = new Set<string>();
     for (const g of activeGroups) {
-      if (activeColVis[g.label]) {
+      if (activeColVis[g.label] !== false) { // default true if not set
         for (const c of g.cols) visibleSet.add(c);
       }
     }
-    // Preserve original column order
-    return allCols.filter(c => visibleSet.has(c));
+    // Exclude internal-only columns from display
+    return allCols.filter(c => visibleSet.has(c) && !INTERNAL_COLS.has(c));
   }, [cache, activeTab, activeGroups, activeColVis]);
 
   const toggleGroup = (label: string) => {
-    const next = !activeColVis[label];
+    const current = activeColVis[label] !== false; // default true
+    const next = !current;
     console.log(`[COLVIS][STEP] tab="${activeTab}" group="${label}" → ${next ? "visible" : "hidden"}`);
     setColVis(prev => ({
       ...prev,
@@ -365,7 +374,7 @@ export default function Resources() {
   };
 
   const resetColVis = () => {
-    console.log(`[COLVIS][STEP] tab="${activeTab}" — reset to defaults`);
+    console.log(`[COLVIS][STEP] tab="${activeTab}" — reset to defaults (all visible)`);
     setColVis(prev => ({ ...prev, [activeTab]: buildDefaultVisibility(activeTabType) }));
   };
 
@@ -404,11 +413,7 @@ export default function Resources() {
   // Staleness display
   const cacheEntry = cache[activeTab];
   const ageMs = cacheEntry ? Date.now() - cacheEntry.fetchedAt : null;
-  const ageLabel = ageMs !== null
-    ? ageMs < 60_000
-      ? `${Math.round(ageMs / 1000)}s ago`
-      : `${Math.round(ageMs / 60_000)}m ago`
-    : null;
+  const ageLabel = ageMs !== null ? formatAge(ageMs) : null;
   const isStaleDisplay = ageMs !== null && ageMs > STALE_MS;
 
   // ── Close col panel on outside click ────────────────────────────────────────
@@ -430,7 +435,6 @@ export default function Resources() {
       </div>
     );
   }
-
   if (!appUser || !ALLOWED.has(appUser.username)) {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center gap-4">
@@ -449,11 +453,9 @@ export default function Resources() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white flex flex-col">
-
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-[#0a0a0f]/95 backdrop-blur border-b border-zinc-800 px-4 py-3">
         <div className="max-w-screen-2xl mx-auto flex items-center justify-between gap-4 flex-wrap">
-
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 text-sm">
             <button onClick={() => setLocation("/")} className="text-zinc-400 hover:text-white transition-colors">
@@ -464,10 +466,8 @@ export default function Resources() {
             <span className="text-zinc-600">/</span>
             <span className="text-violet-400 font-medium">THE BAT X</span>
           </div>
-
           {/* Action buttons */}
           <div className="flex items-center gap-2 flex-wrap">
-
             {/* Refresh All */}
             <Button
               variant="outline"
@@ -480,7 +480,6 @@ export default function Resources() {
               <RotateCcw className={`w-3.5 h-3.5 ${loadingTabs.size > 0 ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">Refresh All</span>
             </Button>
-
             {/* Refresh active tab */}
             <Button
               variant="ghost" size="sm"
@@ -492,7 +491,6 @@ export default function Resources() {
               <RefreshCw className={`w-3.5 h-3.5 ${isLoadingActive ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
-
             {/* Download CSV */}
             <Button
               variant="ghost" size="sm"
@@ -508,17 +506,6 @@ export default function Resources() {
               <Download className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">CSV</span>
             </Button>
-
-            {/* Open in RG */}
-            <Button
-              variant="ghost" size="sm"
-              onClick={() => window.open(RG_URLS[activeTab], "_blank")}
-              className="text-zinc-400 hover:text-white gap-1.5"
-              title="Open in Rotogrinders"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Open RG</span>
-            </Button>
           </div>
         </div>
       </header>
@@ -533,7 +520,6 @@ export default function Resources() {
             const tabEntry = cache[tab.key];
             const tabAge = tabEntry ? Date.now() - tabEntry.fetchedAt : null;
             const tabStale = tabAge !== null && tabAge > STALE_MS;
-
             return (
               <button
                 key={tab.key}
@@ -562,38 +548,49 @@ export default function Resources() {
       {/* ── Main Content ─────────────────────────────────────────────────────── */}
       <main className="flex-1 px-4 py-4 max-w-screen-2xl mx-auto w-full">
 
-        {/* Toolbar: metadata + search + column toggle */}
+        {/* ── Toolbar: metadata + search + column toggle ─────────────────────── */}
         {tableData && (
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-
-            {/* Left: metadata badges */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-sm font-semibold text-white">{tableData.title}</h1>
-              {tableData.updatedAt && (
-                <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs">
-                  RG: {tableData.updatedAt}
-                </Badge>
-              )}
-              {ageLabel && (
-                <Badge
-                  variant="outline"
-                  className={`text-xs border-zinc-700 ${isStaleDisplay ? "text-amber-400 border-amber-700/50" : "text-zinc-400"}`}
-                  title={isStaleDisplay ? "Data is stale — will auto-refresh on next tab switch" : "Data is fresh"}
-                >
-                  {isStaleDisplay ? "⚠ " : ""}Fetched {ageLabel}
-                </Badge>
-              )}
-              <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs">
-                {filteredRows.length} / {tableData.rows.length} rows
-              </Badge>
-              <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs">
-                {visibleCols.length} / {tableData.columns.length} cols
-              </Badge>
+            {/* Left: title + compact metadata strip */}
+            <div className="flex items-center gap-3 flex-wrap min-w-0">
+              <h1 className="text-sm font-semibold text-white truncate">{tableData.title}</h1>
+              {/* Compact metadata strip — single clean row */}
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500 bg-zinc-900/60 border border-zinc-800 rounded-md px-2.5 py-1 font-mono">
+                {/* Fetch age */}
+                {ageLabel && (
+                  <span
+                    className={isStaleDisplay ? "text-amber-400" : "text-zinc-400"}
+                    title={isStaleDisplay ? "Data is stale — will auto-refresh on next tab switch" : "Data is fresh"}
+                  >
+                    {isStaleDisplay ? "⚠ " : "↻ "}{ageLabel}
+                  </span>
+                )}
+                {ageLabel && <span className="text-zinc-700">·</span>}
+                {/* Row count */}
+                <span className="text-zinc-400">
+                  {filteredRows.length === tableData.rows.length
+                    ? `${tableData.rows.length} rows`
+                    : `${filteredRows.length} / ${tableData.rows.length} rows`}
+                </span>
+                <span className="text-zinc-700">·</span>
+                {/* Column count */}
+                <span className="text-zinc-400">
+                  {visibleCols.length === tableData.columns.filter(c => !INTERNAL_COLS.has(c)).length
+                    ? `${visibleCols.length} cols`
+                    : `${visibleCols.length} / ${tableData.columns.filter(c => !INTERNAL_COLS.has(c)).length} cols`}
+                </span>
+                {/* RG updated timestamp */}
+                {tableData.updatedAt && (
+                  <>
+                    <span className="text-zinc-700">·</span>
+                    <span className="text-zinc-500">RG: {tableData.updatedAt}</span>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Right: search + columns button */}
             <div className="flex items-center gap-2">
-
               {/* Column visibility dropdown */}
               <div className="relative" ref={colPanelRef}>
                 <Button
@@ -605,7 +602,6 @@ export default function Resources() {
                   <Columns className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Columns</span>
                 </Button>
-
                 {colPanelOpen && (
                   <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-[#13131f] border border-zinc-700 rounded-lg shadow-2xl shadow-black/60 p-3">
                     <div className="flex items-center justify-between mb-2">
@@ -622,7 +618,7 @@ export default function Resources() {
                         <button
                           onClick={resetColVis}
                           className="text-xs text-zinc-400 hover:text-white transition-colors px-1"
-                          title="Reset to defaults"
+                          title="Reset to defaults (all visible)"
                         >
                           Reset
                         </button>
@@ -630,8 +626,8 @@ export default function Resources() {
                     </div>
                     <div className="space-y-1">
                       {activeGroups.map(g => {
-                        const isVis = activeColVis[g.label] ?? g.defaultVisible;
-                        const colsInData = g.cols.filter(c => tableData.columns.includes(c));
+                        const isVis = activeColVis[g.label] !== false; // default true
+                        const colsInData = g.cols.filter(c => tableData.columns.includes(c) && !INTERNAL_COLS.has(c));
                         return (
                           <button
                             key={g.label}
@@ -668,42 +664,21 @@ export default function Resources() {
           </div>
         )}
 
+        {/* Loading spinner */}
+        {isLoadingActive && !tableData && (
+          <div className="flex items-center justify-center py-20 gap-3 text-zinc-500">
+            <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
+            <span className="text-sm">Loading projections...</span>
+          </div>
+        )}
+
         {/* Error banner */}
         {activeError && (
-          <div className="flex items-center gap-3 bg-red-950/40 border border-red-800/50 rounded-lg px-4 py-3 mb-4">
-            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-            <p className="text-red-300 text-sm">{activeError}</p>
-            <Button
-              variant="ghost" size="sm"
-              onClick={() => fetchTab(activeTab, true)}
-              className="ml-auto text-red-400 hover:text-red-200"
-            >
-              Retry
-            </Button>
-          </div>
-        )}
-
-        {/* Loading skeleton */}
-        {isLoadingActive && !tableData && (
-          <div className="space-y-2">
-            <div className="h-10 bg-zinc-800/60 rounded animate-pulse" />
-            {Array.from({ length: 25 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-8 bg-zinc-800/40 rounded animate-pulse"
-                style={{ opacity: Math.max(0.1, 1 - i * 0.035) }}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!isLoadingActive && tableData && tableData.rows.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-zinc-500">
-            <AlertTriangle className="w-8 h-8" />
-            <p className="text-sm">No projection data found for this page.</p>
-            <p className="text-xs text-center max-w-xs">
-              The table may not have loaded from Rotogrinders. Try refreshing or opening directly in RG.
+            <AlertTriangle className="w-8 h-8 text-red-400" />
+            <p className="text-red-300 text-sm font-medium">{activeError}</p>
+            <p className="text-zinc-500 text-xs text-center max-w-sm">
+              The table may not have loaded from Rotogrinders. Try refreshing.
             </p>
             <Button
               variant="outline" size="sm"
@@ -774,24 +749,101 @@ export default function Resources() {
                   >
                     {visibleCols.map((col, ci) => {
                       const val = row[col] ?? "";
-                      const isKey  = keyCols.has(col);
-                      const isName = col === "NAME";
-                      const isTeam = col === "TEAM" || col === "OPP_TM" || col === "OPP";
-                      const isFpts = col === "FPTS";
-                      const isBool = val === "true" || val === "false";
+                      const isKey    = keyCols.has(col);
+                      const isName   = col === "NAME";
+                      const isTeam   = col === "TEAM";
+                      const isOpp    = col === "OPP_TM" || col === "OPP";
+                      const isFpts   = col === "FPTS";
+                      const isBool   = val === "true" || val === "false";
                       const isSalary = col === "SALARY";
+                      const isId     = col === "PLAYER_ID" || col === "MLB_ID";
 
+                      // ── NAME cell: headshot + name ────────────────────────
+                      if (isName) {
+                        const headshotUrl = row["HEADSHOT_URL"] ?? "";
+                        return (
+                          <td
+                            key={`d-${col}-${ci}`}
+                            className="px-2 py-1.5 whitespace-nowrap font-semibold text-white sticky left-0 bg-inherit z-10 min-w-[160px] shadow-[2px_0_8px_rgba(0,0,0,0.4)]"
+                          >
+                            <div className="flex items-center gap-2">
+                              {headshotUrl ? (
+                                <img
+                                  src={headshotUrl}
+                                  alt={val}
+                                  className="w-7 h-7 rounded-full object-cover bg-zinc-800 border border-zinc-700 shrink-0"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = "none";
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 shrink-0 flex items-center justify-center text-zinc-600 text-[10px] font-bold">
+                                  {val.charAt(0)}
+                                </div>
+                              )}
+                              <span className="truncate max-w-[120px]">{val || <span className="text-zinc-700">—</span>}</span>
+                            </div>
+                          </td>
+                        );
+                      }
+
+                      // ── TEAM cell: logo + abbreviation ────────────────────
+                      if (isTeam) {
+                        const logoUrl = row["TEAM_LOGO_URL"] ?? "";
+                        return (
+                          <td
+                            key={`d-${col}-${ci}`}
+                            className="px-3 py-1.5 whitespace-nowrap"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              {logoUrl ? (
+                                <img
+                                  src={logoUrl}
+                                  alt={val}
+                                  className="w-5 h-5 object-contain shrink-0"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                />
+                              ) : null}
+                              <span className="text-zinc-200 font-medium text-xs">{val || <span className="text-zinc-700">—</span>}</span>
+                            </div>
+                          </td>
+                        );
+                      }
+
+                      // ── OPP / OPP_TM cell: logo + abbreviation ────────────
+                      if (isOpp) {
+                        const logoUrl = row["OPP_LOGO_URL"] ?? "";
+                        return (
+                          <td
+                            key={`d-${col}-${ci}`}
+                            className="px-3 py-1.5 whitespace-nowrap"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              {logoUrl ? (
+                                <img
+                                  src={logoUrl}
+                                  alt={val}
+                                  className="w-5 h-5 object-contain shrink-0"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                />
+                              ) : null}
+                              <span className="text-zinc-200 font-medium text-xs">{val || <span className="text-zinc-700">—</span>}</span>
+                            </div>
+                          </td>
+                        );
+                      }
+
+                      // ── Default cell ──────────────────────────────────────
                       return (
                         <td
                           key={`d-${col}-${ci}`}
                           className={`
                             px-3 py-2 whitespace-nowrap
-                            ${isName ? "font-semibold text-white sticky left-0 bg-inherit z-10 min-w-[130px] shadow-[2px_0_8px_rgba(0,0,0,0.4)]" : ""}
-                            ${isTeam ? "text-zinc-200 font-medium" : ""}
-                            ${isFpts ? "text-emerald-400 font-bold" : ""}
+                            ${isFpts   ? "text-emerald-400 font-bold" : ""}
                             ${isSalary ? "text-sky-300 font-medium" : ""}
-                            ${isKey && !isName && !isFpts && !isSalary ? "text-violet-200" : ""}
-                            ${!isKey && !isName && !isFpts && !isSalary ? "text-zinc-300" : ""}
+                            ${isId     ? "text-zinc-500 font-mono text-[10px]" : ""}
+                            ${isKey && !isFpts && !isSalary && !isId ? "text-violet-200" : ""}
+                            ${!isKey && !isFpts && !isSalary && !isId ? "text-zinc-300" : ""}
                           `}
                         >
                           {isBool

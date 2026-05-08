@@ -3024,3 +3024,21 @@
 - [x] Feature: Sticky NAME column with shadow, alternating row colors, key column highlighting
 - [x] Feature: Structured diagnostic logging ([FETCH][STEP/OUTPUT], [CACHE][HIT], [STALE], [SORT][STATE], [COLVIS][STEP], [CSV][STEP/OUTPUT], [REFRESH_ALL][STEP])
 - [x] TypeScript: 0 errors (fixed Set spread iteration with Array.from())
+
+## Session: 2026-05-08 — RESOURCES Page Deep Fix & Enrichment
+
+- [x] ROOT CAUSE: Today Pitchers 0-row bug — pitchers table uses "PLAYER" column, hitters use "NAME"; parser filtered on row["NAME"] dropping ALL pitcher rows
+- [x] Fix rotogrinderProxy.ts: detect PLAYER vs NAME column, normalize to NAME in output
+- [x] Add PLAYER_ID extraction from /players/slug-{id} href attribute
+- [x] Add MLB_ID resolution via MLB Stats API (statsapi.mlb.com) with 24h in-memory cache
+- [x] Add HEADSHOT_URL field per row (MLB static CDN img.mlbstatic.com)
+- [x] Add TEAM_LOGO_URL and OPP_LOGO_URL fields per row (ESPN CDN a.espncdn.com)
+- [x] Resources.tsx: player headshots in NAME column (circular avatar, fallback initials)
+- [x] Resources.tsx: team logos in TEAM and OPP/OPP_TM columns (ESPN CDN 20px)
+- [x] Resources.tsx: PLAYER_ID and MLB_ID in Identity column group
+- [x] Resources.tsx: remove "Open RG" button from header
+- [x] Resources.tsx: all column groups visible by default (defaultVisible: true for all)
+- [x] Resources.tsx: localStorage persistence for column visibility preferences (key: rg_col_vis_v2)
+- [x] Resources.tsx: clean compact metadata bar (single-line strip: ↻ age · rows · cols · RG timestamp)
+- [x] Resources.tsx: INTERNAL_COLS set (HEADSHOT_URL, TEAM_LOGO_URL, OPP_LOGO_URL) excluded from display and CSV
+- [x] TypeScript: 0 errors
