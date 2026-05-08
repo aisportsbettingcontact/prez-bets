@@ -17,6 +17,7 @@ import NhlTeamSchedule from "./pages/NhlTeamSchedule";
 import BetTracker from "@/pages/BetTracker";
 import AdminModelStatus from "@/pages/AdminModelStatus";
 import PostponedGames from "@/pages/PostponedGames";
+import Resources from "@/pages/Resources";
 
 function Router() {
   return (
@@ -54,6 +55,8 @@ function Router() {
       <Route path="/admin/model-status" component={AdminModelStatus} />
       {/* Owner-only: Postponed and suspended game audit view */}
       <Route path="/admin/postponed-games" component={PostponedGames} />
+      {/* Private: Rotogrinders THE BAT X projections — @prez and @lucianobets only */}
+      <Route path="/resources" component={Resources} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

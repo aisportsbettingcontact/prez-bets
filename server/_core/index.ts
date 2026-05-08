@@ -31,6 +31,7 @@ import { startBetAutoGradeScheduler } from "../betAutoGradeScheduler";
 import { startMlbOutcomeAndDriftScheduler } from "../mlbOutcomeAndDriftScheduler";
 import { startMlbModelSyncScheduler } from "../mlbModelRunner";
 import { getCircuitStatus, getCacheStats } from "../dbCircuitBreaker";
+import { registerRgProxyRoute } from "../rotogrinderProxy";
 
 // ─── Rate limit event helper ─────────────────────────────────────────────────
 // Fire-and-forget: writes a RATE_LIMIT row to security_events.
@@ -212,7 +213,7 @@ async function startServer() {
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
         imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
         connectSrc: ["'self'", "wss:", "ws:", "https:"],
-        frameSrc: ["'none'"],
+        frameSrc: ["'self'"], // Allow same-origin iframes (Rotogrinders proxy)
         objectSrc: ["'none'"],
         upgradeInsecureRequests: process.env.NODE_ENV === "production" ? [] : null,
       },
@@ -285,9 +286,10 @@ async function startServer() {
 
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
-
   // Discord account linking routes
   registerDiscordAuthRoutes(app);
+  // Rotogrinders server-side proxy — restricted to @prez and @lucianobets
+  registerRgProxyRoute(app);
 
   // tRPC API
   app.use(
