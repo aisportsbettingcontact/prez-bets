@@ -3006,3 +3006,21 @@
 - [x] NHL fix: Changed awayModelSpread/homeModelSpread in nhlModelSync.ts to use correctedAwaySpreadStr (book-authoritative) instead of modelAwayPL (model origination line)
 - [x] DB correction: Fixed 5 flipped games (KC@ATH MLB + EDM@ANA NHL + others); 44 games verified PASS, 0 FAIL
 - [x] TypeScript check: 0 errors
+
+## Session: 2026-05-08 — RESOURCES Page Enhancements
+
+- [x] Build RESOURCES page server proxy at /api/rg-proxy (rotogrinderProxy.ts) with cheerio table scraping
+- [x] Fix Rotogrinders login endpoint (POST /sign-in with username/password fields)
+- [x] Fix NAME cell parser (span.first() selector)
+- [x] Build Resources.tsx with 4-tab native sortable table UI
+- [x] Gate RESOURCES page to @prez and @lucianobets only (frontend + backend)
+- [x] Add RESOURCES dropdown item to ModelProjections nav (violet BookOpen icon)
+- [x] Feature: CSV Export — per-tab Download CSV button using only visible columns, filename includes tab + timestamp
+- [x] Feature: Column Visibility Groups — 7 named groups each for pitchers/hitters with Show All / Reset buttons
+- [x] Feature: Staleness Auto-Refresh — 15-min stale check on tab switch with [STALE] diagnostic log
+- [x] Feature: Refresh All — force-refresh all 4 tabs in parallel
+- [x] Feature: Stale badge (amber) on metadata bar when data >15 min old
+- [x] Feature: Per-tab refresh button + global Refresh All button in header
+- [x] Feature: Sticky NAME column with shadow, alternating row colors, key column highlighting
+- [x] Feature: Structured diagnostic logging ([FETCH][STEP/OUTPUT], [CACHE][HIT], [STALE], [SORT][STATE], [COLVIS][STEP], [CSV][STEP/OUTPUT], [REFRESH_ALL][STEP])
+- [x] TypeScript: 0 errors (fixed Set spread iteration with Array.from())
