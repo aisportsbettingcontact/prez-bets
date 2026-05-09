@@ -1528,11 +1528,14 @@ export const betTrackerRouter = router({
         homeAbbrev:    string;
         /**
          * Doubleheader game number: 1 = G1, 2 = G2.
-         * MLB Stats API guarantees G1 has a lower gamePk than G2 on the same date.
-         * We detect DH by finding two games with the same gameDate+away+home, then
-         * assign gameNumber=1 to the lower gamePk and gameNumber=2 to the higher.
+         * Detected by finding two games with the same gameDate+away+home, then
+         * assigning gameNumber=1 to the earlier startTime and gameNumber=2 to the later.
+         * NOTE: gamePk order does NOT reliably match chronological order
+         * (e.g. SF@PHI 2026-04-30: gamePk=823471 starts 21:35Z but gamePk=823472 starts 16:35Z).
          */
         gameNumber:    1 | 2;
+        /** ISO UTC start time — used for DH G1/G2 chronological ordering */
+        startTime:     string;
         innings:       InningLine[];
         awayR:         number | null;
         awayH:         number | null;
@@ -1597,6 +1600,7 @@ export const betTrackerRouter = router({
                 awayAbbrev:    game.teams?.away?.team?.abbreviation ?? "",
                 homeAbbrev:    game.teams?.home?.team?.abbreviation ?? "",
                 gameNumber:    1, // default; overwritten below after DH detection
+                startTime:     game.gameDate ?? "",
                 innings,
                 awayR:         ls?.teams?.away?.runs   ?? null,
                 awayH:         ls?.teams?.away?.hits   ?? null,
@@ -1618,8 +1622,11 @@ export const betTrackerRouter = router({
 
       // ── Doubleheader gameNumber assignment ──────────────────────────────────────
       // Group games by gameDate:awayAbbrev:homeAbbrev. For any group with 2+ games,
-      // sort by gamePk ASC and assign gameNumber=1 to the first, gameNumber=2 to the second.
-      // MLB Stats API guarantees G1 has a lower gamePk than G2 on the same date.
+      // sort by startTime ASC (chronological) and assign gameNumber=1 to the earlier,
+      // gameNumber=2 to the later.
+      // IMPORTANT: gamePk order does NOT reliably match chronological order.
+      // Example: SF@PHI 2026-04-30 — gamePk=823471 starts 21:35Z but gamePk=823472 starts 16:35Z.
+      // Sorting by gamePk would incorrectly assign G1=823471 (later game).
       const dhGroups = new Map<string, number[]>(); // key → [gamePk, ...]
       for (const entry of Object.values(result)) {
         const key = `${entry.gameDate}:${entry.awayAbbrev}:${entry.homeAbbrev}`;
@@ -1630,11 +1637,12 @@ export const betTrackerRouter = router({
       let dhCount = 0;
       for (const [key, pks] of Array.from(dhGroups.entries())) {
         if (pks.length < 2) continue; // not a doubleheader
-        pks.sort((a, b) => a - b); // ascending: lower gamePk = G1
+        // Sort by startTime ASC (chronological) — NOT by gamePk
+        pks.sort((a, b) => (result[a].startTime ?? "").localeCompare(result[b].startTime ?? ""));
         result[pks[0]].gameNumber = 1;
         result[pks[1]].gameNumber = 2;
         dhCount++;
-        console.log(`[BetTracker][STATE] getLinescores: DH detected key=${key} G1_gamePk=${pks[0]} G2_gamePk=${pks[1]}`);
+        console.log(`[BetTracker][STATE] getLinescores: DH detected key=${key} G1_gamePk=${pks[0]} (${result[pks[0]].startTime}) G2_gamePk=${pks[1]} (${result[pks[1]].startTime})`);
       }
       console.log(`[BetTracker][OUTPUT] getLinescores: total=${Object.keys(result).length} games returned dhCount=${dhCount}`);
       return result;

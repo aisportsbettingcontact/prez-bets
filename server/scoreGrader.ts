@@ -63,6 +63,8 @@ export interface TimeframeScore {
 export interface GameScoreData {
   sport: Sport;
   gameId: string;
+  /** ISO UTC start time (e.g. "2026-04-30T16:35:00Z") — used for DH G1/G2 chronological ordering */
+  startTime: string;
   awayAbbrev: string;
   homeAbbrev: string;
   gameState: string; // "Final", "Live", "Scheduled", "OFF", etc.
@@ -84,8 +86,10 @@ export interface BetGradeInput {
   /**
    * Doubleheader game number: 1 = G1, 2 = G2.
    * Used when anGameId cannot be matched by gamePk (AN IDs ≠ MLB Stats API gamePk).
-   * When gameNumber=2, the fallback team-name match skips G1 and returns G2.
-   * MLB Stats API guarantees G1 has a lower gamePk than G2 on the same date.
+   * When gameNumber=2, the fallback team-name match sorts by startTime ASC and returns G2.
+   * G1/G2 is determined by chronological start time (NOT gamePk order).
+   * NOTE: gamePk order does NOT reliably match chronological order
+   * (e.g. SF@PHI 2026-04-30: gamePk=823471 starts 21:35Z but gamePk=823472 starts 16:35Z).
    */
   gameNumber?: 1 | 2;
 }
@@ -140,6 +144,8 @@ async function fetchMlbScores(date: string): Promise<GameScoreData[]> {
   const json = await res.json() as {
     dates?: Array<{ games: Array<{
       gamePk: number;
+      /** ISO UTC start time (e.g. "2026-04-30T16:35:00Z") */
+      gameDate: string;
       status: { detailedState: string };
       teams: {
         away: { team: { abbreviation?: string; name: string }; score?: number };
@@ -214,6 +220,7 @@ async function fetchMlbScores(date: string): Promise<GameScoreData[]> {
     return {
       sport: "MLB" as Sport,
       gameId: String(g.gamePk),
+      startTime: g.gameDate ?? "",
       awayAbbrev,
       homeAbbrev,
       gameState,
@@ -317,6 +324,7 @@ async function fetchNhlScores(date: string): Promise<GameScoreData[]> {
     return {
       sport: "NHL" as Sport,
       gameId: String(g.id),
+      startTime: "", // NHL API does not return ISO UTC start time in this endpoint
       awayAbbrev: g.awayTeam.abbrev,
       homeAbbrev: g.homeTeam.abbrev,
       gameState,
@@ -392,6 +400,7 @@ async function fetchNbaScores(date: string): Promise<GameScoreData[]> {
     return {
       sport: "NBA" as Sport,
       gameId: e.id,
+      startTime: "", // ESPN API does not return ISO UTC start time in this endpoint
       awayAbbrev: awayComp.team.abbreviation,
       homeAbbrev: homeComp.team.abbreviation,
       gameState: status,
@@ -456,6 +465,7 @@ async function fetchNcaamScores(date: string): Promise<GameScoreData[]> {
     return {
       sport: "NCAAM" as Sport,
       gameId: e.id,
+      startTime: "", // ESPN API does not return ISO UTC start time in this endpoint
       awayAbbrev: awayComp.team.abbreviation,
       homeAbbrev: homeComp.team.abbreviation,
       gameState: status,
@@ -694,14 +704,16 @@ export async function gradeTrackedBet(input: BetGradeInput): Promise<BetGradeOut
   }
 
   // ── Fallback: gameNumber-aware team-name match ──────────────────────────────────
-  // For doubleheaders: gameNumber=1 → first match (lower gamePk = G1)
-  //                    gameNumber=2 → second match (higher gamePk = G2)
-  // MLB Stats API returns games sorted by gamePk ASC, so the first match = G1.
+  // For doubleheaders: gameNumber=1 → first match (chronologically earlier = G1)
+  //                    gameNumber=2 → second match (chronologically later = G2)
+  // Sort by startTime ASC (ISO UTC string comparison) for correct G1/G2 ordering.
+  // IMPORTANT: gamePk order does NOT reliably match chronological order.
+  // Example: SF@PHI 2026-04-30 — gamePk=823471 starts 21:35Z but gamePk=823472 starts 16:35Z.
   // For non-DH games (gameNumber=1 or undefined), findGame returns the only match.
   if (!game) {
     const gameNum = input.gameNumber ?? 1;
     if (gameNum === 2) {
-      // For G2: find ALL games matching away+home, then take the second one (index 1)
+      // For G2: find ALL games matching away+home, sort by startTime ASC, take index 1
       const normAway = input.awayTeam.toUpperCase();
       const normHome = input.homeTeam.toUpperCase();
       const matches = games.filter(g => {
@@ -710,8 +722,12 @@ export async function gradeTrackedBet(input: BetGradeInput): Promise<BetGradeOut
         return (ga === normAway && gh === normHome) ||
                (ga.includes(normAway) || normAway.includes(ga)) && (gh.includes(normHome) || normHome.includes(gh));
       });
-      // Sort by gameId ASC (gamePk ascending = G1 first, G2 second)
-      matches.sort((a, b) => Number(a.gameId) - Number(b.gameId));
+      // Sort by startTime ASC (chronological) — NOT by gameId/gamePk
+      // Falls back to gameId sort only when startTime is empty (non-MLB sports)
+      matches.sort((a, b) => {
+        if (a.startTime && b.startTime) return a.startTime.localeCompare(b.startTime);
+        return Number(a.gameId) - Number(b.gameId); // legacy fallback for non-MLB
+      });
       game = matches[1] ?? matches[0] ?? null; // G2 = index 1; fallback to G1 if only one found
       if (game) {
         console.log(`[ScoreGrader][STEP] gradeTrackedBet: resolved G2 via gameNumber=2 team-name match → gameId=${game.gameId} ${game.awayAbbrev}@${game.homeAbbrev} (${matches.length} matches found, took index 1)`);

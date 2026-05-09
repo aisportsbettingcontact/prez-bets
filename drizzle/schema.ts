@@ -1941,7 +1941,9 @@ export const trackedBets = mysqlTable("tracked_bets", {
    * Doubleheader game number: 1 = G1, 2 = G2.
    * Null/1 for non-doubleheader games or legacy bets created before this field was added.
    * Used to resolve the correct linescore when two games share the same away+home+date.
-   * MLB Stats API guarantees G1 has a lower gamePk than G2 on the same date.
+   * G1/G2 is determined by chronological start time (NOT gamePk order).
+   * NOTE: gamePk order does NOT reliably match chronological order
+   * (e.g. SF@PHI 2026-04-30: gamePk=823471 starts 21:35Z but gamePk=823472 starts 16:35Z).
    */
   gameNumber: int("gameNumber").default(1),
   /**
