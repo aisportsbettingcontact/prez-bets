@@ -2110,7 +2110,12 @@ export default function BetTracker() {
       console.log(`[BetTracker][STATE] YRFI bet: enforcing market=TOTAL pickSide=OVER line=0.5`);
     } else if (formGame?.odds) {
       const lv = getPickLine(formGame.odds, effectiveMarket, effectivePickSide);
-      if (lv !== null && lv !== undefined) linePick = Math.abs(lv);
+      // CRITICAL: Store the raw signed value — do NOT apply Math.abs().
+      // RL convention: HOME pick on favorite → lv = -1.5 (must win by >1.5)
+      //                AWAY pick on underdog → lv = +1.5 (can lose by <1.5)
+      // The grader formula: pickedMargin + rlLine > 0 requires the signed value.
+      // Math.abs() was previously here and caused SEA -1.5 (won by 1) to grade as WIN.
+      if (lv !== null && lv !== undefined) linePick = lv;
     }
 
     // Custom line override (for RL/TOTAL)
