@@ -108,6 +108,12 @@ export interface SlateGame {
   gameDate:     string;   // "YYYY-MM-DD" (EST date)
   status:       string;   // "scheduled" | "in_progress" | "complete" | etc.
   odds:         GameOdds; // Live ML/RL/Total odds
+  /**
+   * Game number within a doubleheader: 1 for all single games and G1 of a DH,
+   * 2 for G2 of a doubleheader. Assigned post-parse by comparing start times
+   * for games sharing the same away+home matchup on the same date.
+   */
+  gameNumber:   1 | 2;
 }
 
 interface CacheEntry {
@@ -433,6 +439,7 @@ async function fetchAnSlateRaw(sport: string, dateStr: string): Promise<SlateGam
         gameDate:     utcToEstDate(startUtc),
         status,
         odds,
+        gameNumber:   1, // default; overwritten below for doubleheaders
       });
     } catch (err) {
       console.error(`[AN][ERROR] Parse error on game: ${err}`);
@@ -442,12 +449,40 @@ async function fetchAnSlateRaw(sport: string, dateStr: string): Promise<SlateGam
 
   result.sort((a, b) => a.startUtc.localeCompare(b.startUtc));
 
+  // ── Doubleheader detection ─────────────────────────────────────────────────
+  // AN does not include a game_number field. We detect doubleheaders by finding
+  // games that share the same awayTeam + homeTeam on the same gameDate.
+  // After sorting by startUtc ASC, the first occurrence = G1, second = G2.
+  // All other games keep gameNumber = 1 (their default).
+  const matchupCount = new Map<string, number>(); // matchup key → count of games seen so far
+  let dhDetected = 0;
+  for (const g of result) {
+    const key = `${g.gameDate}:${g.awayTeam}:${g.homeTeam}`;
+    const seen = matchupCount.get(key) ?? 0;
+    if (seen === 0) {
+      matchupCount.set(key, 1);
+      // gameNumber stays 1 (already set)
+    } else {
+      // Second (or more) game with same matchup on same date → G2
+      g.gameNumber = 2;
+      matchupCount.set(key, seen + 1);
+      dhDetected++;
+      console.log(
+        `[AN][DH] Doubleheader detected: ${g.awayTeam}@${g.homeTeam} on ${g.gameDate} ` +
+        `— id=${g.id} assigned gameNumber=2 (G2, starts ${g.gameTime} ET)`
+      );
+    }
+  }
+  if (dhDetected > 0) {
+    console.log(`[AN][DH] Total doubleheader G2 games assigned: ${dhDetected}`);
+  }
+
   console.log(`[AN][OUTPUT] Parsed ${result.length} games | sport=${sport} date=${dateStr} | oddsFound=${oddsFound}/${result.length} | errors=${parseErrors}`);
   console.log(`[AN][VERIFY] ${parseErrors === 0 ? "PASS" : "WARN"} — ${parseErrors} parse errors`);
 
   result.forEach((g, i) => {
     console.log(
-      `[AN][OUTPUT]   [${i + 1}] id=${g.id} ${g.awayTeam} @ ${g.homeTeam} | ${g.gameTime} ET | ` +
+      `[AN][OUTPUT]   [${i + 1}] id=${g.id} ${g.awayTeam} @ ${g.homeTeam} G${g.gameNumber} | ${g.gameTime} ET | ` +
       `ML: ${g.odds.awayMl?.odds ?? "N/A"}/${g.odds.homeMl?.odds ?? "N/A"} | ` +
       `RL: ${g.odds.awayRl?.value ?? "N/A"}(${g.odds.awayRl?.odds ?? "N/A"}) | ` +
       `Total: ${g.odds.over?.value ?? "N/A"}`
@@ -662,6 +697,7 @@ async function fetchMlbStatsSlate(dateStr: string): Promise<SlateGame[]> {
         gameDate:     utcToEstDate(startTime),
         status,
         odds:         emptyOdds,
+        gameNumber:   1, // default; overwritten below for doubleheaders
       });
       console.log(`[AN][FALLBACK][STATE] Mapped gamePk=${gamePk} ${awayTeam.abbrev}@${homeTeam.abbrev} status=${status} time=${utcToEstTime(startTime)}`);
     } catch (err) {
@@ -670,6 +706,19 @@ async function fetchMlbStatsSlate(dateStr: string): Promise<SlateGame[]> {
     }
   }
   result.sort((a, b) => a.startUtc.localeCompare(b.startUtc));
+  // Doubleheader detection for fallback slate (same logic as primary)
+  const fbMatchupCount = new Map<string, number>();
+  for (const g of result) {
+    const key = `${g.gameDate}:${g.awayTeam}:${g.homeTeam}`;
+    const seen = fbMatchupCount.get(key) ?? 0;
+    if (seen === 0) {
+      fbMatchupCount.set(key, 1);
+    } else {
+      g.gameNumber = 2;
+      fbMatchupCount.set(key, seen + 1);
+      console.log(`[AN][FALLBACK][DH] Doubleheader G2: ${g.awayTeam}@${g.homeTeam} id=${g.id} time=${g.gameTime} ET`);
+    }
+  }
   console.log(`[AN][FALLBACK][OUTPUT] fetchMlbStatsSlate DONE: date=${dateStr} games=${result.length} skipped=${skipped} elapsed=${elapsed}ms`);
   console.log(`[AN][FALLBACK][VERIFY] ${result.length > 0 ? "PASS" : "WARN — 0 games"} | date=${dateStr}`);
   return result;

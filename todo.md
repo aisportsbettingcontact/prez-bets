@@ -3042,3 +3042,19 @@
 - [x] Resources.tsx: clean compact metadata bar (single-line strip: ↻ age · rows · cols · RG timestamp)
 - [x] Resources.tsx: INTERNAL_COLS set (HEADSHOT_URL, TEAM_LOGO_URL, OPP_LOGO_URL) excluded from display and CSV
 - [x] TypeScript: 0 errors
+
+## Session: 2026-05-08 — Bet Tracker Doubleheader Fix
+
+- [x] ROOT CAUSE: AN API has no game_number field; DH games are two entries with same away+home matchup and different IDs/start times; findGame() always returned first match (G1) for any team-name lookup
+- [x] actionNetwork.ts: Add gameNumber: 1|2 field to SlateGame interface
+- [x] actionNetwork.ts: Post-sort DH detection in fetchAnSlateRaw — assign G1/G2 by chronological start time order
+- [x] actionNetwork.ts: Same DH detection logic added to fetchMlbStatsSlate fallback
+- [x] actionNetwork.ts: Log [AN][DH] when doubleheader G2 is detected
+- [x] betTracker router: Pass gameNumber through getSlate return mapping
+- [x] BetTracker.tsx: Add gameNumber: 1|2 to SlateGame frontend interface
+- [x] BetTracker.tsx: GameSelector — dhMatchups Set detects same-matchup pairs on the slate
+- [x] BetTracker.tsx: GameSelector — amber G1/G2 badge shown in dropdown list and selected trigger when DH detected
+- [x] BetTracker.tsx: GameSelector — getLs() tries DH-qualified key (gameDate:away:home:gameNumber) before base key
+- [x] scoreGrader.ts: gradeTrackedBet — primary resolution via anGameId (direct gameId === String(anGameId) match), fallback to team-name match
+- [x] scoreGrader.ts: Detailed logging for both resolution paths with DH context
+- [x] TypeScript: 0 errors

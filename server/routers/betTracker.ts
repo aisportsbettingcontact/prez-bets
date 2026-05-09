@@ -875,6 +875,7 @@ export const betTrackerRouter = router({
         gameDate:     g.gameDate,
         status:       g.status,
         odds:         g.odds,
+        gameNumber:   g.gameNumber,  // 1 for single/G1, 2 for G2 of doubleheader
       }));
     }),
 

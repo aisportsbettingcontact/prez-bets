@@ -104,6 +104,8 @@ interface SlateGame {
   gameDate:     string;
   status:       string;
   odds:         GameOdds;
+  /** 1 for single games and G1 of a doubleheader; 2 for G2 */
+  gameNumber:   1 | 2;
 }
 
 // ─── Sport-aware timeframe options ───────────────────────────────────────────
@@ -444,10 +446,34 @@ function GameSelector({
   formDate:           string;
   linescoreByTeams?:  Map<string, LinescoreEntry>;
 }) {
-  /** Get linescore for a game using the gameDate:away:home key */
+  /** Get linescore for a game using the gameDate:away:home key.
+   * For doubleheaders, tries gameNumber-qualified key first, then falls back to base key.
+   */
   function getLs(g: SlateGame): LinescoreEntry | undefined {
     if (!linescoreByTeams) return undefined;
+    // Try DH-qualified key first (gameDate:away:home:gameNumber)
+    const dhKey = `${g.gameDate}:${g.awayTeam}:${g.homeTeam}:${g.gameNumber}`;
+    const dhResult = linescoreByTeams.get(dhKey);
+    if (dhResult) return dhResult;
+    // Fallback to base key for non-DH games
     return linescoreByTeams.get(`${g.gameDate}:${g.awayTeam}:${g.homeTeam}`);
+  }
+
+  /** Detect which matchups appear more than once on this slate (doubleheaders) */
+  const dhMatchups = useMemo(() => {
+    const seen = new Set<string>();
+    const dh = new Set<string>();
+    for (const g of games) {
+      const key = `${g.gameDate}:${g.awayTeam}:${g.homeTeam}`;
+      if (seen.has(key)) dh.add(key);
+      seen.add(key);
+    }
+    return dh;
+  }, [games]);
+
+  /** Returns true if this game is part of a doubleheader */
+  function isDH(g: SlateGame): boolean {
+    return dhMatchups.has(`${g.gameDate}:${g.awayTeam}:${g.homeTeam}`);
   }
   /** Render inline score/status for a game */
   function GameStatus({ g, compact }: { g: SlateGame; compact?: boolean }) {
@@ -534,6 +560,11 @@ function GameSelector({
             <img src={selected.homeLogo} alt={selected.homeTeam} className="w-5 h-5 object-contain shrink-0"
               onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
             <span className="font-bold text-white">{selected.homeTeam}</span>
+            {isDH(selected) && (
+              <span className="ml-1 px-1.5 py-0.5 rounded text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
+                G{selected.gameNumber}
+              </span>
+            )}
             <span className="ml-1"><GameStatus g={selected} compact /></span>
           </>
         ) : (
@@ -555,6 +586,12 @@ function GameSelector({
               <img src={g.homeLogo} alt={g.homeTeam} className="w-6 h-6 object-contain shrink-0"
                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
               <span className="font-bold text-white text-sm w-8 shrink-0">{g.homeTeam}</span>
+              {/* Doubleheader G1/G2 badge — only shown when the same matchup appears twice on this slate */}
+              {isDH(g) && (
+                <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
+                  G{g.gameNumber}
+                </span>
+              )}
               <span className="ml-auto"><GameStatus g={g} compact /></span>
               {/* Show ML odds only for scheduled games */}
               {g.status === "scheduled" && g.odds?.awayMl && (

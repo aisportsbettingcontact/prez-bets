@@ -668,10 +668,33 @@ export async function gradeTrackedBet(input: BetGradeInput): Promise<BetGradeOut
   console.log(`[ScoreGrader][INPUT] gradeTrackedBet: sport=${input.sport} date=${input.gameDate} ${input.awayTeam}@${input.homeTeam} timeframe=${input.timeframe} market=${input.market} pickSide=${input.pickSide} odds=${input.odds} line=${input.line}`);
 
   const games = await fetchScores(input.sport, input.gameDate);
-  const game = findGame(games, input.awayTeam, input.homeTeam);
+
+  // ── Primary resolution: use anGameId for exact game lookup (critical for doubleheaders) ──────────
+  // When anGameId is available, match by gameId directly to avoid G1/G2 ambiguity.
+  // The MLB Stats API gamePk equals the Action Network game ID numerically.
+  let game: GameScoreData | null = null;
+  if (input.anGameId != null) {
+    const anIdStr = String(input.anGameId);
+    game = games.find(g => g.gameId === anIdStr) ?? null;
+    if (game) {
+      console.log(`[ScoreGrader][STEP] gradeTrackedBet: resolved via anGameId=${input.anGameId} → gameId=${game.gameId} ${game.awayAbbrev}@${game.homeAbbrev}`);
+    } else {
+      console.log(`[ScoreGrader][STEP] gradeTrackedBet: anGameId=${input.anGameId} not found in ${games.length} fetched games — falling back to team-name match`);
+    }
+  }
+
+  // ── Fallback: team-name match (used when anGameId is absent or not found) ────────────────────
+  // NOTE: For doubleheaders without anGameId, this will match the first game (G1).
+  // Always store anGameId when creating bets to guarantee correct DH grading.
+  if (!game) {
+    game = findGame(games, input.awayTeam, input.homeTeam);
+    if (game) {
+      console.log(`[ScoreGrader][STEP] gradeTrackedBet: resolved via team-name match → gameId=${game.gameId} ${game.awayAbbrev}@${game.homeAbbrev}`);
+    }
+  }
 
   if (!game) {
-    console.log(`[ScoreGrader][VERIFY] gradeTrackedBet: FAIL — game not found for ${input.awayTeam}@${input.homeTeam} on ${input.gameDate}`);
+    console.log(`[ScoreGrader][VERIFY] gradeTrackedBet: FAIL — game not found for ${input.awayTeam}@${input.homeTeam} on ${input.gameDate} (anGameId=${input.anGameId ?? "null"})`);
     return {
       result: "PENDING",
       awayScore: null,
