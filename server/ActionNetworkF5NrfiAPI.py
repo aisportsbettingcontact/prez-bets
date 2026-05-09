@@ -33,10 +33,11 @@ OUTPUT SCHEMA per game:
 }
 """
 
-import sys
 import json
-import requests
 import logging
+import sys
+
+import requests
 
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
 FD_NJ_BOOK_ID = "69"
@@ -46,14 +47,36 @@ REQUEST_TIMEOUT = 20
 
 # AN team abbreviation → our system abbreviation mapping
 AN_TEAM_MAP: dict[str, str] = {
-    "ARI": "ARI", "ATL": "ATL", "BAL": "BAL", "BOS": "BOS",
-    "CHC": "CHC", "CWS": "CWS", "CIN": "CIN", "CLE": "CLE",
-    "COL": "COL", "DET": "DET", "HOU": "HOU", "KC":  "KC",
-    "LAA": "LAA", "LAD": "LAD", "MIA": "MIA", "MIL": "MIL",
-    "MIN": "MIN", "NYM": "NYM", "NYY": "NYY", "OAK": "OAK",
-    "PHI": "PHI", "PIT": "PIT", "SD":  "SD",  "SEA": "SEA",
-    "SF":  "SF",  "STL": "STL", "TB":  "TB",  "TEX": "TEX",
-    "TOR": "TOR", "WSH": "WSH",
+    "ARI": "ARI",
+    "ATL": "ATL",
+    "BAL": "BAL",
+    "BOS": "BOS",
+    "CHC": "CHC",
+    "CWS": "CWS",
+    "CIN": "CIN",
+    "CLE": "CLE",
+    "COL": "COL",
+    "DET": "DET",
+    "HOU": "HOU",
+    "KC": "KC",
+    "LAA": "LAA",
+    "LAD": "LAD",
+    "MIA": "MIA",
+    "MIL": "MIL",
+    "MIN": "MIN",
+    "NYM": "NYM",
+    "NYY": "NYY",
+    "OAK": "OAK",
+    "PHI": "PHI",
+    "PIT": "PIT",
+    "SD": "SD",
+    "SEA": "SEA",
+    "SF": "SF",
+    "STL": "STL",
+    "TB": "TB",
+    "TEX": "TEX",
+    "TOR": "TOR",
+    "WSH": "WSH",
 }
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────
@@ -81,7 +104,9 @@ def _extract_ml(book_data: dict, period: str) -> tuple[int | None, int | None]:
     return away_odds, home_odds
 
 
-def _extract_rl(book_data: dict, period: str) -> tuple[float | None, int | None, float | None, int | None]:
+def _extract_rl(
+    book_data: dict, period: str
+) -> tuple[float | None, int | None, float | None, int | None]:
     """Extract away and home run line (value + odds) from a book's period data."""
     period_data = book_data.get(period, {})
     rl_items = period_data.get("spread", [])
@@ -97,7 +122,9 @@ def _extract_rl(book_data: dict, period: str) -> tuple[float | None, int | None,
     return away_val, away_odds, home_val, home_odds
 
 
-def _extract_total(book_data: dict, period: str) -> tuple[float | None, int | None, int | None]:
+def _extract_total(
+    book_data: dict, period: str
+) -> tuple[float | None, int | None, int | None]:
     """Extract total value, over odds, under odds from a book's period data."""
     period_data = book_data.get(period, {})
     total_items = period_data.get("total", [])
@@ -118,20 +145,22 @@ def _extract_total(book_data: dict, period: str) -> tuple[float | None, int | No
 def fetch_f5_nrfi_odds(date_str: str) -> list[dict]:
     """
     Fetch F5 and NRFI odds for all games on the given date.
-    
+
     Args:
         date_str: Date in YYYYMMDD format (e.g., '20260405')
-    
+
     Returns:
         List of game dicts with F5 and NRFI odds from FD NJ.
     """
     # Normalize date format: accept both YYYY-MM-DD and YYYYMMDD, always pass YYYYMMDD to API
-    if len(date_str) == 10 and date_str[4] == '-':
-        date_api = date_str.replace('-', '')  # "2026-04-05" → "20260405"
+    if len(date_str) == 10 and date_str[4] == "-":
+        date_api = date_str.replace("-", "")  # "2026-04-05" → "20260405"
         log.info(f"[STEP] Normalized date format: {date_str} → {date_api}")
     else:
         date_api = date_str  # already YYYYMMDD
-    log.info(f"[INPUT] Fetching F5/NRFI odds for date={date_api}, book=FanDuel NJ (id={FD_NJ_BOOK_ID})")
+    log.info(
+        f"[INPUT] Fetching F5/NRFI odds for date={date_api}, book=FanDuel NJ (id={FD_NJ_BOOK_ID})"
+    )
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
@@ -146,7 +175,9 @@ def fetch_f5_nrfi_odds(date_str: str) -> list[dict]:
     }
 
     log.info(f"[STEP] GET {AN_SCOREBOARD_URL}?date={date_api}&periods={PERIODS}")
-    resp = requests.get(AN_SCOREBOARD_URL, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
+    resp = requests.get(
+        AN_SCOREBOARD_URL, headers=headers, params=params, timeout=REQUEST_TIMEOUT
+    )
     resp.raise_for_status()
 
     data = resp.json()
@@ -163,7 +194,9 @@ def fetch_f5_nrfi_odds(date_str: str) -> list[dict]:
         away_team_id = g.get("away_team_id")
         home_team_id = g.get("home_team_id")
         teams_list = g.get("teams", [])
-        team_map_local: dict[int, str] = {t["id"]: t.get("abbr", "") for t in teams_list if "id" in t}
+        team_map_local: dict[int, str] = {
+            t["id"]: t.get("abbr", "") for t in teams_list if "id" in t
+        }
         away_abbr_raw = team_map_local.get(away_team_id, "") if away_team_id else ""
         home_abbr_raw = team_map_local.get(home_team_id, "") if home_team_id else ""
         game_time = g.get("start_time", "")
@@ -181,8 +214,12 @@ def fetch_f5_nrfi_odds(date_str: str) -> list[dict]:
             log.info(f"  [WARN] {away_abbr}@{home_abbr}: No F5 data from FD NJ")
 
         f5_away_ml, f5_home_ml = _extract_ml(fd_data, "firstfiveinnings")
-        f5_away_rl_val, f5_away_rl_odds, f5_home_rl_val, f5_home_rl_odds = _extract_rl(fd_data, "firstfiveinnings")
-        f5_total_val, f5_over_odds, f5_under_odds = _extract_total(fd_data, "firstfiveinnings")
+        f5_away_rl_val, f5_away_rl_odds, f5_home_rl_val, f5_home_rl_odds = _extract_rl(
+            fd_data, "firstfiveinnings"
+        )
+        f5_total_val, f5_over_odds, f5_under_odds = _extract_total(
+            fd_data, "firstfiveinnings"
+        )
 
         # ── NRFI/YRFI data ───────────────────────────────────────────────────
         has_nrfi = "firstinning" in fd_data
@@ -190,7 +227,9 @@ def fetch_f5_nrfi_odds(date_str: str) -> list[dict]:
             missing_nrfi += 1
             log.info(f"  [WARN] {away_abbr}@{home_abbr}: No 1st inning data from FD NJ")
 
-        nrfi_total_val, nrfi_over_odds, nrfi_under_odds = _extract_total(fd_data, "firstinning")
+        nrfi_total_val, nrfi_over_odds, nrfi_under_odds = _extract_total(
+            fd_data, "firstinning"
+        )
 
         game_record = {
             "anEventId": event_id,
@@ -210,7 +249,7 @@ def fetch_f5_nrfi_odds(date_str: str) -> list[dict]:
             },
             "nrfi": {
                 "totalValue": nrfi_total_val,
-                "overOdds": nrfi_over_odds,   # YRFI
+                "overOdds": nrfi_over_odds,  # YRFI
                 "underOdds": nrfi_under_odds,  # NRFI
             },
         }

@@ -3,7 +3,9 @@
 Full end-to-end doubleheader logic audit.
 Tests all 5 layers of DH handling with live data.
 """
-import json, sys, urllib.request, urllib.error
+import json
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 
 PASS = "✅ PASS"
@@ -95,7 +97,7 @@ print("-" * 50)
 # Simulate the key construction for both sides
 # linescoreByGameNum builder: `${ls.gameDate}:${ls.awayAbbrev}:${ls.homeAbbrev}:${ls.gameNumber}`
 # bet history lookup:         `${bet.gameDate}:${bet.awayTeam}:${bet.homeTeam}:${betGameNum}`
-# 
+#
 # For HOU@BAL 2026-04-30:
 # ls.awayAbbrev = "HOU" (from MLB Stats API)
 # bet.awayTeam  = "HOU" (from Action Network, stored in DB)
@@ -243,7 +245,7 @@ print("-" * 50)
 # Simulate with the two games we found.
 
 games_list = hou_bal_games.copy()
-print(f"  Simulating gradeTrackedBet for G2 bet (gameNumber=2, awayTeam=HOU, homeTeam=BAL):")
+print("  Simulating gradeTrackedBet for G2 bet (gameNumber=2, awayTeam=HOU, homeTeam=BAL):")
 print(f"  Games list: {[(g['gamePk'], g['awayAbbrev']+'@'+g['homeAbbrev'], g.get('gameNumber')) for g in games_list]}")
 
 # Primary: anGameId match (will fail since AN ID ≠ gamePk)

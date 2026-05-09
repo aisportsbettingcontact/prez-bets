@@ -4,11 +4,13 @@ Direct test of MLBAIModel for MIL@MIA (2026-04-17)
 Robert Gasser (league-avg) vs Janson Junk
 Runs with unbuffered output so we can see exactly where it stalls
 """
-import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server'))
-from MLBAIModel import project_game
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 from datetime import datetime
+
+from MLBAIModel import project_game
 
 print("[INPUT] MIL@MIA — Robert Gasser(R) vs Janson Junk(R)", flush=True)
 print("[STATE] Gasser: league-avg (ERA=4.50, FIP=4.50, xFIP=4.50)", flush=True)
@@ -83,10 +85,10 @@ try:
         home_f5_rs=2.32,
         verbose=True,
     )
-    print("[OUTPUT] Result:", result.get('ok'), flush=True)
-    print("[OUTPUT] ML:", result.get('away_ml'), result.get('home_ml'), flush=True)
-    print("[OUTPUT] RL:", result.get('away_rl'), result.get('home_rl'), flush=True)
-    print("[OUTPUT] Total:", result.get('total'), flush=True)
+    print("[OUTPUT] Result:", result.get("ok"), flush=True)
+    print("[OUTPUT] ML:", result.get("away_ml"), result.get("home_ml"), flush=True)
+    print("[OUTPUT] RL:", result.get("away_rl"), result.get("home_rl"), flush=True)
+    print("[OUTPUT] Total:", result.get("total"), flush=True)
     print("[VERIFY] PASS — MIL@MIA model completed successfully", flush=True)
 except Exception as e:
     print("[FAIL] Exception:", str(e), flush=True)

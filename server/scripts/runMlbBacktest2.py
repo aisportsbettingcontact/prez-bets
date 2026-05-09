@@ -48,10 +48,10 @@ EXECUTION:
   Exit code 0 = success, 1 = failure
 """
 
-import os
-import sys
 import json
 import math
+import os
+import sys
 import traceback
 from datetime import datetime, timezone
 
@@ -99,10 +99,11 @@ def main() -> int:
 
     log("STEP", "Connecting to database")
     try:
-        import mysql.connector
         # Parse DATABASE_URL: mysql://user:pass@host:port/dbname
         # mysql.connector doesn't accept URL format directly
         import re
+
+        import mysql.connector
         m = re.match(
             r"mysql(?:\+\w+)?://([^:]+):([^@]+)@([^:/]+)(?::(\d+))?/(.+?)(?:\?.*)?$",
             db_url

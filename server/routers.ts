@@ -48,7 +48,7 @@ import { runStrikeoutModel, type StrikeoutRunnerInput } from "./strikeoutModelRu
 import { getLastRefreshResult, runVsinRefresh, runVsinRefreshManual, refreshAllScoresNow } from "./vsinAutoRefresh";
 import { syncNbaModelFromSheet, getLastNbaModelSyncResult } from "./nbaModelSync";
 import { syncNhlModelForToday, getLastNhlSyncResult } from "./nhlModelSync";
-import { runMlbModelForDate } from "./mlbModelRunner";
+import { runMlbModelForDate, validateMlbModelResults } from "./mlbModelRunner";
 import { checkGoalieChanges, getLastGoalieWatchResult } from "./nhlGoalieWatcher";
 import { MARCH_MADNESS_DB_SLUGS } from "@shared/marchMadnessTeams";
 import { parseAnAllMarketsHtml, type AnSport } from "./anHtmlParser";
@@ -821,8 +821,47 @@ export const appRouter = router({
           })),
         };
       }),
+    /**
+     * Run the post-write validation gate on demand for a specific date.
+     * Owner-only — returns issues (errors) and warnings from validateMlbModelResults.
+     * Use this to audit stale data, RL sign mismatches, and missing spreadDiff/spreadEdge
+     * without needing to check server logs.
+     *
+     * Response shape:
+     *   passed: boolean  — true if zero issues (warnings do not affect pass/fail)
+     *   issues: string[] — hard errors (totalMismatch, RL inversion, missing odds, etc.)
+     *   warnings: string[] — soft alerts (whole-number totals, missing spreadDiff, etc.)
+     *   date: string     — the date audited (YYYY-MM-DD)
+     *   summary: { total, modeled, issues, warnings }
+     */
+    audit: ownerProcedure
+      .input(z.object({ date: zodGameDate.optional() }))
+      .query(async ({ input }) => {
+        const dateStr = input.date ?? (() => {
+          const etStr = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+          const [m, d, y] = etStr.split('/');
+          return `${y}-${m}-${d}`;
+        })();
+        console.log(`[tRPC][mlbModel.audit] ► Running validation gate for ${dateStr}`);
+        const result = await validateMlbModelResults(dateStr);
+        const games = await listGamesByDate(dateStr, 'MLB');
+        const modeled = games.filter(g => g.modelRunAt !== null).length;
+        const summary = {
+          total: games.length,
+          modeled,
+          issues: result.issues.length,
+          warnings: result.warnings.length,
+        };
+        if (result.passed) {
+          console.log(`[tRPC][mlbModel.audit] ✅ PASSED — ${modeled}/${games.length} modeled, 0 issues, ${result.warnings.length} warnings`);
+        } else {
+          console.error(`[tRPC][mlbModel.audit] ❌ FAILED — ${result.issues.length} issues, ${result.warnings.length} warnings`);
+          for (const issue of result.issues) console.error(`  ✗ ${issue}`);
+        }
+        return { passed: result.passed, issues: result.issues, warnings: result.warnings, date: dateStr, summary };
+      }),
   }),
-  // ─── NHL Model Sync ─────────────────────────────────────────────────────────
+  // ─── NHL Model Sync ─────────────────────────────────────────────────────────────────────
   nhlModel: router({
     /**
      * Manually trigger the NHL model sync for today's games.

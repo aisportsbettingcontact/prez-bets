@@ -32,15 +32,12 @@ Logging: [INPUT] [STEP] [STATE] [OUTPUT] [VERIFY] [ERROR] [WARN]
 """
 
 import json
-import os
-import sys
-import time
-import math
 import statistics
+import time
+import urllib.error
+import urllib.request
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import urllib.request
-import urllib.error
 
 INPUT_FILE  = "/home/ubuntu/mlb_historical_results.json"
 OUTPUT_JSON = "/home/ubuntu/mlb_backtest_results.json"
@@ -55,7 +52,7 @@ def fetch_boxscore(game_pk: int, retries: int = 3) -> dict | None:
         try:
             with urllib.request.urlopen(url, timeout=10) as resp:
                 return json.loads(resp.read())
-        except Exception as e:
+        except Exception:
             if attempt < retries - 1:
                 time.sleep(1.5 * (attempt + 1))
             else:
@@ -311,7 +308,7 @@ def compute_calibration(graded_games: list) -> dict:
             "n_games":   len(data["fg_total"]),
         }
 
-    print(f"\n[STATE] Season breakdown:")
+    print("\n[STATE] Season breakdown:")
     for s, stats in sorted(season_stats.items()):
         print(f"  {s}: n={stats['n_games']} nrfi={stats['nrfi_rate']} avg_fg={stats['avg_fg']} f5_share={stats['f5_share']} i1_share={stats['i1_share']}")
 
@@ -397,7 +394,7 @@ def main():
 
     # ── Phase 1: Fetch per-game boxscores ─────────────────────────────────
     print(f"\n[STEP] Phase 1: Fetching per-game boxscores for {len(complete_games)} games")
-    print(f"[STATE] Using 8 concurrent threads with rate limiting")
+    print("[STATE] Using 8 concurrent threads with rate limiting")
 
     game_stats = {}
     fetched = failed = 0
@@ -418,7 +415,7 @@ def main():
                     failed += 1
                     game_stats[gp] = {"gamePk": gp, "away_sp": None, "home_sp": None,
                                       "away_batting": None, "home_batting": None}
-            except Exception as e:
+            except Exception:
                 failed += 1
                 game_stats[gp] = {"gamePk": gp, "away_sp": None, "home_sp": None,
                                   "away_batting": None, "home_batting": None}
@@ -509,7 +506,7 @@ def main():
     print(f"[OUTPUT] Phase 2 complete: graded={len(graded_games)} errors={grade_errors}")
 
     # Sample verification — print first 3 games
-    print(f"\n[VERIFY] Sample game grades (first 3):")
+    print("\n[VERIFY] Sample game grades (first 3):")
     for g in graded_games[:3]:
         print(f"  {g['gameDate']} {g['away_team']}@{g['home_team']}: "
               f"FG={g['away_score']}-{g['home_score']} F5={g['away_f5']}-{g['home_f5']} "
@@ -521,7 +518,7 @@ def main():
     calibration = compute_calibration(graded_games)
 
     # ── Phase 4: Write outputs ────────────────────────────────────────────
-    print(f"\n[STEP] Phase 4: Writing outputs")
+    print("\n[STEP] Phase 4: Writing outputs")
 
     with open(OUTPUT_JSON, "w") as f:
         json.dump({"graded_games": graded_games, "summary": calibration["overall"]}, f, indent=2)
@@ -626,7 +623,7 @@ def main():
     print(f"[OUTPUT] Human-readable report → {OUTPUT_RPT}")
 
     print("\n" + report_text)
-    print(f"\n[VERIFY] PASS — 3-season backtest complete")
+    print("\n[VERIFY] PASS — 3-season backtest complete")
     print(f"[VERIFY] graded={len(graded_games)} calibration_constants={len(calibration['overall'])} team_nrfi={len(tn)} team_f5={len(tf)}")
 
 if __name__ == "__main__":

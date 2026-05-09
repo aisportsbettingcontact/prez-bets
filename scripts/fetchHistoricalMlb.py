@@ -17,9 +17,9 @@ Output: /home/ubuntu/mlb_historical_results.json
 
 import json
 import time
-import sys
-import requests
 from datetime import datetime, timedelta
+
+import requests
 
 # ─── Constants ───────────────────────────────────────────────────────────────
 MLB_API_BASE = "https://statsapi.mlb.com/api/v1"
@@ -168,10 +168,10 @@ def main():
                     if parsed:
                         season_games.append(parsed)
                         chunk_games += 1
-            
+
             if chunk_count % 5 == 0 or chunk_games > 0:
                 print(f"  [STATE] Chunk {chunk_start}→{chunk_end}: {chunk_games} games parsed (season total: {len(season_games)})")
-            
+
             time.sleep(REQUEST_DELAY)
 
         nrfi_count = sum(1 for g in season_games if g["nrfiResult"] == "NRFI")

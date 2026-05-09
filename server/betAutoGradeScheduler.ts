@@ -322,21 +322,21 @@ export function startBetAutoGradeScheduler(): void {
     }
   }, 10_000);
 
-  // Layer 1: 15-minute polling during game hours
+  // Layer 1: 15-minute polling during game hours — .unref() prevents keeping process alive
   const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
   pollingInterval = setInterval(() => {
     runPollingGrade().catch(err => {
       console.log(`[BetAutoGrade][ERROR] polling interval error: ${(err as Error).message}`);
     });
-  }, POLL_INTERVAL_MS);
+  }, POLL_INTERVAL_MS).unref();
 
-  // Layer 2: 1-minute check for 11:30 PM EST nightly sweep
+  // Layer 2: 1-minute check for 11:30 PM EST nightly sweep — .unref() prevents keeping process alive
   const NIGHTLY_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
   nightlySweepInterval = setInterval(() => {
     runNightlySweep().catch(err => {
       console.log(`[BetAutoGrade][ERROR] nightly sweep check error: ${(err as Error).message}`);
     });
-  }, NIGHTLY_CHECK_INTERVAL_MS);
+  }, NIGHTLY_CHECK_INTERVAL_MS).unref();
 
   console.log(`[BetAutoGrade][OUTPUT] startBetAutoGradeScheduler: STARTED`);
   console.log(`[BetAutoGrade][STATE] Polling: every 15 min during game hours (7AM–11:59PM PST)`);

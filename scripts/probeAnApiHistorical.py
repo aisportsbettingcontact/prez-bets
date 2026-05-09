@@ -19,10 +19,11 @@ Usage:
   python3.11 scripts/probeAnApiHistorical.py
 """
 
-import sys
 import json
-import requests
 import logging
+import sys
+
+import requests
 
 logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
 log = logging.getLogger("AN_PROBE")
@@ -73,9 +74,8 @@ def probe_scoreboard_v2(date_str: str, periods: str, book_ids: str) -> dict:
         log.info(f"[PROBE] HTTP {resp.status_code} | {len(resp.content)} bytes")
         if resp.status_code == 200:
             return resp.json()
-        else:
-            log.warning(f"[PROBE] Non-200: {resp.text[:200]}")
-            return {}
+        log.warning(f"[PROBE] Non-200: {resp.text[:200]}")
+        return {}
     except Exception as e:
         log.error(f"[PROBE] Exception: {e}")
         return {}
@@ -144,7 +144,7 @@ def analyze_game_markets(game: dict, target_games: list[tuple[str, str]]) -> Non
     log.info(f"  [GAME] markets keys: {list(markets.keys()) if markets else 'EMPTY'}")
 
     if not markets:
-        log.warning(f"  [GAME] ⚠️  NO MARKETS — game has no odds data")
+        log.warning("  [GAME] ⚠️  NO MARKETS — game has no odds data")
         return
 
     # Check each book

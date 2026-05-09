@@ -1181,17 +1181,23 @@ export async function runVsinRefresh(): Promise<RefreshResult | null> {
     const rangeEnd = datePst(RANGE_DAYS_AHEAD);
     const allDates = dateRange(todayStr, rangeEnd);
 
-    // Run NBA and NHL refreshes in sequence (share the same VSiN token)
-    const nbaResult = await refreshNba(todayStr, allDates);
-    const nhlResult = await refreshNhl(todayStr, allDates);
+    // Run NBA, NHL, and MLB VSiN refreshes in parallel — each uses independent fetch() sessions
+    // with no shared state, so concurrent execution is safe and reduces wall-clock time by ~2/3.
+    const [nbaResult, nhlResult, mlbResult] = await Promise.all([
+      refreshNba(todayStr, allDates),
+      refreshNhl(todayStr, allDates),
+      refreshMlb(todayStr),
+    ]);
+    console.log(
+      `[VSiNAutoRefresh] NBA refresh complete: updated=${nbaResult.updated} ` +
+      `inserted=${nbaResult.inserted} scheduleInserted=${nbaResult.scheduleInserted} ` +
+      `total=${nbaResult.total}`
+    );
     console.log(
       `[VSiNAutoRefresh] NHL refresh complete: updated=${nhlResult.updated} ` +
       `inserted=${nhlResult.inserted} scheduleInserted=${nhlResult.scheduleInserted} ` +
       `total=${nhlResult.total}`
     );
-
-    // MLB: refresh VSiN splits (non-fatal)
-    const mlbResult = await refreshMlb(todayStr);
     console.log(
       `[VSiNAutoRefresh] MLB VSiN splits: updated=${mlbResult.updated} total=${mlbResult.total}`
     );

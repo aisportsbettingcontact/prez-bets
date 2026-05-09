@@ -428,7 +428,7 @@ export function startNbaModelSyncScheduler(): void {
     console.log("[NBAModelSync] Outside sync window (9AM–9PM PST), skipping initial sync.");
   }
 
-  // Schedule every 30 minutes
+  // Schedule every 30 minutes — .unref() prevents the interval from keeping the process alive
   syncInterval = setInterval(() => {
     if (isWithinSyncWindow()) {
       console.log("[NBAModelSync] Scheduled sync triggered...");
@@ -438,16 +438,7 @@ export function startNbaModelSyncScheduler(): void {
     } else {
       console.log("[NBAModelSync] Outside sync window (9AM–9PM PST), skipping scheduled sync.");
     }
-  }, THIRTY_MIN_MS);
+  }, THIRTY_MIN_MS).unref();
 
   console.log("[NBAModelSync] Scheduler started (every 30 min, 9AM–9PM PST).");
-}
-
-// Dead export — no active callers in pipeline
-function stopNbaModelSyncScheduler(): void {
-  if (syncInterval) {
-    clearInterval(syncInterval);
-    syncInterval = null;
-    console.log("[NBAModelSync] Scheduler stopped.");
-  }
 }

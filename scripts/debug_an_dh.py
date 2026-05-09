@@ -3,8 +3,9 @@
 Diagnostic: Inspect Action Network API response for doubleheader fields.
 Checks today's MLB slate for any game-level fields that indicate doubleheader G1/G2.
 """
-import urllib.request, json, sys
-from datetime import datetime, timezone, timedelta
+import json
+import urllib.request
+from datetime import datetime, timedelta, timezone
 
 # EST = UTC-5 (no DST adjustment needed for this diagnostic)
 est = timezone(timedelta(hours=-4))  # EDT currently
@@ -38,15 +39,15 @@ for g in games:
     home_abbr = home.get("abbr", "?")
     start = g.get("start_time", "")[:19]
     status = g.get("status", "?")
-    
+
     # Check for any DH-related fields
     dh_fields = {}
-    for k in ["double_header", "game_number", "series_game_number", "game_type", 
+    for k in ["double_header", "game_number", "series_game_number", "game_type",
               "description", "title", "neutral_site", "series_summary", "broadcast",
               "boxscore", "score"]:
         if k in g:
             dh_fields[k] = g[k]
-    
+
     print(f"  id={g['id']} {away_abbr}@{home_abbr} start={start} status={status}")
     for k, v in dh_fields.items():
         if isinstance(v, dict):
@@ -56,6 +57,7 @@ for g in games:
 
 # Also check if there are any games with the same away+home teams (potential DH)
 from collections import defaultdict
+
 matchup_count = defaultdict(list)
 for g in games:
     teams = {t["id"]: t for t in g.get("teams", [])}

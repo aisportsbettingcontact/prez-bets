@@ -1,7 +1,19 @@
 import { and, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
-import { games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, mlbTeams, appUsers as appUsersTable, oddsHistory, mlbLineups, mlbStrikeoutProps, mlbParkFactors, mlbBullpenStats, mlbUmpireModifiers, mlbHrProps, securityEvents, type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser, type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow, type MlbLineupRow, type InsertMlbLineup, type MlbStrikeoutPropRow, type InsertMlbStrikeoutProp, type MlbParkFactorRow, type MlbBullpenStatsRow, type MlbUmpireModifierRow, type MlbHrPropRow, type InsertSecurityEvent, type SecurityEventRow } from "../drizzle/schema";
+import {
+  games, modelFiles, users, nbaTeams, ncaamTeams, nhlTeams, mlbTeams,
+  appUsers as appUsersTable, appUsers,
+  oddsHistory, mlbLineups, mlbStrikeoutProps, mlbParkFactors, mlbBullpenStats,
+  mlbUmpireModifiers, mlbHrProps, securityEvents,
+  userFavoriteGames, userSessions,
+  type Game, type AppUser, type InsertGame, type InsertModelFile, type InsertUser,
+  type InsertNbaTeam, type InsertNhlTeam, type OddsHistoryRow,
+  type MlbLineupRow, type InsertMlbLineup, type MlbStrikeoutPropRow,
+  type InsertMlbStrikeoutProp, type MlbParkFactorRow, type MlbBullpenStatsRow,
+  type MlbUmpireModifierRow, type MlbHrPropRow, type InsertSecurityEvent, type SecurityEventRow,
+  type InsertAppUser, type UserSession, type InsertUserSession,
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { withCircuitBreaker } from './dbCircuitBreaker';
 
@@ -299,7 +311,7 @@ export async function deleteGameById(id: number): Promise<void> {
 
 // ─── App Users (custom accounts) ─────────────────────────────────────────────────
 
-import { appUsers, type InsertAppUser, userFavoriteGames } from "../drizzle/schema";
+// appUsers, InsertAppUser, userFavoriteGames — imported at top of file
 export async function createAppUser(data: InsertAppUser) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -2042,7 +2054,7 @@ export async function pruneSecurityEvents(retentionDays = 90): Promise<number> {
 }
 
 // ─── User Session Tracking (DAU / MAU / WAU / avg session duration) ──────────
-import { userSessions, type UserSession, type InsertUserSession } from "../drizzle/schema";
+// userSessions, UserSession, InsertUserSession — imported at top of file
 
 // Idle threshold: sessions with no heartbeat for > 30 min are considered closed
 const SESSION_IDLE_MS = 30 * 60 * 1000;

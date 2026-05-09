@@ -25,14 +25,14 @@ def avail(panel):
 # Inter Bold 13px character widths (px) — estimated from font metrics
 # These are conservative estimates; actual canvas values may be 0-5% wider
 CW = {
-    'A': 9.1, 'B': 8.5, 'C': 8.3, 'D': 9.0, 'E': 7.8, 'F': 7.2, 'G': 8.8,
-    'H': 9.0, 'I': 3.8, 'J': 5.5, 'K': 8.8, 'L': 7.2, 'M': 10.5, 'N': 9.0,
-    'O': 9.2, 'P': 8.2, 'Q': 9.2, 'R': 8.8, 'S': 7.9, 'T': 8.0, 'U': 9.0,
-    'V': 9.1, 'W': 10.8, 'X': 8.8, 'Y': 8.8, 'Z': 8.5,
-    'a': 7.5, 'b': 8.0, 'c': 7.0, 'd': 8.0, 'e': 7.5, 'f': 4.5, 'g': 8.0,
-    'h': 8.0, 'i': 3.5, 'j': 3.5, 'k': 7.8, 'l': 3.5, 'm': 11.5, 'n': 8.0,
-    'o': 8.0, 'p': 8.0, 'q': 8.0, 'r': 5.0, 's': 6.8, 't': 5.0, 'u': 8.0,
-    'v': 7.5, 'w': 10.2, 'x': 7.5, 'y': 7.5, 'z': 7.0, ' ': 3.5,
+    "A": 9.1, "B": 8.5, "C": 8.3, "D": 9.0, "E": 7.8, "F": 7.2, "G": 8.8,
+    "H": 9.0, "I": 3.8, "J": 5.5, "K": 8.8, "L": 7.2, "M": 10.5, "N": 9.0,
+    "O": 9.2, "P": 8.2, "Q": 9.2, "R": 8.8, "S": 7.9, "T": 8.0, "U": 9.0,
+    "V": 9.1, "W": 10.8, "X": 8.8, "Y": 8.8, "Z": 8.5,
+    "a": 7.5, "b": 8.0, "c": 7.0, "d": 8.0, "e": 7.5, "f": 4.5, "g": 8.0,
+    "h": 8.0, "i": 3.5, "j": 3.5, "k": 7.8, "l": 3.5, "m": 11.5, "n": 8.0,
+    "o": 8.0, "p": 8.0, "q": 8.0, "r": 5.0, "s": 6.8, "t": 5.0, "u": 8.0,
+    "v": 7.5, "w": 10.2, "x": 7.5, "y": 7.5, "z": 7.0, " ": 3.5,
 }
 
 def tw(text, size=13):
@@ -42,37 +42,37 @@ def tw(text, size=13):
 # All MLB, NHL, NBA team names (nickname line — the longer of the two lines)
 teams = [
     # MLB nicknames
-    'White Sox', 'Blue Jays', 'Diamondbacks', 'Cardinals', 'Guardians',
-    'Brewers', 'Mariners', 'Athletics', 'Nationals', 'Phillies',
-    'Dodgers', 'Yankees', 'Red Sox', 'Padres', 'Giants',
-    'Rockies', 'Orioles', 'Astros', 'Rangers', 'Braves',
-    'Twins', 'Tigers', 'Royals', 'Cubs', 'Mets',
-    'Pirates', 'Reds', 'Marlins', 'Rays', 'Angels',
+    "White Sox", "Blue Jays", "Diamondbacks", "Cardinals", "Guardians",
+    "Brewers", "Mariners", "Athletics", "Nationals", "Phillies",
+    "Dodgers", "Yankees", "Red Sox", "Padres", "Giants",
+    "Rockies", "Orioles", "Astros", "Rangers", "Braves",
+    "Twins", "Tigers", "Royals", "Cubs", "Mets",
+    "Pirates", "Reds", "Marlins", "Rays", "Angels",
     # NHL nicknames
-    'Golden Knights', 'Maple Leafs', 'Canadiens', 'Blackhawks',
-    'Blue Jackets', 'Hurricanes', 'Avalanche', 'Lightning',
-    'Penguins', 'Capitals', 'Senators', 'Panthers',
-    'Predators', 'Coyotes', 'Canucks', 'Oilers',
+    "Golden Knights", "Maple Leafs", "Canadiens", "Blackhawks",
+    "Blue Jackets", "Hurricanes", "Avalanche", "Lightning",
+    "Penguins", "Capitals", "Senators", "Panthers",
+    "Predators", "Coyotes", "Canucks", "Oilers",
     # NBA nicknames
-    'Timberwolves', 'Trailblazers', 'Mavericks', 'Cavaliers',
-    'Grizzlies', 'Pelicans', 'Thunder', 'Warriors',
-    'Raptors', 'Clippers', 'Pacers', 'Nuggets',
+    "Timberwolves", "Trailblazers", "Mavericks", "Cavaliers",
+    "Grizzlies", "Pelicans", "Thunder", "Warriors",
+    "Raptors", "Clippers", "Pacers", "Nuggets",
     # MLB city names (top line)
-    'San Francisco', 'Los Angeles', 'Kansas City', 'San Diego',
-    'Philadelphia', 'Washington', 'Pittsburgh', 'Cincinnati',
-    'Minnesota', 'Cleveland', 'Baltimore', 'Milwaukee',
-    'Toronto', 'Chicago', 'Detroit', 'Houston',
-    'Colorado', 'Oakland', 'Seattle', 'Tampa Bay',
-    'New York', 'Boston', 'Texas', 'Atlanta',
-    'Miami', 'St. Louis', 'Arizona',
+    "San Francisco", "Los Angeles", "Kansas City", "San Diego",
+    "Philadelphia", "Washington", "Pittsburgh", "Cincinnati",
+    "Minnesota", "Cleveland", "Baltimore", "Milwaukee",
+    "Toronto", "Chicago", "Detroit", "Houston",
+    "Colorado", "Oakland", "Seattle", "Tampa Bay",
+    "New York", "Boston", "Texas", "Atlanta",
+    "Miami", "St. Louis", "Arizona",
     # NHL city names
-    'Washington', 'Philadelphia', 'Pittsburgh', 'Minnesota',
-    'Colorado', 'Nashville', 'Columbus', 'Carolina',
-    'New Jersey', 'San Jose', 'Vancouver', 'Edmonton',
-    'Winnipeg', 'Calgary', 'Ottawa', 'Montreal',
-    'Toronto', 'Tampa Bay', 'Florida', 'Detroit',
-    'Boston', 'Buffalo', 'Chicago', 'Dallas',
-    'Arizona', 'Seattle', 'Vegas',
+    "Washington", "Philadelphia", "Pittsburgh", "Minnesota",
+    "Colorado", "Nashville", "Columbus", "Carolina",
+    "New Jersey", "San Jose", "Vancouver", "Edmonton",
+    "Winnipeg", "Calgary", "Ottawa", "Montreal",
+    "Toronto", "Tampa Bay", "Florida", "Detroit",
+    "Boston", "Buffalo", "Chicago", "Dallas",
+    "Arizona", "Seattle", "Vegas",
 ]
 
 a768 = avail(PANEL_768)

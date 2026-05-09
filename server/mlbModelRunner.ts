@@ -1945,6 +1945,7 @@ export function startMlbModelSyncScheduler(): void {
   console.log(`${TAG} Starting — interval=${MLB_MODEL_SYNC_INTERVAL_MS / 1000}s (24/7, no time gates)`);
 
   // Run immediately on boot, then every 5 minutes
+  // .unref() prevents this interval from keeping the process alive if all other work is done
   void runMlbModelSyncCycle();
-  setInterval(() => void runMlbModelSyncCycle(), MLB_MODEL_SYNC_INTERVAL_MS);
+  setInterval(() => void runMlbModelSyncCycle(), MLB_MODEL_SYNC_INTERVAL_MS).unref();
 }

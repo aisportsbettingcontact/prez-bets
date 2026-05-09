@@ -40,24 +40,27 @@ Exit codes:
 import argparse
 import json
 import sys
-import urllib.request
 import urllib.error
-from datetime import datetime, timezone, date
+import urllib.request
+from datetime import date, datetime, timezone
 
 # ── Logging helpers ────────────────────────────────────────────────────────────
+
 
 def log(msg: str):
     ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     print(f"[ANKPropsAPI] [{ts}] {msg}", flush=True)
 
+
 def log_err(msg: str):
     ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     print(f"[ANKPropsAPI] [ERROR] [{ts}] {msg}", file=sys.stderr, flush=True)
 
+
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 AN_API_BASE = "https://api.actionnetwork.com/web/v2/scoreboard/mlb/markets"
-CONSENSUS_BOOK_ID = 15          # Action Network internal consensus aggregator
+CONSENSUS_BOOK_ID = 15  # Action Network internal consensus aggregator
 K_PROP_TYPE = "core_bet_type_37_strikeouts"
 
 HEADERS = {
@@ -72,6 +75,7 @@ HEADERS = {
 }
 
 # ── Fetch helpers ──────────────────────────────────────────────────────────────
+
 
 def fetch_json(url: str) -> dict:
     """Fetch a URL and return parsed JSON. Raises on HTTP or parse errors."""
@@ -93,16 +97,20 @@ def fetch_json(url: str) -> dict:
         log_err(f"JSON parse error from {url}: {e}")
         raise
 
+
 # ── Team abbreviation mapping ──────────────────────────────────────────────────
 # Action Network uses full team names in game objects; map to our abbreviations.
 # We derive team abbrev from the game's away_team/home_team abbr field.
+
 
 def get_team_abbrev(team_obj: dict) -> str:
     """Extract team abbreviation from Action Network team object."""
     # AN uses abbr field like 'NYY', 'SF', 'LAD', etc.
     return team_obj.get("abbr", team_obj.get("short_name", "???"))
 
+
 # ── Main scrape function ───────────────────────────────────────────────────────
+
 
 def fetch_consensus_k_props(date_str: str) -> list[dict]:
     """
@@ -126,7 +134,9 @@ def fetch_consensus_k_props(date_str: str) -> list[dict]:
     players_raw = data.get("players", [])
     markets_raw = data.get("markets", {})
 
-    log(f"Games: {len(games_raw)} | Players: {len(players_raw)} | Market books: {len(markets_raw)}")
+    log(
+        f"Games: {len(games_raw)} | Players: {len(players_raw)} | Market books: {len(markets_raw)}"
+    )
 
     if not games_raw:
         log("No games found for this date.")
@@ -138,7 +148,9 @@ def fetch_consensus_k_props(date_str: str) -> list[dict]:
         pid = p.get("id")
         if pid:
             players[pid] = p
-            log(f"  Player: {pid} = {p.get('full_name')} ({p.get('primary_position', '?')})")
+            log(
+                f"  Player: {pid} = {p.get('full_name')} ({p.get('primary_position', '?')})"
+            )
 
     # Build game map: game_id -> {away_abbrev, home_abbrev}
     games: dict[int, dict] = {}
@@ -175,7 +187,9 @@ def fetch_consensus_k_props(date_str: str) -> list[dict]:
         odds = line.get("odds")
         game_id = line.get("event_id")
 
-        log(f"  Line: player={pid} side={side} value={value} odds={odds} game={game_id}")
+        log(
+            f"  Line: player={pid} side={side} value={value} odds={odds} game={game_id}"
+        )
 
         if pid not in by_player:
             by_player[pid] = {"game_id": game_id}
@@ -206,9 +220,13 @@ def fetch_consensus_k_props(date_str: str) -> list[dict]:
                 team_abbrev = game_info["home"]
             else:
                 # Fallback: use player's team abbreviation from player object
-                team_abbrev = player_info.get("team", {}).get("abbr", "???") if isinstance(player_info.get("team"), dict) else "???"
+                team_abbrev = (
+                    player_info.get("team", {}).get("abbr", "???")
+                    if isinstance(player_info.get("team"), dict)
+                    else "???"
+                )
 
-        over_data  = sides.get("over",  {})
+        over_data = sides.get("over", {})
         under_data = sides.get("under", {})
 
         prop = {
@@ -217,29 +235,39 @@ def fetch_consensus_k_props(date_str: str) -> list[dict]:
             "team": team_abbrev,
             "position": position,
             "game_id": game_id,
-            "consensus_over_line":  over_data.get("line"),
-            "consensus_over_odds":  over_data.get("odds"),
+            "consensus_over_line": over_data.get("line"),
+            "consensus_over_odds": over_data.get("odds"),
             "consensus_under_line": under_data.get("line"),
             "consensus_under_odds": under_data.get("odds"),
         }
 
-        log(f"  PROP: {full_name} ({team_abbrev}) — "
+        log(
+            f"  PROP: {full_name} ({team_abbrev}) — "
             f"o{prop['consensus_over_line']} {prop['consensus_over_odds']} / "
-            f"u{prop['consensus_under_line']} {prop['consensus_under_odds']}")
+            f"u{prop['consensus_under_line']} {prop['consensus_under_odds']}"
+        )
 
         props.append(prop)
 
     log(f"Total props extracted: {len(props)}")
     return props
 
+
 # ── Entry point ────────────────────────────────────────────────────────────────
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Fetch Action Network Consensus MLB K prop lines")
-    parser.add_argument("--date", default=None,
-                        help="Date in YYYY-MM-DD or YYYYMMDD format (default: today)")
-    parser.add_argument("--output", default=None,
-                        help="Output JSON file path (default: stdout)")
+    parser = argparse.ArgumentParser(
+        description="Fetch Action Network Consensus MLB K prop lines"
+    )
+    parser.add_argument(
+        "--date",
+        default=None,
+        help="Date in YYYY-MM-DD or YYYYMMDD format (default: today)",
+    )
+    parser.add_argument(
+        "--output", default=None, help="Output JSON file path (default: stdout)"
+    )
     args = parser.parse_args()
 
     # Resolve date
@@ -256,6 +284,7 @@ def main():
     except Exception as e:
         log_err(f"Fatal error: {e}")
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         sys.exit(2)
 

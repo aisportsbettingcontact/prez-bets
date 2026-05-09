@@ -46,13 +46,18 @@ import requests
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
+
 def log(msg: str) -> None:
     ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"[ANHRPropsAPI] [{ts}] {msg}", file=sys.stderr, flush=True)  # stderr: logs only, stdout reserved for JSON output
+    print(
+        f"[ANHRPropsAPI] [{ts}] {msg}", file=sys.stderr, flush=True
+    )  # stderr: logs only, stdout reserved for JSON output
+
 
 def log_err(msg: str) -> None:
     ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     print(f"[ANHRPropsAPI] [ERROR] [{ts}] {msg}", file=sys.stderr, flush=True)
+
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -73,22 +78,47 @@ HEADERS = {
 
 # Action Network team_id → our abbreviation (all 30 MLB teams)
 AN_TEAM_ID_TO_ABBR: dict[int, str] = {
-    187: "BAL", 188: "TOR", 189: "TB",  190: "BOS", 191: "NYY",
-    192: "KC",  193: "CLE", 194: "CWS", 195: "DET", 196: "MIN",
-    197: "SEA", 198: "LAA", 199: "HOU", 200: "TEX", 201: "ATH",
-    202: "CIN", 203: "PIT", 204: "LAD", 205: "ARI", 206: "CHC",
-    207: "STL", 208: "MIL", 209: "SF",  210: "COL", 211: "SD",
-    212: "PHI", 213: "NYM", 214: "MIA", 215: "ATL", 216: "WSH",
+    187: "BAL",
+    188: "TOR",
+    189: "TB",
+    190: "BOS",
+    191: "NYY",
+    192: "KC",
+    193: "CLE",
+    194: "CWS",
+    195: "DET",
+    196: "MIN",
+    197: "SEA",
+    198: "LAA",
+    199: "HOU",
+    200: "TEX",
+    201: "ATH",
+    202: "CIN",
+    203: "PIT",
+    204: "LAD",
+    205: "ARI",
+    206: "CHC",
+    207: "STL",
+    208: "MIL",
+    209: "SF",
+    210: "COL",
+    211: "SD",
+    212: "PHI",
+    213: "NYM",
+    214: "MIA",
+    215: "ATL",
+    216: "WSH",
 }
 
 # ── Probability helpers ───────────────────────────────────────────────────────
+
 
 def american_to_prob(odds: int) -> float:
     """Convert American odds to implied probability (with vig)."""
     if odds > 0:
         return 100.0 / (odds + 100)
-    else:
-        return abs(odds) / (abs(odds) + 100)
+    return abs(odds) / (abs(odds) + 100)
+
 
 def no_vig_prob(over_odds: int | None, under_odds: int | None) -> float | None:
     """
@@ -106,7 +136,9 @@ def no_vig_prob(over_odds: int | None, under_odds: int | None) -> float | None:
         return None
     return round(p_over / total, 6)
 
+
 # ── Fetch ─────────────────────────────────────────────────────────────────────
+
 
 def fetch_hr_props_raw(date_str: str) -> dict:
     """
@@ -123,7 +155,9 @@ def fetch_hr_props_raw(date_str: str) -> dict:
         resp.raise_for_status()
         data = resp.json()
         log(f"[INPUT] HTTP {resp.status_code} — {len(resp.content)} bytes")
-        log(f"[INPUT] games={len(data.get('games', []))} players={len(data.get('players', []))} markets_books={list(data.get('markets', {}).keys())}")
+        log(
+            f"[INPUT] games={len(data.get('games', []))} players={len(data.get('players', []))} markets_books={list(data.get('markets', {}).keys())}"
+        )
         return data
     except requests.RequestException as e:
         log_err(f"HTTP error fetching HR props: {e}")
@@ -132,12 +166,16 @@ def fetch_hr_props_raw(date_str: str) -> dict:
         log_err(f"JSON parse error: {e}")
         raise
 
+
 # ── Core parsing ──────────────────────────────────────────────────────────────
+
 
 def parse_hr_props(
     raw: dict,
     db_game_map: dict[str, int],  # "AWAY@HOME|YYYY-MM-DD" → db_game_id
-    lineup_map: dict[int, dict],  # db_game_id → {awayLineup: [...], homeLineup: [...], awayLineupConfirmed, homeLineupConfirmed}
+    lineup_map: dict[
+        int, dict
+    ],  # db_game_id → {awayLineup: [...], homeLineup: [...], awayLineupConfirmed, homeLineupConfirmed}
     date_str: str = "",  # YYYYMMDD — used as fallback for UTC date-shifted West Coast games
 ) -> list[dict]:
     """
@@ -205,10 +243,10 @@ def parse_hr_props(
     for db_game_id, lineup in lineup_map.items():
         away_names: dict[str, int] = {}
         home_names: dict[str, int] = {}
-        for player in (lineup.get("awayLineup") or []):
+        for player in lineup.get("awayLineup") or []:
             norm = _normalize_name(player.get("name", ""))
             away_names[norm] = player.get("battingOrder", 0)
-        for player in (lineup.get("homeLineup") or []):
+        for player in lineup.get("homeLineup") or []:
             norm = _normalize_name(player.get("name", ""))
             home_names[norm] = player.get("battingOrder", 0)
         lineup_name_sets[db_game_id] = {
@@ -235,7 +273,9 @@ def parse_hr_props(
         # Determine event_id from whichever side is available
         event_id = (sides.get("over") or sides.get("under", {})).get("event_id")
         if not event_id:
-            log_err(f"  [SKIP] player_id={pid} ({player_info.get('full_name')}) — no event_id")
+            log_err(
+                f"  [SKIP] player_id={pid} ({player_info.get('full_name')}) — no event_id"
+            )
             skipped_no_game += 1
             continue
 
@@ -271,8 +311,8 @@ def parse_hr_props(
         player_team = AN_TEAM_ID_TO_ABBR.get(team_id, "?")
 
         # Determine if player is on away or home side
-        is_away = (player_team == away_abbr)
-        is_home = (player_team == home_abbr)
+        is_away = player_team == away_abbr
+        is_home = player_team == home_abbr
 
         # Cross-reference against Rotowire lineup
         lineup_data = lineup_name_sets.get(db_game_id, {})
@@ -312,7 +352,9 @@ def parse_hr_props(
             "homeTeam": home_abbr,
             "playerName": player_info.get("full_name", ""),
             "playerTeam": player_team,
-            "position": player_info.get("primary_position", player_info.get("position", "")),
+            "position": player_info.get(
+                "primary_position", player_info.get("position", "")
+            ),
             "battingOrder": batting_order,
             "lineupConfirmed": lineup_confirmed,
             "overLine": over_line,
@@ -324,21 +366,29 @@ def parse_hr_props(
         results.append(record)
 
     log(f"[OUTPUT] {len(results)} HR prop records built")
-    log(f"[VERIFY] lineup_confirmed={lineup_confirmed_count} | lineup_unconfirmed={lineup_unconfirmed_count}")
-    log(f"[VERIFY] skipped_no_game={skipped_no_game} | skipped_no_player={skipped_no_player}")
+    log(
+        f"[VERIFY] lineup_confirmed={lineup_confirmed_count} | lineup_unconfirmed={lineup_unconfirmed_count}"
+    )
+    log(
+        f"[VERIFY] skipped_no_game={skipped_no_game} | skipped_no_player={skipped_no_player}"
+    )
 
     # Sort: confirmed lineup players first, then by team, then by batting order
-    results.sort(key=lambda r: (
-        not r["lineupConfirmed"],
-        r["awayTeam"],
-        r["homeTeam"],
-        r["battingOrder"] or 99,
-        r["playerName"],
-    ))
+    results.sort(
+        key=lambda r: (
+            not r["lineupConfirmed"],
+            r["awayTeam"],
+            r["homeTeam"],
+            r["battingOrder"] or 99,
+            r["playerName"],
+        )
+    )
 
     return results
 
+
 # ── Name normalization ────────────────────────────────────────────────────────
+
 
 def _normalize_name(name: str) -> str:
     """
@@ -348,12 +398,15 @@ def _normalize_name(name: str) -> str:
     - Collapse whitespace
     """
     import re
+
     name = name.lower()
     name = re.sub(r"[.\'\-]", "", name)
     name = re.sub(r"\s+", " ", name).strip()
     return name
 
+
 # ── Main entry point ──────────────────────────────────────────────────────────
+
 
 def fetch_consensus_hr_props(date_str: str) -> list[dict]:
     """
@@ -371,6 +424,7 @@ def fetch_consensus_hr_props(date_str: str) -> list[dict]:
     log(f"=== Fetching Consensus HR Props for {date_str} ===")
     raw = fetch_hr_props_raw(date_str)
     return raw  # Return raw for TypeScript to process with DB context
+
 
 # ── CLI mode (called from TypeScript via child_process) ───────────────────────
 
@@ -400,7 +454,9 @@ if __name__ == "__main__":
     # Convert string keys back to int keys for lineup_map
     lineup_map: dict[int, dict] = {int(k): v for k, v in lineup_map_raw.items()}
 
-    log(f"[INPUT] dateStr={date_str} | dbGameMap entries={len(db_game_map)} | lineupMap entries={len(lineup_map)}")
+    log(
+        f"[INPUT] dateStr={date_str} | dbGameMap entries={len(db_game_map)} | lineupMap entries={len(lineup_map)}"
+    )
 
     if not date_str:
         log_err("dateStr is required")

@@ -21,6 +21,7 @@ Logging: [INPUT] [STEP] [STATE] [OUTPUT] [VERIFY] [ERROR] [WARN]
 import json
 import os
 import sys
+
 import mysql.connector
 
 INPUT_FILE = "/home/ubuntu/mlb_historical_results.json"
@@ -207,14 +208,14 @@ def main():
 
     conn.close()
 
-    print(f"\n[OUTPUT] ═══ FINAL SEED SUMMARY ═══")
+    print("\n[OUTPUT] ═══ FINAL SEED SUMMARY ═══")
     print(f"  inserted        = {totals['inserted']}")
     print(f"  skipped_existing= {totals['skipped_existing']}")
     print(f"  duplicate       = {totals['duplicate']}")
     print(f"  error           = {totals['error']}")
 
     if totals["error"] == 0:
-        print(f"[VERIFY] PASS — historical seed complete with 0 errors")
+        print("[VERIFY] PASS — historical seed complete with 0 errors")
     else:
         print(f"[VERIFY] WARN — seed complete with {totals['error']} errors (see above)")
 

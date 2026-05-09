@@ -1,4 +1,4 @@
-with open('/home/ubuntu/ai-sports-betting/client/src/pages/ModelProjections.tsx', 'r') as f:
+with open("/home/ubuntu/ai-sports-betting/client/src/pages/ModelProjections.tsx", "r") as f:
     content = f.read()
 
 # Step 1: Add useUrlState import
@@ -7,7 +7,7 @@ new_import = 'import { useLocation } from "wouter";\nimport { useUrlState, type 
 content = content.replace(old_import, new_import, 1)
 
 # Step 2: Replace the state declarations block
-old_state = '''  const [, setLocation] = useLocation();
+old_state = """  const [, setLocation] = useLocation();
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [selectedSport, setSelectedSport] = useState<"MLB" | "NBA" | "NHL">("MLB");
@@ -28,9 +28,9 @@ old_state = '''  const [, setLocation] = useLocation();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSports]);
   const [selectedStatuses, setSelectedStatuses] = useState<Set<"upcoming" | "live" | "final">>(new Set());
-  const [selectedDate, setSelectedDate] = useState<string>(() => todayUTC());'''
+  const [selectedDate, setSelectedDate] = useState<string>(() => todayUTC());"""
 
-new_state = '''  const [, setLocation] = useLocation();
+new_state = """  const [, setLocation] = useLocation();
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   // Architecture: URL query params for feed state (sport, date, tab, statuses)
@@ -57,14 +57,14 @@ new_state = '''  const [, setLocation] = useLocation();
       if (fallback) setSelectedSport(fallback);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSports]);'''
+  }, [activeSports]);"""
 
 count = content.count(old_state)
 content = content.replace(old_state, new_state, 1)
 print(f"Replaced state declarations: {count}")
 
 # Step 3: Replace the feedMobileTab state + handler block
-old_feed_tab = '''  // ── Main page tab: projections | splits ───────────────────────────────────
+old_feed_tab = """  // ── Main page tab: projections | splits ───────────────────────────────────
   // ── Feed-wide mobile tab filter ───────────────────────────────────────────
   // Tabs: MODEL PROJECTIONS (dual) | BETTING SPLITS (splits) | LINEUPS (lineups, MLB only)
   //       K PROPS (props, MLB only) | F5/NRFI (f5nrfi, MLB only) | HR PROPS (hrprops, MLB only)
@@ -82,9 +82,9 @@ old_feed_tab = '''  // ── Main page tab: projections | splits ────�
   const handleFeedTabChange = (next: FeedMobileTab) => {
     setFeedMobileTab(next);
     try { localStorage.setItem(FEED_TAB_KEY, next); } catch { /* ignore */ }
-  };'''
+  };"""
 
-new_feed_tab = '''  // ── Main page tab: projections | splits ───────────────────────────────────
+new_feed_tab = """  // ── Main page tab: projections | splits ───────────────────────────────────
   // ── Feed-wide mobile tab filter ───────────────────────────────────────────
   // Tabs: MODEL PROJECTIONS (dual) | BETTING SPLITS (splits) | LINEUPS (lineups, MLB only)
   //       K PROPS (props, MLB only) | F5/NRFI (f5nrfi, MLB only) | HR PROPS (hrprops, MLB only)
@@ -93,27 +93,27 @@ new_feed_tab = '''  // ── Main page tab: projections | splits ────�
   const feedMobileTab = urlFeedMobileTab;
   const handleFeedTabChange = (next: FeedMobileTab) => {
     setUrlFeedMobileTab(next);
-  };'''
+  };"""
 
 count2 = content.count(old_feed_tab)
 content = content.replace(old_feed_tab, new_feed_tab, 1)
 print(f"Replaced feedMobileTab block: {count2}")
 
 # Step 4: Replace the resetFilters call (setSelectedStatuses + setSelectedDate)
-old_reset = '''  useEffect(() => {
+old_reset = """  useEffect(() => {
     setSelectedStatuses(new Set());
     setSelectedDate(todayUTC());
-  }, [selectedSport]);'''
+  }, [selectedSport]);"""
 
-new_reset = '''  useEffect(() => {
+new_reset = """  useEffect(() => {
     resetUrlFilters();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSport]);'''
+  }, [selectedSport]);"""
 
 count3 = content.count(old_reset)
 content = content.replace(old_reset, new_reset, 1)
 print(f"Replaced resetFilters call: {count3}")
 
-with open('/home/ubuntu/ai-sports-betting/client/src/pages/ModelProjections.tsx', 'w') as f:
+with open("/home/ubuntu/ai-sports-betting/client/src/pages/ModelProjections.tsx", "w") as f:
     f.write(content)
 print("Done")

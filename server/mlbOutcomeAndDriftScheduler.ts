@@ -266,12 +266,12 @@ export function startMlbOutcomeAndDriftScheduler(): void {
     console.error(`${TAG} [ERROR] Initial tick failed: ${err instanceof Error ? err.message : String(err)}`);
   });
 
-  // Then tick every 60 seconds
+  // Then tick every 60 seconds — .unref() prevents this from keeping the process alive
   schedulerInterval = setInterval(() => {
     schedulerTick().catch(err => {
       console.error(`${TAG} [ERROR] Tick failed: ${err instanceof Error ? err.message : String(err)}`);
     });
-  }, 60_000);
+  }, 60_000).unref();
 
   console.log(`${TAG} [OUTPUT] startMlbOutcomeAndDriftScheduler: STARTED`);
   console.log(`${TAG} [VERIFY] PASS — scheduler running, tick interval=60s`);
