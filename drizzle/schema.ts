@@ -1938,6 +1938,13 @@ export const trackedBets = mysqlTable("tracked_bets", {
   /** Action Network game id — links to AN scoreboard for slate display */
   anGameId: int("anGameId"),
   /**
+   * Doubleheader game number: 1 = G1, 2 = G2.
+   * Null/1 for non-doubleheader games or legacy bets created before this field was added.
+   * Used to resolve the correct linescore when two games share the same away+home+date.
+   * MLB Stats API guarantees G1 has a lower gamePk than G2 on the same date.
+   */
+  gameNumber: int("gameNumber").default(1),
+  /**
    * Timeframe of the bet:
    *   FULL_GAME    = Full game (default)
    *   FIRST_5      = First 5 innings (MLB)

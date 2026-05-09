@@ -436,7 +436,7 @@ function PickButton({
 }
 
 function GameSelector({
-   games, selectedId, onSelect, loading, sport, formDate, linescoreByTeams, linescoreByPk,
+   games, selectedId, onSelect, loading, sport, formDate, linescoreByTeams, linescoreByPk, linescoreByGameNum,
 }: {
   games:             SlateGame[];
   selectedId:        number | null;
@@ -446,29 +446,42 @@ function GameSelector({
   formDate:          string;
   linescoreByTeams?:  Map<string, LinescoreEntry>;
   linescoreByPk?:     Map<number, LinescoreEntry>;
+  /**
+   * linescoreByGameNum — keyed by "gameDate:away:home:gameNumber" (THE correct DH-safe map).
+   * AN game IDs ≠ MLB gamePks, so linescoreByPk.get(g.id) always misses for MLB.
+   * This map uses gameNumber (1 or 2) which is assigned identically by both AN and MLB
+   * systems based on chronological start time.
+   */
+  linescoreByGameNum?: Map<string, LinescoreEntry>;
 }) {
   /**
    * getLs — resolve linescore for a SlateGame.
    *
    * Resolution order (most precise first):
-   *   1. linescoreByPk[g.id]  — exact gamePk match (handles DH perfectly, G1 ≠ G2)
-   *   2. linescoreByTeams[gameDate:away:home]  — fallback for non-MLB or missing pk
+   *   1. linescoreByGameNum[gameDate:away:home:gameNumber]  — DH-safe, works for all sports
+   *   2. linescoreByTeams[gameDate:away:home]               — fallback for non-DH games only
+   *
+   * WHY NOT linescoreByPk?
+   *   Action Network game IDs (stored as anGameId / SlateGame.id) are a DIFFERENT number
+   *   space from MLB Stats API gamePk values. e.g. AN=287818 vs MLB=824848 for the same game.
+   *   linescoreByPk.get(g.id) will ALWAYS miss for MLB games fetched via the AN primary path.
    *
    * Logging:
-   *   [getLs][HIT_PK]   — resolved via gamePk
-   *   [getLs][HIT_TEAM] — resolved via team-name key
-   *   [getLs][MISS]     — no match found
+   *   [getLs][HIT_GAMENUM] — resolved via gameDate:away:home:gameNumber (correct)
+   *   [getLs][HIT_TEAM]    — resolved via team-name key (non-DH fallback)
+   *   [getLs][MISS]        — no match found
    */
   function getLs(g: SlateGame): LinescoreEntry | undefined {
-    // Primary: exact gamePk lookup (O(1), DH-safe)
-    if (linescoreByPk) {
-      const byPk = linescoreByPk.get(g.id);
-      if (byPk) {
-        console.log(`[getLs][HIT_PK] gameId=${g.id} ${g.awayTeam}@${g.homeTeam} G${g.gameNumber} → gamePk=${byPk.gamePk} status=${byPk.status} R=${byPk.awayR}-${byPk.homeR}`);
-        return byPk;
+    // Primary: gameDate:away:home:gameNumber lookup (O(1), DH-safe, correct for all sports)
+    if (linescoreByGameNum) {
+      const key = `${g.gameDate}:${g.awayTeam}:${g.homeTeam}:${g.gameNumber}`;
+      const byGN = linescoreByGameNum.get(key);
+      if (byGN) {
+        console.log(`[getLs][HIT_GAMENUM] key=${key} gameId=${g.id} → gamePk=${byGN.gamePk} status=${byGN.status} R=${byGN.awayR}-${byGN.homeR}`);
+        return byGN;
       }
     }
-    // Fallback: team-name key (ambiguous for DH, but safe for non-MLB or pre-2026 bets)
+    // Fallback: team-name key (ambiguous for DH, but safe for non-DH games)
     if (linescoreByTeams) {
       const byTeam = linescoreByTeams.get(`${g.gameDate}:${g.awayTeam}:${g.homeTeam}`);
       if (byTeam) {
@@ -1678,30 +1691,58 @@ export default function BetTracker() {
   );
 
   const linescoreByTeams = useMemo(() => {
+    // linescoreByTeams — keyed by "gameDate:away:home" (non-DH fallback only)
+    // WARNING: For doubleheaders this map is AMBIGUOUS — both G1 and G2 share the same key.
+    // Always prefer linescoreByGameNum for DH-safe lookups.
     const map = new Map<string, LinescoreEntry>();
     if (!linescoreQuery.data) return map;
     for (const ls of Object.values(linescoreQuery.data)) {
       const key = `${ls.gameDate}:${ls.awayAbbrev}:${ls.homeAbbrev}`;
-      // For non-DH games this is fine; for DH the last game written wins (team-name key is ambiguous)
-      // Use linescoreByPk for precise DH lookups
-      map.set(key, ls);
+      map.set(key, ls); // last write wins — only safe for non-DH games
     }
     return map;
   }, [linescoreQuery.data]);
 
   /**
-   * linescoreByPk — keyed by gamePk (number) for O(1) exact game lookup.
-   * Critical for doubleheaders: each game has a unique gamePk = anGameId,
-   * so G1 and G2 are always resolved independently.
+   * linescoreByPk — keyed by gamePk (MLB Stats API integer).
+   * NOTE: Action Network game IDs ≠ MLB gamePk — these are DIFFERENT number spaces.
+   *   AN game ID:  e.g. 287818, 290399
+   *   MLB gamePk:  e.g. 824848, 824850
+   * DO NOT use this map with bet.anGameId or slateGame.id — they will never match.
+   * Use linescoreByGameNum for DH-safe lookups from SlateGame or TrackedBet objects.
    */
   const linescoreByPk = useMemo(() => {
     const map = new Map<number, LinescoreEntry>();
     if (!linescoreQuery.data) return map;
     for (const ls of Object.values(linescoreQuery.data)) {
       map.set(ls.gamePk, ls);
-      console.log(`[Linescore][STATE] gamePk=${ls.gamePk} ${ls.awayAbbrev}@${ls.homeAbbrev} date=${ls.gameDate} status=${ls.status} R=${ls.awayR}-${ls.homeR}`);
+      console.log(`[Linescore][STATE] gamePk=${ls.gamePk} ${ls.awayAbbrev}@${ls.homeAbbrev} date=${ls.gameDate} gameNumber=${ls.gameNumber} status=${ls.status} R=${ls.awayR}-${ls.homeR}`);
     }
     console.log(`[Linescore][OUTPUT] linescoreByPk built: ${map.size} entries`);
+    return map;
+  }, [linescoreQuery.data]);
+
+  /**
+   * linescoreByGameNum — keyed by "gameDate:awayAbbrev:homeAbbrev:gameNumber".
+   *
+   * This is the CORRECT DH-safe map for all linescore lookups.
+   * Both getLinescores (server) and getSlate (server) assign gameNumber by chronological
+   * start time: G1 = earlier game, G2 = later game. The key is identical in both systems
+   * regardless of whether AN IDs or MLB gamePks are used.
+   *
+   * Usage:
+   *   SlateGame:   linescoreByGameNum.get(`${g.gameDate}:${g.awayTeam}:${g.homeTeam}:${g.gameNumber}`)
+   *   TrackedBet:  linescoreByGameNum.get(`${bet.gameDate}:${bet.awayTeam}:${bet.homeTeam}:${bet.gameNumber ?? 1}`)
+   */
+  const linescoreByGameNum = useMemo(() => {
+    const map = new Map<string, LinescoreEntry>();
+    if (!linescoreQuery.data) return map;
+    for (const ls of Object.values(linescoreQuery.data)) {
+      const key = `${ls.gameDate}:${ls.awayAbbrev}:${ls.homeAbbrev}:${ls.gameNumber}`;
+      map.set(key, ls);
+      console.log(`[Linescore][GAMENUM] key=${key} gamePk=${ls.gamePk} status=${ls.status} R=${ls.awayR}-${ls.homeR}`);
+    }
+    console.log(`[Linescore][OUTPUT] linescoreByGameNum built: ${map.size} entries (DH-safe)`);
     return map;
   }, [linescoreQuery.data]);
 
@@ -2052,6 +2093,7 @@ export default function BetTracker() {
 
     await createMut.mutateAsync({
       anGameId:   formGame.id,
+      gameNumber: formGame.gameNumber,  // 1 for G1/non-DH, 2 for G2 — critical for DH grading
       sport:      formSport,
       gameDate:   formDate,
       awayTeam:   formGame.awayTeam,
@@ -2582,6 +2624,7 @@ export default function BetTracker() {
                 formDate={formDate}
                 linescoreByTeams={linescoreByTeams}
                 linescoreByPk={linescoreByPk}
+                linescoreByGameNum={linescoreByGameNum}
               />
             </div>
 
@@ -2928,17 +2971,22 @@ export default function BetTracker() {
                             {isExpanded && (
                               <div className="space-y-2 p-2 bg-zinc-950/40">
                                 {section.bets.map(bet => {
-                                  // Primary: use anGameId (gamePk) for exact DH-safe lookup
-                                  // Fallback: team-name key for non-MLB or legacy bets without anGameId
+                                  // DH-SAFE linescore resolution for bet history cards.
+                                  // AN game IDs ≠ MLB gamePks — linescoreByPk.get(bet.anGameId) ALWAYS misses.
+                                  // Correct approach: match by gameDate:away:home:gameNumber.
+                                  // bet.gameNumber is stored at bet-creation time from SlateGame.gameNumber.
+                                  // Legacy bets without gameNumber default to 1 (non-DH or G1).
+                                  const betGameNum = (bet as { gameNumber?: number | null }).gameNumber ?? 1;
                                   const ls = bet.sport === "MLB"
                                     ? (
-                                        bet.anGameId != null
-                                          ? (linescoreByPk.get(bet.anGameId) ?? linescoreByTeams.get(`${bet.gameDate}:${bet.awayTeam}:${bet.homeTeam}`))
-                                          : linescoreByTeams.get(`${bet.gameDate}:${bet.awayTeam}:${bet.homeTeam}`)
+                                        // Primary: DH-safe gameNumber key
+                                        linescoreByGameNum.get(`${bet.gameDate}:${bet.awayTeam}:${bet.homeTeam}:${betGameNum}`) ??
+                                        // Fallback: team-name key (safe for non-DH games)
+                                        linescoreByTeams.get(`${bet.gameDate}:${bet.awayTeam}:${bet.homeTeam}`)
                                       ) ?? undefined
                                     : undefined;
                                   if (bet.sport === "MLB") {
-                                    console.log(`[BetCard][LINESCORE] betId=${bet.id} anGameId=${bet.anGameId ?? "null"} ${bet.awayTeam}@${bet.homeTeam} → gamePk=${ls?.gamePk ?? "MISS"} R=${ls?.awayR ?? "?"}-${ls?.homeR ?? "?"}`);
+                                    console.log(`[BetCard][LINESCORE] betId=${bet.id} gameNum=${betGameNum} ${bet.awayTeam}@${bet.homeTeam} date=${bet.gameDate} → gamePk=${ls?.gamePk ?? "MISS"} R=${ls?.awayR ?? "?"}-${ls?.homeR ?? "?"}`);
                                   }
                                   const betOwnerIsHandicapper = bet.userId === appUser?.id && role === "handicapper";
                                   const canDirectEdit = isOwnerOrAdmin || !betOwnerIsHandicapper;

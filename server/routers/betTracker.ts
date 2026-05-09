@@ -333,6 +333,8 @@ export const betTrackerRouter = router({
     .input(z.object({
       // Game identification
       anGameId:   z.number().int().positive(),
+      /** Doubleheader game number: 1 = G1, 2 = G2. Defaults to 1 for non-DH games. */
+      gameNumber: z.number().int().min(1).max(2).default(1),
       sport:      z.enum(SPORTS).default("MLB"),
       gameDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       awayTeam:   z.string().min(1).max(128),
@@ -359,13 +361,14 @@ export const betTrackerRouter = router({
       const toWin  = input.toWin ?? calcToWin(input.odds, input.risk);
       const pick   = derivePickLabel(input.pickSide, input.market, input.awayTeam, input.homeTeam, input.timeframe);
 
-      console.log(`[BetTracker][INPUT] create: userId=${userId} sport=${input.sport} date=${input.gameDate} anGameId=${input.anGameId} timeframe=${input.timeframe} market=${input.market} pickSide=${input.pickSide} pick="${pick}" odds=${input.odds} risk=${input.risk} toWin=${toWin} wagerType=${input.wagerType} customLine=${input.customLine ?? "null"}`);
+      console.log(`[BetTracker][INPUT] create: userId=${userId} sport=${input.sport} date=${input.gameDate} anGameId=${input.anGameId} gameNumber=${input.gameNumber} timeframe=${input.timeframe} market=${input.market} pickSide=${input.pickSide} pick="${pick}" odds=${input.odds} risk=${input.risk} toWin=${toWin} wagerType=${input.wagerType} customLine=${input.customLine ?? "null"}`);
       console.log(`[BetTracker][STATE] create: awayTeam=${input.awayTeam} homeTeam=${input.homeTeam} derivedPick="${pick}"`);
 
       const db = await getDb();
       const [result] = await db.insert(trackedBets).values({
         userId,
         anGameId:   input.anGameId,
+        gameNumber: input.gameNumber,
         sport:      input.sport,
         gameDate:   input.gameDate,
         awayTeam:   input.awayTeam,
@@ -916,16 +919,17 @@ export const betTrackerRouter = router({
           : (bet.line != null ? parseFloat(String(bet.line)) : null);
 
         const gradeOut = await gradeTrackedBet({
-          sport:     bet.sport as GraderSport,
-          gameDate:  bet.gameDate,
-          awayTeam:  bet.awayTeam ?? "",
-          homeTeam:  bet.homeTeam ?? "",
-          timeframe: (bet.timeframe ?? "FULL_GAME") as GraderTimeframe,
-          market:    (bet.market ?? "ML") as GraderMarket,
-          pickSide:  (bet.pickSide ?? "AWAY") as GraderPickSide,
-          odds:      bet.odds,
-          line:      gradeLineValue,
-          anGameId:  bet.anGameId,
+          sport:      bet.sport as GraderSport,
+          gameDate:   bet.gameDate,
+          awayTeam:   bet.awayTeam ?? "",
+          homeTeam:   bet.homeTeam ?? "",
+          timeframe:  (bet.timeframe ?? "FULL_GAME") as GraderTimeframe,
+          market:     (bet.market ?? "ML") as GraderMarket,
+          pickSide:   (bet.pickSide ?? "AWAY") as GraderPickSide,
+          odds:       bet.odds,
+          line:       gradeLineValue,
+          anGameId:   bet.anGameId,
+          gameNumber: (bet.gameNumber ?? 1) as 1 | 2,
         });
 
         details.push({ betId: bet.id, result: gradeOut.result, reason: gradeOut.reason });
@@ -1002,16 +1006,17 @@ export const betTrackerRouter = router({
           : (bet.line != null ? parseFloat(String(bet.line)) : null);
 
         const gradeOut = await gradeTrackedBet({
-          sport:     bet.sport as GraderSport,
-          gameDate:  bet.gameDate,
-          awayTeam:  bet.awayTeam ?? "",
-          homeTeam:  bet.homeTeam ?? "",
-          timeframe: (bet.timeframe ?? "FULL_GAME") as GraderTimeframe,
-          market:    (bet.market ?? "ML") as GraderMarket,
-          pickSide:  (bet.pickSide ?? "AWAY") as GraderPickSide,
-          odds:      bet.odds,
-          line:      gradeLineValue,
-          anGameId:  bet.anGameId,
+          sport:      bet.sport as GraderSport,
+          gameDate:   bet.gameDate,
+          awayTeam:   bet.awayTeam ?? "",
+          homeTeam:   bet.homeTeam ?? "",
+          timeframe:  (bet.timeframe ?? "FULL_GAME") as GraderTimeframe,
+          market:     (bet.market ?? "ML") as GraderMarket,
+          pickSide:   (bet.pickSide ?? "AWAY") as GraderPickSide,
+          odds:       bet.odds,
+          line:       gradeLineValue,
+          anGameId:   bet.anGameId,
+          gameNumber: (bet.gameNumber ?? 1) as 1 | 2,
         });
 
         if (gradeOut.result === "PENDING") { stillPending++; continue; }
@@ -1521,6 +1526,13 @@ export const betTrackerRouter = router({
         gameDate:      string;
         awayAbbrev:    string;
         homeAbbrev:    string;
+        /**
+         * Doubleheader game number: 1 = G1, 2 = G2.
+         * MLB Stats API guarantees G1 has a lower gamePk than G2 on the same date.
+         * We detect DH by finding two games with the same gameDate+away+home, then
+         * assign gameNumber=1 to the lower gamePk and gameNumber=2 to the higher.
+         */
+        gameNumber:    1 | 2;
         innings:       InningLine[];
         awayR:         number | null;
         awayH:         number | null;
@@ -1584,6 +1596,7 @@ export const betTrackerRouter = router({
                 gameDate:      date,
                 awayAbbrev:    game.teams?.away?.team?.abbreviation ?? "",
                 homeAbbrev:    game.teams?.home?.team?.abbreviation ?? "",
+                gameNumber:    1, // default; overwritten below after DH detection
                 innings,
                 awayR:         ls?.teams?.away?.runs   ?? null,
                 awayH:         ls?.teams?.away?.hits   ?? null,
@@ -1603,7 +1616,27 @@ export const betTrackerRouter = router({
         }
       }));
 
-      console.log(`[BetTracker][OUTPUT] getLinescores: total=${Object.keys(result).length} games returned`);
+      // ── Doubleheader gameNumber assignment ──────────────────────────────────────
+      // Group games by gameDate:awayAbbrev:homeAbbrev. For any group with 2+ games,
+      // sort by gamePk ASC and assign gameNumber=1 to the first, gameNumber=2 to the second.
+      // MLB Stats API guarantees G1 has a lower gamePk than G2 on the same date.
+      const dhGroups = new Map<string, number[]>(); // key → [gamePk, ...]
+      for (const entry of Object.values(result)) {
+        const key = `${entry.gameDate}:${entry.awayAbbrev}:${entry.homeAbbrev}`;
+        const group = dhGroups.get(key) ?? [];
+        group.push(entry.gamePk);
+        dhGroups.set(key, group);
+      }
+      let dhCount = 0;
+      for (const [key, pks] of Array.from(dhGroups.entries())) {
+        if (pks.length < 2) continue; // not a doubleheader
+        pks.sort((a, b) => a - b); // ascending: lower gamePk = G1
+        result[pks[0]].gameNumber = 1;
+        result[pks[1]].gameNumber = 2;
+        dhCount++;
+        console.log(`[BetTracker][STATE] getLinescores: DH detected key=${key} G1_gamePk=${pks[0]} G2_gamePk=${pks[1]}`);
+      }
+      console.log(`[BetTracker][OUTPUT] getLinescores: total=${Object.keys(result).length} games returned dhCount=${dhCount}`);
       return result;
     }),
 

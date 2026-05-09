@@ -81,6 +81,13 @@ export interface BetGradeInput {
   odds: number;           // American odds
   line?: number | null;   // RL spread or Total line (e.g. -1.5, 8.5)
   anGameId?: number | null;
+  /**
+   * Doubleheader game number: 1 = G1, 2 = G2.
+   * Used when anGameId cannot be matched by gamePk (AN IDs ≠ MLB Stats API gamePk).
+   * When gameNumber=2, the fallback team-name match skips G1 and returns G2.
+   * MLB Stats API guarantees G1 has a lower gamePk than G2 on the same date.
+   */
+  gameNumber?: 1 | 2;
 }
 
 export interface BetGradeOutput {
@@ -670,8 +677,11 @@ export async function gradeTrackedBet(input: BetGradeInput): Promise<BetGradeOut
   const games = await fetchScores(input.sport, input.gameDate);
 
   // ── Primary resolution: use anGameId for exact game lookup (critical for doubleheaders) ──────────
-  // When anGameId is available, match by gameId directly to avoid G1/G2 ambiguity.
-  // The MLB Stats API gamePk equals the Action Network game ID numerically.
+  // IMPORTANT: Action Network game IDs and MLB Stats API gamePk are DIFFERENT number spaces.
+  //   AN game ID: e.g. 287818, 290399
+  //   MLB gamePk: e.g. 824848, 824850
+  // The anGameId match will always fail for MLB bets created via the AN primary path.
+  // We keep this lookup for future cases where IDs may align (e.g. NHL, NBA via ESPN).
   let game: GameScoreData | null = null;
   if (input.anGameId != null) {
     const anIdStr = String(input.anGameId);
@@ -679,17 +689,40 @@ export async function gradeTrackedBet(input: BetGradeInput): Promise<BetGradeOut
     if (game) {
       console.log(`[ScoreGrader][STEP] gradeTrackedBet: resolved via anGameId=${input.anGameId} → gameId=${game.gameId} ${game.awayAbbrev}@${game.homeAbbrev}`);
     } else {
-      console.log(`[ScoreGrader][STEP] gradeTrackedBet: anGameId=${input.anGameId} not found in ${games.length} fetched games — falling back to team-name match`);
+      console.log(`[ScoreGrader][STEP] gradeTrackedBet: anGameId=${input.anGameId} not found by direct ID match (AN ID ≠ MLB gamePk) — falling back to gameNumber-aware team-name match`);
     }
   }
 
-  // ── Fallback: team-name match (used when anGameId is absent or not found) ────────────────────
-  // NOTE: For doubleheaders without anGameId, this will match the first game (G1).
-  // Always store anGameId when creating bets to guarantee correct DH grading.
+  // ── Fallback: gameNumber-aware team-name match ──────────────────────────────────
+  // For doubleheaders: gameNumber=1 → first match (lower gamePk = G1)
+  //                    gameNumber=2 → second match (higher gamePk = G2)
+  // MLB Stats API returns games sorted by gamePk ASC, so the first match = G1.
+  // For non-DH games (gameNumber=1 or undefined), findGame returns the only match.
   if (!game) {
-    game = findGame(games, input.awayTeam, input.homeTeam);
-    if (game) {
-      console.log(`[ScoreGrader][STEP] gradeTrackedBet: resolved via team-name match → gameId=${game.gameId} ${game.awayAbbrev}@${game.homeAbbrev}`);
+    const gameNum = input.gameNumber ?? 1;
+    if (gameNum === 2) {
+      // For G2: find ALL games matching away+home, then take the second one (index 1)
+      const normAway = input.awayTeam.toUpperCase();
+      const normHome = input.homeTeam.toUpperCase();
+      const matches = games.filter(g => {
+        const ga = g.awayAbbrev.toUpperCase();
+        const gh = g.homeAbbrev.toUpperCase();
+        return (ga === normAway && gh === normHome) ||
+               (ga.includes(normAway) || normAway.includes(ga)) && (gh.includes(normHome) || normHome.includes(gh));
+      });
+      // Sort by gameId ASC (gamePk ascending = G1 first, G2 second)
+      matches.sort((a, b) => Number(a.gameId) - Number(b.gameId));
+      game = matches[1] ?? matches[0] ?? null; // G2 = index 1; fallback to G1 if only one found
+      if (game) {
+        console.log(`[ScoreGrader][STEP] gradeTrackedBet: resolved G2 via gameNumber=2 team-name match → gameId=${game.gameId} ${game.awayAbbrev}@${game.homeAbbrev} (${matches.length} matches found, took index 1)`);
+      } else {
+        console.log(`[ScoreGrader][STEP] gradeTrackedBet: G2 team-name match found 0 games for ${input.awayTeam}@${input.homeTeam}`);
+      }
+    } else {
+      game = findGame(games, input.awayTeam, input.homeTeam);
+      if (game) {
+        console.log(`[ScoreGrader][STEP] gradeTrackedBet: resolved via team-name match (gameNumber=${gameNum}) → gameId=${game.gameId} ${game.awayAbbrev}@${game.homeAbbrev}`);
+      }
     }
   }
 

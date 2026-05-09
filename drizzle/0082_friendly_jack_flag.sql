@@ -1,0 +1,1 @@
+ALTER TABLE `tracked_bets` ADD `gameNumber` int DEFAULT 1;

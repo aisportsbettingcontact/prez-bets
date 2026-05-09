@@ -575,6 +575,13 @@
       "when": 1777528652528,
       "tag": "0081_classy_iron_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "5",
+      "when": 1778293078755,
+      "tag": "0082_friendly_jack_flag",
+      "breakpoints": true
     }
   ]
 }
