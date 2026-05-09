@@ -1086,6 +1086,8 @@ export async function validateMlbModelResults(dateStr: string): Promise<Validati
     modelF5PushPct:    games.modelF5PushPct,
     modelF5PushRaw:    games.modelF5PushRaw,
     modelRunAt:        games.modelRunAt,
+    spreadDiff:        games.spreadDiff,
+    spreadEdge:        games.spreadEdge,
   }).from(games)
     .where(and(
       eq(games.gameDate, dateStr),
@@ -1195,6 +1197,20 @@ export async function validateMlbModelResults(dateStr: string): Promise<Validati
     // 7. Warn on whole-number totals (push probability > 0)
     if (bookT === Math.floor(bookT)) {
       warnings.push(`${label}: bookTotal=${bookT} is a whole number — push probability applies`);
+    }
+  }
+
+  // 8. spreadDiff and spreadEdge must be populated for all modeled games
+  // These are required for GameCard to show MLB RL edge detection.
+  // If missing, the RL edge will never be shown (GameCard falls back to game.spreadDiff=null → diff=0).
+  const modeledRows = rows.filter((g: (typeof rows)[0]) => g.modelRunAt != null);
+  for (const g of modeledRows) {
+    const label = `[${g.id}] ${g.away} @ ${g.home}`;
+    if (!g.spreadDiff) {
+      warnings.push(`${label}: spreadDiff is NULL — RL edge detection disabled (will show PASS for all RL markets)`);
+    }
+    if (!g.spreadEdge) {
+      warnings.push(`${label}: spreadEdge is NULL — RL edge direction unknown`);
     }
   }
 
@@ -1599,6 +1615,72 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
         safeHomeRunLine = correctedHome >= 0 ? `+${correctedHome.toFixed(1)}` : `${correctedHome.toFixed(1)}`;
       }
     }
+
+    // ── MLB RL EDGE DETECTION ─────────────────────────────────────────────────
+    // MLB run lines are ALWAYS ±1.5 — line arithmetic (|awayModelSpread - awayBookSpread|)
+    // is useless (always 0 when signs match). The edge lives in the ODDS:
+    //   model fair cover% vs book break-even% at the SAME ±1.5 line.
+    // spreadDiff = probability edge in percentage points (like NHL puck line).
+    // spreadEdge = "AWAY +1.5 [EDGE]" or "HOME -1.5 [EDGE]" (like NHL format for edgeLabelIsAway).
+    //
+    // FORMULA:
+    //   bookBreakEven(away) = |awayRLOdds| / (|awayRLOdds| + 100)  [for negative odds]
+    //                       = 100 / (awayRLOdds + 100)              [for positive odds]
+    //   edgeAway = away_rl_cover_pct/100 - bookBreakEven(away)
+    //   edgeHome = home_rl_cover_pct/100 - bookBreakEven(home)
+    //   spreadDiff = max(edgeAway, edgeHome) * 100  [in pp]
+    //   spreadEdge = side with higher edge, formatted as "ABBR ±1.5 [EDGE]"
+    const _mlbRlAwayOdds = r.away_rl_odds;  // model fair odds at book's ±1.5 line
+    const _mlbRlHomeOdds = r.home_rl_odds;
+    const _mlbRlAwayCoverPct = r.away_rl_cover_pct / 100;  // 0-1 scale
+    const _mlbRlHomeCoverPct = r.home_rl_cover_pct / 100;
+    // Book break-even: the cover% needed to break even at book's RL odds
+    const _bkAwayRLOddsNum = parseFloat(String(dbGame?.awayRunLineOdds ?? ''));
+    const _bkHomeRLOddsNum = parseFloat(String(dbGame?.homeRunLineOdds ?? ''));
+    const _americanBreakEven = (odds: number): number | null => {
+      if (isNaN(odds)) return null;
+      return odds < 0 ? Math.abs(odds) / (Math.abs(odds) + 100) : 100 / (odds + 100);
+    };
+    const _bkAwayBreakEven = _americanBreakEven(_bkAwayRLOddsNum);
+    const _bkHomeBreakEven = _americanBreakEven(_bkHomeRLOddsNum);
+    let mlbSpreadDiff: string | null = null;
+    let mlbSpreadEdge: string | null = null;
+    if (_bkAwayBreakEven !== null && _bkHomeBreakEven !== null) {
+      const edgeAway = _mlbRlAwayCoverPct - _bkAwayBreakEven;  // positive = away has edge
+      const edgeHome = _mlbRlHomeCoverPct - _bkHomeBreakEven;  // positive = home has edge
+      const bestEdge = Math.max(edgeAway, edgeHome);
+      if (bestEdge > 0) {
+        mlbSpreadDiff = String(Math.round(bestEdge * 1000) / 10);  // pp with 1 decimal
+        const dbGameForEdge = dbGameById.get(r.db_id);
+        const awayRLLabel = safeAwayRunLine;  // sign-enforced RL label e.g. "+1.5" or "-1.5"
+        const homeRLLabel = safeHomeRunLine;
+        const awayAbbrForEdge = r.game.split('@')[0]?.trim() ?? 'AWAY';
+        const homeAbbrForEdge = r.game.split('@')[1]?.trim() ?? 'HOME';
+        if (edgeAway >= edgeHome) {
+          mlbSpreadEdge = `${awayAbbrForEdge} ${awayRLLabel} [EDGE]`;
+        } else {
+          mlbSpreadEdge = `${homeAbbrForEdge} ${homeRLLabel} [EDGE]`;
+        }
+        console.log(
+          `${TAG} [${r.db_id}] ${r.game} — [RL EDGE] ` +
+          `awayEdge=${(edgeAway*100).toFixed(2)}pp homeEdge=${(edgeHome*100).toFixed(2)}pp ` +
+          `→ spreadDiff=${mlbSpreadDiff}pp spreadEdge="${mlbSpreadEdge}"`
+        );
+      } else {
+        // No edge — still write spreadDiff as raw probability diff (negative = no edge)
+        mlbSpreadDiff = String(Math.round(bestEdge * 1000) / 10);
+        console.log(
+          `${TAG} [${r.db_id}] ${r.game} — [RL NO EDGE] ` +
+          `awayEdge=${(edgeAway*100).toFixed(2)}pp homeEdge=${(edgeHome*100).toFixed(2)}pp → PASS`
+        );
+      }
+    } else {
+      console.warn(
+        `${TAG} [${r.db_id}] ${r.game} — [RL EDGE] SKIP: book RL odds unavailable ` +
+        `(awayRunLineOdds=${dbGame?.awayRunLineOdds} homeRunLineOdds=${dbGame?.homeRunLineOdds})`
+      );
+    }
+
     try {
       await db.update(games)
         .set({
@@ -1616,6 +1698,12 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
           // ⚠ awayRunLineOdds/homeRunLineOdds intentionally NOT written here — book fields, scraper-owned
           modelAwaySpreadOdds:  fmtMl(r.away_rl_odds), // ← GameCard MLB spread odds display
           modelHomeSpreadOdds:  fmtMl(r.home_rl_odds), // ← GameCard MLB spread odds display
+          // ── RL Edge (probability-based, NOT line arithmetic) ─────────────────────────────
+          // spreadDiff = probability edge in pp (model cover% - book break-even%)
+          // spreadEdge = "ABBR ±1.5 [EDGE]" for edgeLabelIsAway() parsing in GameCard
+          // GameCard uses game.spreadDiff for MLB (like NHL) — line arithmetic is invalid for ±1.5
+          spreadDiff:           mlbSpreadDiff ?? undefined,
+          spreadEdge:           mlbSpreadEdge ?? undefined,
           // ── Total (ALWAYS anchored to book O/U line, NOT model-derived line) ────────────
           // CRITICAL: modelTotal MUST equal bookTotal so displayed model line matches book line.
           // r.total_line = Python's optimal line (may differ from book by 0.5) — NEVER use this.
@@ -1713,13 +1801,22 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
         })
         .where(eq(games.id, r.db_id));
 
-      // [VERIFY] Log RL sign and total match immediately after write
-      const dbGame = dbGameById.get(r.db_id);
-      const rlSignMatch = r.away_run_line === r.away_run_line; // always true — Python is source of truth for RL
+      // [VERIFY] Log RL sign, total match, and RL edge immediately after write
       const bookTotalVal = dbGame?.bookTotal != null ? parseFloat(String(dbGame.bookTotal)) : null;
       const modelTotalVal = bookTotalVal; // we just wrote bookTotal as modelTotal
       const totalMatch = bookTotalVal != null;
-      console.log(`  [VERIFY] id=${r.db_id} | RL: away=${r.away_run_line}(${fmtMl(r.away_rl_odds)}) home=${r.home_run_line}(${fmtMl(r.home_rl_odds)}) | Total: book=${bookTotalVal} model=${modelTotalVal} match=${totalMatch}`);
+      const rlSignOk = (() => {
+        const bkSign = bookAwaySpreadForGuard !== null ? (bookAwaySpreadForGuard >= 0 ? 1 : -1) : null;
+        const mdlSign = parseFloat(safeAwayRunLine) >= 0 ? 1 : -1;
+        return bkSign === null || bkSign === mdlSign;
+      })();
+      console.log(
+        `  [VERIFY] id=${r.db_id} | ` +
+        `RL: away=${safeAwayRunLine}(${fmtMl(r.away_rl_odds)}) home=${safeHomeRunLine}(${fmtMl(r.home_rl_odds)}) ` +
+        `rlSignOk=${rlSignOk} | ` +
+        `Total: book=${bookTotalVal} model=${modelTotalVal} match=${totalMatch} | ` +
+        `RL Edge: spreadDiff=${mlbSpreadDiff ?? 'null'} spreadEdge="${mlbSpreadEdge ?? 'null'}"`
+      );
       console.log(`  [DB] ✓ Written id=${r.db_id}`);
       written++;
     } catch (err) {

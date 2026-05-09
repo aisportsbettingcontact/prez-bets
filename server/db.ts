@@ -1009,7 +1009,17 @@ export async function updateAnOdds(
   if (data.awaySpreadOdds !== undefined) updateData.awaySpreadOdds = data.awaySpreadOdds;
   if (data.homeBookSpread !== undefined) updateData.homeBookSpread = parseSpread(data.homeBookSpread);
   if (data.homeSpreadOdds !== undefined) updateData.homeSpreadOdds = data.homeSpreadOdds;
-  if (data.bookTotal !== undefined) updateData.bookTotal = parseSpread(data.bookTotal);
+  if (data.bookTotal !== undefined) {
+    const parsedTotal = parseSpread(data.bookTotal);
+    updateData.bookTotal = parsedTotal;
+    // CRITICAL: modelTotal must always mirror bookTotal (same line, model odds only).
+    // Whenever bookTotal changes via AN API refresh (updateAnOdds), modelTotal must stay in sync.
+    // This prevents the feed from showing mismatched book/model lines after odds refresh.
+    // Only sync if the new bookTotal is a valid non-null number.
+    if (parsedTotal !== null && parsedTotal !== undefined && !isNaN(parsedTotal)) {
+      updateData.modelTotal = String(parsedTotal);
+    }
+  }
   if (data.overOdds !== undefined) updateData.overOdds = data.overOdds;
   if (data.underOdds !== undefined) updateData.underOdds = data.underOdds;
   if (data.awayML !== undefined) updateData.awayML = data.awayML;

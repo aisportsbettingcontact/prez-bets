@@ -2025,9 +2025,13 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
   // Use it directly — it will be correct after the next model run.
   const modelTotal = toNum(game.modelTotal);
 
-  // Use game.spreadDiff (probability edge in pp, set by Python engine) for NHL.
+  // Use game.spreadDiff (probability edge in pp, set by Python engine) for NHL and MLB.
+  // MLB run lines are always ±1.5 — line arithmetic (|awayModelSpread - awayBookSpread|) always
+  // yields 0 (signs match) or 3.0 (inverted sign), making it useless for edge detection.
+  // The real MLB RL edge lives in the ODDS (model fair odds vs book break-even), so we use
+  // game.spreadDiff (written by mlbModelRunner from away_rl_cover_pct vs book break-even).
   // For NBA: compute diff from line values as before.
-  const spreadDiff = isNhlGame
+  const spreadDiff = (isNhlGame || isMlbGame)
     ? toNum(game.spreadDiff)
     : (!isNaN(awayModelSpread) && !isNaN(awayBookSpread))
       ? Math.round(Math.abs(awayModelSpread - awayBookSpread) * 10) / 10
@@ -2193,9 +2197,10 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
 
   const computedSpreadEdge: string | null = (() => {
     if (isNaN(spreadDiff) || spreadDiff <= 0) return "PASS";
-    // For NHL: edge direction comes from game.spreadEdge (set by Python engine from P(margin>=2)).
-    // Line arithmetic is invalid for NHL since both model and book always have ±1.5.
-    if (isNhlGame) return game.spreadEdge ?? null;
+    // For NHL and MLB: edge direction comes from game.spreadEdge (set by Python engine).
+    // Line arithmetic is invalid since both model and book always have ±1.5 for run/puck lines.
+    // The MLB engine writes spreadEdge as "AWAY +1.5 [EDGE]" or "HOME -1.5 [EDGE]" etc.
+    if (isNhlGame || isMlbGame) return game.spreadEdge ?? null;
     if (isNaN(awayModelSpread) || isNaN(awayBookSpread)) return game.spreadEdge;
     if (awayModelSpread < awayBookSpread) {
       return `${awayDisplayName} ${spreadSign(awayBookSpread)}`;
