@@ -19,6 +19,16 @@ import path from "path";
 describe("mlbModelRunner DB write block — run line odds field mapping", () => {
   const runnerPath = path.join(__dirname, "mlbModelRunner.ts");
   let source: string;
+  // The main DB write block is identified by containing 'awayModelSpread:' and 'modelRunAt:'.
+  // There is also a smaller invalidation write block (.set({ modelRunAt: null })) that appears
+  // earlier in the file when rlSignFlipDetected=true. We must target the MAIN write block.
+  // Strategy: find the .set({ block that contains 'modelAwaySpreadOdds:' (unique to main block).
+  function getMainSetBlock(src: string): string {
+    // Match all .set({ ... }) blocks and return the one containing modelAwaySpreadOdds
+    const allBlocks = [...src.matchAll(/\.set\(\{([\s\S]*?)\}\)/g)];
+    const mainBlock = allBlocks.find(m => m[1].includes("modelAwaySpreadOdds:"));
+    return mainBlock ? mainBlock[1] : "";
+  }
 
   beforeEach(() => {
     source = fs.readFileSync(runnerPath, "utf-8");
@@ -27,18 +37,16 @@ describe("mlbModelRunner DB write block — run line odds field mapping", () => 
   it("writes modelAwaySpreadOdds from away RL odds", () => {
     expect(source).toContain("modelAwaySpreadOdds:");
     expect(source).toContain("fmtMl(r.away_rl_odds)");
-    // Verify the assignment appears in the .set({ }) block
-    const setBlockMatch = source.match(/\.set\(\{([\s\S]*?)\}\)/);
-    expect(setBlockMatch).not.toBeNull();
-    const setBlock = setBlockMatch![1];
+    // Verify the assignment appears in the main .set({ }) block
+    const setBlock = getMainSetBlock(source);
+    expect(setBlock).not.toBe("");
     expect(setBlock).toContain("modelAwaySpreadOdds:");
     expect(setBlock).toContain("modelHomeSpreadOdds:");
   });
 
   it("writes modelHomeSpreadOdds from home RL odds", () => {
-    const setBlockMatch = source.match(/\.set\(\{([\s\S]*?)\}\)/);
-    expect(setBlockMatch).not.toBeNull();
-    const setBlock = setBlockMatch![1];
+    const setBlock = getMainSetBlock(source);
+    expect(setBlock).not.toBe("");
     // Both fields must use fmtMl(r.*_rl_odds)
     expect(setBlock).toMatch(/modelAwaySpreadOdds\s*:\s*fmtMl\(r\.away_rl_odds\)/);
     expect(setBlock).toMatch(/modelHomeSpreadOdds\s*:\s*fmtMl\(r\.home_rl_odds\)/);
@@ -48,9 +56,8 @@ describe("mlbModelRunner DB write block — run line odds field mapping", () => 
     // awayRunLineOdds and homeRunLineOdds are BOOK fields written ONLY by vsinAutoRefresh.
     // The model runner intentionally omits them to prevent feedback loop corruption.
     // Instead, the model runner writes modelAwaySpreadOdds / modelHomeSpreadOdds.
-    const setBlockMatch = source.match(/\.set\(\{([\s\S]*?)\}\)/);
-    expect(setBlockMatch).not.toBeNull();
-    const setBlock = setBlockMatch![1];
+    const setBlock = getMainSetBlock(source);
+    expect(setBlock).not.toBe("");
     // Model runner writes model-side odds, not book-side run line odds
     expect(setBlock).toContain("modelAwaySpreadOdds:");
     expect(setBlock).toContain("modelHomeSpreadOdds:");
@@ -59,15 +66,40 @@ describe("mlbModelRunner DB write block — run line odds field mapping", () => 
   });
 
   it("writes awayModelSpread and homeModelSpread as signed RL labels", () => {
-    const setBlockMatch = source.match(/\.set\(\{([\s\S]*?)\}\)/);
-    expect(setBlockMatch).not.toBeNull();
-    const setBlock = setBlockMatch![1];
+    const setBlock = getMainSetBlock(source);
+    expect(setBlock).not.toBe("");
     expect(setBlock).toContain("awayModelSpread:");
     expect(setBlock).toContain("homeModelSpread:");
     // Uses safeAwayRunLine / safeHomeRunLine (sign-enforced wrappers around r.away_run_line / r.home_run_line)
     // These wrappers enforce sign constraints to prevent feedback loop corruption
     expect(setBlock).toMatch(/awayModelSpread\s*:\s*safe(?:Away|Home)RunLine|awayModelSpread\s*:\s*r\.away_run_line/);
     expect(setBlock).toMatch(/homeModelSpread\s*:\s*safe(?:Home|Away)RunLine|homeModelSpread\s*:\s*r\.home_run_line/);
+  });
+
+  it("has RL sign flip / invariant violation guard that invalidates modelRunAt instead of writing bad odds", () => {
+    // When rlSignFlipDetected=true, the model runner must:
+    // 1. NOT write modelAwaySpreadOdds / modelHomeSpreadOdds (bad values)
+    // 2. Only write modelRunAt: null to trigger re-run next cycle
+    // 3. Log the invalidation with a structured error message
+    expect(source).toContain("rlSignFlipDetected");
+    expect(source).toContain("INVALIDATING modelRunAt");
+    // The invalidation write block must set modelRunAt to null
+    const invalidationMatch = source.match(/rlSignFlipDetected[\s\S]*?\.set\(\{[\s\S]*?modelRunAt\s*:\s*null[\s\S]*?\}\)/);
+    expect(invalidationMatch).not.toBeNull();
+    // The invalidation block must be followed by continue to skip the main write
+    expect(source).toMatch(/rlSignFlipDetected[\s\S]*?continue/);
+  });
+
+  it("invariant check: P(cover -1.5) must be <= P(win outright) + tolerance", () => {
+    // The post-write invariant check must verify that if home has -1.5,
+    // P(home covers -1.5) <= P(home wins outright) + 2pp tolerance.
+    // Violation triggers rlSignFlipDetected = true.
+    expect(source).toContain("RL INVARIANT VIOLATION");
+    expect(source).toContain("home_rl_cover_pct");
+    expect(source).toContain("home_win_pct");
+    // Both home and away checks must exist
+    expect(source).toContain("away_rl_cover_pct");
+    expect(source).toContain("away_win_pct");
   });
 });
 

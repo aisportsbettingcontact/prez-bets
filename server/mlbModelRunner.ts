@@ -1531,8 +1531,9 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
   console.log(`${TAG} Engine completed in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
   // ── Step 5: Write results to DB (v2 field mapping) ───────────────────────────
-  let written = 0;
-  let errors  = 0;
+  let written     = 0;
+  let errors       = 0;
+  let invalidated  = 0;  // games skipped due to RL sign flip / invariant violation
 
   // Build a fast lookup: db_id → engineInput (for NRFI signal retrieval)
   const engineInputById = new Map<number, EngineInput>();
@@ -1653,21 +1654,68 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
     const modelAwayRLNum = parseFloat(r.away_run_line);
     let safeAwayRunLine = r.away_run_line;
     let safeHomeRunLine = r.home_run_line;
+    // ── RL SIGN GUARD: detect flip and INVALIDATE (not patch) ──────────────────
+    // When the model ran with the wrong rl_home_spread sign (e.g. awayRunLine was
+    // written with wrong sign before odds were confirmed), the entire simulation
+    // used the wrong spread direction. The resulting odds are computed for the wrong
+    // team's perspective and CANNOT be salvaged by simply swapping labels.
+    // Correct action: skip DB write for this game and clear modelRunAt so it
+    // re-runs next cycle with the now-correct awayRunLine from the scraper.
+    let rlSignFlipDetected = false;
     if (bookAwaySpreadForGuard !== null && !isNaN(bookAwaySpreadForGuard) && !isNaN(modelAwayRLNum)) {
       const bookSign  = bookAwaySpreadForGuard >= 0 ? 1 : -1;
       const modelSign = modelAwayRLNum >= 0 ? 1 : -1;
       if (bookSign !== modelSign) {
-        // Python output is flipped — enforce book sign
+        rlSignFlipDetected = true;
+        console.error(
+          `${TAG} [${r.db_id}] ${r.game} — [RL SIGN GUARD] FLIP DETECTED: ` +
+          `Python away_run_line=${r.away_run_line} but awayBookSpread=${bookAwaySpreadForGuard}. ` +
+          `Model ran with wrong rl_home_spread — odds are invalid. ` +
+          `INVALIDATING modelRunAt so game re-runs next cycle with corrected awayRunLine.`
+        );
+        // Correct the run line labels for the invalidation write below
         const correctedAway = bookSign > 0 ? Math.abs(modelAwayRLNum) : -Math.abs(modelAwayRLNum);
         const correctedHome = -correctedAway;
-        console.error(
-          `${TAG} [${r.db_id}] ${r.game} — [RL SIGN GUARD] CORRECTING FLIP: ` +
-          `Python away_run_line=${r.away_run_line} but awayBookSpread=${bookAwaySpreadForGuard} → ` +
-          `forcing awayModelSpread=${correctedAway >= 0 ? '+' : ''}${correctedAway.toFixed(1)} ` +
-          `homeModelSpread=${correctedHome >= 0 ? '+' : ''}${correctedHome.toFixed(1)}`
-        );
         safeAwayRunLine = correctedAway >= 0 ? `+${correctedAway.toFixed(1)}` : `${correctedAway.toFixed(1)}`;
         safeHomeRunLine = correctedHome >= 0 ? `+${correctedHome.toFixed(1)}` : `${correctedHome.toFixed(1)}`;
+      }
+    }
+    // ── POST-WRITE INVARIANT CHECK: P(cover -1.5) must be ≤ P(win outright) ────
+    // Even if no sign flip was detected, verify the mathematical invariant:
+    // if home has -1.5 (home is RL fav), P(home covers -1.5) MUST be ≤ P(home wins).
+    // Violation means the model ran with wrong rl_spread (e.g. awayRunLine was null
+    // at run time and default +1.5 was used when home should have been -1.5).
+    if (!rlSignFlipDetected) {
+      const liveHomeBookSpread = liveBookSpreadMap.get(r.db_id)?.homeBookSpread;
+      const homeBookSpreadNum = liveHomeBookSpread != null ? liveHomeBookSpread
+        : dbGame?.homeBookSpread != null ? parseFloat(String(dbGame.homeBookSpread)) : null;
+      if (homeBookSpreadNum !== null && homeBookSpreadNum < 0) {
+        // Home has -1.5: P(home covers -1.5) must be ≤ P(home wins outright)
+        const pHomeCoverRL = r.home_rl_cover_pct / 100;
+        const pHomeWin = r.home_win_pct / 100;
+        if (pHomeCoverRL > pHomeWin + 0.02) {  // 2pp tolerance for simulation noise
+          rlSignFlipDetected = true;
+          console.error(
+            `${TAG} [${r.db_id}] ${r.game} — [RL INVARIANT VIOLATION] ` +
+            `homeBookSpread=${homeBookSpreadNum} (home is -1.5 fav) but ` +
+            `P(home covers -1.5)=${(pHomeCoverRL*100).toFixed(2)}% > P(home wins)=${(pHomeWin*100).toFixed(2)}%. ` +
+            `Model ran with wrong rl_home_spread. INVALIDATING modelRunAt for re-run.`
+          );
+        }
+      }
+      // Symmetric check: if away has -1.5 (away is RL fav)
+      if (!rlSignFlipDetected && bookAwaySpreadForGuard !== null && bookAwaySpreadForGuard < 0) {
+        const pAwayCoverRL = r.away_rl_cover_pct / 100;
+        const pAwayWin = r.away_win_pct / 100;
+        if (pAwayCoverRL > pAwayWin + 0.02) {
+          rlSignFlipDetected = true;
+          console.error(
+            `${TAG} [${r.db_id}] ${r.game} — [RL INVARIANT VIOLATION] ` +
+            `awayBookSpread=${bookAwaySpreadForGuard} (away is -1.5 fav) but ` +
+            `P(away covers -1.5)=${(pAwayCoverRL*100).toFixed(2)}% > P(away wins)=${(pAwayWin*100).toFixed(2)}%. ` +
+            `Model ran with wrong rl_home_spread. INVALIDATING modelRunAt for re-run.`
+          );
+        }
       }
     }
 
@@ -1740,6 +1788,29 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
         `${TAG} [${r.db_id}] ${r.game} — [RL EDGE] SKIP: book RL odds unavailable ` +
         `(awayRunLineOdds=${dbGame?.awayRunLineOdds} homeRunLineOdds=${dbGame?.homeRunLineOdds})`
       );
+    }
+
+    // ── RL SIGN FLIP / INVARIANT VIOLATION: skip model write, clear modelRunAt ──
+    // When rlSignFlipDetected=true, the simulation ran with the wrong rl_home_spread.
+    // All RL-derived fields (modelHomeSpreadOdds, modelAwaySpreadOdds, spreadDiff,
+    // spreadEdge, away_rl_cover_pct, home_rl_cover_pct) are invalid and must NOT be
+    // written to the DB. Instead, only clear modelRunAt so the game re-runs next
+    // cycle with the now-correct awayRunLine value from the scraper.
+    if (rlSignFlipDetected) {
+      try {
+        await db.update(games)
+          .set({ modelRunAt: null })
+          .where(eq(games.id, r.db_id));
+        console.log(
+          `${TAG} [${r.db_id}] ${r.game} — [RL INVALIDATE] modelRunAt cleared. ` +
+          `Game will re-run next cycle with corrected awayRunLine.`
+        );
+        invalidated++;
+      } catch (invErr) {
+        console.error(`${TAG} [${r.db_id}] ${r.game} — [RL INVALIDATE] DB clear failed: ${invErr}`);
+        errors++;
+      }
+      continue;  // skip the full model write below
     }
 
     try {
@@ -1886,7 +1957,7 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
     }
   }
 
-  console.log(`\n${TAG} DB writes: ${written} written, ${errors} errors, ${dbGames.length - modelable.length} skipped (no lines/pitchers)`);
+  console.log(`\n${TAG} DB writes: ${written} written, ${errors} errors, ${invalidated} invalidated (RL flip/invariant), ${dbGames.length - modelable.length} skipped (no lines/pitchers)`);
 
   // ── Step 6: Post-write validation gate ──────────────────────────────────────
   console.log(`\n${TAG} Running post-write validation gate...`);

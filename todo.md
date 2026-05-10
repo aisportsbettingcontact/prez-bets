@@ -3084,3 +3084,21 @@
 - [x] Update all 8 OddsCell calls (4 away row + 4 home row) to pass mainValue=line and juiceStr=odds separately
 - [x] TypeScript: 0 errors (confirmed post-fix)
 - [x] Tests: 582/582 passing (confirmed post-fix)
+
+## Session: 2026-05-10 — Model RL Odds Bug (mlbModelRunner.ts)
+- [ ] ROOT CAUSE AUDIT: modelHomeSpreadOdds = -221 for LAD (-132 ML) is mathematically impossible — trace how rl_cover_pct is computed in mlbModelRunner.ts
+- [ ] FIX: Correct the run-line cover probability calculation so model spread odds are consistent with model ML
+- [ ] VERIFY: All 15 May 10 MLB games — modelHomeSpreadOdds must be worse than homeML for favorites, modelAwaySpreadOdds must be worse than awayML for underdogs
+- [ ] TEST: 0 TypeScript errors, all tests passing
+
+## Session: 2026-05-10 — MLB Model RL Odds Invariant Fix
+
+- [x] Root cause identified: model ran with wrong rl_home_spread sign (awayRunLine had wrong sign at model run time, before scraper corrected it)
+- [x] Added RL SIGN GUARD: detect flip → invalidate modelRunAt (skip bad write, re-run next cycle)
+- [x] Added RL INVARIANT CHECK: P(cover -1.5) must be ≤ P(win outright) + 2pp — violation triggers invalidation
+- [x] Added `invalidated` counter to summary log line
+- [x] Updated mlbRunLineOdds.test.ts to use getMainSetBlock() helper (avoids capturing invalidation block)
+- [x] Added 2 new tests: invariant guard presence + P(cover) ≤ P(win) check
+- [x] All 584 tests passing, TypeScript 0 errors
+- [x] DB: cleared modelRunAt for ATL@LAD (wrong -221 odds) — model re-ran and corrected to +127
+- [x] Verified: 15/15 today's MLB games pass invariant check (0 violations)
