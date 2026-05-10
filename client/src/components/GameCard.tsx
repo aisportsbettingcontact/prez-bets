@@ -1685,45 +1685,52 @@ function OddsLinesPanel({
   const mdlHomeMl = modelHomeML ?? '—';
   const hasModelData = !isNaN(mdlAwaySpread) || !isNaN(mdlTotal) || mdlAwayMl !== '—';
 
-  // Book values — use DK-specific if available, otherwise fall back to awayBookSpread (from AN API)
+  // ── Book / Model display values — LINE and ODDS are kept SEPARATE so OddsCell
+  //    renders them with proper visual hierarchy (line bold/large, odds smaller/muted).
+  //    Combining them into one string causes the odds to wrap inside the pill and
+  //    appear as a second "line" — the exact visual confusion reported.
   const bkTotalStr    = !isNaN(bkTotal) ? String(bkTotal) : '—';
-  const bkAwaySpreadBase  = !isNaN(awaySpread)
-    ? (awaySpreadOdds ? `${spreadSign(awaySpread)} (${awaySpreadOdds})` : spreadSign(awaySpread))
-    : '—';
-  const bkHomeSpreadBase  = !isNaN(homeSpread)
-    ? (homeSpreadOdds ? `${spreadSign(homeSpread)} (${homeSpreadOdds})` : spreadSign(homeSpread))
-    : '—';
-  const bkOverTotalBase   = !isNaN(bkTotal)
-    ? (overOdds  ? `o${bkTotalStr} (${overOdds})`  : `o${bkTotalStr}`)
-    : 'o—';
-  const bkUnderTotalBase  = !isNaN(bkTotal)
-    ? (underOdds ? `u${bkTotalStr} (${underOdds})` : `u${bkTotalStr}`)
-    : 'u—';
-  // Prefer DK-specific display values when available
-  const bkAwaySpread  = dkAwaySpreadProp ?? bkAwaySpreadBase;
-  const bkHomeSpread  = dkHomeSpreadProp ?? bkHomeSpreadBase;
-  const bkOverTotal   = dkOverProp   ? `o${dkOverProp}`   : bkOverTotalBase;
-  const bkUnderTotal  = dkUnderProp  ? `u${dkUnderProp}`  : bkUnderTotalBase;
-  const awayMlDisplay = dkAwayMlProp ?? awayMl;
-  const homeMlDisplay = dkHomeMlProp ?? homeMl;
 
-  // Model values — for NHL/MLB games, append odds in parentheses
-  const isNhlGame   = sport === 'NHL';
-  const isMlbGame   = sport === 'MLB';
-  const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread)
-    ? (isNhlGame && modelAwayPLOdds
-        ? `${spreadSign(mdlAwaySpread)} (${modelAwayPLOdds})`
-        : isMlbGame && modelAwaySpreadOdds
-          ? `${spreadSign(mdlAwaySpread)} (${modelAwaySpreadOdds})`
-          : spreadSign(mdlAwaySpread))
-    : '—';
-  const mdlHomeSpreadStr = hasModelData && !isNaN(mdlHomeSpread)
-    ? (isNhlGame && modelHomePLOdds
-        ? `${spreadSign(mdlHomeSpread)} (${modelHomePLOdds})`
-        : isMlbGame && modelHomeSpreadOdds
-          ? `${spreadSign(mdlHomeSpread)} (${modelHomeSpreadOdds})`
-          : spreadSign(mdlHomeSpread))
-    : '—';
+  // Book spread — line only (no parenthetical odds in mainValue)
+  const bkAwaySpreadLineBase = !isNaN(awaySpread) ? spreadSign(awaySpread) : '—';
+  const bkHomeSpreadLineBase = !isNaN(homeSpread) ? spreadSign(homeSpread) : '—';
+  // Book spread odds — passed as juiceStr to OddsCell
+  const bkAwaySpreadJuice = awaySpreadOdds ?? null;
+  const bkHomeSpreadJuice = homeSpreadOdds ?? null;
+
+  // Book total — line only
+  const bkOverTotalLineBase  = !isNaN(bkTotal) ? `o${bkTotalStr}` : 'o—';
+  const bkUnderTotalLineBase = !isNaN(bkTotal) ? `u${bkTotalStr}` : 'u—';
+  // Book total odds — passed as juiceStr
+  const bkOverJuice  = overOdds  ?? null;
+  const bkUnderJuice = underOdds ?? null;
+
+  // Prefer DK-specific display values when available (DK props are already line-only strings)
+  const bkAwaySpreadLine = dkAwaySpreadProp ?? bkAwaySpreadLineBase;
+  const bkHomeSpreadLine = dkHomeSpreadProp ?? bkHomeSpreadLineBase;
+  const bkOverTotalLine  = dkOverProp  ? `o${dkOverProp}`  : bkOverTotalLineBase;
+  const bkUnderTotalLine = dkUnderProp ? `u${dkUnderProp}` : bkUnderTotalLineBase;
+  const awayMlDisplay    = dkAwayMlProp ?? awayMl;
+  const homeMlDisplay    = dkHomeMlProp ?? homeMl;
+
+  // ── Model values — line and odds SEPARATE ──────────────────────────────────
+  const isNhlGame = sport === 'NHL';
+  const isMlbGame = sport === 'MLB';
+
+  // Model spread line (same ±1.5 / ±N.5 as book, just the sign)
+  const mdlAwaySpreadLine = hasModelData && !isNaN(mdlAwaySpread) ? spreadSign(mdlAwaySpread) : '—';
+  const mdlHomeSpreadLine = hasModelData && !isNaN(mdlHomeSpread) ? spreadSign(mdlHomeSpread) : '—';
+  // Model spread odds — juiceStr for NHL puck line and MLB run line
+  const mdlAwaySpreadJuice = hasModelData
+    ? (isNhlGame ? (modelAwayPLOdds ?? null) : isMlbGame ? (modelAwaySpreadOdds ?? null) : null)
+    : null;
+  const mdlHomeSpreadJuice = hasModelData
+    ? (isNhlGame ? (modelHomePLOdds ?? null) : isMlbGame ? (modelHomeSpreadOdds ?? null) : null)
+    : null;
+
+  // Keep legacy combined strings for any code paths that still use them (edge labels etc.)
+  const mdlAwaySpreadStr = mdlAwaySpreadLine;
+  const mdlHomeSpreadStr = mdlHomeSpreadLine;
   // CRITICAL: ALWAYS display the BOOK's total line with model fair odds at that line.
   // The book O/U is the NON-NEGOTIABLE reference for edge detection and display across ALL sports.
   // modelTotal in DB is now anchored to bookTotal (fixed in mlbModelRunner/nhlModelSync/nbaModelSync)
@@ -1736,16 +1743,15 @@ function OddsLinesPanel({
       `modelTotal=${mdlTotal} ≠ bookTotal=${bkTotal} — displaying bookTotal per policy`
     );
   }
-  const mdlOverTotal = hasModelData && !isNaN(mdlDisplayTotal)
-    ? ((isNhlGame || isMlbGame) && modelOverOdds
-        ? `${String(mdlDisplayTotal)} (${modelOverOdds})`
-        : String(mdlDisplayTotal))
-    : '—';
-  const mdlUnderTotal = hasModelData && !isNaN(mdlDisplayTotal)
-    ? ((isNhlGame || isMlbGame) && modelUnderOdds
-        ? `${String(mdlDisplayTotal)} (${modelUnderOdds})`
-        : String(mdlDisplayTotal))
-    : '—';
+  // Model total — LINE and ODDS SEPARATE (same pattern as spread fix)
+  // mainValue = line only ("8.5"), juiceStr = odds only ("-115") passed to OddsCell
+  const mdlOverTotalLine  = hasModelData && !isNaN(mdlDisplayTotal) ? String(mdlDisplayTotal) : '—';
+  const mdlUnderTotalLine = hasModelData && !isNaN(mdlDisplayTotal) ? String(mdlDisplayTotal) : '—';
+  const mdlOverJuice  = (hasModelData && (isNhlGame || isMlbGame)) ? (modelOverOdds  ?? null) : null;
+  const mdlUnderJuice = (hasModelData && (isNhlGame || isMlbGame)) ? (modelUnderOdds ?? null) : null;
+  // Legacy aliases kept for any remaining code paths that reference the old names
+  const mdlOverTotal  = mdlOverTotalLine;
+  const mdlUnderTotal = mdlUnderTotalLine;
   const mdlAwayMlStr     = hasModelData ? mdlAwayMl : '—';
   const mdlHomeMlStr     = hasModelData ? mdlHomeMl : '—';
 
@@ -1828,35 +1834,35 @@ function OddsLinesPanel({
 
       {/* Away row — OddsCell pills for BOOK, plain spans for MODEL */}
       <div className={`grid ${GRID} py-2`} style={{ transition: 'grid-template-columns 200ms ease' }}>
-        {/* Away Spread BOOK pill */}
+        {/* Away Spread BOOK pill — line and odds SEPARATE for correct visual hierarchy */}
         <OddsCell
-          mainValue={bkAwaySpread}
-          juiceStr={null}
+          mainValue={bkAwaySpreadLine}
+          juiceStr={bkAwaySpreadJuice}
           isBook={true}
           openLine={openAwaySpreadStr}
           size="md"
           wrapperStyle={{ justifySelf: 'center', width: '100%' }}
         />
         {showModel && <OddsCell
-          mainValue={mdlAwaySpreadStr}
-          juiceStr={null}
+          mainValue={mdlAwaySpreadLine}
+          juiceStr={mdlAwaySpreadJuice}
           isBook={false}
           isEdge={awaySpreadModelStyle === modelGreen}
           size="md"
           wrapperStyle={{ justifySelf: 'center', width: '100%' }}
         />}
-        {/* Away Total BOOK pill */}
+        {/* Away Total BOOK pill — line and odds SEPARATE */}
         <OddsCell
-          mainValue={bkOverTotal}
-          juiceStr={null}
+          mainValue={bkOverTotalLine}
+          juiceStr={bkOverJuice}
           isBook={true}
           openLine={openOverStr}
           size="md"
           wrapperStyle={{ justifySelf: 'center', width: '100%' }}
         />
         {showModel && <OddsCell
-          mainValue={`o${mdlOverTotal}`}
-          juiceStr={null}
+          mainValue={`o${mdlOverTotalLine}`}
+          juiceStr={mdlOverJuice}
           isBook={false}
           isEdge={overTotalModelStyle === modelGreen}
           size="md"
@@ -1886,35 +1892,35 @@ function OddsLinesPanel({
 
       {/* Home row — OddsCell pills for BOOK, plain spans for MODEL */}
       <div className={`grid ${GRID} py-2`} style={{ transition: 'grid-template-columns 200ms ease' }}>
-        {/* Home Spread BOOK pill */}
+        {/* Home Spread BOOK pill — line and odds SEPARATE for correct visual hierarchy */}
         <OddsCell
-          mainValue={bkHomeSpread}
-          juiceStr={null}
+          mainValue={bkHomeSpreadLine}
+          juiceStr={bkHomeSpreadJuice}
           isBook={true}
           openLine={openHomeSpreadStr}
           size="md"
           wrapperStyle={{ justifySelf: 'center', width: '100%' }}
         />
         {showModel && <OddsCell
-          mainValue={mdlHomeSpreadStr}
-          juiceStr={null}
+          mainValue={mdlHomeSpreadLine}
+          juiceStr={mdlHomeSpreadJuice}
           isBook={false}
           isEdge={homeSpreadModelStyle === modelGreen}
           size="md"
           wrapperStyle={{ justifySelf: 'center', width: '100%' }}
         />}
-        {/* Home Total BOOK pill */}
+        {/* Home Total BOOK pill — line and odds SEPARATE */}
         <OddsCell
-          mainValue={bkUnderTotal}
-          juiceStr={null}
+          mainValue={bkUnderTotalLine}
+          juiceStr={bkUnderJuice}
           isBook={true}
           openLine={openUnderStr}
           size="md"
           wrapperStyle={{ justifySelf: 'center', width: '100%' }}
         />
         {showModel && <OddsCell
-          mainValue={`u${mdlUnderTotal}`}
-          juiceStr={null}
+          mainValue={`u${mdlUnderTotalLine}`}
+          juiceStr={mdlUnderJuice}
           isBook={false}
           isEdge={underTotalModelStyle === modelGreen}
           size="md"

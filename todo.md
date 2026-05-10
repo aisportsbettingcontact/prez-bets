@@ -3069,3 +3069,18 @@
   - Benefit: Zero PENDING window for past games — UI shows WIN/LOSS/PUSH the instant the mutation resolves
   - Safe for rapid-fire creation: each optimistic entry has a unique tempId (−Date.now())
 - [x] VALIDATION: 29/29 checks pass across 8 layers (MLB Stats API, gradeTrackedBet, gameNumber propagation, frontend onSuccess, DB state)
+
+## Session: 2026-05-10 — OddsCell Line/Odds Display Fix (GameCard.tsx)
+- [x] ROOT CAUSE: OddsCell received combined strings like `+1.5 (-181)` as mainValue with juiceStr=null — odds wrapped inside fixed-width pill and appeared as a second "line" value, causing visual confusion between book line and model line
+- [x] FIX: Refactor all OddsCell variable declarations in OddsLinesPanel to separate line-only strings from odds-only strings
+  - bkAwaySpreadLine / bkAwaySpreadJuice (was: bkAwaySpread = combined string)
+  - bkHomeSpreadLine / bkHomeSpreadJuice (was: bkHomeSpread)
+  - bkOverTotalLine / bkOverJuice (was: bkOverTotal)
+  - bkUnderTotalLine / bkUnderJuice (was: bkUnderTotal)
+  - mdlAwaySpreadLine / mdlAwaySpreadJuice (was: combined string)
+  - mdlHomeSpreadLine / mdlHomeSpreadJuice (was: combined string)
+  - mdlOverTotalLine / mdlOverJuice (was: combined string for NHL/MLB)
+  - mdlUnderTotalLine / mdlUnderJuice (was: combined string for NHL/MLB)
+- [x] Update all 8 OddsCell calls (4 away row + 4 home row) to pass mainValue=line and juiceStr=odds separately
+- [x] TypeScript: 0 errors (confirmed post-fix)
+- [x] Tests: 582/582 passing (confirmed post-fix)
