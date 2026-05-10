@@ -1000,23 +1000,55 @@ export async function refreshAnApiOdds(
         const rAwayML         = { value: useAwayML };
         const rHomeML         = { value: useHomeML };
 
-        // ── DB WRITE: primary book columns + open lines + oddsSource ───────────
-        // ── MLB DUAL-WRITE: spread → awayRunLine + awayBookSpread ────────────────────
+        // ── DB WRITE: primary book columns + open lines + oddsSource ─────────────────────
+        // ── MLB DUAL-WRITE: spread → awayRunLine + awayBookSpread ─────────────────────
         // For MLB, the AN spread market IS the run line (+1.5/-1.5).
         // The model reads awayRunLine/homeRunLine (varchar) for its run line input.
         // awayBookSpread/homeBookSpread (decimal) are used for display.
         // We write BOTH so the model and display always have the same data.
+        //
+        // ── LAYER 2: ML-direction cross-check before DUAL_WRITE ─────────────────────
+        // INVARIANT: ML favorite is ALWAYS the RL favorite (-1.5).
+        // If the scraped awayRunLine contradicts the ML direction, it is a scraper
+        // artifact (e.g. odds arrived before the line was confirmed). Correct it
+        // before writing so the model never receives a wrong rl_home_spread.
+        let _finalAwayRunLine = rAwaySpread.value;
+        let _finalHomeRunLine = rHomeSpread.value;
+        if (sport === 'mlb' && rAwaySpread.value !== null && useAwayML !== null) {
+          const _awayMLNum = parseFloat(String(useAwayML));
+          const _awayRLNum = parseFloat(String(rAwaySpread.value));
+          if (!isNaN(_awayMLNum) && !isNaN(_awayRLNum)) {
+            // ML fav = negative odds. RL fav = negative spread (-1.5).
+            // If awayML < 0, away is fav → away should be -1.5.
+            // If awayML > 0, home is fav → away should be +1.5.
+            const mlSaysAwayIsFav = _awayMLNum < 0;
+            const rlSaysAwayIsFav = _awayRLNum < 0;
+            if (mlSaysAwayIsFav !== rlSaysAwayIsFav) {
+              // Contradiction — flip the run line to match ML direction
+              const correctedAwayRL = mlSaysAwayIsFav ? -1.5 : 1.5;
+              const correctedHomeRL = -correctedAwayRL;
+              _finalAwayRunLine = correctedAwayRL > 0 ? `+${correctedAwayRL.toFixed(1)}` : `${correctedAwayRL.toFixed(1)}`;
+              _finalHomeRunLine = correctedHomeRL > 0 ? `+${correctedHomeRL.toFixed(1)}` : `${correctedHomeRL.toFixed(1)}`;
+              console.warn(
+                `[ANApiOdds][MLB][LAYER2_ML_GUARD] ${dbGame.awayTeam}@${dbGame.homeTeam} — ` +
+                `scraped awayRunLine=${rAwaySpread.value} contradicts awayML=${useAwayML}. ` +
+                `Corrected to awayRunLine=${_finalAwayRunLine} homeRunLine=${_finalHomeRunLine} ` +
+                `to match ML direction before DUAL_WRITE.`
+              );
+            }
+          }
+        }
         const mlbRunLineFields = sport === 'mlb' ? {
-          awayRunLine:     rAwaySpread.value,
-          homeRunLine:     rHomeSpread.value,
+          awayRunLine:     _finalAwayRunLine,
+          homeRunLine:     _finalHomeRunLine,
           awayRunLineOdds: rAwaySpreadOdds.value,
           homeRunLineOdds: rHomeSpreadOdds.value,
         } : {};
-        if (sport === 'mlb' && rAwaySpread.value !== null) {
+        if (sport === 'mlb' && _finalAwayRunLine !== null) {
           console.log(
             `[ANApiOdds][MLB][DUAL_WRITE] ${dbGame.awayTeam}@${dbGame.homeTeam} ` +
-            `awayRunLine=${rAwaySpread.value}(${rAwaySpreadOdds.value ?? '-'}) ` +
-            `homeRunLine=${rHomeSpread.value}(${rHomeSpreadOdds.value ?? '-'}) ` +
+            `awayRunLine=${_finalAwayRunLine}(${rAwaySpreadOdds.value ?? '-'}) ` +
+            `homeRunLine=${_finalHomeRunLine}(${rHomeSpreadOdds.value ?? '-'}) ` +
             `→ writing to BOTH awayBookSpread AND awayRunLine columns`
           );
         }

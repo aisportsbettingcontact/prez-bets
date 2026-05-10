@@ -1044,14 +1044,54 @@ export async function updateAnOdds(
   if (data.oddsSource !== undefined) updateData.oddsSource = data.oddsSource;
 
   // ── MLB RL SIGN SYNC (Layer 2 guard) ─────────────────────────────────────────────────────────
-  // When awayBookSpread is written (by VSiN scraper post-model-run), check if
-  // awayModelSpread has the OPPOSITE sign. If so, flip it to match the book.
-  // This is the safety net for the case where:
-  //   1. Model ran at midnight ET when awayBookSpread was NULL
-  //   2. RL sign guard was bypassed (null check failed)
-  //   3. VSiN scraper later wrote awayBookSpread with the correct sign
-  //   4. awayModelSpread is now inverted vs awayBookSpread
-  // We fix it here so the next odds refresh self-heals the inversion.
+  // ── LAYER 3: ML-direction cross-check in updateAnOdds ─────────────────────
+  // PRIMARY: When awayML is being written, cross-check against existing
+  // awayModelSpread. If ML direction contradicts model spread direction,
+  // the model ran with wrong rl_home_spread — clear modelRunAt to force re-run.
+  // SECONDARY: When awayBookSpread changes, also check awayModelSpread sign.
+  // Both checks write corrected awayModelSpread/homeModelSpread as self-heal.
+  if (data.awayML !== undefined && data.awayML !== null) {
+    const newAwayML = parseFloat(String(data.awayML));
+    if (!isNaN(newAwayML)) {
+      const currentRow = await db
+        .select({
+          awayModelSpread: games.awayModelSpread,
+          homeModelSpread: games.homeModelSpread,
+          sport: games.sport,
+          modelRunAt: games.modelRunAt,
+        })
+        .from(games)
+        .where(eq(games.id, id))
+        .limit(1);
+      const row = currentRow[0];
+      if (row?.sport === 'MLB' && row.awayModelSpread != null && row.modelRunAt != null) {
+        const currentModelAway = parseFloat(String(row.awayModelSpread));
+        if (!isNaN(currentModelAway) && currentModelAway !== 0) {
+          // ML fav = negative odds. RL fav = negative spread (-1.5).
+          // If awayML < 0, away is ML fav → away should have -1.5 (negative model spread).
+          // If awayML > 0, home is ML fav → away should have +1.5 (positive model spread).
+          const mlSaysAwayIsFav  = newAwayML < 0;
+          const mdlSaysAwayIsFav = currentModelAway < 0;
+          if (mlSaysAwayIsFav !== mdlSaysAwayIsFav) {
+            // ML direction contradicts model spread direction — model ran with wrong RL sign.
+            // Clear modelRunAt to force model re-run with correct ML-aligned rl_home_spread.
+            updateData.modelRunAt = null;
+            // Also flip awayModelSpread/homeModelSpread so display is correct immediately.
+            const correctedAway = mlSaysAwayIsFav ? -Math.abs(currentModelAway) : Math.abs(currentModelAway);
+            const correctedHome = -correctedAway;
+            updateData.awayModelSpread = correctedAway >= 0 ? `+${correctedAway.toFixed(1)}` : `${correctedAway.toFixed(1)}`;
+            updateData.homeModelSpread = correctedHome >= 0 ? `+${correctedHome.toFixed(1)}` : `${correctedHome.toFixed(1)}`;
+            console.error(
+              `[updateAnOdds][LAYER3_ML_GUARD] id=${id} — awayML=${newAwayML} contradicts awayModelSpread=${currentModelAway}. ` +
+              `ML says away ${mlSaysAwayIsFav ? 'IS' : 'is NOT'} fav but model spread says away ${mdlSaysAwayIsFav ? 'IS' : 'is NOT'} fav. ` +
+              `CLEARING modelRunAt + CORRECTING awayModelSpread=${updateData.awayModelSpread} homeModelSpread=${updateData.homeModelSpread}`
+            );
+          }
+        }
+      }
+    }
+  }
+  // SECONDARY: When awayBookSpread changes, check awayModelSpread sign (book-vs-model).
   if (data.awayBookSpread !== undefined && data.awayBookSpread !== null) {
     const newBookAway = parseFloat(data.awayBookSpread);
     if (!isNaN(newBookAway) && newBookAway !== 0) {

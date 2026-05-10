@@ -794,20 +794,30 @@ function DesktopMergedPanel({
   // MLB model fair odds at book's spread line (computed by Python engine)
   const mdlAwaySpreadOdds = game.modelAwaySpreadOdds ?? null;
   const mdlHomeSpreadOdds = game.modelHomeSpreadOdds ?? null;
-
-  const mdlAwaySpreadStr = hasModelData && !isNaN(mdlAwaySpread)
+  // ── MLB RULE: model RL LABEL always mirrors book RL LABEL exactly.
+  // Only the ODDS differ between book and model.
+  // awayModelSpread/homeModelSpread may be stale or inverted if the model ran with wrong rl_home_spread.
+  // The book's awaySpread/homeSpread (awayBookSpread/homeBookSpread) is the single source of truth.
+  // For NHL/NBA: use model spread label as before.
+  const mlbMdlAwayLabel = isMlbGame && !isNaN(awaySpread) ? spreadSign(awaySpread) : null;
+  const mlbMdlHomeLabel = isMlbGame && !isNaN(homeSpread) ? spreadSign(homeSpread) : null;
+  const mdlAwaySpreadStr = hasModelData
     ? (isNhlGame && mdlAwayPLOdds
         ? `${spreadSign(mdlAwaySpread)} (${mdlAwayPLOdds})`
-        : isMlbGame && mdlAwaySpreadOdds
-          ? `${spreadSign(mdlAwaySpread)} (${mdlAwaySpreadOdds})`
-          : spreadSign(mdlAwaySpread))
+        : isMlbGame
+          ? (mlbMdlAwayLabel
+              ? (mdlAwaySpreadOdds ? `${mlbMdlAwayLabel} (${mdlAwaySpreadOdds})` : mlbMdlAwayLabel)
+              : '—')
+          : (!isNaN(mdlAwaySpread) ? spreadSign(mdlAwaySpread) : '—'))
     : '—';
-  const mdlHomeSpreadStr = hasModelData && !isNaN(mdlHomeSpread)
+  const mdlHomeSpreadStr = hasModelData
     ? (isNhlGame && mdlHomePLOdds
         ? `${spreadSign(mdlHomeSpread)} (${mdlHomePLOdds})`
-        : isMlbGame && mdlHomeSpreadOdds
-          ? `${spreadSign(mdlHomeSpread)} (${mdlHomeSpreadOdds})`
-          : spreadSign(mdlHomeSpread))
+        : isMlbGame
+          ? (mlbMdlHomeLabel
+              ? (mdlHomeSpreadOdds ? `${mlbMdlHomeLabel} (${mdlHomeSpreadOdds})` : mlbMdlHomeLabel)
+              : '—')
+          : (!isNaN(mdlHomeSpread) ? spreadSign(mdlHomeSpread) : '—'))
     : '—';
   // CRITICAL: ALWAYS display the BOOK's total line with model fair odds at that line.
   // The book O/U is the NON-NEGOTIABLE reference for edge detection and display across ALL sports.
@@ -1716,10 +1726,27 @@ function OddsLinesPanel({
   // ── Model values — line and odds SEPARATE ──────────────────────────────────
   const isNhlGame = sport === 'NHL';
   const isMlbGame = sport === 'MLB';
-
-  // Model spread line (same ±1.5 / ±N.5 as book, just the sign)
-  const mdlAwaySpreadLine = hasModelData && !isNaN(mdlAwaySpread) ? spreadSign(mdlAwaySpread) : '—';
-  const mdlHomeSpreadLine = hasModelData && !isNaN(mdlHomeSpread) ? spreadSign(mdlHomeSpread) : '—';
+  // ── MLB RULE: model RL LABEL always mirrors book RL LABEL exactly.
+  // Only the ODDS differ between book and model.
+  // awayModelSpread/homeModelSpread may be stale or inverted if the model ran with wrong rl_home_spread.
+  // The book's awayBookSpread/homeBookSpread is the single source of truth for the ±1.5 label.
+  // For NHL/NBA: use model spread as before (model line is meaningful for non-RL sports).
+  const mlbBookAwayLine = isMlbGame && !isNaN(awaySpread) ? spreadSign(awaySpread) : null;
+  const mlbBookHomeLine = isMlbGame && !isNaN(homeSpread) ? spreadSign(homeSpread) : null;
+  // Model spread line:
+  //   MLB  → always use book label (mlbBookAwayLine / mlbBookHomeLine)
+  //   NHL  → use model puck line label (mdlAwaySpread)
+  //   NBA  → use model spread label (mdlAwaySpread)
+  const mdlAwaySpreadLine = hasModelData
+    ? (isMlbGame
+        ? (mlbBookAwayLine ?? (mdlAwaySpread !== undefined && !isNaN(mdlAwaySpread) ? spreadSign(mdlAwaySpread) : '—'))
+        : (!isNaN(mdlAwaySpread) ? spreadSign(mdlAwaySpread) : '—'))
+    : '—';
+  const mdlHomeSpreadLine = hasModelData
+    ? (isMlbGame
+        ? (mlbBookHomeLine ?? (mdlHomeSpread !== undefined && !isNaN(mdlHomeSpread) ? spreadSign(mdlHomeSpread) : '—'))
+        : (!isNaN(mdlHomeSpread) ? spreadSign(mdlHomeSpread) : '—'))
+    : '—';
   // Model spread odds — juiceStr for NHL puck line and MLB run line
   const mdlAwaySpreadJuice = hasModelData
     ? (isNhlGame ? (modelAwayPLOdds ?? null) : isMlbGame ? (modelAwaySpreadOdds ?? null) : null)

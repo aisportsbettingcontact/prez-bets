@@ -1352,17 +1352,41 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
     const awayPitcher = g.awayStartingPitcher!;
     const homePitcher = g.homeStartingPitcher!;
 
-    // Determine RL home spread from DB awayRunLine / homeRunLine
-    // awayRunLine = "+1.5" means away is the RL underdog → home is RL fav → rl_home_spread = -1.5
-    // awayRunLine = "-1.5" means away is the RL fav → rl_home_spread = +1.5
+    // ── LAYER 1: ML-direction cross-check for rl_home_spread ─────────────────
+    // INVARIANT: The ML favorite is ALWAYS the RL favorite (-1.5).
+    //   awayML < 0  → away is ML fav → away should have -1.5 → rl_home_spread = +1.5
+    //   awayML > 0  → home is ML fav → home should have -1.5 → rl_home_spread = -1.5
+    // awayRunLine is the PRIMARY source. If it contradicts the ML direction, it is
+    // stale/corrupted — use the ML-derived direction instead.
+    // This prevents the model from running with a wrong rl_home_spread sign.
     let rlHomeSpread = -1.5; // default: home is RL favorite
+    const _awayMLForRL = parseFloat(String(g.awayML ?? '100'));
+    // ML-derived direction: away ML < 0 means away is fav → away has -1.5 → home has +1.5
+    const _mlDerivedRlHomeSpread = (!isNaN(_awayMLForRL) && _awayMLForRL < 0) ? 1.5 : -1.5;
     if (g.awayRunLine) {
       const awayRLNum = parseFloat(String(g.awayRunLine));
-      rlHomeSpread = -awayRLNum; // invert: if away is -1.5, home is +1.5
-    } else if (g.awayML) {
-      // Fallback: infer from ML
-      const awayMLNum = parseFloat(String(g.awayML));
-      rlHomeSpread = awayMLNum < 0 ? 1.5 : -1.5;
+      if (!isNaN(awayRLNum)) {
+        const rlDerived = -awayRLNum; // invert: if away is -1.5, home is +1.5
+        // Cross-check: RL-derived direction must agree with ML-derived direction
+        // If they disagree, awayRunLine is stale/corrupted — use ML direction
+        if (!isNaN(_awayMLForRL) && Math.sign(rlDerived) !== Math.sign(_mlDerivedRlHomeSpread)) {
+          console.warn(
+            `[MLB MODEL] [${g.id}] ${g.awayTeam}@${g.homeTeam} — ` +
+            `[LAYER 1 ML-DIRECTION GUARD] awayRunLine=${g.awayRunLine} contradicts awayML=${g.awayML}. ` +
+            `RL-derived rl_home_spread=${rlDerived} but ML-derived=${_mlDerivedRlHomeSpread}. ` +
+            `Using ML-derived direction. awayRunLine is stale/corrupted.`
+          );
+          rlHomeSpread = _mlDerivedRlHomeSpread;
+        } else {
+          rlHomeSpread = rlDerived;
+        }
+      } else {
+        // awayRunLine is not parseable — fall back to ML direction
+        rlHomeSpread = _mlDerivedRlHomeSpread;
+      }
+    } else {
+      // No awayRunLine — use ML direction
+      rlHomeSpread = _mlDerivedRlHomeSpread;
     }
 
     const bookLines = {
