@@ -1571,6 +1571,56 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
     }
   }
 
+  // ── LIVE awayBookSpread re-read (CRITICAL for RL sign guard accuracy) ──────────
+  // dbGames was fetched at model-run START — awayBookSpread may have been null then if
+  // VSiN odds hadn't been scraped yet (common for midnight ET model runs).
+  // We re-read awayBookSpread NOW (right before DB writes) to get the current authoritative
+  // value. This ensures the RL sign guard has a valid reference to compare against.
+  // Without this, bookAwaySpreadForGuard = null → guard bypassed → inverted signs written.
+  const liveBookSpreadMap = new Map<number, {
+    awayBookSpread: number | null;
+    homeBookSpread: number | null;
+    awayRunLineOdds: string | null;
+    homeRunLineOdds: string | null;
+  }>();
+  if (modelableIds.length > 0) {
+    try {
+      const liveSpreadRows = await db.select({
+        id:             games.id,
+        awayBookSpread: games.awayBookSpread,
+        homeBookSpread: games.homeBookSpread,
+        awayRunLineOdds: games.awayRunLineOdds,
+        homeRunLineOdds: games.homeRunLineOdds,
+      })
+        .from(games)
+        .where(inArray(games.id, modelableIds));
+      for (const row of liveSpreadRows) {
+        liveBookSpreadMap.set(row.id, {
+          awayBookSpread:  row.awayBookSpread != null ? parseFloat(String(row.awayBookSpread)) : null,
+          homeBookSpread:  row.homeBookSpread != null ? parseFloat(String(row.homeBookSpread)) : null,
+          awayRunLineOdds: row.awayRunLineOdds ?? null,
+          homeRunLineOdds: row.homeRunLineOdds ?? null,
+        });
+      }
+      console.log(`${TAG} [LIVE awayBookSpread re-read] ${liveSpreadRows.length} games fetched`);
+      // Log any games where live awayBookSpread differs from snapshot (drift detection)
+      for (const [id, live] of Array.from(liveBookSpreadMap.entries())) {
+        const snap = dbGameById.get(id)?.awayBookSpread != null
+          ? parseFloat(String(dbGameById.get(id)!.awayBookSpread))
+          : null;
+        if (live.awayBookSpread !== snap) {
+          const g = dbGameById.get(id);
+          console.warn(
+            `${TAG} [LIVE awayBookSpread DRIFT] id=${id} ${g?.awayTeam}@${g?.homeTeam}: ` +
+            `snapshot=${snap} live=${live.awayBookSpread} — using live value for RL sign guard`
+          );
+        }
+      }
+    } catch (err) {
+      console.error(`${TAG} [LIVE awayBookSpread re-read FAILED] ${err} — falling back to snapshot values`);
+    }
+  }
+
   for (const r of engineResults) {
     if (!r.ok || r.error) {
       console.error(`${TAG} [${r.db_id}] ${r.game} — engine error: ${r.error}`);
@@ -1588,13 +1638,18 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
     // ── SIGN-ENFORCEMENT GUARD ────────────────────────────────────────────────
     // awayModelSpread MUST mirror awayBookSpread sign.
     // The Python engine computes away_run_line from rl_home_spread (derived from awayRunLine).
-    // If awayRunLine was corrupted by a previous model write, the Python output may be flipped.
-    // Ground truth: dbGameById has the DB state at model-run time.
+    // If awayBookSpread was NULL at model-run START (odds not yet scraped), the snapshot
+    // in dbGameById is stale. We use liveBookSpreadMap (re-read right before DB writes)
+    // as the authoritative source. Falls back to dbGameById snapshot if live re-read failed.
     // awayBookSpread is written ONLY by the VSiN scraper and is always the authoritative book value.
     const dbGame = dbGameById.get(r.db_id);
-    const bookAwaySpreadForGuard = dbGame?.awayBookSpread != null
-      ? parseFloat(String(dbGame.awayBookSpread))
-      : null;
+    const liveSpread = liveBookSpreadMap.get(r.db_id);
+    // Prefer live re-read value; fall back to snapshot if live re-read failed or returned null
+    const bookAwaySpreadForGuard: number | null = (
+      liveSpread?.awayBookSpread != null ? liveSpread.awayBookSpread
+      : dbGame?.awayBookSpread != null   ? parseFloat(String(dbGame.awayBookSpread))
+      : null
+    );
     const modelAwayRLNum = parseFloat(r.away_run_line);
     let safeAwayRunLine = r.away_run_line;
     let safeHomeRunLine = r.home_run_line;
@@ -1635,8 +1690,14 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
     const _mlbRlAwayCoverPct = r.away_rl_cover_pct / 100;  // 0-1 scale
     const _mlbRlHomeCoverPct = r.home_rl_cover_pct / 100;
     // Book break-even: the cover% needed to break even at book's RL odds
-    const _bkAwayRLOddsNum = parseFloat(String(dbGame?.awayRunLineOdds ?? ''));
-    const _bkHomeRLOddsNum = parseFloat(String(dbGame?.homeRunLineOdds ?? ''));
+    // Use liveBookSpreadMap (live re-read) for RL odds — more accurate than snapshot
+    const _liveRLOdds = liveBookSpreadMap.get(r.db_id);
+    const _bkAwayRLOddsNum = parseFloat(String(
+      _liveRLOdds?.awayRunLineOdds ?? dbGame?.awayRunLineOdds ?? ''
+    ));
+    const _bkHomeRLOddsNum = parseFloat(String(
+      _liveRLOdds?.homeRunLineOdds ?? dbGame?.homeRunLineOdds ?? ''
+    ));
     const _americanBreakEven = (odds: number): number | null => {
       if (isNaN(odds)) return null;
       return odds < 0 ? Math.abs(odds) / (Math.abs(odds) + 100) : 100 / (odds + 100);

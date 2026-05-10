@@ -1042,6 +1042,47 @@ export async function updateAnOdds(
   if (data.awayRunLineOdds !== undefined) updateData.awayRunLineOdds = data.awayRunLineOdds;
   if (data.homeRunLineOdds !== undefined) updateData.homeRunLineOdds = data.homeRunLineOdds;
   if (data.oddsSource !== undefined) updateData.oddsSource = data.oddsSource;
+
+  // ── MLB RL SIGN SYNC (Layer 2 guard) ─────────────────────────────────────────────────────────
+  // When awayBookSpread is written (by VSiN scraper post-model-run), check if
+  // awayModelSpread has the OPPOSITE sign. If so, flip it to match the book.
+  // This is the safety net for the case where:
+  //   1. Model ran at midnight ET when awayBookSpread was NULL
+  //   2. RL sign guard was bypassed (null check failed)
+  //   3. VSiN scraper later wrote awayBookSpread with the correct sign
+  //   4. awayModelSpread is now inverted vs awayBookSpread
+  // We fix it here so the next odds refresh self-heals the inversion.
+  if (data.awayBookSpread !== undefined && data.awayBookSpread !== null) {
+    const newBookAway = parseFloat(data.awayBookSpread);
+    if (!isNaN(newBookAway) && newBookAway !== 0) {
+      // Fetch current awayModelSpread to check if sign correction is needed
+      const currentRow = await db
+        .select({ awayModelSpread: games.awayModelSpread, homeModelSpread: games.homeModelSpread, sport: games.sport })
+        .from(games)
+        .where(eq(games.id, id))
+        .limit(1);
+      const row = currentRow[0];
+      if (row?.sport === 'MLB' && row.awayModelSpread != null) {
+        const currentModelAway = parseFloat(String(row.awayModelSpread));
+        if (!isNaN(currentModelAway) && currentModelAway !== 0) {
+          const bookSign  = newBookAway >= 0 ? 1 : -1;
+          const modelSign = currentModelAway >= 0 ? 1 : -1;
+          if (bookSign !== modelSign) {
+            // Signs are inverted — self-heal: flip awayModelSpread/homeModelSpread
+            const correctedAway = bookSign > 0 ? Math.abs(currentModelAway) : -Math.abs(currentModelAway);
+            const correctedHome = -correctedAway;
+            updateData.awayModelSpread = correctedAway >= 0 ? `+${correctedAway.toFixed(1)}` : `${correctedAway.toFixed(1)}`;
+            updateData.homeModelSpread = correctedHome >= 0 ? `+${correctedHome.toFixed(1)}` : `${correctedHome.toFixed(1)}`;
+            console.error(
+              `[updateAnOdds][RL SIGN SYNC] id=${id} — awayBookSpread=${newBookAway} but awayModelSpread=${currentModelAway} ` +
+              `— CORRECTING: awayModelSpread=${updateData.awayModelSpread} homeModelSpread=${updateData.homeModelSpread}`
+            );
+          }
+        }
+      }
+    }
+  }
+
   if (Object.keys(updateData).length === 0) return;
   await db.update(games).set(updateData).where(eq(games.id, id));
 }
