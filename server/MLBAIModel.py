@@ -378,7 +378,7 @@ EMPIRICAL_PRIORS = {
     # NRFI
     "nrfi_rate": 0.5093,  # NRFI rate (2026 live: 0.5093, 3yr: 0.5150)
     # Run shares
-    "f5_share": 0.5491,  # F5 runs / FG runs (2026 live: 0.5491, 3yr: 0.5618)
+    "f5_share": 0.5595,  # F5 runs / FG runs (2026 live: 0.5595 n=561, updated 2026-05-10)
     "i1_share": 0.1166,  # I1 runs / FG runs (3yr empirical, was 0.1093)
     # Totals
     "fg_mean": 8.892,  # mean FG total (2026 live: 8.892, 3yr: 8.842)
@@ -386,7 +386,7 @@ EMPIRICAL_PRIORS = {
     # Season-by-season drift (for temporal weighting)
     "f5_share_2024": 0.5622,  # 2024 F5 share (n=2,428)
     "f5_share_2025": 0.5624,  # 2025 F5 share (n=2,432)
-    "f5_share_2026": 0.5491,  # 2026 F5 share (n=324, updated 2026-04-20)
+    "f5_share_2026": 0.5595,  # 2026 F5 share (n=561, updated 2026-05-10)
     "i1_share_2024": 0.1133,  # 2024 I1 share
     "i1_share_2025": 0.1198,  # 2025 I1 share
     "i1_share_2026": 0.1181,  # 2026 I1 share
@@ -1599,6 +1599,26 @@ class MarketDerivation:
             logger.step("Step 5: Moneyline Origination")
         p_home = sim["p_home_win"]
         p_away = sim["p_away_win"]
+
+        # ── FG_ML_HOME_EDGE CORRECTION ─────────────────────────────────────────
+        # SPEC: Backtest (n=554, 2026-05-10) identified systematic away over-valuation:
+        #   FG ML Home accuracy: 51.5% (below 70% target)
+        #   FG ML Away accuracy: 48.5% (over-valued by model)
+        # Correction: add +0.03 to home win probability before no-vig pricing.
+        # This shifts the model toward home teams by ~3 percentage points,
+        # correcting the systematic away bias identified in live 2026 data.
+        # Source: mlb_calibration_constants.fg_ml_home_edge = 0.03 (LIVE_2026_N554_BACKTEST)
+        FG_ML_HOME_EDGE = 0.03  # +3pp home win probability correction
+        p_home_raw = p_home
+        p_away_raw = p_away
+        p_home = float(np.clip(p_home + FG_ML_HOME_EDGE, 0.001, 0.999))
+        p_away = float(np.clip(1.0 - p_home, 0.001, 0.999))
+        if logger:
+            logger.state(
+                f"[HOME_EDGE] fg_ml_home_edge={FG_ML_HOME_EDGE:+.4f} | "
+                f"p_home: {p_home_raw:.4f} -> {p_home:.4f} | "
+                f"p_away: {p_away_raw:.4f} -> {p_away:.4f}"
+            )
 
         # Total-environment variance adjustment
         if total_key >= 9.0:
