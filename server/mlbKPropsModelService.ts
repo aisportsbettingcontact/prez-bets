@@ -52,6 +52,7 @@ import {
   mlbPitcherRolling5,
   mlbTeamBattingSplits,
   games,
+  mlbLineups,
 } from "../drizzle/schema";
 import { eq, and, inArray } from "drizzle-orm";
 
@@ -85,6 +86,17 @@ const K_CALIBRATION_FACTOR_UNDER = 0.739;  // Standard correction for UNDER dire
 // Legacy alias (used in kProj display)
 const K_CALIBRATION_FACTOR = K_CALIBRATION_FACTOR_UNDER;
 const EMPIRICAL_IP_PER_START = 5.1;   // 2025 MLB starter avg IP/start
+// ─── P4-B: Platoon composition constants (2025 MLB empirical) ─────────────────
+// LHP vs RHH platoon advantage: LHP K% is ~8% higher vs RHH than vs LHH
+// RHP vs LHH platoon advantage: RHP K% is ~5% higher vs LHH than vs RHH
+// Source: 2024-2025 Statcast platoon splits (FanGraphs)
+const PLATOON_LHP_VS_RHH_BOOST = 1.08;   // LHP gets +8% K-rate vs RHH-heavy lineup
+const PLATOON_LHP_VS_LHH_PENALTY = 0.94; // LHP gets -6% K-rate vs LHH-heavy lineup
+const PLATOON_RHP_VS_LHH_BOOST = 1.05;   // RHP gets +5% K-rate vs LHH-heavy lineup
+const PLATOON_RHP_VS_RHH_PENALTY = 0.97; // RHP gets -3% K-rate vs RHH-heavy lineup
+const PLATOON_NEUTRAL_THRESHOLD = 0.60;  // >= 60% same-hand batters = "heavy" composition
+const MIN_PLATOON_ADJ = 0.88;
+const MAX_PLATOON_ADJ = 1.15;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -142,6 +154,90 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
+// ─── P4-B: Platoon composition adjustment helper ──────────────────────────────
+/**
+ * computePlatoonAdj: Compute K-rate multiplier based on pitcher hand vs lineup
+ * batting hand composition.
+ *
+ * Logic:
+ * - Parse lineup JSON to count R/L/S batters (switch-hitters = 0.5R + 0.5L)
+ * - LHP vs RHH-heavy (>=60% RHH): +8% K-rate boost
+ * - LHP vs LHH-heavy (>=60% LHH): -6% K-rate penalty
+ * - RHP vs LHH-heavy (>=60% LHH): +5% K-rate boost
+ * - RHP vs RHH-heavy (>=60% RHH): -3% K-rate penalty
+ * - Otherwise: neutral (1.0)
+ *
+ * @param lineupJson  JSON string from mlbLineups.awayLineup / homeLineup
+ * @param pitcherHand 'L' | 'R'
+ * @param confirmed   true if lineup is confirmed
+ * @param tag         Logging tag
+ * @returns Platoon adjustment multiplier (clamped to [0.88, 1.15])
+ */
+function computePlatoonAdj(
+  lineupJson: string | null | undefined,
+  pitcherHand: string,
+  confirmed: boolean | null | undefined,
+  tag: string,
+): number {
+  if (!confirmed || !lineupJson) {
+    console.log(`${tag} [P4-B] No confirmed lineup — platoon adj = 1.0`);
+    return 1.0;
+  }
+  let lineup: Array<{ bats?: string }> = [];
+  try {
+    lineup = JSON.parse(lineupJson);
+  } catch {
+    console.log(`${tag} [P4-B] JSON parse error — platoon adj = 1.0`);
+    return 1.0;
+  }
+  if (!Array.isArray(lineup) || lineup.length < 7) {
+    console.log(`${tag} [P4-B] Lineup < 7 players — platoon adj = 1.0`);
+    return 1.0;
+  }
+  // Count R/L/S batters (switch-hitters count as 0.5 R + 0.5 L)
+  let rCount = 0, lCount = 0;
+  for (const player of lineup.slice(0, 9)) {
+    const bats = (player.bats ?? 'R').toUpperCase();
+    if (bats === 'R') { rCount += 1; }
+    else if (bats === 'L') { lCount += 1; }
+    else if (bats === 'S') { rCount += 0.5; lCount += 0.5; }
+    else { rCount += 1; }
+  }
+  const total = rCount + lCount;
+  if (total === 0) return 1.0;
+  const rPct = rCount / total;
+  const lPct = lCount / total;
+  const hand = pitcherHand.toUpperCase();
+  let adj = 1.0;
+  let reason = 'neutral';
+
+  if (hand === 'L') {
+    if (rPct >= PLATOON_NEUTRAL_THRESHOLD) {
+      adj = PLATOON_LHP_VS_RHH_BOOST;
+      reason = `LHP vs RHH-heavy (${(rPct * 100).toFixed(0)}% RHH) +${((adj - 1) * 100).toFixed(0)}%`;
+    } else if (lPct >= PLATOON_NEUTRAL_THRESHOLD) {
+      adj = PLATOON_LHP_VS_LHH_PENALTY;
+      reason = `LHP vs LHH-heavy (${(lPct * 100).toFixed(0)}% LHH) ${((adj - 1) * 100).toFixed(0)}%`;
+    }
+  } else {
+    if (lPct >= PLATOON_NEUTRAL_THRESHOLD) {
+      adj = PLATOON_RHP_VS_LHH_BOOST;
+      reason = `RHP vs LHH-heavy (${(lPct * 100).toFixed(0)}% LHH) +${((adj - 1) * 100).toFixed(0)}%`;
+    } else if (rPct >= PLATOON_NEUTRAL_THRESHOLD) {
+      adj = PLATOON_RHP_VS_RHH_PENALTY;
+      reason = `RHP vs RHH-heavy (${(rPct * 100).toFixed(0)}% RHH) ${((adj - 1) * 100).toFixed(0)}%`;
+    }
+  }
+
+  const clamped = Math.min(Math.max(adj, MIN_PLATOON_ADJ), MAX_PLATOON_ADJ);
+  console.log(
+    `${tag} [P4-B] Platoon: pitcher=${hand} R=${rCount.toFixed(1)} L=${lCount.toFixed(1)} ` +
+    `(${(rPct * 100).toFixed(0)}%R/${(lPct * 100).toFixed(0)}%L) ${reason} adj=${clamped.toFixed(4)}`
+  );
+  return clamped;
+}
+
+
 // ─── Name normalization ───────────────────────────────────────────────────────
 
 function normalizeName(name: string): string {
@@ -181,9 +277,15 @@ export async function modelKPropsForDate(gameDate: string): Promise<KPropsModelR
       anNoVigOverPct: mlbStrikeoutProps.anNoVigOverPct,
       awayTeam: games.awayTeam,
       homeTeam: games.homeTeam,
+      // P4-B: Lineup data for platoon composition adjustment (from mlbLineups)
+      awayLineup: mlbLineups.awayLineup,
+      homeLineup: mlbLineups.homeLineup,
+      awayLineupConfirmed: mlbLineups.awayLineupConfirmed,
+      homeLineupConfirmed: mlbLineups.homeLineupConfirmed,
     })
     .from(mlbStrikeoutProps)
     .innerJoin(games, eq(mlbStrikeoutProps.gameId, games.id))
+    .leftJoin(mlbLineups, eq(mlbStrikeoutProps.gameId, mlbLineups.gameId))
     .where(eq(games.gameDate, gameDate));
 
   console.log(`${TAG} [STATE] Found ${kPropsRows.length} K-Props rows for ${gameDate}`);
@@ -197,22 +299,38 @@ export async function modelKPropsForDate(gameDate: string): Promise<KPropsModelR
   const pitcherNames = (kPropsRows as Array<{ pitcherName: string }>).map((r) => r.pitcherName);
   const pitcherStatsRows = await db
     .select({
-      fullName: mlbPitcherStats.fullName,
-      k9: mlbPitcherStats.k9,
-      xfip: mlbPitcherStats.xfip,
-      fip: mlbPitcherStats.fip,
-      throwsHand: mlbPitcherStats.throwsHand,
+      fullName:    mlbPitcherStats.fullName,
+      k9:          mlbPitcherStats.k9,
+      xfip:        mlbPitcherStats.xfip,
+      fip:         mlbPitcherStats.fip,
+      throwsHand:  mlbPitcherStats.throwsHand,
+      // P2-A: IP fallback fields
+      ipMean3yr:   mlbPitcherStats.ipMean3yr,     // 3yr mean IP/start (most reliable)
+      ip:          mlbPitcherStats.ip,            // season total IP
+      gamesStarted: mlbPitcherStats.gamesStarted, // season GS (for ip/gs calc)
     })
     .from(mlbPitcherStats);
 
   // Build name → stats map (normalized)
-  const pitcherStatsByName = new Map<string, { k9: number | null; xfip: number | null; fip: number | null; throwsHand: string | null }>();
+  const pitcherStatsByName = new Map<string, {
+    k9: number | null;
+    xfip: number | null;
+    fip: number | null;
+    throwsHand: string | null;
+    // P2-A: IP fallback fields
+    ipMean3yr: number | null;    // 3yr mean IP/start (most reliable)
+    ip: number | null;           // season total IP
+    gamesStarted: number | null; // season GS
+  }>();
   for (const row of pitcherStatsRows) {
     pitcherStatsByName.set(normalizeName(row.fullName), {
-      k9: row.k9,
-      xfip: row.xfip,
-      fip: row.fip,
-      throwsHand: row.throwsHand,
+      k9:          row.k9,
+      xfip:        row.xfip,
+      fip:         row.fip,
+      throwsHand:  row.throwsHand,
+      ipMean3yr:   row.ipMean3yr   != null ? Number(row.ipMean3yr)   : null,
+      ip:          row.ip          != null ? Number(row.ip)          : null,
+      gamesStarted: row.gamesStarted != null ? Number(row.gamesStarted) : null,
     });
   }
 
@@ -317,21 +435,37 @@ export async function modelKPropsForDate(gameDate: string): Promise<KPropsModelR
       const oppK9 = battingSplitsByTeamHand.get(oppK9Key) ?? LEAGUE_OPP_K9;
       const oppAdj = clamp(oppK9 / LEAGUE_OPP_K9, MIN_OPP_ADJ, MAX_OPP_ADJ);
 
-      // ── Expected innings pitched ───────────────────────────────────────
-      // FIX: Use empirical IP baseline (5.1 innings) instead of the circular
-      // formula ip_expected = bookLine/k9*9 which reduces to lambda ≈ bookLine.
-      // The rolling-5 ip5 is used if available (more recent form), else EMPIRICAL_IP_PER_START.
+      // ── P2-A: Expected innings pitched (4-tier priority fallback) ─────────────────────────────────────────────────────
+      // Priority 1: ipMean3yr (3yr empirical mean IP/start — most stable, backtest-calibrated)
+      // Priority 2: ip / gamesStarted (current season IP per start — reflects current workload)
+      // Priority 3: rolling5Ip (last-5 starts IP — most recent form, but high variance)
+      // Priority 4: EMPIRICAL_IP_PER_START (2025 league average 5.1 — last resort)
       const rolling5Ip = rolling5?.ip5 ?? null;
-      const ipExpected = clamp(
-        rolling5Ip !== null ? rolling5Ip : EMPIRICAL_IP_PER_START,
-        MIN_IP,
-        MAX_IP
+      const seasonIpPerStart = (stats?.ip != null && stats?.gamesStarted != null && stats.gamesStarted > 0)
+        ? stats.ip / stats.gamesStarted
+        : null;
+      const ipRaw = stats?.ipMean3yr ?? seasonIpPerStart ?? rolling5Ip ?? EMPIRICAL_IP_PER_START;
+      const ipSource = stats?.ipMean3yr != null ? '3yr' : seasonIpPerStart != null ? 'season' : rolling5Ip != null ? 'r5' : 'empirical';
+      const ipExpected = clamp(ipRaw, MIN_IP, MAX_IP);
+      console.log(
+        `[KProps][P2-A][IP] ${row.pitcherName}: ` +
+        `ipMean3yr=${stats?.ipMean3yr ?? 'N/A'} ` +
+        `seasonIpPerStart=${seasonIpPerStart != null ? seasonIpPerStart.toFixed(2) : 'N/A'} ` +
+        `r5Ip=${rolling5Ip ?? 'N/A'} ` +
+        `→ used=${ipRaw.toFixed(2)} (source=${ipSource}) clamped=${ipExpected.toFixed(2)}`
       );
-
+      // ── P4-B: Platoon composition adjustment ───────────────────────────
+      // Determine which lineup to use: pitcher is on 'away' side → faces home lineup
+      // pitcher is on 'home' side → faces away lineup
+      const oppLineupJson = row.side === "away" ? row.homeLineup : row.awayLineup;
+      const oppLineupConfirmed = row.side === "away" ? row.homeLineupConfirmed : row.awayLineupConfirmed;
+      const platoonTag = `[KProps][P4-B][${row.pitcherName}]`;
+      const platoonAdj = computePlatoonAdj(oppLineupJson, throwsHand, oppLineupConfirmed, platoonTag);
       // ── Poisson lambda (direction-split calibration) ─────────────────────
       // OVER uses stronger factor (0.800) to correct high-line over-projection.
       // UNDER uses standard factor (0.739) calibrated from full-sample backtest.
-      const lambdaRaw = pitcherK9 * xfipAdj * oppAdj * (ipExpected / 9);
+      // P4-B: platoonAdj multiplied into lambdaRaw (adjusts K-rate for lineup hand composition)
+      const lambdaRaw = pitcherK9 * xfipAdj * oppAdj * platoonAdj * (ipExpected / 9);
       const lambdaOver  = lambdaRaw * K_CALIBRATION_FACTOR_OVER;  // for OVER probability
       const lambdaUnder = lambdaRaw * K_CALIBRATION_FACTOR_UNDER; // for UNDER probability
       // Use lambdaUnder as the display lambda (kProj) since UNDER is the primary signal
@@ -405,7 +539,11 @@ export async function modelKPropsForDate(gameDate: string): Promise<KPropsModelR
       const edgeStr = edgeOver >= 0 ? `+${edgeOver.toFixed(4)}` : edgeOver.toFixed(4);
       const evStr = (edgeOver * 100).toFixed(1);
       console.log(
-        `${TAG} [STATE] ${row.pitcherName} (${row.side}@${oppTeam}) | ${statsTag} | xfipAdj=${xfipAdj.toFixed(3)} oppAdj=${oppAdj.toFixed(3)} ip=${ipExpected.toFixed(1)} lambdaRaw=${lambdaRaw.toFixed(3)} lambda=${lambda.toFixed(3)} (calib=${K_CALIBRATION_FACTOR}) | pOver=${pOver.toFixed(4)} anNoVig=${anNoVig.toFixed(4)} edge=${edgeStr} ev=${evStr} | verdict=${verdict}`
+        `${TAG} [STATE] ${row.pitcherName} (${row.side}@${oppTeam}) | ${statsTag} | ` +
+        `xfipAdj=${xfipAdj.toFixed(3)} oppAdj=${oppAdj.toFixed(3)} platoonAdj=${platoonAdj.toFixed(4)} ` +
+        `ip=${ipExpected.toFixed(1)} lambdaRaw=${lambdaRaw.toFixed(3)} lambda=${lambda.toFixed(3)} ` +
+        `(calib=${K_CALIBRATION_FACTOR}) | pOver=${pOver.toFixed(4)} anNoVig=${anNoVig.toFixed(4)} ` +
+        `edge=${edgeStr} ev=${evStr} | verdict=${verdict}`
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

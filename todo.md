@@ -3102,3 +3102,90 @@
 - [x] All 584 tests passing, TypeScript 0 errors
 - [x] DB: cleared modelRunAt for ATL@LAD (wrong -221 odds) — model re-ran and corrected to +127
 - [x] Verified: 15/15 today's MLB games pass invariant check (0 violations)
+
+## Session: 2026-05-10 — P1–P4 MLB AI Model Full Enhancement Roadmap
+
+### P1-A: Weather Integration
+- [ ] Add weather fields to dbGames SELECT in mlbModelRunner.ts (weatherTemp, weatherWind, weatherDome from mlbLineups)
+- [ ] Parse weatherTemp string to temp_f float
+- [ ] Parse weatherWind string to wind_speed_mph float + wind_dir string
+- [ ] Add weather dict to EngineInput interface and pass to Python
+- [ ] Add modelWeatherAdj column to games table for traceability
+- [ ] Write vitest tests for weather parsing edge cases
+
+### P1-B: Confirmed Lineup Statcast Data in Main Game Model
+- [ ] Fetch awayLineup + homeLineup JSON from mlbLineups in mlbModelRunner.ts
+- [ ] Batch-fetch mlbPlayers (iso, barrelPct, hardHitPct) by mlbamId
+- [ ] Aggregate per-lineup weighted avg barrel/ISO/hard-hit
+- [ ] Pass lineup Statcast dicts to EngineInput and Python
+- [ ] Python: override team_stats_to_batter_features barrel_rate/iso/hard_hit with lineup data
+- [ ] Write vitest tests for Statcast aggregation logic
+
+### P1-C: NRFI Product Formula Fix
+- [ ] Python: change nrfi_combined_signal from average to product formula
+- [ ] Update NRFI_COMBINED_THRESHOLD to match product scale
+- [ ] mlbModelRunner.ts: update TS-side combined signal to product formula
+- [ ] Write vitest tests for product formula correctness
+
+### P2-A: K-Props IP Fallback Fix
+- [ ] Add ipPerGame to pitcher stats SELECT in mlbKPropsModelService.ts
+- [ ] Change IP fallback: rolling5Ip ?? stats?.ipPerGame ?? EMPIRICAL_IP_PER_START
+- [ ] Write vitest tests for IP fallback priority chain
+
+### P2-B: HR-Specific Park Factor
+- [ ] drizzle/schema.ts: add hrFactor double column to mlbParkFactors table
+- [ ] Run pnpm db:push
+- [ ] Backfill hrFactor from PARK_FACTORS Python constant
+- [ ] mlbHrPropsModelService.ts: use hrFactor instead of parkFactor3yr
+- [ ] Write vitest tests for hrFactor lookup
+
+### P2-C: HR Props wOBA Double-Count Fix
+- [ ] Remove woba_scale from base_rate in computePlayerPHr()
+- [ ] Recalibrate HR_CALIBRATION_FACTOR
+- [ ] Write vitest tests for wOBA-free base rate computation
+
+### P2-D: Display Raw exp_total as Model Projection
+- [ ] drizzle/schema.ts: add modelProjTotal decimal(6,2) column to games table
+- [ ] Run pnpm db:push
+- [ ] mlbModelRunner.ts: write r.proj_total to modelProjTotal
+- [ ] GameCard.tsx + MlbCheatSheetCard.tsx: display modelProjTotal alongside total_line
+- [ ] Write vitest tests for modelProjTotal DB write
+
+### P3-A: RE Matrix 2025 Update
+- [ ] Update RE_MATRIX dict in MLBAIModel.py with 2025 empirical values
+- [ ] Recalibrate LEAGUE_CALIBRATION_MULT after RE matrix update
+
+### P3-B: Per-Inning Linescore in NRFI Table View + Hundredths Precision
+- [ ] Add InningBoxGrid to NrfiTableRowV3 component (compact inline design)
+- [ ] Ensure all inning values display at 2 decimal places throughout
+- [ ] Add responsive breakpoints: hide I6-I9 on mobile
+
+### P3-C: NRFI Threshold Re-evaluation
+- [ ] Recalibrate NRFI_COMBINED_THRESHOLD after product formula change
+
+### P4-A: Lineup Order Integration
+- [ ] mlbModelRunner.ts: fetch and parse awayLineup + homeLineup JSON
+- [ ] Build per-batter feature dicts using individual player stats
+- [ ] Pass lineup_players arrays to Python
+- [ ] Python: use actual batting order when lineup confirmed and >= 7 players
+- [ ] Write vitest tests for lineup order integration
+
+### P4-B: Platoon Composition Adjustment for K-Props
+- [ ] Parse lineup JSON to count LHH vs RHH batters
+- [ ] Compute platoon_adj multiplier based on pitcher hand vs lineup composition
+- [ ] Write vitest tests for platoon adjustment logic
+
+## Session: 2026-05-10 — P1–P4 MLB AI Model Enhancements
+
+- [x] P1-A: Weather integration — parse mlbLineups weather fields and pass to Python engine
+- [x] P1-B: Confirmed lineup Statcast data in main game model — aggregate per-game barrel/ISO/hard-hit
+- [x] P1-C: NRFI product formula fix — replace arithmetic average with geometric mean (product formula)
+- [x] P2-A: K-Props IP fallback fix — 4-tier priority: ipMean3yr → ip/gs → rolling5Ip → EMPIRICAL
+- [x] P2-B: HR-specific park factor — added hrFactor column to mlbParkFactors, migrated DB, backfilled 30 teams, wired into HR Props model
+- [x] P2-C: HR Props wOBA double-count fix — removed woba_scale from base_rate, recalibrated HR_CALIBRATION_FACTOR to 0.82
+- [x] P2-D: Display raw exp_total (model projection) alongside total_line (originated line) in TotalRow and F5GameCardV3
+- [x] P3-A: Updated RE_MATRIX and RUN_VALUES to 2024 empirical values; updated PARK_FACTORS HR values for all 30 teams
+- [x] P3-B: Per-inning linescore in NRFI table view with expandable I1–I9 grid + hundredths precision display
+- [x] P3-C: NRFI threshold recalibrated to 0.52 (combined) and 0.54 (both) from 2026 live data analysis
+- [x] P4-A: Per-player lineup order integration — replaced 9x team-average with heterogeneous per-player Statcast array
+- [x] P4-B: Platoon composition adjustment for K-props — LHP vs RHH-heavy (+8%), LHP vs LHH-heavy (-6%), RHP vs LHH-heavy (+5%), RHP vs RHH-heavy (-3%)

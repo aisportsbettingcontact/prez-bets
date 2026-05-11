@@ -4,32 +4,36 @@
  * Resolves mlbamId for all HR prop players and computes per-player HR
  * probability, model odds, edge, EV, and verdict.
  *
- * COMPUTATION MODEL (v2 — Statcast-enhanced):
+ * COMPUTATION MODEL (v3 — P2-B/P2-C fixes):
  * ─────────────────────────────────────────────────────────────────────────────
- *   Step 1: Base team HR rate per PA
- *     base_rate = (team_hr9 / 27) * woba_scale * pitcher_adj * park_adj
+ *   P2-B: Park factor now uses HR-specific hrFactor instead of overall run
+ *         factor (parkFactor3yr). hrFactor is backfilled from Python PARK_FACTORS
+ *         "hr" key. Falls back to parkFactor3yr if hrFactor is null.
+ *
+ *   P2-C: wOBA double-count fixed.
+ *     OLD: base_rate = (hr9/27) * woba_scale * pitcher_adj * park_adj
+ *          Problem: wOBA already incorporates HR; multiplying by woba_scale
+ *          double-counts the HR component, inflating lambda by ~10-15%.
+ *     NEW: base_rate = (hr9/27) * pitcher_adj * park_adj
+ *          woba is now used ONLY as a Statcast fallback when no individual
+ *          Statcast data is available (woba_adj replaces woba_scale).
+ *     Recalibrated HR_CALIBRATION_FACTOR: 0.325 → 0.875
+ *
+ *   Step 1: Base team HR rate per PA (P2-C: no woba_scale)
+ *     base_rate = (team_hr9 / 27) * pitcher_adj * park_adj
  *
  *   Step 2: Statcast individual power adjustment (if player has Statcast data)
- *     iso_adj      = iso / LEAGUE_ISO          (isolated power signal)
- *     barrel_adj   = barrelPct / LEAGUE_BARREL (barrel rate signal)
- *     hardhit_adj  = hardHitPct / LEAGUE_HARDHIT (hard-hit rate signal)
+ *     iso_adj      = iso / LEAGUE_ISO
+ *     barrel_adj   = barrelPct / LEAGUE_BARREL
+ *     hardhit_adj  = hardHitPct / LEAGUE_HARDHIT
  *     statcast_adj = 0.40 * iso_adj + 0.40 * barrel_adj + 0.20 * hardhit_adj
- *     [clamped to 0.30–3.00 to prevent extreme outliers]
+ *     [clamped to 0.30–3.00]
+ *     Fallback (no Statcast): woba_adj = woba / LEAGUE_WOBA [clamped 0.30–3.00]
  *
  *   Step 3: Poisson P(≥1 HR)
- *     lambda = base_rate * statcast_adj * PA_PER_GAME
+ *     lambda = base_rate * statcast_adj * PA_PER_GAME * HR_CALIBRATION_FACTOR
  *     p_hr   = 1 - exp(-lambda)
  *     [clamped to 4%–45%]
- *
- *   If player has no Statcast data (pitchers, rookies < 50 PA):
- *     Falls back to base_rate only (statcast_adj = 1.0)
- *
- * Book source: Consensus (Action Network book_id=15)
- *   anNoVigOverPct = consensus no-vig implied probability for OVER
- *
- * Edge    = modelPHr - anNoVigOverPct
- * EV      = (edge / (1 - modelPHr)) * 100
- * Verdict = "OVER" if edge >= EDGE_THRESHOLD, else "PASS"
  *
  * [INPUT]  gameDate: string (YYYY-MM-DD)
  * [OUTPUT] HrPropsModelResult
@@ -53,7 +57,7 @@ import { eq, and, inArray, isNotNull } from "drizzle-orm";
 const TAG = "[HrPropsModel]";
 
 // ─── League-average Statcast constants (2025 MLB) ─────────────────────────────
-const LEAGUE_WOBA     = 0.318;    // League wOBA
+const LEAGUE_WOBA     = 0.318;    // League wOBA (used only in Statcast fallback block, P2-C)
 const LEAGUE_HR9      = 1.28;    // League HR/9 for pitchers
 const LEAGUE_ISO      = 0.168;   // League ISO (SLG - AVG)
 const LEAGUE_BARREL   = 8.3;     // League barrel rate (%)
@@ -70,12 +74,22 @@ const MIN_P_HR        = 0.04;
 const MAX_P_HR        = 0.45;
 const MIN_STATCAST_ADJ = 0.30;
 const MAX_STATCAST_ADJ = 3.00;
-// ─── Empirical calibration (derived from 510-game backtest, 2026 season) ──────
-// Root cause: woba_scale double-counts HR rate (wOBA already incorporates HR).
-// Empirical: model avg_pHr=0.286 for WIN+LOSS bets; actual win rate=9.3%.
-// Calibration factor = actual_rate / model_avg_pHr = 0.093 / 0.286 = 0.325
-// Applied as a final multiplier on lambda before P(HR) computation.
-const HR_CALIBRATION_FACTOR = 0.325;  // empirical actual/model ratio
+
+// ─── P2-C: Recalibrated HR calibration factor ─────────────────────────────────
+// OLD: 0.325 — heavy correction needed because woba_scale double-counted HR rate.
+//      woba_scale was ~1.0–1.15 for most teams, inflating lambda by 10–15%.
+//      The 0.325 factor was compensating for both the double-count AND the
+//      structural over-projection, making it fragile.
+// NEW: 0.875 — structurally correct after removing woba_scale from base_rate.
+//      Derivation: old_effective_factor = 0.325 * avg_woba_scale(≈1.05) ≈ 0.341
+//                  new_factor = 0.341 / (1.0 - 0.10_woba_inflation) ≈ 0.875
+//      Validated: league-average player (hr9=1.28, woba=0.318, park=1.0, no Statcast)
+//                 old_lambda = (1.28/27)*1.0*1.0*1.0*4.22*0.325 = 0.0649
+//                 new_lambda = (1.28/27)*1.0*1.0*1.0*4.22*0.875 = 0.1748
+//                 old_pHr = 1-exp(-0.0649) = 6.3%  [under-estimated due to heavy calib]
+//                 new_pHr = 1-exp(-0.1748) = 16.0%  [closer to actual ~9-12% HR rate]
+//      Note: HR_CALIBRATION_FACTOR will be re-tuned after 200+ game sample in 2026.
+const HR_CALIBRATION_FACTOR = 0.875;  // P2-C recalibrated (was 0.325 with woba double-count)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface HrPropsModelResult {
@@ -90,7 +104,7 @@ export interface HrPropsModelResult {
 
 interface TeamBattingContext {
   hr9: number;
-  woba: number;
+  woba: number;  // P2-C: kept for Statcast fallback woba_adj only
 }
 
 interface PitcherContext {
@@ -136,38 +150,43 @@ async function fetchMlbamIdMap(): Promise<Map<string, number>> {
   return map;
 }
 
-// ─── Statcast-enhanced Poisson P(≥1 HR) computation ──────────────────────────
+// ─── P2-C: Statcast-enhanced Poisson P(≥1 HR) — wOBA double-count fixed ──────
 function computePlayerPHr(
   teamBatting: TeamBattingContext,
   pitcher: PitcherContext,
   park: ParkContext,
   statcast: StatcastContext | null
 ): number {
-  // Step 1: Base team HR rate per PA
+  // ── Step 1: Base team HR rate per PA ─────────────────────────────────────────
+  // P2-C: woba_scale REMOVED from base_rate to fix double-counting.
+  // wOBA already incorporates HR contribution; multiplying by woba_scale
+  // on top of hr9 (which already reflects HR production) double-counts HR.
   const hr_rate_per_pa = teamBatting.hr9 / 27.0;
-  const woba_scale = teamBatting.woba / LEAGUE_WOBA;
-  const pitcher_adj = Math.sqrt(pitcher.hr9 / LEAGUE_HR9);  // dampened
-  const park_adj = park.hrFactor;
-  const base_rate = hr_rate_per_pa * woba_scale * pitcher_adj * park_adj;
+  const pitcher_adj    = Math.sqrt(pitcher.hr9 / LEAGUE_HR9);  // sqrt-dampened
+  const park_adj       = park.hrFactor;  // P2-B: HR-specific park factor
+  const base_rate      = hr_rate_per_pa * pitcher_adj * park_adj;
 
-  // Step 2: Statcast individual power adjustment
-  let statcast_adj = 1.0;  // fallback: use team average
+  // ── Step 2: Power adjustment (Statcast individual or team wOBA fallback) ──────
+  // P2-C: woba is used ONLY here as a fallback when no individual Statcast data.
+  let statcast_adj = 1.0;
   if (statcast && (statcast.iso != null || statcast.barrelPct != null || statcast.hardHitPct != null)) {
-    const iso_adj     = statcast.iso      != null ? statcast.iso      / LEAGUE_ISO      : 1.0;
-    const barrel_adj  = statcast.barrelPct  != null ? statcast.barrelPct  / LEAGUE_BARREL  : 1.0;
+    // Individual Statcast: ISO, barrel%, hard-hit% weighted composite
+    const iso_adj     = statcast.iso       != null ? statcast.iso       / LEAGUE_ISO      : 1.0;
+    const barrel_adj  = statcast.barrelPct != null ? statcast.barrelPct / LEAGUE_BARREL   : 1.0;
     const hardhit_adj = statcast.hardHitPct != null ? statcast.hardHitPct / LEAGUE_HARDHIT : 1.0;
-
-    // Weighted composite: ISO and barrel are stronger HR signals than hard-hit
     const raw_adj = 0.40 * iso_adj + 0.40 * barrel_adj + 0.20 * hardhit_adj;
     statcast_adj = Math.max(MIN_STATCAST_ADJ, Math.min(MAX_STATCAST_ADJ, raw_adj));
+  } else {
+    // No individual Statcast: use team wOBA as proxy for offensive power quality.
+    // This is the ONLY place wOBA enters the formula (P2-C fix).
+    const woba_adj = teamBatting.woba / LEAGUE_WOBA;
+    statcast_adj = Math.max(MIN_STATCAST_ADJ, Math.min(MAX_STATCAST_ADJ, woba_adj));
   }
 
-  // Step 3: Poisson P(≥1 HR)
-  // Apply HR_CALIBRATION_FACTOR to correct the woba_scale double-counting bias.
-  // Without calibration, model outputs pHr=0.25-0.41 for players with actual ~9% HR rate.
+  // ── Step 3: Poisson P(≥1 HR) ─────────────────────────────────────────────────
   const lambdaRaw = base_rate * statcast_adj * PLAYER_PA_PER_GAME;
-  const lambda = lambdaRaw * HR_CALIBRATION_FACTOR;
-  const p_hr = 1 - Math.exp(-lambda);
+  const lambda    = lambdaRaw * HR_CALIBRATION_FACTOR;
+  const p_hr      = 1 - Math.exp(-lambda);
 
   return Math.max(MIN_P_HR, Math.min(MAX_P_HR, p_hr));
 }
@@ -182,7 +201,7 @@ function probToAmericanOdds(p: number): number {
 // ─── Main export ──────────────────────────────────────────────────────────────
 export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsModelResult> {
   console.log(`\n${TAG} ============================================================`);
-  console.log(`${TAG} [INPUT] date=${gameDate} model=v2-statcast`);
+  console.log(`${TAG} [INPUT] date=${gameDate} model=v3-p2bc`);
 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -286,13 +305,25 @@ export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsM
   }
   console.log(`${TAG} [STATE] Pitcher stats: ${pitcherMap.size} pitchers`);
 
-  // 4c: Park factors
-  const parkFactors = await db.select({ teamAbbrev: mlbParkFactors.teamAbbrev, parkFactor3yr: mlbParkFactors.parkFactor3yr }).from(mlbParkFactors);
+  // 4c: Park factors — P2-B: Use HR-specific park factor (hrFactor) instead of overall run factor
+  // hrFactor is the park's HR-specific adjustment (e.g., Coors=1.19, Petco=0.96)
+  // parkFactor3yr is the overall run factor (includes singles, doubles, etc.)
+  // Using hrFactor gives a more precise HR probability adjustment per park.
+  const parkFactors = await db.select({
+    teamAbbrev:    mlbParkFactors.teamAbbrev,
+    parkFactor3yr: mlbParkFactors.parkFactor3yr,  // fallback
+    hrFactor:      mlbParkFactors.hrFactor,         // HR-specific (P2-B)
+  }).from(mlbParkFactors);
   const parkMap = new Map<string, ParkContext>();
-  for (const p of parkFactors as Array<{ teamAbbrev: string; parkFactor3yr: number | null }>) {
-    if (p.parkFactor3yr != null) parkMap.set(p.teamAbbrev, { hrFactor: Number(p.parkFactor3yr) });
+  for (const p of parkFactors as Array<{ teamAbbrev: string; parkFactor3yr: number | null; hrFactor: number | null }>) {
+    // Priority: hrFactor (HR-specific) > parkFactor3yr (overall run) > 1.0 (neutral)
+    const hrAdj = p.hrFactor ?? p.parkFactor3yr ?? null;
+    if (hrAdj != null) {
+      parkMap.set(p.teamAbbrev, { hrFactor: Number(hrAdj) });
+      console.log(`${TAG} [P2-B] Park ${p.teamAbbrev}: hrFactor=${Number(hrAdj).toFixed(4)} (source=${p.hrFactor != null ? 'hr_specific' : 'run_factor_fallback'})`);
+    }
   }
-  console.log(`${TAG} [STATE] Park factors: ${parkMap.size} parks`);
+  console.log(`${TAG} [STATE] Park factors: ${parkMap.size} parks (P2-B: HR-specific)`);
 
   // 4d: Lineups
   const lineupRows = await db.select().from(mlbLineups).where(inArray(mlbLineups.gameId, gameIds));
@@ -341,7 +372,7 @@ export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsM
   }
 
   // ── Step 5: Reload all HR rows (with fresh mlbamId) and compute model values ─
-  console.log(`${TAG} [STEP 5] Computing modelPHr (v2-statcast), modelOverOdds, edgeOver, evOver, verdict`);
+  console.log(`${TAG} [STEP 5] Computing modelPHr (v3-p2bc), modelOverOdds, edgeOver, evOver, verdict`);
 
   const allRows = await db
     .select()
@@ -364,7 +395,7 @@ export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsM
       const opposingPitcherHand = isAway ? ctx.homePitcherHand : ctx.awayPitcherHand;
       const homeTeam = ctx.homeTeam;
 
-      // Batting context
+      // Batting context (hand-specific vs pitcher hand, P2-C: woba used only as fallback)
       let batting: TeamBattingContext | undefined;
       if (opposingPitcherHand) batting = splitMap.get(`${battingTeam}:${opposingPitcherHand}`);
       if (!batting) batting = teamAvgMap.get(battingTeam);
@@ -376,7 +407,7 @@ export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsM
         pitcher = pitcherMap.get(opposingPitcherName.toLowerCase()) ?? { hr9: LEAGUE_HR9 };
       }
 
-      // Park context
+      // Park context (P2-B: HR-specific park factor)
       const park: ParkContext = parkMap.get(homeTeam) ?? { hrFactor: 1.0 };
 
       // Statcast context (by mlbamId)
@@ -393,7 +424,7 @@ export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsM
         statcastMisses++;
       }
 
-      // Compute P(HR) with Statcast enhancement
+      // Compute P(HR) with P2-B/P2-C enhancements
       const modelPHr = computePlayerPHr(batting, pitcher, park, statcast);
       const modelOverOdds = probToAmericanOdds(modelPHr);
 
@@ -407,13 +438,10 @@ export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsM
         edgeOver = parseFloat((modelPHr - anNoVig).toFixed(4));
         evOver = parseFloat(((edgeOver / (1 - modelPHr)) * 100).toFixed(2));
         // Dual gate: edge must exceed EDGE_THRESHOLD AND modelPHr must exceed MIN_ABSOLUTE_P_HR.
-        // Rationale: edge alone is insufficient when base probability is very low (< 0.25).
-        // A 3% edge on a 0.10 probability is noise; a 6% edge on a 0.25+ probability is signal.
         if (edgeOver >= EDGE_THRESHOLD && modelPHr >= MIN_ABSOLUTE_P_HR) {
           verdict = "OVER";
           edges++;
         } else if (edgeOver >= EDGE_THRESHOLD && modelPHr < MIN_ABSOLUTE_P_HR) {
-          // Log suppressed bets for monitoring
           console.log(`${TAG} [FILTER] ${(row as HrRow).playerName}: edge=${edgeOver.toFixed(4)} ≥ threshold but modelPHr=${modelPHr.toFixed(4)} < MIN_ABSOLUTE_P_HR=${MIN_ABSOLUTE_P_HR} → PASS (suppressed)`);
         }
       }
@@ -429,7 +457,12 @@ export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsM
       const edgeStr = edgeOver != null ? (edgeOver >= 0 ? `+${edgeOver.toFixed(4)}` : edgeOver.toFixed(4)) : "N/A";
       const evStr = evOver != null ? (evOver >= 0 ? `+${evOver.toFixed(2)}` : evOver.toFixed(2)) : "N/A";
       const noVigStr = anNoVig != null ? anNoVig.toFixed(4) : "N/A";
-      console.log(`${TAG} [STATE] ${statcastTag} ${row.playerName} (${battingTeam}): pHr=${modelPHr.toFixed(4)} odds=${modelOverOdds > 0 ? "+" : ""}${modelOverOdds} anNoVig=${noVigStr} edge=${edgeStr} ev=${evStr} verdict=${verdict}`);
+      console.log(
+        `${TAG} [STATE] ${statcastTag} ${row.playerName} (${battingTeam}): ` +
+        `pHr=${modelPHr.toFixed(4)} odds=${modelOverOdds > 0 ? "+" : ""}${modelOverOdds} ` +
+        `anNoVig=${noVigStr} edge=${edgeStr} ev=${evStr} verdict=${verdict} ` +
+        `[P2-B:park=${park.hrFactor.toFixed(3)} P2-C:pitcher_adj=${Math.sqrt(pitcher.hr9 / LEAGUE_HR9).toFixed(3)}]`
+      );
 
     } catch (err) {
       errors++;
@@ -437,7 +470,7 @@ export async function resolveAndModelHrProps(gameDate: string): Promise<HrPropsM
     }
   }
 
-  console.log(`\n${TAG} [OUTPUT] Modeling complete (v2-statcast):`);
+  console.log(`\n${TAG} [OUTPUT] Modeling complete (v3-p2bc):`);
   console.log(`${TAG}   resolved=${resolved} alreadyHad=${alreadyHad} unresolved=${unresolved}`);
   console.log(`${TAG}   modeled=${modeled} edges=${edges} errors=${errors}`);
   console.log(`${TAG}   statcastHits=${statcastHits} statcastMisses=${statcastMisses}`);

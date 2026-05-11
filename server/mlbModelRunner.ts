@@ -24,7 +24,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { games, mlbPitcherStats, mlbPitcherRolling5, mlbTeamBattingSplits, mlbParkFactors, mlbBullpenStats, mlbUmpireModifiers, mlbLineups } from "../drizzle/schema";
+import { games, mlbPitcherStats, mlbPitcherRolling5, mlbTeamBattingSplits, mlbParkFactors, mlbBullpenStats, mlbUmpireModifiers, mlbLineups, mlbPlayers } from "../drizzle/schema";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -280,6 +280,8 @@ interface MlbModelResult {
   inning_p_home_scores: number[];  // [I1..I9] P(home scores >= 1)
   inning_p_away_scores: number[];  // [I1..I9] P(away scores >= 1)
   inning_p_neither_score: number[];// [I1..I9] P(neither scores) = NRFI per inning
+  // P1-A: Weather adjustment
+  weather_run_adj: number;            // weather_run_adj from get_environment_features (1.0 = neutral)
   // Meta
   simulations: number;
   elapsed_sec: number;
@@ -952,6 +954,275 @@ interface EngineInput {
   home_team_nrfi: number | null;       // home team 3yr NRFI rate (null = auto-lookup in Python)
   away_f5_rs: number | null;           // away team 3yr F5 RS mean (null = auto-lookup in Python)
   home_f5_rs: number | null;           // home team 3yr F5 RS mean (null = auto-lookup in Python)
+  // ── Weather dict (parsed from mlbLineups.weatherTemp/Wind/Dome) ───────────────────────────────
+  weather: {
+    temp_f: number;          // parsed from "72°F" or "72" strings
+    wind_speed_mph: number;  // parsed from "15 mph Out to CF" etc.
+    wind_dir: string;        // "out", "in", "calm", "cross", "unknown"
+    dome: boolean;           // true = retractable/fixed dome (weather irrelevant)
+  } | null;
+  // ── Confirmed lineup Statcast aggregates (weighted by batting order position) ──
+  away_lineup_statcast: {
+    barrel_rate: number;  // weighted avg barrel% across confirmed lineup
+    iso: number;          // weighted avg ISO
+    hard_hit: number;     // weighted avg hard-hit%
+    n_players: number;    // number of players with Statcast data
+  } | null;
+  home_lineup_statcast: {
+    barrel_rate: number;
+    iso: number;
+    hard_hit: number;
+    n_players: number;
+  } | null;
+  // ── P4-A: Per-player batting order array (9 slots, sorted by battingOrder) ──
+  // Each slot: { barrel_rate, iso, hard_hit, bats } for that batting order position.
+  // When confirmed lineup is available, Python builds a per-player lineup array
+  // instead of replicating the team-average feature dict 9 times.
+  away_lineup_order: Array<{
+    barrel_rate: number;
+    iso: number;
+    hard_hit: number;
+    bats: string; // 'R' | 'L' | 'S'
+  }> | null;
+  home_lineup_order: Array<{
+    barrel_rate: number;
+    iso: number;
+    hard_hit: number;
+    bats: string;
+  }> | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P1-A: WEATHER PARSING HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * parseWeatherTemp: Extract numeric temperature from Rotowire weather string.
+ * Handles: "72°F", "72 F", "72", "72°", null/undefined.
+ * Returns 72.0 (league-average neutral) if parsing fails.
+ */
+export function parseWeatherTemp(raw: string | null | undefined): number {
+  if (!raw) return 72.0;
+  // Remove degree symbol, F/C suffix, whitespace
+  const cleaned = raw.replace(/°/g, '').replace(/[FC]/gi, '').trim();
+  const val = parseFloat(cleaned);
+  if (isNaN(val) || val < 20 || val > 120) return 72.0; // sanity bounds
+  return val;
+}
+
+/**
+ * parseWeatherWind: Extract wind speed (mph) and direction from Rotowire wind string.
+ * Handles: "15 mph Out to CF", "10 mph In from LF", "Calm", "5 mph L to R",
+ *          "12 mph R to L", null/undefined.
+ * Returns { speed: 0, dir: 'calm' } if parsing fails.
+ *
+ * Direction classification:
+ *   'out'   = wind blowing out to CF/LF/RF (HR-boosting)
+ *   'in'    = wind blowing in from CF/LF/RF (HR-suppressing)
+ *   'calm'  = calm / < 3 mph
+ *   'cross' = L to R, R to L (minimal HR effect)
+ *   'unknown' = unrecognized pattern
+ */
+export function parseWeatherWind(raw: string | null | undefined): { speed: number; dir: string } {
+  if (!raw) return { speed: 0, dir: 'calm' };
+  const lower = raw.toLowerCase().trim();
+  if (lower === 'calm' || lower === '0' || lower.startsWith('calm')) return { speed: 0, dir: 'calm' };
+  // Extract speed: first numeric token
+  const speedMatch = lower.match(/(\d+(?:\.\d+)?)\s*mph/);
+  const speed = speedMatch ? parseFloat(speedMatch[1]) : 0;
+  // Classify direction
+  let dir = 'unknown';
+  if (lower.includes('out to') || lower.includes('out from') || lower.includes('out cf') ||
+      lower.includes('out lf') || lower.includes('out rf') || lower.includes('blowing out')) {
+    dir = 'out';
+  } else if (lower.includes('in from') || lower.includes('in to') || lower.includes('in cf') ||
+             lower.includes('in lf') || lower.includes('in rf') || lower.includes('blowing in')) {
+    dir = 'in';
+  } else if (lower.includes('l to r') || lower.includes('left to right') ||
+             lower.includes('r to l') || lower.includes('right to left')) {
+    dir = 'cross';
+  } else if (speed < 3) {
+    dir = 'calm';
+  }
+  return { speed, dir };
+}
+
+/**
+ * buildWeatherDict: Compose the full weather dict for Python project_game().
+ * If dome=true, returns null (Python uses park-only factors, no weather adj).
+ */
+export function buildWeatherDict(
+  weatherTemp: string | null | undefined,
+  weatherWind: string | null | undefined,
+  weatherDome: boolean | null | undefined,
+): EngineInput['weather'] {
+  // Dome games: weather irrelevant — pass null so Python skips weather_run_adj
+  if (weatherDome === true) return null;
+  const temp_f = parseWeatherTemp(weatherTemp);
+  const { speed: wind_speed_mph, dir: wind_dir } = parseWeatherWind(weatherWind);
+  return { temp_f, wind_speed_mph, wind_dir, dome: false };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P1-B: LINEUP STATCAST AGGREGATION HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * LINEUP_POSITION_WEIGHTS: batting order positional PA weight.
+ * Positions 1-3 get more PA per game than 7-9.
+ * Source: empirical MLB PA distribution by batting order slot (2023-2025).
+ */
+const LINEUP_POSITION_WEIGHTS = [0.130, 0.125, 0.122, 0.118, 0.115, 0.110, 0.105, 0.100, 0.075];
+
+/**
+ * aggregateLineupStatcast: Compute batting-order-weighted Statcast averages
+ * from a confirmed lineup's individual player data.
+ *
+ * @param lineupJson  JSON string from mlbLineups.awayLineup / homeLineup
+ * @param playerMap   Map<mlbamId, { iso, barrelPct, hardHitPct }> from mlbPlayers
+ * @param tag         Logging tag (e.g. "[1234] AWAY")
+ * @returns Weighted averages or null if < MIN_PLAYERS_WITH_DATA players have Statcast data
+ */
+export function aggregateLineupStatcast(
+  lineupJson: string | null | undefined,
+  playerMap: Map<number, { iso: number | null; barrelPct: number | null; hardHitPct: number | null }>,
+  tag: string,
+): EngineInput['away_lineup_statcast'] {
+  const MIN_PLAYERS_WITH_DATA = 5; // require at least 5 of 9 players to have Statcast data
+  if (!lineupJson) {
+    console.log(`${tag} [LINEUP-STATCAST] No lineup JSON — using team averages`);
+    return null;
+  }
+  let lineup: Array<{ battingOrder: number; mlbamId: number | null }> = [];
+  try {
+    lineup = JSON.parse(lineupJson);
+  } catch {
+    console.log(`${tag} [LINEUP-STATCAST] JSON parse error — using team averages`);
+    return null;
+  }
+  if (!Array.isArray(lineup) || lineup.length < 7) {
+    console.log(`${tag} [LINEUP-STATCAST] Lineup has ${lineup.length} players (< 7) — using team averages`);
+    return null;
+  }
+  // Sort by battingOrder ascending
+  const sorted = [...lineup].sort((a, b) => (a.battingOrder ?? 9) - (b.battingOrder ?? 9));
+  let weightedBarrel = 0, weightedIso = 0, weightedHardHit = 0;
+  let totalWeight = 0;
+  let nWithData = 0;
+  for (let i = 0; i < Math.min(sorted.length, 9); i++) {
+    const player = sorted[i];
+    const w = LINEUP_POSITION_WEIGHTS[i] ?? 0.075;
+    const stats = player.mlbamId ? playerMap.get(player.mlbamId) : undefined;
+    if (!stats || (stats.iso == null && stats.barrelPct == null && stats.hardHitPct == null)) {
+      // No Statcast data for this player — use league averages as placeholder
+      weightedBarrel  += w * 8.3;   // LEAGUE_BARREL
+      weightedIso     += w * 0.150; // LEAGUE_ISO
+      weightedHardHit += w * 37.5;  // LEAGUE_HARDHIT
+    } else {
+      weightedBarrel  += w * (stats.barrelPct  ?? 8.3);
+      weightedIso     += w * (stats.iso        ?? 0.150);
+      weightedHardHit += w * (stats.hardHitPct ?? 37.5);
+      nWithData++;
+    }
+    totalWeight += w;
+  }
+  if (nWithData < MIN_PLAYERS_WITH_DATA) {
+    console.log(`${tag} [LINEUP-STATCAST] Only ${nWithData}/${sorted.length} players have Statcast data (< ${MIN_PLAYERS_WITH_DATA}) — using team averages`);
+    return null;
+  }
+  const result = {
+    barrel_rate: weightedBarrel  / totalWeight,
+    iso:         weightedIso     / totalWeight,
+    hard_hit:    weightedHardHit / totalWeight,
+    n_players:   nWithData,
+  };
+  console.log(
+    `${tag} [LINEUP-STATCAST] n=${nWithData}/${sorted.length} ` +
+    `barrel=${result.barrel_rate.toFixed(2)}% iso=${result.iso.toFixed(3)} ` +
+    `hard_hit=${result.hard_hit.toFixed(1)}%`
+  );
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P4-A: PER-PLAYER BATTING ORDER BUILDER
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * buildLineupOrder: Build a per-player batting order array (9 slots) from a
+ * confirmed lineup JSON + playerStatcastMap.
+ *
+ * Each slot corresponds to batting order position 1-9 and contains:
+ *   { barrel_rate, iso, hard_hit, bats }
+ *
+ * For players without Statcast data, league averages are used as fallback.
+ * Returns null if < 7 players are in the lineup JSON.
+ *
+ * This enables the Python engine to build a TRUE per-player lineup array
+ * instead of replicating the team-average feature dict 9 times.
+ *
+ * @param lineupJson  JSON string from mlbLineups.awayLineup / homeLineup
+ * @param playerMap   Map<mlbamId, { iso, barrelPct, hardHitPct }> from mlbPlayers
+ * @param tag         Logging tag (e.g. "[1234] AWAY")
+ */
+export function buildLineupOrder(
+  lineupJson: string | null | undefined,
+  playerMap: Map<number, { iso: number | null; barrelPct: number | null; hardHitPct: number | null }>,
+  tag: string,
+): EngineInput['away_lineup_order'] {
+  // League averages (2025)
+  const LEAGUE_BARREL = 8.3;
+  const LEAGUE_ISO = 0.150;
+  const LEAGUE_HARD_HIT = 37.5;
+
+  if (!lineupJson) {
+    console.log(`${tag} [LINEUP-ORDER] No lineup JSON — skipping per-player order`);
+    return null;
+  }
+  let lineup: Array<{ battingOrder: number; mlbamId: number | null; bats?: string }> = [];
+  try {
+    lineup = JSON.parse(lineupJson);
+  } catch {
+    console.log(`${tag} [LINEUP-ORDER] JSON parse error — skipping per-player order`);
+    return null;
+  }
+  if (!Array.isArray(lineup) || lineup.length < 7) {
+    console.log(`${tag} [LINEUP-ORDER] Lineup has ${lineup.length} players (< 7) — skipping`);
+    return null;
+  }
+  // Sort by battingOrder ascending (1-9)
+  const sorted = [...lineup].sort((a, b) => (a.battingOrder ?? 9) - (b.battingOrder ?? 9));
+  const result: Array<{ barrel_rate: number; iso: number; hard_hit: number; bats: string }> = [];
+  let nWithData = 0;
+
+  for (let i = 0; i < Math.min(sorted.length, 9); i++) {
+    const player = sorted[i];
+    const stats = player.mlbamId ? playerMap.get(player.mlbamId) : undefined;
+    if (stats && (stats.barrelPct != null || stats.iso != null || stats.hardHitPct != null)) {
+      result.push({
+        barrel_rate: stats.barrelPct ?? LEAGUE_BARREL,
+        iso:         stats.iso       ?? LEAGUE_ISO,
+        hard_hit:    stats.hardHitPct ?? LEAGUE_HARD_HIT,
+        bats:        player.bats ?? 'R',
+      });
+      nWithData++;
+    } else {
+      // Use league averages as fallback for this slot
+      result.push({
+        barrel_rate: LEAGUE_BARREL,
+        iso:         LEAGUE_ISO,
+        hard_hit:    LEAGUE_HARD_HIT,
+        bats:        player.bats ?? 'R',
+      });
+    }
+  }
+
+  // Pad to exactly 9 slots if lineup has fewer than 9 players
+  while (result.length < 9) {
+    result.push({ barrel_rate: LEAGUE_BARREL, iso: LEAGUE_ISO, hard_hit: LEAGUE_HARD_HIT, bats: 'R' });
+  }
+
+  console.log(
+    `${tag} [LINEUP-ORDER] Built per-player order: n=${nWithData}/${sorted.length} with Statcast data`
+  );
+  return result;
 }
 
 async function runPythonEngine(inputs: EngineInput[]): Promise<MlbModelResult[]> {
@@ -993,6 +1264,14 @@ for inp in inputs:
             home_team_nrfi=inp.get('home_team_nrfi'),
             away_f5_rs=inp.get('away_f5_rs'),
             home_f5_rs=inp.get('home_f5_rs'),
+            # P1-A: Weather dict (temp_f, wind_speed_mph, wind_dir, dome)
+            weather=inp.get('weather'),
+            # P1-B: Confirmed lineup Statcast aggregates (barrel_rate, iso, hard_hit, n_players)
+            away_lineup_statcast=inp.get('away_lineup_statcast'),
+            home_lineup_statcast=inp.get('home_lineup_statcast'),
+            # P4-A: Per-player batting order arrays (9 slots: barrel_rate, iso, hard_hit, bats)
+            away_lineup_order=inp.get('away_lineup_order'),
+            home_lineup_order=inp.get('home_lineup_order'),
             verbose=True,
         )
         r['db_id'] = inp['db_id']
@@ -1268,6 +1547,16 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
     startTimeEst:    games.startTimeEst,
     mlbGamePk:       games.mlbGamePk,
     modelRunAt:      games.modelRunAt,
+    // ── Weather data from mlb_lineups (Rotowire scraper) ──
+    weatherTemp:     mlbLineups.weatherTemp,
+    weatherWind:     mlbLineups.weatherWind,
+    weatherDome:     mlbLineups.weatherDome,
+    weatherPrecip:   mlbLineups.weatherPrecip,
+    // ── Batting lineup JSON arrays (for Statcast aggregation) ──
+    awayLineup:      mlbLineups.awayLineup,
+    homeLineup:      mlbLineups.homeLineup,
+    awayLineupConfirmed: mlbLineups.awayLineupConfirmed,
+    homeLineupConfirmed: mlbLineups.homeLineupConfirmed,
   }).from(games)
     .leftJoin(mlbLineups, eq(mlbLineups.gameId, games.id))
     .where(and(
@@ -1336,6 +1625,48 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
     `${TAG} [STATE] Signals loaded: parkFactors=${parkFactorMap.size}/${homeTeams.length} ` +
     `bullpens=${bullpenMap.size}/${allTeams.length} umpires=${umpireMap.size}/${gamePks.length}`
   );
+
+  // ── P1-B: Batch-fetch Statcast data for all players in today's lineups ─────────────────────────────────────────────────────────────────────────────
+  // Collect all mlbamIds from confirmed lineups for a single DB round-trip
+  const lineupMlbamIds = new Set<number>();
+  for (const g of modelable) {
+    for (const lineupJson of [g.awayLineup, g.homeLineup]) {
+      if (!lineupJson) continue;
+      try {
+        const lineup = JSON.parse(lineupJson) as Array<{ mlbamId?: number | null }>;
+        for (const p of lineup) {
+          if (p.mlbamId) lineupMlbamIds.add(p.mlbamId);
+        }
+      } catch { /* ignore parse errors */ }
+    }
+  }
+  // Build playerStatcastMap: mlbamId → { iso, barrelPct, hardHitPct }
+  const playerStatcastMap = new Map<number, { iso: number | null; barrelPct: number | null; hardHitPct: number | null }>();
+  if (lineupMlbamIds.size > 0) {
+    const mlbamIdArr = Array.from(lineupMlbamIds);
+    console.log(`${TAG} [P1-B] Fetching Statcast for ${mlbamIdArr.length} lineup players...`);
+    try {
+      const playerRows = await db.select({
+        mlbamId:    mlbPlayers.mlbamId,
+        iso:        mlbPlayers.iso,
+        barrelPct:  mlbPlayers.barrelPct,
+        hardHitPct: mlbPlayers.hardHitPct,
+      }).from(mlbPlayers)
+        .where(inArray(mlbPlayers.mlbamId, mlbamIdArr));
+      for (const row of playerRows) {
+        playerStatcastMap.set(row.mlbamId, {
+          iso:        row.iso        != null ? Number(row.iso)        : null,
+          barrelPct:  row.barrelPct  != null ? Number(row.barrelPct)  : null,
+          hardHitPct: row.hardHitPct != null ? Number(row.hardHitPct) : null,
+        });
+      }
+      console.log(`${TAG} [P1-B] Statcast loaded: ${playerStatcastMap.size}/${mlbamIdArr.length} players with data`);
+    } catch (err) {
+      console.error(`${TAG} [P1-B] Statcast fetch error (non-fatal, using team averages):`, err);
+    }
+  } else {
+    console.log(`${TAG} [P1-B] No lineup mlbamIds found — Statcast aggregation skipped`);
+  }
 
   // ── Step 3: Batch-fetch pitcher stats from DB, then build engine inputs ────────
   // Collect all unique pitcher/team pairs for a single DB round-trip
@@ -1539,6 +1870,35 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
           home_f5_rs:           null,
         };
       })(),
+      // ── P1-A: Weather dict (parsed from mlbLineups weather fields) ───────────────────────────────────────────────────────────────────────
+      weather: (() => {
+        const weatherDict = buildWeatherDict(g.weatherTemp, g.weatherWind, g.weatherDome);
+        console.log(
+          `${TAG} [${g.id}] WEATHER: ` +
+          `dome=${g.weatherDome ?? false} ` +
+          `temp=${g.weatherTemp ?? 'N/A'} → ${weatherDict?.temp_f ?? 'N/A'}°F ` +
+          `wind="${g.weatherWind ?? 'N/A'}" → speed=${weatherDict?.wind_speed_mph ?? 0}mph dir=${weatherDict?.wind_dir ?? 'N/A'} ` +
+          `precip=${g.weatherPrecip ?? 'N/A'} ` +
+          `adj=${weatherDict ? 'ACTIVE' : 'DOME/NULL'}`
+        );
+        return weatherDict;
+      })(),
+      // ── P1-B: Confirmed lineup Statcast aggregates (batting-order-weighted) ───────────────────────────────────────────────────────────────────────
+      away_lineup_statcast: (g.awayLineupConfirmed && g.awayLineup)
+        ? aggregateLineupStatcast(g.awayLineup, playerStatcastMap, `${TAG} [${g.id}] AWAY`)
+        : null,
+      home_lineup_statcast: (g.homeLineupConfirmed && g.homeLineup)
+        ? aggregateLineupStatcast(g.homeLineup, playerStatcastMap, `${TAG} [${g.id}] HOME`)
+        : null,
+      // ── P4-A: Per-player batting order arrays (9 slots, sorted by battingOrder) ─────────────────────────────────────────────────────────────────────────
+      // When confirmed lineup is available, build a per-player Statcast array so
+      // Python can construct a true heterogeneous lineup (not 9x team-average).
+      away_lineup_order: (g.awayLineupConfirmed && g.awayLineup)
+        ? buildLineupOrder(g.awayLineup, playerStatcastMap, `${TAG} [${g.id}] AWAY`)
+        : null,
+      home_lineup_order: (g.homeLineupConfirmed && g.homeLineup)
+        ? buildLineupOrder(g.homeLineup, playerStatcastMap, `${TAG} [${g.id}] HOME`)
+        : null,
     };
   });
 
@@ -1949,7 +2309,11 @@ export async function runMlbModelForDate(dateStr: string, opts?: { targetGameIds
           homePitcherConfirmed: true,
           publishedToFeed:      true,
           publishedModel:       true,
-          // ── 3-year NRFI pitcher signal ──────────────────────────────────────────────────────────────
+          // ── P1-A: Weather adjustment (stored for traceability and backtest) ───────────────────────────────────────────────────────────────────────────────────
+          modelWeatherAdj:      r.weather_run_adj != null ? String(r.weather_run_adj.toFixed(4)) : null,
+          // ── P2-D: Raw model projection total (pre-snap, for display alongside originated line) ───────────────────────────────────────────────────────────────────────────────────
+          modelProjTotal:       r.proj_total != null ? String(r.proj_total.toFixed(2)) : null,
+          // ── 3-year NRFI pitcher signal ─────────────────────────────────────────────────────────────────────────────────────
           nrfiCombinedSignal:   engineInputById.get(r.db_id)?.nrfi_combined_signal ?? null,
           nrfiFilterPass:       engineInputById.get(r.db_id)?.nrfi_filter_pass != null
                                   ? (engineInputById.get(r.db_id)!.nrfi_filter_pass ? 1 : 0)

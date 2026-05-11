@@ -486,6 +486,23 @@ export const games = mysqlTable("games", {
   modelInningPNeitherScores: text("modelInningPNeitherScores"),
 
   /**
+   * Raw Monte Carlo projection total (proj_away_runs + proj_home_runs) BEFORE snapping to
+   * a key number. This is the model's true expected total, distinct from modelTotal which
+   * is anchored to the book O/U line for originated-line display.
+   * e.g. 8.73 means the model projects 8.73 combined runs before line selection.
+   * Precision 6,2 allows values like 8.73, 10.42, 6.08.
+   */
+  modelProjTotal: decimal("modelProjTotal", { precision: 6, scale: 2 }),
+
+  /**
+   * Weather run-factor adjustment applied by the Python engine for this game.
+   * 1.0 = neutral (dome or no weather data). >1.0 = run-boosting conditions.
+   * Stored for traceability and backtest analysis.
+   * Precision 5,4 allows values like 1.0120, 0.9880.
+   */
+  modelWeatherAdj: decimal("modelWeatherAdj", { precision: 5, scale: 4 }),
+
+  /**
    * Tracks the source of the current primary book columns (awayBookSpread, homeBookSpread,
    * bookTotal, awayML, homeML, awaySpreadOdds, homeSpreadOdds, overOdds, underOdds).
    *
@@ -1265,6 +1282,13 @@ export const mlbParkFactors = mysqlTable("mlb_park_factors", {
   avgRpg2026: double("avgRpg2026"),
   pf2026: double("pf2026"),
   parkFactor3yr: double("parkFactor3yr").notNull(),
+  /**
+   * HR-specific park factor (separate from run-factor).
+   * Derived from PARK_FACTORS[team]['hr'] / 100.0 in MLBAIModel.py.
+   * e.g. COL=1.28, SF=0.88, CIN=1.15. Neutral=1.00.
+   * Used exclusively by the HR Props model (mlbHrPropsModelService.ts).
+   */
+  hrFactor: double("hrFactor"),
   leagueAvgRpg: double("leagueAvgRpg"),
   lastFetchedAt: bigint("lastFetchedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
