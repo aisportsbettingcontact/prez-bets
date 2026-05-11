@@ -50,6 +50,14 @@ const MIN_EDGE_THRESHOLD    = 0.05;   // minimum edge vs book no-vig prob to act
 // NOTE: ML/RL markets use edge-based confidence (modelProb - bookNoVigProb >= MIN_EDGE_THRESHOLD)
 // because away ML base rate is ~44.75% — raw prob threshold of 0.65 would never fire for away bets.
 // Totals/NRFI use raw probability threshold since they are symmetric markets.
+//
+// FG RL Away market-specific threshold:
+// The fg_ml_home_edge (+0.03) calibration correction inflates away +1.5 cover probability on
+// ~81% of games, pushing nearly every game above the 5% edge threshold. This is a systematic
+// model bias artifact, not a genuine edge. Raising to 18% concentrates action on games where
+// the model has a structural advantage (away team meaningfully better than the line implies).
+// Backtest target: action rate ~15-25%, accuracy >= 58%.
+const FG_RL_AWAY_EDGE_THRESHOLD = 0.18;  // raised from 0.05 — market-specific, see comment above
 const DRIFT_SIGMA_THRESHOLD = 2.0;   // standard deviations to trigger recalibration
 const MIN_SAMPLE_FOR_DRIFT  = 20;    // minimum samples before drift detection fires
 
@@ -319,7 +327,9 @@ function evaluateFgRl(game: GameRow): BacktestResult[] {
     const pAwayRl = pAwayRlRaw / 100;
     const edge = calcEdge(pAwayRl, nvAwayRl);
     const ev   = calcEV(pAwayRl, bookAwayRlOdds);
-    const conf = edge !== null && edge >= MIN_EDGE_THRESHOLD;
+    // Use FG_RL_AWAY_EDGE_THRESHOLD (18%) — raised from global 5% to filter out
+    // systematic home-edge correction bias. See constant definition for full rationale.
+    const conf = edge !== null && edge >= FG_RL_AWAY_EDGE_THRESHOLD;
     const result = !conf ? "NO_ACTION"
       : isPush ? "PUSH"
       : awayCovers ? "WIN" : "LOSS";
@@ -330,7 +340,7 @@ function evaluateFgRl(game: GameRow): BacktestResult[] {
       bookNoVigProb: nvAwayRl, edge, ev, confidencePassed: conf,
       result, correct: result === "WIN" ? true : result === "LOSS" ? false : null,
       actualValue: `margin=${margin}`,
-      notes: `P(away RL +1.5)=${pAwayRl.toFixed(4)} margin=${margin} covers=${awayCovers} book=${bookAwayRlOdds}`,
+      notes: `P(away RL +1.5)=${pAwayRl.toFixed(4)} edge=${edge?.toFixed(4)} threshold=${FG_RL_AWAY_EDGE_THRESHOLD} margin=${margin} covers=${awayCovers} book=${bookAwayRlOdds}`,
     });
   }
 

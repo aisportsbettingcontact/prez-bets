@@ -100,9 +100,12 @@ function evalFgMl(game, edgeThresh) {
   return results;
 }
 
-function evalFgRl(game, edgeThresh) {
+function evalFgRl(game, edgeThresh, awayEdgeThresh) {
   // FG RL: use model score differential to determine RL cover probability
   // modelAwayPLCoverPct/modelHomePLCoverPct are NULL for all games — derive from scores
+  // awayEdgeThresh (optional) overrides edgeThresh for the fg_rl_away market only.
+  // Set to 18% to filter out systematic home-edge correction bias.
+  const awayThresh = awayEdgeThresh ?? edgeThresh;
   const results = [];
   const ah = parseNum(game.actualHomeScore), aa = parseNum(game.actualAwayScore);
   if (ah === null || aa === null) return [];
@@ -140,10 +143,11 @@ function evalFgRl(game, edgeThresh) {
   if (bookAwayRl !== null) {
     const edge = calcEdge(pAwayRl, nvAwayRl);
     const ev = calcEV(pAwayRl, bookAwayRl);
-    const conf = edge !== null && edge >= edgeThresh;
+    // Use awayThresh (18%) instead of global edgeThresh (5%) to filter home-edge bias
+    const conf = edge !== null && edge >= awayThresh;
     const result = !conf ? 'NO_ACTION' : awayCovers ? 'WIN' : 'LOSS';
     results.push({ market: 'fg_rl_away', modelProb: pAwayRl, edge, ev, result, bookOdds: bookAwayRl,
-      notes: `modelMargin=${modelMargin.toFixed(2)} actual=${margin} awayCovers=${awayCovers} edge=${edge?.toFixed(4)}` });
+      notes: `modelMargin=${modelMargin.toFixed(2)} actual=${margin} awayCovers=${awayCovers} edge=${edge?.toFixed(4)} threshold=${awayThresh}` });
   }
   return results;
 }
@@ -380,6 +384,10 @@ async function main() {
   console.log(`\n${TAG} [STEP 2] Evaluating all markets...`);
 
   const EDGE_THRESH = 0.05;
+  // FG RL Away uses a higher threshold (18%) to filter out systematic home-edge correction
+  // bias that inflates away +1.5 cover probability on ~81% of games.
+  // See mlbMultiMarketBacktest.ts FG_RL_AWAY_EDGE_THRESHOLD for full rationale.
+  const FG_RL_AWAY_EDGE_THRESH = 0.18;
   const PROB_THRESH = 0.65;
   const NRFI_THRESH = 0.52;
   const F5_THRESH   = 0.60;
@@ -397,7 +405,7 @@ async function main() {
   for (const game of gameRows) {
     for (const r of [
       ...evalFgMl(game, EDGE_THRESH),
-      ...evalFgRl(game, EDGE_THRESH),
+      ...evalFgRl(game, EDGE_THRESH, FG_RL_AWAY_EDGE_THRESH),
       ...evalFgTotal(game, PROB_THRESH),
       ...evalF5Ml(game, EDGE_THRESH),
       ...evalF5Rl(game, EDGE_THRESH),

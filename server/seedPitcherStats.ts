@@ -1,7 +1,7 @@
 /**
  * seedPitcherStats.ts
  *
- * Fetches 2025 MLB season pitching stats for all active starters (GS >= 1, IP >= 10)
+ * Fetches 2026 MLB season pitching stats for all active starters (GS >= 1, IP >= 10)
  * from the MLB Stats API and upserts them into the mlb_pitcher_stats table.
  *
  * Can be run manually:
@@ -10,7 +10,7 @@
  * Or called programmatically from the cron scheduler.
  *
  * MLB Stats API endpoint:
- *   https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&season=2025
+ *   https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&season=2026
  *     &playerPool=All&limit=1000&fields=...
  *
  * Upsert key: (mlbamId, teamAbbrev)
@@ -113,13 +113,13 @@ function parseIP(val: string | undefined | null): number | null {
  * individual lookups are performed here.
  */
 async function fetchMlbPitchingStats(): Promise<PitcherRecord[]> {
-  console.log("[STEP] Fetching 2025 MLB pitching stats from MLB Stats API...");
+  console.log("[STEP] Fetching 2026 MLB pitching stats from MLB Stats API...");
 
   const url =
     "https://statsapi.mlb.com/api/v1/stats" +
     "?stats=season" +
     "&group=pitching" +
-    "&season=2025" +
+    "&season=2026" +
     "&playerPool=All" +
     "&limit=2000" +
     "&fields=stats,splits,player,id,fullName,team,id,name,stat,era,strikeoutsPer9Inn,walksPer9Inn,homeRunsPer9,whip,inningsPitched,gamesStarted,gamesPlayed";
@@ -257,7 +257,7 @@ async function upsertPitcherStats(records: PitcherRecord[]): Promise<{ inserted:
  * Returns summary stats for logging.
  */
 export async function seedPitcherStats(): Promise<{ total: number; inserted: number; updated: number; errors: number }> {
-  console.log("[INPUT] Starting pitcher stats seed/refresh for 2025 season");
+  console.log("[INPUT] Starting pitcher stats seed/refresh for 2026 season");
 
   const records = await fetchMlbPitchingStats();
 

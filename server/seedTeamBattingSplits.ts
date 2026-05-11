@@ -1,11 +1,11 @@
 /**
  * seedTeamBattingSplits.ts
  *
- * Fetches 2025 team batting splits (vs LHP and vs RHP) for all 30 MLB teams
+ * Fetches 2026 team batting splits (vs LHP and vs RHP) for all 30 MLB teams
  * and upserts them into the mlb_team_batting_splits table.
  *
  * Data source:
- *   GET /api/v1/teams/{teamId}/stats?stats=statSplits&group=hitting&season=2025&sitCodes=vl,vr
+ *   GET /api/v1/teams/{teamId}/stats?stats=statSplits&group=hitting&season=2026&sitCodes=vl,vr
  *   sitCode 'vl' = vs Left-Handed Pitchers
  *   sitCode 'vr' = vs Right-Handed Pitchers
  *
@@ -15,7 +15,7 @@
  *   k9   = K  / AB * 27   (strikeouts per 9 innings equivalent)
  *   woba = (0.69*BB + 0.888*1B + 1.271*2B + 1.616*3B + 2.101*HR) / (AB + BB)
  *          Note: 1B = H - 2B - 3B - HR (singles)
- *          wOBA weights from FanGraphs 2025 linear weights
+ *          wOBA weights from FanGraphs 2026 linear weights
  *
  * Execution model:
  *   - Fetches all 30 teams in parallel (concurrency=10)
@@ -67,7 +67,7 @@ const MLB_TEAMS: Array<{ id: number; abbrev: string; name: string }> = [
   { id: 120, abbrev: "WSH", name: "Washington Nationals" },
 ];
 
-// ─── wOBA Weights (FanGraphs 2025 linear weights) ────────────────────────────
+// ─── wOBA Weights (FanGraphs 2026 linear weights) ────────────────────────────
 const WOBA_WEIGHTS = {
   bb:  0.690,
   hbp: 0.722,
@@ -126,7 +126,7 @@ async function fetchTeamBattingSplits(teamId: number, teamAbbrev: string, teamNa
   hand: string;
   stat: Record<string, any>;
 }>> {
-  const url = `https://statsapi.mlb.com/api/v1/teams/${teamId}/stats?stats=statSplits&group=hitting&season=2025&sitCodes=vl,vr`;
+  const url = `https://statsapi.mlb.com/api/v1/teams/${teamId}/stats?stats=statSplits&group=hitting&season=2026&sitCodes=vl,vr`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} for team ${teamAbbrev} (${teamId})`);
   const data = await res.json();
@@ -170,7 +170,7 @@ export async function seedTeamBattingSplits(): Promise<{
   const now = Date.now();
 
   console.log("[INPUT] Starting team batting splits seed for all 30 MLB teams...");
-  console.log(`[STATE] Season: 2025 | sitCodes: vl (vs LHP), vr (vs RHP)`);
+  console.log(`[STATE] Season: 2026 | sitCodes: vl (vs LHP), vr (vs RHP)`);
   console.log(`[STATE] wOBA weights: BB=${WOBA_WEIGHTS.bb} 1B=${WOBA_WEIGHTS.s1b} 2B=${WOBA_WEIGHTS.d2b} 3B=${WOBA_WEIGHTS.t3b} HR=${WOBA_WEIGHTS.hr}`);
 
   const rowsToUpsert: Array<{

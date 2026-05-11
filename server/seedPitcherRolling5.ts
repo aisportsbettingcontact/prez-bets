@@ -6,7 +6,7 @@
  * and upserts into mlb_pitcher_rolling5.
  *
  * Data source:
- *   GET /api/v1/people/{id}/stats?stats=gameLog&group=pitching&season=2025
+ *   GET /api/v1/people/{id}/stats?stats=gameLog&group=pitching&season=2026
  *   Filters to entries where stat.gamesStarted >= 1 (GS only, not relief)
  *   Takes the last 5 chronologically
  *
@@ -18,7 +18,7 @@
  *   whip5 = (H5 + BB5) / IP5
  *   fip5  = (13*HR5 + 3*BB5 - 2*K5) / IP5 + FIP_CONSTANT
  *
- * FIP constant: 3.10 (standard MLB league-average FIP constant for 2025)
+ * FIP constant: 3.10 (standard MLB league-average FIP constant for 2026)
  *
  * IP parsing: "6.1" = 6 + 1/3 = 6.333..., "6.2" = 6 + 2/3 = 6.667...
  *
@@ -39,7 +39,7 @@ import { mlbPitcherStats, mlbPitcherRolling5 } from "../drizzle/schema";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Standard FIP constant (league-average ERA minus FIP components, 2025 estimate) */
+/** Standard FIP constant (league-average ERA minus FIP components, 2026 estimate) */
 const FIP_CONSTANT = 3.10;
 
 /** Number of starts in the rolling window */
@@ -153,7 +153,7 @@ function computeRolling5(starts: GameLogEntry[]): Rolling5Result {
 // ─── MLB API Fetch ────────────────────────────────────────────────────────────
 
 async function fetchGameLog(mlbamId: number): Promise<GameLogEntry[]> {
-  const url = `https://statsapi.mlb.com/api/v1/people/${mlbamId}/stats?stats=gameLog&group=pitching&season=2025`;
+  const url = `https://statsapi.mlb.com/api/v1/people/${mlbamId}/stats?stats=gameLog&group=pitching&season=2026`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
@@ -247,7 +247,7 @@ export async function seedPitcherRolling5(): Promise<{
 
       if (rolling.startsIncluded === 0) {
         noStarts++;
-        console.log(`${prefix} — ⚠ No starts found in 2025 game log`);
+        console.log(`${prefix} — ⚠ No starts found in 2026 game log`);
       } else {
         console.log(
           `${prefix} — ✓ ${rolling.startsIncluded} starts | ` +

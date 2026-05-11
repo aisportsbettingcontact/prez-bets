@@ -5,7 +5,7 @@
  * already in the mlb_pitcher_stats table, then upserts those fields.
  *
  * Data sources:
- *   - Sabermetrics: GET /api/v1/people/{id}/stats?stats=sabermetrics&group=pitching&season=2025
+ *   - Sabermetrics: GET /api/v1/people/{id}/stats?stats=sabermetrics&group=pitching&season=2026
  *   - Handedness:   GET /api/v1/people/{id}
  *
  * Execution model:
@@ -151,14 +151,14 @@ export async function seedPitcherSabermetrics(): Promise<{
     try {
       // Fetch both in parallel
       const [saber, hand] = await Promise.all([
-        fetchSabermetrics(mlbamId, 2025),
+        fetchSabermetrics(mlbamId, 2026),
         fetchThrowsHand(mlbamId),
       ]);
 
       const hasSaber = saber.fip !== null || saber.xfip !== null;
       if (!hasSaber) {
         noSaberData++;
-        console.log(`${prefix} — ⚠ No 2025 sabermetrics data`);
+        console.log(`${prefix} — ⚠ No 2026 sabermetrics data`);
       } else {
         console.log(`${prefix} — ✓ FIP=${saber.fip?.toFixed(2)} xFIP=${saber.xfip?.toFixed(2)} FIP-=${saber.fipMinus?.toFixed(1)} ERA-=${saber.eraMinus?.toFixed(1)} WAR=${saber.war?.toFixed(2)} hand=${hand}`);
       }
