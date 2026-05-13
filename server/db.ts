@@ -995,9 +995,11 @@ export async function updateAnOdds(
      */
     oddsSource?: 'open' | 'dk' | null;
   }
-): Promise<void> {
+): Promise<{ layer3Fired: boolean; gameId: number; gameDate: string | null }> {
   const db = await getDb();
-  if (!db) return;
+  if (!db) return { layer3Fired: false, gameId: id, gameDate: null };
+  let _layer3Fired = false;
+  let _layer3GameDate: string | null = null;
   const updateData: Record<string, unknown> = {};
   // Open lines
   if (data.openAwaySpread !== undefined) updateData.openAwaySpread = data.openAwaySpread;
@@ -1104,6 +1106,13 @@ export async function updateAnOdds(
             // ML direction contradicts model spread direction — model ran with wrong RL sign.
             // Clear modelRunAt to force model re-run with correct ML-aligned rl_home_spread.
             updateData.modelRunAt = null;
+            // Signal to caller that LAYER3 fired — caller will trigger immediate re-run.
+            _layer3Fired = true;
+            // Capture gameDate for immediate re-run trigger at call site (non-fatal if fails)
+            try {
+              const dateRow = await db.select({ gameDate: games.gameDate }).from(games).where(eq(games.id, id)).limit(1);
+              _layer3GameDate = dateRow[0]?.gameDate ?? null;
+            } catch { /* non-fatal — caller falls back to 5-min cycle */ }
             // Also flip awayModelSpread/homeModelSpread so display is correct immediately.
             const correctedAway = mlSaysAwayIsFav ? -Math.abs(currentModelAway) : Math.abs(currentModelAway);
             const correctedHome = -correctedAway;
@@ -1112,7 +1121,8 @@ export async function updateAnOdds(
             console.error(
               `[updateAnOdds][LAYER3_ML_GUARD] id=${id} — awayML=${newAwayML} contradicts awayModelSpread=${currentModelAway}. ` +
               `ML says away ${mlSaysAwayIsFav ? 'IS' : 'is NOT'} fav but model spread says away ${mdlSaysAwayIsFav ? 'IS' : 'is NOT'} fav. ` +
-              `CLEARING modelRunAt + CORRECTING awayModelSpread=${updateData.awayModelSpread} homeModelSpread=${updateData.homeModelSpread}`
+              `CLEARING modelRunAt + CORRECTING awayModelSpread=${updateData.awayModelSpread} homeModelSpread=${updateData.homeModelSpread} ` +
+              `→ IMMEDIATE RE-RUN will be triggered by caller (gameDate=${_layer3GameDate ?? 'unknown'})`
             );
           }
         }
@@ -1151,8 +1161,9 @@ export async function updateAnOdds(
     }
   }
 
-  if (Object.keys(updateData).length === 0) return;
+  if (Object.keys(updateData).length === 0) return { layer3Fired: _layer3Fired, gameId: id, gameDate: _layer3GameDate };
   await db.update(games).set(updateData).where(eq(games.id, id));
+  return { layer3Fired: _layer3Fired, gameId: id, gameDate: _layer3GameDate };
 }
 
 // ─── Odds History helpers ─────────────────────────────────────────────────────

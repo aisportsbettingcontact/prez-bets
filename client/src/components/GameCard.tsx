@@ -650,12 +650,14 @@ interface DesktopMergedPanelProps {
     modelHomePLOdds?: string | null;
     modelOverOdds?: string | null;
     modelUnderOdds?: string | null;
-    // Model fair odds at derived model spread/total line
+     // Model fair odds at derived model spread/total line
     modelAwaySpreadOdds?: string | null;
     modelHomeSpreadOdds?: string | null;
+    // Model validity guard: null means model was invalidated or not yet run
+    // Stored as Unix timestamp (ms) in DB, hence number | null
+    modelRunAt?: number | null;
   };
 }
-
 function DesktopMergedPanel({
   awayBookSpread: awaySpread,
   homeBookSpread: homeSpread,
@@ -733,8 +735,10 @@ function DesktopMergedPanel({
   const awayAbbr = colors?.away?.abbrev ?? (awayDisplayName ?? '');
   const homeAbbr = colors?.home?.abbrev ?? (homeDisplayName ?? '');
 
-  // ── Book / Model value strings ────────────────────────────────────────────
-  const hasModelData = !isNaN(mdlAwaySpread) || !isNaN(mdlTotal) || (modelAwayML != null && modelAwayML !== '—');
+  // ── Book / Model value strings ──────────────────────────────────────────────────────────────────────
+  // game.modelRunAt=null means model was invalidated (e.g. ML direction flip) or not yet run.
+  // Gate hasModelData behind it so stale model values never render during the re-run window.
+  const hasModelData = (game.modelRunAt != null) && (!isNaN(mdlAwaySpread) || !isNaN(mdlTotal) || (modelAwayML != null && modelAwayML !== '—'));
 
   // Spread odds in parentheses, e.g. "+1.5 (-225)" / "-1.5 (+185)"
   // Only append odds when they exist; omit if null (standard -110 assumed)
@@ -1639,6 +1643,12 @@ interface OddsLinesPanelProps {
   // AUTHORITATIVE edge direction — computed once at GameCard level, passed down
   authSpreadEdgeIsAway: boolean | null;
   authTotalEdgeIsOver: boolean | null;
+  /**
+   * True when modelRunAt is non-null (model has been run and result is valid).
+   * When false (model invalidated or not yet run), all MODEL columns show '—'
+   * to prevent stale/wrong model data from being displayed during re-run window.
+   */
+  isModeled: boolean;
 }
 
 function OddsLinesPanel({
@@ -1689,11 +1699,14 @@ function OddsLinesPanel({
   modelHomeSpreadOdds,
   authSpreadEdgeIsAway,
   authTotalEdgeIsOver,
+  isModeled,
 }: OddsLinesPanelProps) {
 
   const mdlAwayMl = modelAwayML ?? '—';
   const mdlHomeMl = modelHomeML ?? '—';
-  const hasModelData = !isNaN(mdlAwaySpread) || !isNaN(mdlTotal) || mdlAwayMl !== '—';
+  // isModeled=false means modelRunAt=null: model was invalidated (e.g. ML direction flip)
+  // or not yet run. In this case, show '—' for all model columns to prevent stale display.
+  const hasModelData = isModeled && (!isNaN(mdlAwaySpread) || !isNaN(mdlTotal) || mdlAwayMl !== '—');
 
   // ── Book / Model display values — LINE and ODDS are kept SEPARATE so OddsCell
   //    renders them with proper visual hierarchy (line bold/large, odds smaller/muted).
@@ -2849,6 +2862,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                 modelHomeSpreadOdds={game.modelHomeSpreadOdds ?? null}
                 authSpreadEdgeIsAway={authSpreadEdgeIsAway}
                 authTotalEdgeIsOver={authTotalEdgeIsOver}
+                isModeled={game.modelRunAt != null}
               />
             </div>
           )}
@@ -2973,6 +2987,7 @@ export function GameCard({ game, mode = "full", showModel: showModelProp, onTogg
                       modelHomeSpreadOdds={(game as unknown as Record<string, string | null>).modelHomeSpreadOdds ?? null}
                       authSpreadEdgeIsAway={authSpreadEdgeIsAway}
                       authTotalEdgeIsOver={authTotalEdgeIsOver}
+                      isModeled={game.modelRunAt != null}
                     />
                   </div>
                 </div>

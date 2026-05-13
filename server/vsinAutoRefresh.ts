@@ -1053,7 +1053,7 @@ export async function refreshAnApiOdds(
           );
         }
 
-        await updateAnOdds(dbGame.id, {
+        const _anOddsResult = await updateAnOdds(dbGame.id, {
           // Resolved primary book columns (DK NJ or Open-line — atomic switch)
           awayBookSpread:  rAwaySpread.value,
           awaySpreadOdds:  rAwaySpreadOdds.value,
@@ -1079,6 +1079,35 @@ export async function refreshAnApiOdds(
             openHomeML:         openHomeML,
           } : {}),
         });
+
+        // ── LAYER3 IMMEDIATE RE-RUN ──────────────────────────────────────────────────────────────────
+        // When ML direction flipped and LAYER3_ML_GUARD fired, trigger an immediate
+        // model re-run for this specific game. Without this, stale model data (wrong
+        // RL direction) stays on screen for up to 5 minutes until the next scheduled
+        // MLB model sync cycle picks it up. This reduces the stale window to ~15-30s.
+        if (_anOddsResult.layer3Fired && _anOddsResult.gameDate) {
+          const _l3GameId   = _anOddsResult.gameId;
+          const _l3GameDate = _anOddsResult.gameDate;
+          console.log(
+            `[ANApiOdds][LAYER3_IMMEDIATE_RERUN] id=${_l3GameId} gameDate=${_l3GameDate} — ` +
+            `ML direction flipped → triggering immediate model re-run to eliminate stale RL display.`
+          );
+          // Fire-and-forget: do NOT await — this is a background re-run.
+          // forceRerun=true: bypass the modelRunAt IS NULL guard (it was just cleared).
+          import('./mlbModelRunner').then(({ runMlbModelForDate }) =>
+            runMlbModelForDate(_l3GameDate, { targetGameIds: [_l3GameId], forceRerun: true })
+          ).then(result => {
+            console.log(
+              `[ANApiOdds][LAYER3_IMMEDIATE_RERUN] id=${_l3GameId} COMPLETE — ` +
+              `written=${result.written} errors=${result.errors} ` +
+              `validation=${result.validation.passed ? '✅ PASSED' : '❌ FAILED'}`
+            );
+          }).catch(err => {
+            console.error(
+              `[ANApiOdds][LAYER3_IMMEDIATE_RERUN] id=${_l3GameId} FAILED (non-fatal, 5-min cycle will retry):`, err
+            );
+          });
+        }
 
         // ── ODDS HISTORY SNAPSHOT ───────────────────────────────────────────────
         // Snapshot the resolved lines (DK or Open fallback) + current VSIN splits.

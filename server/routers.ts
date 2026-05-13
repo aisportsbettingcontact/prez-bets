@@ -595,7 +595,7 @@ export const appRouter = router({
 
           // Write open lines (AN HTML open column) AND DK NJ current lines
           // DK lines are stored in the primary book columns (awayBookSpread IS the DK line)
-          await updateAnOdds(dbGame.id, {
+          const _ingestResult = await updateAnOdds(dbGame.id, {
             // Open lines
             openAwaySpread: g.openAwaySpread?.line ?? null,
             openAwaySpreadOdds: g.openAwaySpread?.juice ?? null,
@@ -617,6 +617,19 @@ export const appRouter = router({
             awayML: g.dkAwayML?.line ?? null,
             homeML: g.dkHomeML?.line ?? null,
           });
+          // LAYER3 IMMEDIATE RE-RUN: when ML direction flipped, trigger model re-run immediately
+          if (_ingestResult.layer3Fired && _ingestResult.gameDate) {
+            const _l3Id   = _ingestResult.gameId;
+            const _l3Date = _ingestResult.gameDate;
+            console.log(`[ingestAnHtml][LAYER3_IMMEDIATE_RERUN] id=${_l3Id} gameDate=${_l3Date} — ML direction flipped → immediate re-run triggered.`);
+            import('./mlbModelRunner').then(({ runMlbModelForDate }) =>
+              runMlbModelForDate(_l3Date, { targetGameIds: [_l3Id], forceRerun: true })
+            ).then(r => {
+              console.log(`[ingestAnHtml][LAYER3_IMMEDIATE_RERUN] id=${_l3Id} COMPLETE — written=${r.written} errors=${r.errors}`);
+            }).catch(err => {
+              console.error(`[ingestAnHtml][LAYER3_IMMEDIATE_RERUN] id=${_l3Id} FAILED (non-fatal):`, err);
+            });
+          }
 
           updated++;
           console.log(
