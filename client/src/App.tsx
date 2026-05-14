@@ -19,6 +19,7 @@ import AdminModelStatus from "@/pages/AdminModelStatus";
 import PostponedGames from "@/pages/PostponedGames";
 import Resources from "@/pages/Resources";
 import MlbBacktest from "@/pages/MlbBacktest";
+import ResetPassword from "@/pages/ResetPassword";
 
 function Router() {
   return (
@@ -60,6 +61,8 @@ function Router() {
       <Route path="/resources" component={Resources} />
       {/* Owner-only: Multi-market backtest dashboard — 2026 live data validation */}
       <Route path="/admin/backtest" component={MlbBacktest} />
+      {/* Public: Password reset — accessed via reset link sent to Discord DM or owner */}
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

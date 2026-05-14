@@ -73,6 +73,16 @@ export const appUsers = mysqlTable("app_users", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn"),
+  /**
+   * Password reset token (SHA-256 hex of a random 32-byte secret).
+   * NULL when no reset is pending. Cleared on successful reset or expiry.
+   */
+  passwordResetToken: varchar("passwordResetToken", { length: 64 }),
+  /**
+   * UTC timestamp (ms) when the password reset token expires.
+   * Tokens are valid for 30 minutes from issuance.
+   */
+  passwordResetExpiresAt: bigint("passwordResetExpiresAt", { mode: "number" }),
 });
 
 export type AppUser = typeof appUsers.$inferSelect;

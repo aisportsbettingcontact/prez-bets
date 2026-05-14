@@ -6,6 +6,7 @@ import { BarChart3, TrendingUp, Zap, Shield, Eye, EyeOff, LogIn, Loader2, Chevro
 import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { toast } from "sonner";
+import { ForgotPasswordModal } from "@/components/ForgotPasswordModal";
 
 const FEATURES = [
   {
@@ -44,6 +45,7 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [stayLoggedIn, setStayLoggedIn] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Redirect authenticated users straight to the projections feed
@@ -261,7 +263,24 @@ export default function Home() {
                 )}
                 {loginMutation.isPending ? "Signing in…" : "Sign In"}
               </button>
+
+              {/* Forgot password link */}
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors underline-offset-2 hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
             </form>
+
+            {/* Forgot Password Modal */}
+            <ForgotPasswordModal
+              open={showForgotPassword}
+              onClose={() => setShowForgotPassword(false)}
+            />
 
             <div className="px-5 pb-4 text-center">
               <p className="text-xs text-muted-foreground/50">

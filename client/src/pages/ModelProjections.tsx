@@ -891,6 +891,25 @@ export default function ModelProjections() {
                           <p className="text-xs font-semibold text-foreground truncate">@{appUser.username}</p>
                         </div>
                         <p className="text-sm text-muted-foreground truncate">{appUser.email}</p>
+                        {/* Session duration badge */}
+                        {(() => {
+                          const exp = (appUser as { sessionExpiresAt?: number | null }).sessionExpiresAt;
+                          if (!exp) return (
+                            <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-white/40">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white/30 inline-block" />
+                              Session: browser
+                            </span>
+                          );
+                          const daysLeft = Math.max(0, Math.ceil((exp - Date.now()) / 86_400_000));
+                          const color = daysLeft <= 3 ? "text-red-400 bg-red-400/10" : daysLeft <= 14 ? "text-amber-400 bg-amber-400/10" : "text-emerald-400 bg-emerald-400/10";
+                          const dot = daysLeft <= 3 ? "bg-red-400" : daysLeft <= 14 ? "bg-amber-400" : "bg-emerald-400";
+                          return (
+                            <span className={`inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${dot} inline-block`} />
+                              Session: {daysLeft}d remaining
+                            </span>
+                          );
+                        })()}
                       </div>
                       {(isOwner || appUser.role === "admin" || appUser.role === "handicapper") && (
                         <button type="button" onClick={() => { setShowUserMenu(false); setLocation("/bet-tracker"); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">

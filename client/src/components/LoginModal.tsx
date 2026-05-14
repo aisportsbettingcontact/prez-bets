@@ -12,6 +12,7 @@ import { useState } from "react";
 import { Eye, EyeOff, LogIn, Loader2, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { ForgotPasswordModal } from "./ForgotPasswordModal";
 
 interface LoginModalProps {
   onClose: () => void;
@@ -23,6 +24,7 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [stayLoggedIn, setStayLoggedIn] = useState(true);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const loginMutation = trpc.appUsers.login.useMutation({
     onSuccess: (data) => {
@@ -168,7 +170,24 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
             )}
             {loginMutation.isPending ? "Signing in…" : "Sign In"}
           </button>
+
+          {/* Forgot password link */}
+          <div className="text-center pt-1">
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(true)}
+              className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors underline-offset-2 hover:underline"
+            >
+              Forgot password?
+            </button>
+          </div>
         </form>
+
+        {/* Forgot Password Modal */}
+        <ForgotPasswordModal
+          open={showForgotPassword}
+          onClose={() => setShowForgotPassword(false)}
+        />
 
         <div className="px-5 pb-4 text-center">
           <p className="text-xs text-muted-foreground/50">

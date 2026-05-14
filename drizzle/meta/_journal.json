@@ -589,6 +589,13 @@
       "when": 1778466528190,
       "tag": "0083_opposite_wind_dancer",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "5",
+      "when": 1778776685603,
+      "tag": "0084_strange_skullbuster",
+      "breakpoints": true
     }
   ]
 }

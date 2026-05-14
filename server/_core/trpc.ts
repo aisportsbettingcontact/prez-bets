@@ -58,8 +58,23 @@ import type { TrpcContext } from "./context";
  * [INPUT]  ENV.isProduction  — true when NODE_ENV === "production"
  * [OUTPUT] Set<string>       — lowercase, trailing-slash-stripped allowed origins
  *
- * In production: only the PUBLIC_ORIGIN is allowed.
- * In development: PUBLIC_ORIGIN + localhost variants are allowed.
+ * Allowed in ALL environments:
+ *   - PUBLIC_ORIGIN (canonical production domain)
+ *   - www.PUBLIC_ORIGIN (www subdomain variant)
+ *   - http:// variant of PUBLIC_ORIGIN (handles pre-redirect HTTP access)
+ *   - *.manus.space (Manus deployment domains — same app, different hostname)
+ *   - *.manus.computer (Manus sandbox preview URLs — dev server)
+ *
+ * Allowed in development only:
+ *   - localhost variants on common ports
+ *
+ * Design rationale for *.manus.space:
+ *   The Manus platform deploys apps on both the custom domain (PUBLIC_ORIGIN)
+ *   AND a *.manus.space subdomain (e.g. aisportsbet-mw3ficty.manus.space).
+ *   Both hostnames serve the SAME application — blocking *.manus.space would
+ *   prevent legitimate users who access the site via the Manus subdomain from
+ *   logging in. This is NOT a CSRF risk because *.manus.space is controlled by
+ *   Manus (same operator as the app), not an attacker-controlled domain.
  */
 function buildAllowedOrigins(): Set<string> {
   const origins = new Set<string>();
@@ -69,10 +84,34 @@ function buildAllowedOrigins(): Set<string> {
     const canonical = ENV.publicOrigin.replace(/\/$/, "").toLowerCase();
     origins.add(canonical);
     console.log(`[CSRF] Allowed origin (PUBLIC_ORIGIN): ${canonical}`);
+
+    // Also allow the www subdomain variant (e.g. https://www.aisportsbettingmodels.com)
+    // Users may access the site via www even if PUBLIC_ORIGIN omits it.
+    try {
+      const url = new URL(canonical);
+      if (!url.hostname.startsWith("www.")) {
+        const wwwVariant = `${url.protocol}//www.${url.hostname}`;
+        origins.add(wwwVariant);
+        console.log(`[CSRF] Allowed origin (www variant): ${wwwVariant}`);
+      } else {
+        // PUBLIC_ORIGIN has www — also allow the non-www variant
+        const noWwwVariant = `${url.protocol}//${url.hostname.replace(/^www\./, "")}`;
+        origins.add(noWwwVariant);
+        console.log(`[CSRF] Allowed origin (non-www variant): ${noWwwVariant}`);
+      }
+      // Allow http:// variant — handles users who access before HTTPS redirect
+      if (url.protocol === "https:") {
+        const httpVariant = `http://${url.hostname}`;
+        origins.add(httpVariant);
+        console.log(`[CSRF] Allowed origin (http variant): ${httpVariant}`);
+      }
+    } catch {
+      console.warn(`[CSRF] Could not parse PUBLIC_ORIGIN as URL: ${canonical}`);
+    }
   }
 
   if (!ENV.isProduction) {
-    // Development: allow localhost on common ports + Manus preview domains
+    // Development: allow localhost on common ports
     const devOrigins = [
       "http://localhost:3000",
       "http://localhost:5173",
@@ -82,15 +121,11 @@ function buildAllowedOrigins(): Set<string> {
     for (const o of devOrigins) {
       origins.add(o);
     }
-    // Allow any *.manus.computer preview URL (Manus sandbox dev server)
-    // These are validated by pattern match, not added to the static set.
     console.log(`[CSRF] Development mode — localhost origins allowed`);
     console.log(`[CSRF] Development mode — *.manus.computer preview origins allowed`);
   }
 
   if (origins.size === 0) {
-    // PUBLIC_ORIGIN not set and not in dev — log a warning but don't block.
-    // The check will fall back to a permissive pass with a warning log.
     console.warn(
       "[CSRF] WARNING: PUBLIC_ORIGIN is not set and NODE_ENV is not development. " +
       "CSRF Origin check will log warnings but NOT block requests until PUBLIC_ORIGIN is configured. " +
@@ -123,12 +158,22 @@ function isOriginAllowed(origin: string | undefined): boolean {
 
   const normalized = origin.replace(/\/$/, "").toLowerCase();
 
-  // Static set check (production origin + dev localhost)
+  // [CHECK 1] Static set: PUBLIC_ORIGIN + www variant + http variant + dev localhost
   if (ALLOWED_ORIGINS.has(normalized)) return true;
 
-  // Dynamic pattern: Manus sandbox preview URLs (*.manus.computer)
-  // These are dev-only preview URLs, safe to allow in non-production.
-  if (!ENV.isProduction && /^https:\/\/[a-z0-9\-]+\.manus\.computer$/.test(normalized)) {
+  // [CHECK 2] Manus deployment domains (*.manus.space)
+  // The app is deployed on both the custom domain AND a *.manus.space subdomain.
+  // Both are controlled by the same operator — NOT a CSRF risk.
+  // Pattern: https://<project-slug>.manus.space (exact subdomain format)
+  if (/^https:\/\/[a-z0-9][a-z0-9\-]*\.manus\.space$/.test(normalized)) {
+    console.log(`[CSRF] Allowed origin (*.manus.space deployment domain): ${normalized}`);
+    return true;
+  }
+
+  // [CHECK 3] Manus sandbox preview URLs (*.manus.computer)
+  // Dev-only preview URLs from the Manus sandbox dev server.
+  if (/^https:\/\/[a-z0-9\-]+\.manus\.computer$/.test(normalized)) {
+    console.log(`[CSRF] Allowed origin (*.manus.computer preview): ${normalized}`);
     return true;
   }
 

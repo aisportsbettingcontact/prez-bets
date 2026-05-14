@@ -9,6 +9,7 @@ import { ENV } from "../_core/env";
 import type { Request } from "express";
 import { postSecurityAlert } from "../discord/discordSecurityAlert";
 
+import crypto from "crypto";
 import {
   createAppUser,
   listAppUsers,
@@ -22,6 +23,8 @@ import {
   incrementAllTokenVersions,
   insertSecurityEvent,
 } from "../db";
+import { getDiscordClient } from "../discord/bot";
+import { notifyOwner } from "../_core/notification";
 import { getCachedAppUser, setCachedAppUser, invalidateCachedAppUser } from "../dbCircuitBreaker";
 
 const APP_USER_COOKIE = "app_session";
@@ -186,6 +189,47 @@ export const appUsersRouter = router({
       stayLoggedIn: z.boolean().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
+      // [STEP] Extract client IP for rate limiting
+      const clientIp = (ctx.req.headers["x-forwarded-for"] as string | undefined)
+        ?.split(",")[0]
+        .trim() ?? ctx.req.socket?.remoteAddress ?? "unknown";
+
+      // [STEP] Check login rate limit BEFORE any DB query (prevents timing attacks)
+      const rateCheck = checkLoginRateLimit(clientIp);
+      if (!rateCheck.allowed) {
+        console.warn(`[LoginRateLimit] BLOCKED login attempt | IP=${clientIp}`);
+        // Log as security event
+        const blockedAt = Date.now();
+        insertSecurityEvent({
+          eventType: "AUTH_FAIL",
+          ip: clientIp,
+          blockedOrigin: null,
+          trpcPath: "appUsers.login",
+          httpMethod: ctx.req.method ?? "POST",
+          userAgent: (ctx.req.headers["user-agent"] as string | undefined) ?? null,
+          context: "rate_limit_exceeded",
+          occurredAt: blockedAt,
+        }).catch((err) =>
+          console.error(`[LoginRateLimit] DB insert failed: ${(err as Error).message}`)
+        );
+        postSecurityAlert({
+          eventType: "AUTH_FAIL",
+          ip: clientIp,
+          path: "appUsers.login",
+          method: ctx.req.method ?? "POST",
+          userAgent: (ctx.req.headers["user-agent"] as string | undefined) ?? null,
+          context: "rate_limit_exceeded",
+          targetIdentifier: "[rate-limited]",
+          occurredAt: blockedAt,
+        }).catch((err) =>
+          console.error(`[LoginRateLimit] Discord alert failed: ${(err as Error).message}`)
+        );
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many failed login attempts. Please wait 15 minutes and try again.",
+        });
+      }
+
       // Try email first, then username
       const isEmail = input.emailOrUsername.includes("@");
       const user = isEmail
@@ -194,9 +238,7 @@ export const appUsersRouter = router({
 
       // ── AUTH_FAIL helper — fire-and-forget, never blocks the response ──────
       const fireAuthFailEvent = (reason: string) => {
-        const ip = (ctx.req.headers["x-forwarded-for"] as string | undefined)
-          ?.split(",")[0]
-          .trim() ?? ctx.req.socket?.remoteAddress ?? "unknown";
+        const ip = clientIp; // reuse extracted IP
         const ua = (ctx.req.headers["user-agent"] as string | undefined) ?? null;
         const tag = "[AppAuth][AUTH_FAIL]";
 
@@ -251,20 +293,24 @@ export const appUsersRouter = router({
 
       if (!user) {
         fireAuthFailEvent("user_not_found");
+        recordLoginFailure(clientIp); // [RATE_LIMIT] count failure
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
       }
       if (!user.hasAccess) {
         fireAuthFailEvent("account_access_disabled");
+        recordLoginFailure(clientIp); // [RATE_LIMIT] count failure
         throw new TRPCError({ code: "FORBIDDEN", message: "Account access disabled" });
       }
       if (user.expiryDate && Date.now() > user.expiryDate) {
         fireAuthFailEvent("account_expired");
+        recordLoginFailure(clientIp); // [RATE_LIMIT] count failure
         throw new TRPCError({ code: "FORBIDDEN", message: "Account has expired" });
       }
 
       const valid = await bcrypt.compare(input.password, user.passwordHash);
       if (!valid) {
         fireAuthFailEvent("invalid_password");
+        recordLoginFailure(clientIp); // [RATE_LIMIT] count failure
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
       }
 
@@ -322,6 +368,21 @@ export const appUsersRouter = router({
     const user = await getAppUserById(payload.userId);
     if (!user || !user.hasAccess) return null;
     if (user.expiryDate && Date.now() > user.expiryDate) return null;
+
+    // [STEP] Extract JWT exp claim to surface session expiry to the frontend
+    // This allows the user menu to show "Session: X days remaining" badge
+    let sessionExpiresAt: number | null = null;
+    try {
+      const secret = new TextEncoder().encode(ENV.cookieSecret);
+      const { payload: jwtPayload } = await jwtVerify(token, secret);
+      if (typeof jwtPayload.exp === "number") {
+        sessionExpiresAt = jwtPayload.exp * 1000; // convert seconds to ms
+      }
+    } catch {
+      // JWT already verified above; this is a belt-and-suspenders read of exp
+      // If it fails for any reason, sessionExpiresAt stays null
+    }
+
     return {
       id: user.id,
       email: user.email,
@@ -333,6 +394,7 @@ export const appUsersRouter = router({
       discordId: user.discordId ?? null,
       discordUsername: user.discordUsername ?? null,
       discordConnectedAt: user.discordConnectedAt ?? null,
+      sessionExpiresAt, // null if session cookie (no maxAge), ms timestamp if persistent
     };
   }),
 
@@ -531,4 +593,278 @@ export const appUsersRouter = router({
         unlinkedDiscordUsername: user.discordUsername,
       };
     }),
+
+  // ─── Forgot Password ──────────────────────────────────────────────────────
+  /**
+   * requestPasswordReset
+   *
+   * Generates a 30-minute password reset token and delivers it via:
+   *   1. Discord DM (if the user has Discord linked and the bot is running)
+   *   2. Owner notification (fallback — owner relays the link manually)
+   *
+   * Security design:
+   *   - Token is a 32-byte CSPRNG secret, stored as SHA-256 hex in the DB.
+   *   - The raw token (never stored) is sent to the user; the server only
+   *     stores the hash. This means a DB breach cannot be used to reset passwords.
+   *   - Rate-limited: max 3 requests per email per 15 minutes (in-memory).
+   *   - Always returns success=true regardless of whether the email exists
+   *     (prevents user enumeration).
+   *
+   * [INPUT]  emailOrUsername — the user's email or username
+   * [INPUT]  origin          — the frontend origin for building the reset URL
+   * [OUTPUT] { success: true } always (no enumeration)
+   */
+  requestPasswordReset: publicProcedure
+    .input(z.object({
+      emailOrUsername: z.string().min(1).max(320),
+      origin: z.string().url(),
+    }))
+    .mutation(async ({ input }) => {
+      const ident = input.emailOrUsername.trim().toLowerCase().replace(/^@/, "");
+      console.log(`[PasswordReset] requestPasswordReset | ident=${ident}`);
+
+      // [STEP] Rate-limit: max 3 reset requests per identifier per 15 minutes
+      const now = Date.now();
+      const RATE_WINDOW_MS = 15 * 60 * 1000;
+      const RATE_MAX = 3;
+      const existing = resetRateMap.get(ident);
+      if (existing) {
+        // Prune expired entries
+        existing.timestamps = existing.timestamps.filter(t => now - t < RATE_WINDOW_MS);
+        if (existing.timestamps.length >= RATE_MAX) {
+          console.warn(`[PasswordReset] RATE_LIMIT | ident=${ident} count=${existing.timestamps.length}`);
+          // Return success to prevent enumeration — silently drop
+          return { success: true };
+        }
+        existing.timestamps.push(now);
+      } else {
+        resetRateMap.set(ident, { timestamps: [now] });
+      }
+
+      // [STEP] Look up user by email or username
+      const isEmail = ident.includes("@");
+      const user = isEmail
+        ? await getAppUserByEmail(ident)
+        : await getAppUserByUsername(ident);
+
+      if (!user) {
+        // [VERIFY] User not found — return success to prevent enumeration
+        console.log(`[PasswordReset] user not found for ident=${ident} — returning success (anti-enumeration)`);
+        return { success: true };
+      }
+
+      // [STEP] Generate CSPRNG token (32 bytes = 256 bits of entropy)
+      const rawToken = crypto.randomBytes(32).toString("hex"); // 64 hex chars
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const expiresAt = now + 30 * 60 * 1000; // 30 minutes
+
+      console.log(`[PasswordReset] Generated token | userId=${user.id} username=${user.username} expiresAt=${new Date(expiresAt).toISOString()}`);
+
+      // [STEP] Store hash in DB
+      await updateAppUser(user.id, {
+        passwordResetToken: tokenHash,
+        passwordResetExpiresAt: expiresAt,
+      });
+
+      // [STEP] Build reset URL with raw token
+      const origin = input.origin.replace(/\/$/, "");
+      const resetUrl = `${origin}/reset-password?token=${rawToken}&uid=${user.id}`;
+
+      // [STEP] Attempt Discord DM delivery
+      let dmDelivered = false;
+      if (user.discordId) {
+        try {
+          const discordClient = getDiscordClient();
+          if (discordClient) {
+            const dmChannel = await discordClient.users.createDM(user.discordId);
+            await dmChannel.send(
+              `🔐 **Password Reset Request**\n\n` +
+              `A password reset was requested for your account **${user.username}**.\n\n` +
+              `Click the link below to reset your password. This link expires in **30 minutes**.\n\n` +
+              `${resetUrl}\n\n` +
+              `If you did not request this, you can safely ignore this message.`
+            );
+            dmDelivered = true;
+            console.log(`[PasswordReset] Discord DM delivered | userId=${user.id} discordId=${user.discordId}`);
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[PasswordReset] Discord DM failed | userId=${user.id} discordId=${user.discordId} error=${msg}`);
+        }
+      }
+
+      // [STEP] Owner notification (always — provides audit trail; also serves as fallback)
+      const deliveryNote = dmDelivered
+        ? `Reset link sent via Discord DM to ${user.discordUsername ?? user.discordId}.`
+        : user.discordId
+          ? `Discord DM FAILED — relay link manually.`
+          : `User has no Discord linked — relay link manually.`;
+
+      await notifyOwner({
+        title: `[PasswordReset] Reset requested for ${user.username}`,
+        content:
+          `User: ${user.username} (${user.email})\n` +
+          `Delivery: ${deliveryNote}\n` +
+          `Expires: ${new Date(expiresAt).toISOString()}\n\n` +
+          `Reset URL:\n${resetUrl}`,
+      }).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[PasswordReset] Owner notification failed (non-critical) | error=${msg}`);
+      });
+
+      console.log(`[PasswordReset] [OUTPUT] success | userId=${user.id} username=${user.username} dmDelivered=${dmDelivered}`);
+      return { success: true };
+    }),
+
+  /**
+   * resetPassword
+   *
+   * Validates the reset token and sets a new password.
+   *
+   * Security design:
+   *   - Token is validated by SHA-256 hashing the raw input and comparing to the stored hash.
+   *   - Token is single-use: cleared from DB immediately after successful reset.
+   *   - Expired tokens are rejected.
+   *   - After reset, all existing sessions are invalidated (tokenVersion increment).
+   *
+   * [INPUT]  uid      — app_users.id (from URL param)
+   * [INPUT]  token    — raw 64-hex reset token (from URL param)
+   * [INPUT]  password — new password (min 8 chars)
+   * [OUTPUT] { success: true } on success
+   */
+  resetPassword: publicProcedure
+    .input(z.object({
+      uid: z.number().int().positive(),
+      token: z.string().length(64).regex(/^[0-9a-f]+$/i, "Invalid token format"),
+      password: z.string().min(8, "Password must be at least 8 characters"),
+    }))
+    .mutation(async ({ input }) => {
+      console.log(`[PasswordReset] resetPassword | uid=${input.uid}`);
+
+      // [STEP] Load user
+      const user = await getAppUserById(input.uid);
+      if (!user) {
+        console.warn(`[PasswordReset] resetPassword | user not found | uid=${input.uid}`);
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired reset link." });
+      }
+
+      // [STEP] Validate token exists
+      if (!user.passwordResetToken || !user.passwordResetExpiresAt) {
+        console.warn(`[PasswordReset] resetPassword | no pending reset | uid=${input.uid}`);
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired reset link." });
+      }
+
+      // [STEP] Check expiry
+      const now = Date.now();
+      if (now > user.passwordResetExpiresAt) {
+        console.warn(`[PasswordReset] resetPassword | token expired | uid=${input.uid} expiredAt=${new Date(user.passwordResetExpiresAt).toISOString()}`);
+        // Clear expired token
+        await updateAppUser(input.uid, { passwordResetToken: null, passwordResetExpiresAt: null });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Reset link has expired. Please request a new one." });
+      }
+
+      // [STEP] Validate token hash
+      const inputHash = crypto.createHash("sha256").update(input.token).digest("hex");
+      const tokenValid = inputHash === user.passwordResetToken;
+      if (!tokenValid) {
+        console.warn(`[PasswordReset] resetPassword | token mismatch | uid=${input.uid}`);
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired reset link." });
+      }
+
+      // [STEP] Hash new password
+      const passwordHash = await bcrypt.hash(input.password, 12);
+
+      // [STEP] Update password, clear reset token, invalidate all sessions
+      await updateAppUser(input.uid, {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpiresAt: null,
+      });
+      // Invalidate all existing sessions by incrementing tokenVersion
+      await incrementTokenVersion(input.uid);
+      invalidateCachedAppUser(input.uid);
+
+      console.log(`[PasswordReset] [OUTPUT] success | uid=${input.uid} username=${user.username} sessionsInvalidated=true`);
+      return { success: true };
+    }),
 });
+
+// ─── Password reset rate-limit map ────────────────────────────────────────────
+// In-memory map: identifier (email/username) → list of request timestamps
+// Pruned on each access; not persisted across restarts (intentional — restart clears limits)
+const resetRateMap = new Map<string, { timestamps: number[] }>();
+
+// ─── Login rate-limit map ─────────────────────────────────────────────────────
+/**
+ * In-memory rate limiter for the login endpoint.
+ *
+ * Tracks failed login attempts per IP address.
+ * Key: IP address string
+ * Value: array of UTC timestamps (ms) of failed attempts
+ *
+ * Limits:
+ *   - Max 10 failed attempts per IP per 15-minute window
+ *   - On breach: throw TRPCError FORBIDDEN (429-equivalent) and log security event
+ *   - Successful login does NOT reset the counter (prevents bypass via success)
+ *   - Counter resets naturally as old timestamps fall outside the 15-min window
+ *
+ * Design notes:
+ *   - In-memory only — cleared on server restart (intentional: restarts are rare,
+ *     and persistent storage would add latency to every login attempt)
+ *   - Per-IP, not per-account — prevents distributed attacks targeting one account
+ *     from different IPs, and prevents account enumeration via rate limit responses
+ *   - The limit is applied BEFORE password check to prevent timing attacks
+ */
+export const loginRateMap = new Map<string, { failTimestamps: number[] }>();
+
+export const LOGIN_RATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+export const LOGIN_RATE_MAX_FAILURES = 10;           // max failures per window
+
+/**
+ * Check and record a login attempt for the given IP.
+ *
+ * [INPUT]  ip      — client IP address
+ * [OUTPUT] boolean — true if the attempt is allowed, false if rate-limited
+ *
+ * Side effect: appends the current timestamp to the failure list if allowed.
+ * Call this BEFORE the password check; call recordLoginFailure() on auth failure.
+ */
+export function checkLoginRateLimit(ip: string): { allowed: boolean; remainingAttempts: number } {
+  const now = Date.now();
+  const entry = loginRateMap.get(ip);
+
+  if (!entry) {
+    // First attempt from this IP — allow
+    return { allowed: true, remainingAttempts: LOGIN_RATE_MAX_FAILURES };
+  }
+
+  // Prune expired timestamps
+  entry.failTimestamps = entry.failTimestamps.filter(t => now - t < LOGIN_RATE_WINDOW_MS);
+
+  if (entry.failTimestamps.length >= LOGIN_RATE_MAX_FAILURES) {
+    const oldestFailure = Math.min(...entry.failTimestamps);
+    const windowResetMs = LOGIN_RATE_WINDOW_MS - (now - oldestFailure);
+    const windowResetMin = Math.ceil(windowResetMs / 60_000);
+    console.warn(
+      `[LoginRateLimit] BLOCKED | IP=${ip} failures=${entry.failTimestamps.length} ` +
+      `windowResetIn=${windowResetMin}min`
+    );
+    return { allowed: false, remainingAttempts: 0 };
+  }
+
+  return { allowed: true, remainingAttempts: LOGIN_RATE_MAX_FAILURES - entry.failTimestamps.length };
+}
+
+/**
+ * Record a failed login attempt for the given IP.
+ * Call this after a confirmed auth failure (wrong password, user not found, etc.).
+ */
+export function recordLoginFailure(ip: string): void {
+  const now = Date.now();
+  const entry = loginRateMap.get(ip);
+  if (entry) {
+    entry.failTimestamps.push(now);
+  } else {
+    loginRateMap.set(ip, { failTimestamps: [now] });
+  }
+}

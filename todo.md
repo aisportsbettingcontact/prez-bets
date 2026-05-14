@@ -3242,3 +3242,9 @@
 
 ## Session: 2026-05-14 — Login Fix
 - [x] Fix iOS Safari "string did not match expected pattern" on login: add name/id attributes to username and password inputs, replace bullet placeholder with text placeholder
+
+## Session: 2026-05-14 — CSRF Fix + Auth Features
+- [x] Fix CSRF false-positive: whitelist production domains, fix origin detection
+- [x] Forgot password flow: requestPasswordReset + resetPassword with time-limited token
+- [x] Login rate limiting: per-IP 10 attempts / 15 min, 429 response
+- [x] Session duration badge in user menu when stayLoggedIn is active
