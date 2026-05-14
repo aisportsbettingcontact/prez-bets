@@ -14,7 +14,7 @@
  * Route: /admin/model-status
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
@@ -282,25 +282,15 @@ export default function AdminModelStatus() {
   const [tab, setTab] = useState<"mlb" | "nhl">("mlb");
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // ── Owner-only auth guard ────────────────────────────────────────────────
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-zinc-400 text-sm">Verifying access...</div>
-      </div>
-    );
-  }
-  if (!appUser || !isOwner) {
-    console.warn(`[AdminModelStatus] Unauthorized access attempt | user=${appUser?.username ?? "unauthenticated"} | isOwner=${isOwner}`);
-    navigate("/");
-    return null;
-  }
-
+  // ── All hooks MUST be called unconditionally before any conditional returns ──
+  // Calling hooks after a conditional return violates Rules of Hooks and causes
+  // a React crash. Auth guard redirect is moved to useEffect.
   const mlbQuery = trpc.adminModelStatus.mlb.useQuery(
     {},
     {
       refetchInterval: 30_000,
       staleTime: 15_000,
+      enabled: !authLoading && !!appUser && isOwner,
     }
   );
 
@@ -309,8 +299,27 @@ export default function AdminModelStatus() {
     {
       refetchInterval: 30_000,
       staleTime: 15_000,
+      enabled: !authLoading && !!appUser && isOwner,
     }
   );
+
+  // ── Owner-only auth guard — MUST be useEffect, never render body ────────────
+  useEffect(() => {
+    if (!authLoading && (!appUser || !isOwner)) {
+      console.warn(`[AdminModelStatus] Unauthorized: user=${appUser?.username ?? "unauthenticated"} isOwner=${isOwner} → redirecting to /`);
+      navigate("/");
+    }
+  }, [authLoading, appUser, isOwner, navigate]);
+
+  // Show loading/redirecting skeleton
+  if (authLoading || (!authLoading && (!appUser || !isOwner))) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center gap-3">
+        <div className="w-5 h-5 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
+        <span className="text-zinc-400 text-sm">{authLoading ? "Verifying access..." : "Redirecting..."}</span>
+      </div>
+    );
+  }
 
   const handleRefresh = () => {
     mlbQuery.refetch();

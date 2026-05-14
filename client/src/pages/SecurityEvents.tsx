@@ -12,7 +12,7 @@
  * Access: owner role only — redirects to home if not owner.
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
@@ -323,19 +323,21 @@ export default function SecurityEvents() {
     },
   });
 
-  // ── Auth guard ────────────────────────────────────────────────────────────
-  if (authLoading) {
+  // ── Auth guard — MUST be useEffect, never render body (render-phase navigate crashes React 19) ──
+  useEffect(() => {
+    if (!authLoading && (!user || !isOwner)) {
+      console.warn(`[SECURITY] Unauthorized: user=${user?.username ?? "unauthenticated"} isOwner=${isOwner} → redirecting to /`);
+      navigate("/");
+    }
+  }, [authLoading, user, isOwner, navigate]);
+
+  if (authLoading || (!authLoading && (!user || !isOwner))) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-zinc-200 text-sm">Verifying access...</div>
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center gap-3">
+        <div className="w-5 h-5 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
+        <span className="text-zinc-200 text-sm">{authLoading ? "Verifying access..." : "Redirecting..."}</span>
       </div>
     );
-  }
-
-  if (!user || !isOwner) {
-    console.warn(`[SECURITY] Unauthorized access attempt to /admin/security | user=${user?.username ?? "unauthenticated"} | isOwner=${isOwner}`);
-    navigate("/");
-    return null;
   }
 
   // ── Derived data ──────────────────────────────────────────────────────────

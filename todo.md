@@ -3248,3 +3248,10 @@
 - [x] Forgot password flow: requestPasswordReset + resetPassword with time-limited token
 - [x] Login rate limiting: per-IP 10 attempts / 15 min, 429 response
 - [x] Session duration badge in user menu when stayLoggedIn is active
+
+## Session: 2026-05-14 — Blank Screen Fix (React 19 render-phase navigate anti-pattern)
+- [x] UserManagement: move render-phase navigate() to useEffect, add loading/redirecting skeleton
+- [x] AdminModelStatus: move hooks before auth guard (Rules of Hooks violation), move navigate to useEffect
+- [x] IngestAnOdds: move render-phase navigate() to useEffect
+- [x] PostponedGames: move hooks before auth guard, move navigate to useEffect
+- [x] SecurityEvents: move render-phase navigate() to useEffect

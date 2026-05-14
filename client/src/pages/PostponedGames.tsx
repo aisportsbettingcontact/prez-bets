@@ -12,7 +12,7 @@
  *   - Sort by date (newest first by default)
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
@@ -188,25 +188,30 @@ export default function PostponedGames() {
   const [filterStatus, setFilterStatus] = useState<"all" | "postponed" | "suspended">("all");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  // ── Owner-only auth guard ────────────────────────────────────────────────
-  if (authLoading) {
+  // ── All hooks MUST come before conditional returns (Rules of Hooks) ──────────────
+  const { data, isLoading, error, refetch, isFetching } =
+    trpc.games.listPostponed.useQuery(undefined, {
+      refetchInterval: 60_000,
+      staleTime: 30_000,
+      enabled: !authLoading && !!appUser && isOwner,
+    });
+
+  // ── Owner-only auth guard — MUST be useEffect, never render body ─────────────
+  useEffect(() => {
+    if (!authLoading && (!appUser || !isOwner)) {
+      console.warn(`[PostponedGames] Unauthorized: user=${appUser?.username ?? "unauthenticated"} isOwner=${isOwner} → redirecting to /`);
+      navigate("/");
+    }
+  }, [authLoading, appUser, isOwner, navigate]);
+
+  if (authLoading || (!authLoading && (!appUser || !isOwner))) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-zinc-400 text-sm">Verifying access...</div>
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center gap-3">
+        <div className="w-5 h-5 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
+        <span className="text-zinc-400 text-sm">{authLoading ? "Verifying access..." : "Redirecting..."}</span>
       </div>
     );
   }
-  if (!appUser || !isOwner) {
-    console.warn(`[PostponedGames] Unauthorized access attempt | user=${appUser?.username ?? "unauthenticated"} | isOwner=${isOwner}`);
-    navigate("/");
-    return null;
-  }
-
-  const { data, isLoading, error, refetch, isFetching } =
-    trpc.games.listPostponed.useQuery(undefined, {
-      refetchInterval: 60_000, // auto-refresh every 60s
-      staleTime: 30_000,
-    });
 
   console.log(
     `[PostponedGames][STATE] loaded=${!isLoading} count=${data?.length ?? 0}` +

@@ -11,7 +11,7 @@
  * Access: owner role only — non-owners are immediately redirected to /dashboard.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
@@ -76,15 +76,13 @@ export default function IngestAnOdds() {
     },
   });
 
-  // Redirect non-owners
-  if (!authLoading && appUser && !isOwner) {
-    navigate("/dashboard");
-    return null;
-  }
-  if (!authLoading && !appUser) {
-    navigate("/");
-    return null;
-  }
+  // Auth guard — MUST be useEffect, never render body (render-phase navigate crashes React 19)
+  useEffect(() => {
+    if (!authLoading && (!appUser || !isOwner)) {
+      console.warn(`[IngestAnOdds] Unauthorized: user=${appUser?.username ?? "unauthenticated"} isOwner=${isOwner} → redirecting`);
+      navigate(appUser ? "/dashboard" : "/");
+    }
+  }, [authLoading, appUser, isOwner, navigate]);
 
   const handleIngest = () => {
     if (!html.trim()) {

@@ -549,11 +549,14 @@ export default function UserManagement() {
 
   const [forceLogoutAllConfirm, setForceLogoutAllConfirm] = useState(false);
 
-  // Redirect if not owner
-  if (!loading && (!appUser || appUser.role !== "owner")) {
-    navigate("/dashboard");
-    return null;
-  }
+  // Redirect if not owner — MUST be in useEffect, never in render body
+  // Calling navigate() during render crashes React 19 silently (blank screen)
+  useEffect(() => {
+    if (!loading && (!appUser || appUser.role !== "owner")) {
+      console.warn(`[UserManagement] Unauthorized: user=${appUser?.username ?? "unauthenticated"} role=${appUser?.role ?? "none"} → redirecting to /dashboard`);
+      navigate("/dashboard");
+    }
+  }, [loading, appUser, navigate]);
 
   function openCreate() {
     setForm(defaultForm);
@@ -662,10 +665,13 @@ export default function UserManagement() {
     });
   }
 
-  if (loading) {
+  // Show loading skeleton while auth is resolving OR while redirect is pending
+  // This prevents both the blank screen and the flash of unauthorized content
+  if (loading || (!loading && (!appUser || appUser.role !== "owner"))) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <RefreshCw className="w-6 h-6 text-zinc-300 animate-spin" />
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center gap-3">
+        <RefreshCw className="w-5 h-5 text-zinc-400 animate-spin" />
+        <span className="text-sm text-zinc-500">{loading ? "Authenticating..." : "Redirecting..."}</span>
       </div>
     );
   }
