@@ -3239,3 +3239,6 @@
 - [x] Session-expired toast: intercept UNAUTHORIZED in query/mutation cache, show toast before redirect
 - [x] durationMs histogram: server-side bucket query + MetricsPanel bar chart
 - [x] User table: default lastSignedIn DESC sort + clickable column header sort
+
+## Session: 2026-05-14 — Login Fix
+- [x] Fix iOS Safari "string did not match expected pattern" on login: add name/id attributes to username and password inputs, replace bullet placeholder with text placeholder

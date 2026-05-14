@@ -97,6 +97,8 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
             </label>
             <input
               type="text"
+              id="login-username"
+              name="username"
               value={credential}
               onChange={(e) => setCredential(e.target.value)}
               placeholder="@username or email"
@@ -114,9 +116,11 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
+                id="login-password"
+                name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="Enter your password"
                 autoComplete="current-password"
                 required
                 className="w-full px-3 py-2.5 pr-10 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-colors"
