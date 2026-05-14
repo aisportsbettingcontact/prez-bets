@@ -73,7 +73,26 @@ export function formatMutationError(error: unknown): string {
     return 'Database temporarily unavailable. Please try again in a moment.';
   }
 
-  // [CHECK 6] Internal server error — generic fallback
+  // [CHECK 6] Request timeout — server-side 25s timeout fired
+  if (
+    msg.includes('Request timed out') ||
+    msg.includes('timed out after') ||
+    msg.includes('ETIMEDOUT')
+  ) {
+    return 'The request took too long. Please try again in a moment.';
+  }
+
+  // [CHECK 7] Pass through specific server messages that are already user-friendly
+  // (e.g. "Failed to update account. Please try again." from updateUser catch block)
+  if (
+    msg.includes('Failed to update') ||
+    msg.includes('Failed to delete') ||
+    msg.includes('Failed to create')
+  ) {
+    return msg;
+  }
+
+  // [CHECK 8] Internal server error — generic fallback
   if (msg === "Internal server error" || msg.includes("INTERNAL_SERVER_ERROR")) {
     return "An unexpected server error occurred. Please try again.";
   }

@@ -508,42 +508,73 @@ export const appUsersRouter = router({
     }))
     .mutation(async ({ input }) => {
       const { id, password, ...rest } = input;
-      const existing = await getAppUserById(id);
-      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
-
-      // Check email uniqueness if changing
-      if (rest.email && rest.email.toLowerCase() !== existing.email) {
-        const conflict = await getAppUserByEmail(rest.email.toLowerCase());
-        if (conflict) throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
-      }
-
-      // Check username uniqueness if changing
-      if (rest.username && rest.username.toLowerCase() !== existing.username) {
-        const conflict = await getAppUserByUsername(rest.username.toLowerCase());
-        if (conflict) throw new TRPCError({ code: "CONFLICT", message: "Username already taken" });
-      }
-
-      const updateData: Record<string, unknown> = {};
-      if (rest.email) updateData.email = rest.email.toLowerCase();
-      if (rest.username) updateData.username = rest.username.toLowerCase();
-      if (rest.role) updateData.role = rest.role;
-      if (rest.hasAccess !== undefined) updateData.hasAccess = rest.hasAccess;
-      if (rest.expiryDate !== undefined) updateData.expiryDate = rest.expiryDate;
-      if (password) updateData.passwordHash = await bcrypt.hash(password, 12);
-
-      console.log(`[AppAdmin] updateUser: userId=${id} fields=${JSON.stringify(Object.keys(updateData))}`);
+      console.log(`[AppAdmin][updateUser][INPUT] userId=${id} fields=${JSON.stringify(Object.keys({ ...rest, ...(password ? { password: '***' } : {}) }))}`); 
+      // ── Wrap entire mutation in try/catch to prevent raw errors from escaping ──
       try {
-        await updateAppUser(id, updateData as Parameters<typeof updateAppUser>[1]);
-      } catch (err) {
-        const msg = (err as Error)?.message ?? String(err);
-        console.error(`[AppAdmin] updateUser: DB error for userId=${id}: ${msg}`);
-        if (msg.includes('Circuit is OPEN') || msg.includes('Database not available') || msg.includes('timed out')) {
-          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database temporarily unavailable. Please try again in a moment.' });
+        // [STEP 1] Fetch existing user (required for uniqueness checks)
+        const existing = await getAppUserById(id);
+        if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+        console.log(`[AppAdmin][updateUser][STATE] found userId=${id} username=${existing.username}`);
+
+        // [STEP 2] Parallel uniqueness checks — run concurrently to halve DB round-trips
+        // Only check if the value is actually changing (avoids unnecessary DB reads)
+        const emailChanging = !!(rest.email && rest.email.toLowerCase() !== existing.email);
+        const usernameChanging = !!(rest.username && rest.username.toLowerCase() !== existing.username);
+        if (emailChanging || usernameChanging) {
+          const [emailConflict, usernameConflict] = await Promise.all([
+            emailChanging ? getAppUserByEmail(rest.email!.toLowerCase()) : Promise.resolve(null),
+            usernameChanging ? getAppUserByUsername(rest.username!.toLowerCase()) : Promise.resolve(null),
+          ]);
+          if (emailConflict) throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
+          if (usernameConflict) throw new TRPCError({ code: "CONFLICT", message: "Username already taken" });
         }
-        throw err;
+
+        // [STEP 3] Build update payload
+        const updateData: Record<string, unknown> = {};
+        if (rest.email) updateData.email = rest.email.toLowerCase();
+        if (rest.username) updateData.username = rest.username.toLowerCase();
+        if (rest.role) updateData.role = rest.role;
+        if (rest.hasAccess !== undefined) updateData.hasAccess = rest.hasAccess;
+        if (rest.expiryDate !== undefined) updateData.expiryDate = rest.expiryDate;
+
+        // [STEP 4] Hash password with cost=10 (OWASP-compliant, ~110ms vs ~250ms for cost=12)
+        // Reduces worst-case mutation time: 5s(read) + 5s(write) + 0.11s(hash) = ~10.1s << 30s timeout
+        if (password) {
+          console.log(`[AppAdmin][updateUser][STEP] hashing password userId=${id} cost=10`);
+          updateData.passwordHash = await bcrypt.hash(password, 10);
+          console.log(`[AppAdmin][updateUser][STATE] password hash OK`);
+        }
+
+        // [STEP 5] Write to DB
+        console.log(`[AppAdmin][updateUser][STEP] writing fields=${JSON.stringify(Object.keys(updateData))} userId=${id}`);
+        await updateAppUser(id, updateData as Parameters<typeof updateAppUser>[1]);
+        console.log(`[AppAdmin][updateUser][OUTPUT] SUCCESS userId=${id}`);
+        return { success: true };
+
+      } catch (err) {
+        // Re-throw TRPCErrors (NOT_FOUND, CONFLICT, FORBIDDEN, etc.) unchanged
+        if (err instanceof TRPCError) throw err;
+        // Map all DB/network/circuit-breaker errors to a clean INTERNAL_SERVER_ERROR
+        const msg = (err as Error)?.message ?? String(err);
+        console.error(`[AppAdmin][updateUser][FAIL] userId=${id} error=${msg}`);
+        if (
+          msg.includes('Circuit is OPEN') ||
+          msg.includes('Database not available') ||
+          msg.includes('timed out') ||
+          msg.includes('ECONNREFUSED') ||
+          msg.includes('ETIMEDOUT') ||
+          msg.includes('ER_CON_COUNT_ERROR')
+        ) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Database temporarily unavailable. Please try again in a moment.',
+          });
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to update account. Please try again.',
+        });
       }
-      console.log(`[AppAdmin] updateUser: SUCCESS userId=${id}`);
-      return { success: true };
     }),
 
   deleteUser: ownerProcedure

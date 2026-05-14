@@ -90,7 +90,7 @@ export async function withCircuitBreaker<T>(fn: () => Promise<T>): Promise<T> {
     throw new Error(`${TAG} Circuit is OPEN — DB unavailable. Fast-failing to prevent hang.`);
   }
 
-  const timeoutMs = state === "HALF_OPEN" ? HALF_OPEN_TIMEOUT : 8_000;
+  const timeoutMs = state === "HALF_OPEN" ? HALF_OPEN_TIMEOUT : 5_000;  // 5s per query × max 4 sequential queries = 20s worst case, well under 30s request timeout
 
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error(`${TAG} DB query timed out after ${timeoutMs}ms`)), timeoutMs)
