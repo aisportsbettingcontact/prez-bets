@@ -31,6 +31,7 @@ import { startBetAutoGradeScheduler } from "../betAutoGradeScheduler";
 import { startMlbOutcomeAndDriftScheduler } from "../mlbOutcomeAndDriftScheduler";
 import { startMlbModelSyncScheduler } from "../mlbModelRunner";
 import { getCircuitStatus, getCacheStats } from "../dbCircuitBreaker";
+import { getDb } from "../db";
 import { registerRgProxyRoute } from "../rotogrinderProxy";
 
 // ─── Rate limit event helper ─────────────────────────────────────────────────
@@ -409,6 +410,20 @@ async function startServer() {
       backfillOddsHistoryLineSource()
         .catch((err: unknown) => console.warn('[Startup] [OddsHistory][BACKFILL] lineSource backfill failed (non-fatal):', err));
     }).catch((err: unknown) => console.warn('[Startup] [OddsHistory][BACKFILL] Import failed (non-fatal):', err));
+    // ── DB warm-up ping ─────────────────────────────────────────────────────
+    // Pre-establish the TiDB connection pool immediately after server start.
+    // Without this, the first request after a cold start (deploy, restart) hits
+    // a ~2-5s connection establishment latency, which can push the first
+    // updateUser or login mutation over the circuit breaker timeout.
+    // This single SELECT 1 query forces the pool to open a connection so all
+    // subsequent requests use an already-warm connection.
+    setTimeout(() => {
+      getDb()
+        .then((db) => db.execute('SELECT 1 AS warmup'))
+        .then(() => console.log('[Startup] [DB_WARMUP] TiDB connection pool pre-established ✓'))
+        .catch((err: unknown) => console.warn('[Startup] [DB_WARMUP] Pre-warm failed (non-fatal):', err));
+    }, 500); // 500ms delay: let the event loop settle before hitting the DB
+
     // K-Props MLBAM ID startup backfill — resolves all historical rows missing pitcher headshot IDs
     // Runs once on server start, non-fatal, no-ops if all rows already resolved
     import('../mlbKPropsModelService').then(({ backfillAllKPropsMlbamIds }) => {

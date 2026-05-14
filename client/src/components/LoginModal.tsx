@@ -7,6 +7,23 @@
  *
  * [FIX 2026-05-12] Created to fix broken Sign In button that was calling
  * setLocation('/login') which redirects to /feed — doing nothing visible.
+ *
+ * [FIX 2026-05-14] iOS Safari "string did not match expected pattern" fix:
+ *   ROOT CAUSE: The label text "Username or Email" contains the word "email".
+ *   Safari's AutoFill heuristic scans label text for keywords. When it finds
+ *   "email", it classifies the field as email-type and applies email pattern
+ *   validation BEFORE the submit event fires — completely ignoring noValidate.
+ *   "Chip" fails the email regex → "The string did not match the expected pattern".
+ *
+ *   FIX STRATEGY (two layers):
+ *   1. Replace <form> with <div> — eliminates ALL browser form validation.
+ *      The browser's constraint validation API only applies to <form> elements.
+ *      A <div> with an onKeyDown Enter handler is functionally identical but
+ *      completely invisible to Safari's validation engine.
+ *   2. Label changed to "Username" — removes the "email" keyword that triggers
+ *      Safari's AutoFill heuristic, preventing misclassification.
+ *   3. Added stopPropagation() + stopImmediatePropagation() to onInvalid as
+ *      a belt-and-suspenders guard for any residual validation events.
  */
 import { useState } from "react";
 import { Eye, EyeOff, LogIn, Loader2, BarChart3 } from "lucide-react";
@@ -54,10 +71,11 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // [FIX] Pure JS submit handler — NOT attached to a <form> onSubmit.
+  // This bypasses Safari's pre-submit validation entirely.
+  const handleLogin = () => {
     if (!credential.trim() || !password.trim()) {
-      toast.error("Please enter your username/email and password.");
+      toast.error("Please enter your username and password.");
       return;
     }
     loginMutation.mutate({
@@ -65,6 +83,21 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
       password,
       stayLoggedIn,
     });
+  };
+
+  // Allow Enter key in either input to trigger login
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !loginMutation.isPending) {
+      e.preventDefault();
+      handleLogin();
+    }
+  };
+
+  // Belt-and-suspenders: suppress any residual invalid events
+  const suppressInvalid = (e: React.InvalidEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.nativeEvent as Event).stopImmediatePropagation();
   };
 
   return (
@@ -94,11 +127,32 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} noValidate className="px-5 py-5 space-y-4">
+        {/*
+          [FIX] <div> instead of <form> — eliminates ALL browser constraint validation.
+          Safari's pattern/email validation only fires on <form> elements.
+          A <div> is 100% invisible to Safari's validation engine.
+          Keyboard submission is handled via onKeyDown on each input.
+          Screen readers: role="form" + aria-label preserve accessibility semantics.
+        */}
+        <div
+          role="form"
+          aria-label="Member Sign In"
+          className="px-5 py-5 space-y-4"
+        >
           <div className="space-y-1">
-            <label className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
-              Username or Email
+            {/*
+              [FIX] Label changed from "Username or Email" to "Username".
+              Safari's AutoFill heuristic scans label text for the keyword "email".
+              When found, it misclassifies the field as email-type and applies
+              email pattern validation. Removing "email" from the label prevents
+              this misclassification entirely. Users can still enter their email
+              address — the backend accepts both username and email.
+            */}
+            <label
+              htmlFor="login-username"
+              className="text-xs font-semibold tracking-wider uppercase text-muted-foreground"
+            >
+              Username
             </label>
             <input
               type="text"
@@ -106,17 +160,25 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
               name="username"
               value={credential}
               onChange={(e) => setCredential(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="@username or email"
               autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               autoFocus
               aria-required="true"
-              onInvalid={(e) => e.preventDefault()}
+              aria-label="Username or email address"
+              onInvalid={suppressInvalid}
               className="w-full px-3 py-2.5 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-colors"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
+            <label
+              htmlFor="login-password"
+              className="text-xs font-semibold tracking-wider uppercase text-muted-foreground"
+            >
               Password
             </label>
             <div className="relative">
@@ -126,13 +188,14 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
                 name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={handleKeyDown}
                 placeholder="Enter your password"
                 autoComplete="current-password"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
                 aria-required="true"
-                onInvalid={(e) => e.preventDefault()}
+                onInvalid={suppressInvalid}
                 className="w-full px-3 py-2.5 pr-10 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-colors"
               />
               <button
@@ -167,8 +230,11 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
           </label>
 
           <LoginAttemptBanner failureTrigger={loginFailureTrigger} />
+
+          {/* [FIX] type="button" — not type="submit". No form to submit. */}
           <button
-            type="submit"
+            type="button"
+            onClick={handleLogin}
             disabled={loginMutation.isPending}
             className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white bg-primary hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
           >
@@ -190,7 +256,7 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
               Forgot password?
             </button>
           </div>
-        </form>
+        </div>
 
         {/* Forgot Password Modal */}
         <ForgotPasswordModal
