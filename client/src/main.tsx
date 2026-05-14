@@ -6,7 +6,6 @@ import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
 import superjson from "superjson";
 import App from "./App";
-import { getLoginUrl } from "./const";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -68,8 +67,11 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   // [STEP] Delay redirect by 1.5 s so the toast is visible before navigation.
   // The toast id "session-expired" ensures only one instance is shown.
+  // Redirect to the app's own landing/login page ("/") — NOT the Manus OAuth portal.
+  // The app uses custom JWT auth (app_session cookie), so users must re-enter their
+  // credentials on the app's login form, not the Manus OAuth flow.
   setTimeout(() => {
-    window.location.href = getLoginUrl();
+    window.location.href = "/";
   }, 1500);
 };
 

@@ -1059,7 +1059,7 @@ export default function ModelProjections() {
             Total ≈ 507px — too wide at fixed sizes, so we use a single-line flex container that
             shrinks proportionally via font-size: clamp(9px, 2.4vw, ...) for the league label.
             sm+ breakpoints are unchanged from the original design. */}
-        {!showFavoritesTab && !gamesLoading && sortedDates.length > 0 && (
+        {!showFavoritesTab && !gamesLoading && !appAuthLoading && sortedDates.length > 0 && (
           <div className="w-full flex items-center justify-center px-2 py-1 md:py-2 border-b border-border bg-background/95 sm:px-4" style={{ overflow: 'hidden' }}>
             {/* Single-line pill: all three spans in one nowrap flex row, centered in full width */}
             <div
@@ -1267,7 +1267,7 @@ export default function ModelProjections() {
               /* NORMAL PROJECTIONS FEED — or LINEUPS/PROPS tab for MLB */
               feedMobileTab === 'lineups' && selectedSport === 'MLB' ? (
                 /* ── LINEUPS VIEW ── */
-                gamesLoading ? (
+                (gamesLoading || appAuthLoading) ? (
                   <div className="flex flex-col items-center justify-center py-24 gap-3">
                     <Loader2 className="w-8 h-8 text-primary animate-spin" />
                     <p className="text-sm text-muted-foreground">Loading lineups…</p>
@@ -1299,7 +1299,7 @@ export default function ModelProjections() {
                 )
               ) : feedMobileTab === 'props' && selectedSport === 'MLB' ? (
                 /* ── K PROPS VIEW ── */
-                gamesLoading ? (
+                (gamesLoading || appAuthLoading) ? (
                   <div className="flex flex-col items-center justify-center py-24 gap-3">
                     <Loader2 className="w-8 h-8 text-primary animate-spin" />
                     <p className="text-sm text-muted-foreground">Loading K props…</p>
@@ -1332,7 +1332,7 @@ export default function ModelProjections() {
                 )
               ) : feedMobileTab === 'f5nrfi' && selectedSport === 'MLB' ? (
                 /* ── F5 / NRFI VIEW ── */
-                gamesLoading ? (
+                (gamesLoading || appAuthLoading) ? (
                   <div className="flex flex-col items-center justify-center py-24 gap-3">
                     <Loader2 className="w-8 h-8 text-primary animate-spin" />
                     <p className="text-sm text-muted-foreground">Loading Cheat Sheets…</p>
@@ -1359,7 +1359,7 @@ export default function ModelProjections() {
                 )
               ) : feedMobileTab === 'hrprops' && selectedSport === 'MLB' ? (
                 /* ── HR PROPS VIEW ── */
-                gamesLoading ? (
+                (gamesLoading || appAuthLoading) ? (
                   <div className="flex flex-col items-center justify-center py-24 gap-3">
                     <Loader2 className="w-8 h-8 text-primary animate-spin" />
                     <p className="text-sm text-muted-foreground">Loading HR props…</p>
@@ -1391,7 +1391,7 @@ export default function ModelProjections() {
                 )
               ) : (
                 /* ── PROJECTIONS / SPLITS VIEW ── */
-                gamesLoading ? (
+                (gamesLoading || appAuthLoading) ? (
                   <div className="flex flex-col items-center justify-center py-24 gap-3">
                     <Loader2 className="w-8 h-8 text-primary animate-spin" />
                     <p className="text-sm text-muted-foreground">Loading projections…</p>

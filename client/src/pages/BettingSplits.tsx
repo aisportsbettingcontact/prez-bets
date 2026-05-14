@@ -494,7 +494,7 @@ export default function BettingSplitsPage() {
         </div>
 
         {/* Row 4: Date header — shown when games are loaded */}
-        {!gamesLoading && sortedDates.length > 0 && (
+        {!gamesLoading && !appAuthLoading && sortedDates.length > 0 && (
           <div className="flex items-center px-4 py-1 border-b border-border bg-background/95">
             <div className="flex-1" />
             <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center">
@@ -515,7 +515,7 @@ export default function BettingSplitsPage() {
 
       {/* ── Main Feed ── */}
       <main className="w-full pb-1">
-        {gamesLoading ? (
+        {(gamesLoading || appAuthLoading) ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
             <p className="text-sm text-muted-foreground">Loading betting splits…</p>

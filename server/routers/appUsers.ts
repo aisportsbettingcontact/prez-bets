@@ -368,6 +368,17 @@ export const appUsersRouter = router({
     const user = await getAppUserById(payload.userId);
     if (!user || !user.hasAccess) return null;
     if (user.expiryDate && Date.now() > user.expiryDate) return null;
+    // [STEP] tokenVersion check — must match appUserProcedure's check.
+    // If the session was force-invalidated (admin force-logout, password reset, etc.)
+    // the JWT tv will differ from the DB tokenVersion. Returning null here ensures
+    // the frontend sees the user as unauthenticated BEFORE firing appUserProcedure
+    // queries (e.g. games.list). Without this check, appUsers.me returns a user
+    // object (enabling games.list), but games.list then returns UNAUTHORIZED due to
+    // the tokenVersion mismatch — causing "No MLB games found" + unexpected logout.
+    if (payload.tv !== null && payload.tv !== undefined && payload.tv !== user.tokenVersion) {
+      console.log(`[AppAuth] me: session invalidated — jwt.tv=${payload.tv} db.tv=${user.tokenVersion} userId=${user.id}`);
+      return null;
+    }
 
     // [STEP] Extract JWT exp claim to surface session expiry to the frontend
     // This allows the user menu to show "Session: X days remaining" badge
