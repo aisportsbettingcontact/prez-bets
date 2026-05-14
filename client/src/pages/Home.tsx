@@ -1,5 +1,17 @@
 // Home — Paywall landing page with inline login panel
 // Unauthenticated users see the landing; authenticated users are redirected to the dashboard.
+//
+// [FIX 2026-05-14] iOS Safari "string did not match expected pattern" fix:
+//   ROOT CAUSE: The label text "Username or Email" contains the word "email".
+//   Safari's AutoFill heuristic scans label text for keywords. When it finds
+//   "email", it classifies the field as email-type and applies email pattern
+//   validation BEFORE the submit event fires — completely ignoring noValidate.
+//   "Chip" fails the email regex → "The string did not match the expected pattern".
+//
+//   FIX: Replace <form> with <div role="form"> + button onClick handler.
+//   The browser's constraint validation API only applies to <form> elements.
+//   A <div> is 100% invisible to Safari's validation engine.
+//   Label changed to "Username" to remove the "email" keyword trigger.
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { BarChart3, TrendingUp, Zap, Shield, Eye, EyeOff, LogIn, Loader2, ChevronRight } from "lucide-react";
@@ -86,10 +98,11 @@ export default function Home() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // [FIX] Pure JS handler — NOT attached to a <form> onSubmit.
+  // Bypasses Safari's pre-submit validation engine entirely.
+  const handleLogin = () => {
     if (!credential.trim() || !password.trim()) {
-      toast.error("Please enter your username/email and password.");
+      toast.error("Please enter your username and password.");
       return;
     }
     loginMutation.mutate({
@@ -97,6 +110,21 @@ export default function Home() {
       password,
       stayLoggedIn,
     });
+  };
+
+  // Allow Enter key in either input to trigger login
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !loginMutation.isPending) {
+      e.preventDefault();
+      handleLogin();
+    }
+  };
+
+  // Belt-and-suspenders: suppress any residual invalid events
+  const suppressInvalid = (e: React.InvalidEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.nativeEvent as Event).stopImmediatePropagation();
   };
 
   // Show spinner only while loading AND within the 4-second timeout window
@@ -195,11 +223,30 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} noValidate className="px-5 py-5 space-y-4">
+            {/*
+              [FIX] <div role="form"> instead of <form>.
+              Safari's constraint validation API only fires on <form> elements.
+              A <div> is completely invisible to Safari's validation engine.
+              Keyboard submission handled via onKeyDown on each input.
+            */}
+            <div
+              role="form"
+              aria-label="Member Sign In"
+              className="px-5 py-5 space-y-4"
+            >
               <div className="space-y-1">
-                <label className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
-                  Username or Email
+                {/*
+                  [FIX] Label changed from "Username or Email" to "Username".
+                  Safari scans label text for the keyword "email" and misclassifies
+                  the field as email-type, applying email pattern validation.
+                  Removing "email" from the label prevents this misclassification.
+                  Users can still enter their email — the backend accepts both.
+                */}
+                <label
+                  htmlFor="home-login-username"
+                  className="text-xs font-semibold tracking-wider uppercase text-muted-foreground"
+                >
+                  Username
                 </label>
                 <input
                   type="text"
@@ -207,17 +254,25 @@ export default function Home() {
                   name="username"
                   value={credential}
                   onChange={(e) => setCredential(e.target.value)}
+                  onKeyDown={handleKeyDown}
                   placeholder="@username or email"
                   autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   autoFocus
                   aria-required="true"
-                  onInvalid={(e) => e.preventDefault()}
+                  aria-label="Username or email address"
+                  onInvalid={suppressInvalid}
                   className="w-full px-3 py-2.5 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-colors"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
+                <label
+                  htmlFor="home-login-password"
+                  className="text-xs font-semibold tracking-wider uppercase text-muted-foreground"
+                >
                   Password
                 </label>
                 <div className="relative">
@@ -227,13 +282,14 @@ export default function Home() {
                     name="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={handleKeyDown}
                     placeholder="Enter your password"
                     autoComplete="current-password"
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
                     aria-required="true"
-                    onInvalid={(e) => e.preventDefault()}
+                    onInvalid={suppressInvalid}
                     className="w-full px-3 py-2.5 pr-10 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-colors"
                   />
                   <button type="button" onClick={() => setShowPassword(!showPassword)}
@@ -266,7 +322,11 @@ export default function Home() {
               </label>
 
               <LoginAttemptBanner failureTrigger={loginFailureTrigger} />
-              <button type="submit"
+
+              {/* [FIX] type="button" + onClick — not type="submit". No <form> to submit. */}
+              <button
+                type="button"
+                onClick={handleLogin}
                 disabled={loginMutation.isPending}
                 className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white bg-primary hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
@@ -288,7 +348,7 @@ export default function Home() {
                   Forgot password?
                 </button>
               </div>
-            </form>
+            </div>
 
             {/* Forgot Password Modal */}
             <ForgotPasswordModal
