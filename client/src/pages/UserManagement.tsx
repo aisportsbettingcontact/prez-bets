@@ -1024,10 +1024,17 @@ export default function UserManagement() {
               </Label>
               <div className="relative">
                 <Input
-                  type={showPassword ? "text" : "password"}
+                  type="password"
+                  id="um-password"
+                  name="new-password"
+                  autoComplete="new-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={form.password}
                   onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  placeholder={editUser ? "••••••••" : "Min 8 characters"}
+                  placeholder={editUser ? "Leave blank to keep current" : "Min 8 characters"}
+                  style={showPassword ? { WebkitTextSecurity: "none" } as React.CSSProperties : undefined}
                   className="bg-white/5 border-white/10 text-white placeholder:text-zinc-300 pr-10"
                 />
                 <button type="button" onClick={() => setShowPassword((v) => !v)}

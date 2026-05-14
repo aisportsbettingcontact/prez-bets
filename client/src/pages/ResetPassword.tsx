@@ -143,12 +143,16 @@ export default function ResetPassword() {
               <Input
                 id="rp-password"
                 name="new-password"
-                type={showPassword ? "text" : "password"}
+                type="password"
                 autoComplete="new-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="At least 8 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={resetPassword.isPending}
+                style={showPassword ? { WebkitTextSecurity: "none" } as React.CSSProperties : undefined}
                 className="bg-white/5 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400 pr-10"
                 required
                 minLength={8}
@@ -177,12 +181,16 @@ export default function ResetPassword() {
               <Input
                 id="rp-confirm"
                 name="confirm-password"
-                type={showConfirm ? "text" : "password"}
+                type="password"
                 autoComplete="new-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="Repeat new password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 disabled={resetPassword.isPending}
+                style={showConfirm ? { WebkitTextSecurity: "none" } as React.CSSProperties : undefined}
                 className="bg-white/5 border-white/20 text-white placeholder:text-white/30 focus:border-blue-400 pr-10"
                 required
                 minLength={8}

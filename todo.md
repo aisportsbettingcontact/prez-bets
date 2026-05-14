@@ -3255,3 +3255,9 @@
 - [x] IngestAnOdds: move render-phase navigate() to useEffect
 - [x] PostponedGames: move hooks before auth guard, move navigate to useEffect
 - [x] SecurityEvents: move render-phase navigate() to useEffect
+
+## Session: 2026-05-14 — iOS Safari Password Show/Hide Fix (Root Cause)
+- [x] LoginModal: keep type=password always, use CSS webkit-text-security for show/hide, add autoCapitalize/autoCorrect/spellCheck
+- [x] Home.tsx: same fix + add id/name attributes + fix bullet placeholder
+- [x] ResetPassword.tsx: both new-password and confirm-password fields fixed
+- [x] UserManagement.tsx: admin create/edit password field fixed

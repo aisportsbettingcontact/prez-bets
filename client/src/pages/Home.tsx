@@ -215,12 +215,18 @@ export default function Home() {
                 </label>
                 <div className="relative">
                   <input
-                    type={showPassword ? "text" : "password"}
+                    type="password"
+                    id="home-login-password"
+                    name="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder="Enter your password"
                     autoComplete="current-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     required
+                    style={showPassword ? { WebkitTextSecurity: "none" } as React.CSSProperties : undefined}
                     className="w-full px-3 py-2.5 pr-10 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-colors"
                   />
                   <button type="button" onClick={() => setShowPassword(!showPassword)}
