@@ -194,9 +194,11 @@ export default function BettingSplitsPage() {
 
   useEffect(() => { setSelectedStatuses(new Set()); setSelectedDate(todayUTC()); }, [selectedSport]);
 
+  // SECURITY: only fire when appUser is confirmed — prevents unauthenticated API calls
+  const isAppAuthed = !appAuthLoading && Boolean(appUser);
   const { data: allGames, isLoading: gamesLoading } = trpc.games.list.useQuery(
     { sport: selectedSport },
-    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
+    { enabled: isAppAuthed, refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
   );
 
   const liveCount = useMemo(() => (allGames ?? []).filter(g => g?.gameStatus === "live").length, [allGames]);

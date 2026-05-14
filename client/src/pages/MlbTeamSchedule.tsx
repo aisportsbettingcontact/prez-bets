@@ -479,11 +479,12 @@ export default function MlbTeamSchedule() {
   // - staleTime: 90s — prevents redundant fetches on tab focus
   // - retry: 3 attempts with exponential backoff before surfacing error
   // - onError: NEVER silent — always logged to console with full context
+  // SECURITY: only fire when appUser is confirmed — prevents unauthenticated API calls
   const { data, isLoading, error, refetch, isFetching, dataUpdatedAt } =
     trpc.mlbSchedule.getTeamSchedule.useQuery(
       { teamSlug },
       {
-        enabled: !!teamSlug,
+        enabled: !!teamSlug && !appAuthLoading && Boolean(appUser),
         staleTime: 90 * 1000,
         retry: 3,
         retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),

@@ -3206,3 +3206,21 @@
 - [x] Restore paywall as default entry point: / → Home (hard gate)
 - [x] Add auth guard on /feed — unauthenticated users redirected to /
 - [x] Remove public mode /login redirect (restore proper login flow)
+## Session: 2026-05-14 — Server-Side Auth Enforcement (Full Security Hardening)
+- [x] Audit all publicProcedure endpoints — identified 13 sensitive procedures exposing model/betting data without auth
+- [x] Convert games.list to appUserProcedure (model projections, edges, spread/ML odds)
+- [x] Convert games.mlbLineups to appUserProcedure (pitcher/batting order data)
+- [x] Convert games.mlbEnvSignals to appUserProcedure (park factors, bullpen ERA/FIP, umpire modifiers)
+- [x] Convert oddsHistory.listForGame to appUserProcedure (odds movement data)
+- [x] Convert strikeoutProps.getByGame/getByGames to appUserProcedure (K-prop projections)
+- [x] Convert hrProps.getByGame/getByGames to appUserProcedure (HR prop projections)
+- [x] Convert bracket.getGames to appUserProcedure (bracket data)
+- [x] Convert mlbSchedule.getLast5ForMatchup/getTeamSchedule/getSituationalStats/getH2HGames to appUserProcedure
+- [x] Convert nbaSchedule.getLast5ForMatchup/getTeamSchedule/getSituationalStats to appUserProcedure
+- [x] Convert nhlSchedule.getLast5ForMatchup/getTeamSchedule/getSituationalStats to appUserProcedure
+- [x] Add enabled: isAppAuthedForFav guard to ModelProjections.tsx games.list queries (fires AFTER auth resolves)
+- [x] Add enabled: isAppAuthed guard to BettingSplits.tsx games.list query
+- [x] Add enabled: appUser guard to NbaTeamSchedule, NhlTeamSchedule, MlbTeamSchedule queries
+- [x] Fix SituationalResultsPanel NHL queries to respect enabled prop
+- [x] Force-logout all 48 non-owner users via tokenVersion increment (DB: 2026-05-14 04:14:00)
+- [x] TypeScript: 0 errors throughout

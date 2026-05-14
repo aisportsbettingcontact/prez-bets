@@ -207,8 +207,10 @@ export const appRouter = router({
   games: router({
     /**
      * List all games, optionally filtered by sport and/or date.
+     * SECURITY: appUserProcedure — game rows include model projections, edges, and spread/ML odds.
+     * Unauthenticated callers receive UNAUTHORIZED (prevents API-level paywall bypass).
      */
-    list: publicProcedure
+    list: appUserProcedure
       .input(
         z
           .object({
@@ -219,6 +221,7 @@ export const appRouter = router({
           .optional()
       )
       .query(async ({ input, ctx }) => {
+        console.log(`[tRPC][games.list] AUTHED userId=${ctx.appUser.id} username=${ctx.appUser.username} sport=${input?.sport ?? 'all'} date=${input?.gameDate ?? 'rolling'}`);
         const games = await listGames(input ?? {});
         // Filter by the appropriate registry based on sport
         let filtered = games.filter(g => isValidGame(g.awayTeam, g.homeTeam, g.sport));
@@ -357,10 +360,12 @@ export const appRouter = router({
      * Used by the frontend to hide sport tabs when there are no upcoming games.
      */
     activeSports: publicProcedure.query(async () => {
+      // OK: returns only sport name strings — no model data
       return getActiveSports();
     }),
 
     /** Returns the result of the last auto-refresh run (null if never run). */
+    // OK: returns only a timestamp — no model data
     lastRefresh: publicProcedure.query(() => {
       return getLastRefreshResult();
     }),
@@ -712,9 +717,11 @@ export const appRouter = router({
      * Returns a map of gameId → lineup row (pitcher, batting order, weather, umpire).
      * Public — lineups are visible to all users.
      */
-    mlbLineups: publicProcedure
+    // SECURITY: appUserProcedure — lineup data (pitcher, batting order) is part of the model feed.
+    mlbLineups: appUserProcedure
       .input(z.object({ gameIds: z.array(z.number().int().positive()) }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        console.log(`[tRPC][games.mlbLineups] AUTHED userId=${ctx.appUser.id} gameIds=[${input.gameIds.join(',')}]`);
         if (input.gameIds.length === 0) return {};
         const map = await getMlbLineupsByGameIds(input.gameIds);
         // Convert Map to plain object for JSON serialization
@@ -728,14 +735,16 @@ export const appRouter = router({
      * Fetch MLB environment signals (park factor, bullpen ERA/FIP, umpire K/BB modifiers)
      * for a single game. Used by the MlbLineupCard detail view.
      * Returns nulls for any signal not yet seeded.
+     * SECURITY: appUserProcedure — env signals are model inputs, not public data.
      */
-    mlbEnvSignals: publicProcedure
+    mlbEnvSignals: appUserProcedure
       .input(z.object({
         homeTeam: z.string().min(2).max(8),
         awayTeam: z.string().min(2).max(8),
         umpireName: z.string().max(100).regex(/^[A-Za-z\s\-\.]+$/, "Invalid umpire name").nullable().optional(),
       }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        console.log(`[tRPC][games.mlbEnvSignals] AUTHED userId=${ctx.appUser.id} homeTeam=${input.homeTeam} awayTeam=${input.awayTeam}`);
         return getMlbGameEnvSignals({
           homeTeam: input.homeTeam,
           awayTeam: input.awayTeam,
@@ -933,11 +942,12 @@ export const appRouter = router({
   oddsHistory: router({
     /**
      * List all odds snapshots for a specific game, newest first.
-     * Owner-only — used in Publish Projections odds history table.
+     * SECURITY: appUserProcedure — odds movement data is premium content.
      */
-    listForGame: publicProcedure
+    listForGame: appUserProcedure
       .input(z.object({ gameId: z.number().int().positive() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        console.log(`[tRPC][oddsHistory.listForGame] AUTHED userId=${ctx.appUser.id} gameId=${input.gameId}`);
         const rows = await listOddsHistory(input.gameId);
         return { history: rows };
       }),
@@ -947,10 +957,12 @@ export const appRouter = router({
     /**
      * Fetch strikeout prop projections for a single game.
      * Returns 0–2 rows (away pitcher, home pitcher).
+     * SECURITY: appUserProcedure — K-prop projections are model outputs.
      */
-    getByGame: publicProcedure
+    getByGame: appUserProcedure
       .input(z.object({ gameId: z.number().int().positive() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        console.log(`[tRPC][strikeoutProps.getByGame] AUTHED userId=${ctx.appUser.id} gameId=${input.gameId}`);
         const rows = await getStrikeoutPropsByGame(input.gameId);
         return { props: rows };
       }),
@@ -958,10 +970,12 @@ export const appRouter = router({
     /**
      * Fetch strikeout props for multiple games at once.
      * Returns a record of gameId → rows[].
+     * SECURITY: appUserProcedure — K-prop projections are model outputs.
      */
-    getByGames: publicProcedure
+    getByGames: appUserProcedure
       .input(z.object({ gameIds: z.array(z.number().int().positive()) }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        console.log(`[tRPC][strikeoutProps.getByGames] AUTHED userId=${ctx.appUser.id} gameIds=[${input.gameIds.join(',')}]`);
         const map = await getStrikeoutPropsByGames(input.gameIds);
         // Convert Map to plain object for serialization
         const result: Record<number, typeof map extends Map<number, infer V> ? V : never> = {};
@@ -1199,11 +1213,12 @@ export const appRouter = router({
     /**
      * Fetch HR prop projections for a single game.
      * Returns all player rows ordered by side (away first), then playerName.
-     * Source: Consensus (Action Network book_id=15)
+     * SECURITY: appUserProcedure — HR prop projections are model outputs.
      */
-    getByGame: publicProcedure
+    getByGame: appUserProcedure
       .input(z.object({ gameId: z.number().int().positive() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        console.log(`[tRPC][hrProps.getByGame] AUTHED userId=${ctx.appUser.id} gameId=${input.gameId}`);
         const rows = await getHrPropsByGame(input.gameId);
         return { props: rows };
       }),
@@ -1211,10 +1226,12 @@ export const appRouter = router({
     /**
      * Fetch HR props for multiple games at once.
      * Returns a record of gameId → rows[].
+     * SECURITY: appUserProcedure — HR prop projections are model outputs.
      */
-    getByGames: publicProcedure
+    getByGames: appUserProcedure
       .input(z.object({ gameIds: zodGameIdArray }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        console.log(`[tRPC][hrProps.getByGames] AUTHED userId=${ctx.appUser.id} gameIds=[${input.gameIds.join(',')}]`);
         const map = await getHrPropsByGames(input.gameIds);
         const result: Record<number, Awaited<ReturnType<typeof getHrPropsByGame>>> = {};
         Array.from(map.entries()).forEach(([k, v]) => { result[k] = v; });
@@ -1362,10 +1379,11 @@ export const appRouter = router({
   bracket: router({ /**
      * Fetch all tournament games with bracket metadata.
      * Returns every game from First Four through Championship.
-     * Accessible to all authenticated app users.
+     * SECURITY: appUserProcedure — bracket data is authenticated-user content.
      */
-    getGames: publicProcedure
-      .query(async () => {
+    getGames: appUserProcedure
+      .query(async ({ ctx }) => {
+        console.log(`[tRPC][bracket.getGames] AUTHED userId=${ctx.appUser.id}`);
         const rows = await getBracketGames();
         return { games: rows };
       }),

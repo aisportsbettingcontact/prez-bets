@@ -470,15 +470,21 @@ export default function ModelProjections() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSport]);
 
+  // SECURITY: enabled only when appUser is confirmed — prevents unauthenticated API calls
+  // isAppAuthedForFav is defined below (line ~601) but hoisted here via JS closure — OK because
+  // React guarantees hooks run in order and isAppAuthedForFav is a derived boolean from state.
+  // We compute it early here to gate all sensitive queries.
+  const isAppAuthedForFav = !appAuthLoading && Boolean(appUser);
+
   const { data: allGames, isLoading: gamesLoading } = trpc.games.list.useQuery(
     { sport: selectedSport },
-    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
+    { enabled: isAppAuthedForFav, refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
   );
 
   // Cross-sport game lists for the Favorites tab (needs ALL sports regardless of selectedSport)
   const { data: allNbaGames } = trpc.games.list.useQuery(
     { sport: "NBA" },
-    { refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
+    { enabled: isAppAuthedForFav, refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
   );
 
   const liveCount = useMemo(() =>
@@ -594,11 +600,8 @@ export default function ModelProjections() {
   const { data: lastRefresh } = trpc.games.lastRefresh.useQuery(undefined, { refetchInterval: 60_000 });
 
     // ── Favorites ──────────────────────────────────────────────────────────────
-  // NOTE: enabled must use Boolean(appUser) AND !appAuthLoading — NOT isAuthenticated (Manus OAuth).
-  // Wait for appUsers.me to resolve before firing favorites queries to avoid race condition
-  // where the initial batch fires before the app_session cookie state is known.
-  // Custom-auth users always have isAuthenticated=false, so the query would never fire.
-  const isAppAuthedForFav = !appAuthLoading && Boolean(appUser);
+  // NOTE: isAppAuthedForFav is declared above near games.list queries (line ~477)
+  // to gate ALL sensitive queries from the same auth check.
   const { data: favData } = trpc.favorites.getMyFavorites.useQuery(undefined, {
     enabled: isAppAuthedForFav,
     refetchOnWindowFocus: false,

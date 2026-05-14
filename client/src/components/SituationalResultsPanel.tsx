@@ -247,15 +247,15 @@ function StatsSection({
     { teamSlug: homeSlug },
     { enabled: (enabled ?? true) && sport === "NBA", staleTime: 5 * 60 * 1000, retry: 1 }
   );
-
-  // ── NHL query ────────────────────────────────────────────────────────────
+  // ── NHL query ───────────────────────────────────────────────────────────────────────────
+  // SECURITY: include enabled prop to respect parent auth gate
   const nhlAwayQuery = trpc.nhlSchedule.getSituationalStats.useQuery(
     { teamSlug: awaySlug },
-    { enabled: sport === "NHL", staleTime: 5 * 60 * 1000, retry: 1 }
+    { enabled: (enabled ?? true) && sport === "NHL", staleTime: 5 * 60 * 1000, retry: 1 }
   );
   const nhlHomeQuery = trpc.nhlSchedule.getSituationalStats.useQuery(
     { teamSlug: homeSlug },
-    { enabled: sport === "NHL", staleTime: 5 * 60 * 1000, retry: 1 }
+    { enabled: (enabled ?? true) && sport === "NHL", staleTime: 5 * 60 * 1000, retry: 1 }
   );
 
   const awayQuery =

@@ -15,6 +15,8 @@
  */
 
 import { useState } from "react";
+import { useLocation } from "wouter";
+import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -275,8 +277,24 @@ function SummaryBar({
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function AdminModelStatus() {
+  const [, navigate] = useLocation();
+  const { appUser, loading: authLoading, isOwner } = useAppAuth();
   const [tab, setTab] = useState<"mlb" | "nhl">("mlb");
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // ── Owner-only auth guard ────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-zinc-400 text-sm">Verifying access...</div>
+      </div>
+    );
+  }
+  if (!appUser || !isOwner) {
+    console.warn(`[AdminModelStatus] Unauthorized access attempt | user=${appUser?.username ?? "unauthenticated"} | isOwner=${isOwner}`);
+    navigate("/");
+    return null;
+  }
 
   const mlbQuery = trpc.adminModelStatus.mlb.useQuery(
     {},

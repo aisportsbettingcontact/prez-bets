@@ -17,7 +17,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, router } from "../_core/trpc";
-import { ownerProcedure } from "./appUsers";
+import { ownerProcedure, appUserProcedure } from "./appUsers";
 import {
   getLast5ForMatchup,
   getFullScheduleForTeam,
@@ -58,17 +58,18 @@ export const mlbScheduleRouter = router({
   /**
    * Get the last 5 completed games for both teams in a matchup.
    * Powers the "Last 5 Games" panel on each MLB matchup card.
+   * SECURITY: appUserProcedure — schedule history is authenticated-user content.
    */
-  getLast5ForMatchup: publicProcedure
+  getLast5ForMatchup: appUserProcedure
     .input(
       z.object({
         awaySlug: zodAnSlug,
         homeSlug: zodAnSlug,
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log(
-        `${TAG}[getLast5ForMatchup] Fetching Last 5 for matchup:` +
+        `${TAG}[getLast5ForMatchup] AUTHED userId=${ctx.appUser.id} Fetching Last 5 for matchup:` +
         ` away="${input.awaySlug}" vs home="${input.homeSlug}"`
       );
 
@@ -98,15 +99,16 @@ export const mlbScheduleRouter = router({
    * Get the full schedule for a single MLB team (all games, any status).
    * Powers the Team Schedule page when a user clicks on a team logo.
    */
-  getTeamSchedule: publicProcedure
+  // SECURITY: appUserProcedure — team schedule data is authenticated-user content.
+  getTeamSchedule: appUserProcedure
     .input(
       z.object({
         teamSlug: zodAnSlug,
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log(
-        `${TAG}[getTeamSchedule] Fetching full schedule for team="${input.teamSlug}"`
+        `${TAG}[getTeamSchedule] AUTHED userId=${ctx.appUser.id} Fetching full schedule for team="${input.teamSlug}"`
       );
 
       try {
@@ -131,15 +133,16 @@ export const mlbScheduleRouter = router({
    * Get situational records for a single MLB team.
    * Powers the "Situational Results" panel (ML/Run Line/Total tabs).
    */
-  getSituationalStats: publicProcedure
+  // SECURITY: appUserProcedure — situational stats are authenticated-user content.
+  getSituationalStats: appUserProcedure
     .input(
       z.object({
         teamSlug: zodAnSlug,
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log(
-        `${TAG}[getSituationalStats] Computing situational stats for team="${input.teamSlug}"`
+        `${TAG}[getSituationalStats] AUTHED userId=${ctx.appUser.id} Computing situational stats for team="${input.teamSlug}"`
       );
       try {
         const stats = await getMlbSituationalStats(input.teamSlug);
@@ -162,7 +165,8 @@ export const mlbScheduleRouter = router({
    * Get the last N head-to-head games between two specific MLB teams.
    * Powers the "Head-to-Head" tab in the Recent Schedule panel.
    */
-  getH2HGames: publicProcedure
+  // SECURITY: appUserProcedure — H2H game history is authenticated-user content.
+  getH2HGames: appUserProcedure
     .input(
       z.object({
         slugA: zodAnSlug,
@@ -170,9 +174,9 @@ export const mlbScheduleRouter = router({
         limit: z.number().int().min(1).max(20).default(10),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log(
-        `${TAG}[getH2HGames] Fetching H2H games: "${input.slugA}" vs "${input.slugB}" limit=${input.limit}`
+        `${TAG}[getH2HGames] AUTHED userId=${ctx.appUser.id} Fetching H2H games: "${input.slugA}" vs "${input.slugB}" limit=${input.limit}`
       );
       try {
         const games = await getMlbH2HGames(input.slugA, input.slugB, input.limit);

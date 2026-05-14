@@ -13,6 +13,8 @@
  */
 
 import { useState } from "react";
+import { useLocation } from "wouter";
+import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -181,8 +183,24 @@ function MarkStatusDialog({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PostponedGames() {
+  const [, navigate] = useLocation();
+  const { appUser, loading: authLoading, isOwner } = useAppAuth();
   const [filterStatus, setFilterStatus] = useState<"all" | "postponed" | "suspended">("all");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // ── Owner-only auth guard ────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-zinc-400 text-sm">Verifying access...</div>
+      </div>
+    );
+  }
+  if (!appUser || !isOwner) {
+    console.warn(`[PostponedGames] Unauthorized access attempt | user=${appUser?.username ?? "unauthenticated"} | isOwner=${isOwner}`);
+    navigate("/");
+    return null;
+  }
 
   const { data, isLoading, error, refetch, isFetching } =
     trpc.games.listPostponed.useQuery(undefined, {

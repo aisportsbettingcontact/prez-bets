@@ -15,7 +15,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, router } from "../_core/trpc";
-import { ownerProcedure } from "./appUsers";
+import { ownerProcedure, appUserProcedure } from "./appUsers";
 import {
   getNhlLast5ForMatchup,
   getNhlFullScheduleForTeam,
@@ -56,16 +56,17 @@ export const nhlScheduleRouter = router({
    *   awayLast5 — Array of up to 5 completed games for the away team (most recent first)
    *   homeLast5 — Array of up to 5 completed games for the home team (most recent first)
    */
-  getLast5ForMatchup: publicProcedure
+  // SECURITY: appUserProcedure — NHL schedule history is authenticated-user content.
+  getLast5ForMatchup: appUserProcedure
     .input(
       z.object({
         awaySlug: zodAnSlug,
         homeSlug: zodAnSlug,
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log(
-        `${TAG}[getLast5ForMatchup] Fetching Last 5 for matchup:` +
+        `${TAG}[getLast5ForMatchup] AUTHED userId=${ctx.appUser.id} Fetching Last 5 for matchup:` +
         ` away="${input.awaySlug}" vs home="${input.homeSlug}"`
       );
       try {
@@ -99,15 +100,16 @@ export const nhlScheduleRouter = router({
    *   games — Array of all games for this team (most recent first)
    *   teamSlug — Echo back the slug for the frontend to use
    */
-  getTeamSchedule: publicProcedure
+  // SECURITY: appUserProcedure — NHL team schedule is authenticated-user content.
+  getTeamSchedule: appUserProcedure
     .input(
       z.object({
         teamSlug: zodAnSlug,
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log(
-        `${TAG}[getTeamSchedule] Fetching full schedule for team="${input.teamSlug}"`
+        `${TAG}[getTeamSchedule] AUTHED userId=${ctx.appUser.id} Fetching full schedule for team="${input.teamSlug}"`
       );
       try {
         const games = await getNhlFullScheduleForTeam(input.teamSlug);
@@ -138,15 +140,16 @@ export const nhlScheduleRouter = router({
    *   total   — { overall, last10, home, away, favorite, underdog } O/U records
    *   gamesAnalyzed — Total number of complete games used for computation
    */
-  getSituationalStats: publicProcedure
+  // SECURITY: appUserProcedure — NHL situational stats are authenticated-user content.
+  getSituationalStats: appUserProcedure
     .input(
       z.object({
         teamSlug: zodAnSlug,
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log(
-        `${TAG}[getSituationalStats] Computing situational stats for team="${input.teamSlug}"`
+        `${TAG}[getSituationalStats] AUTHED userId=${ctx.appUser.id} Computing situational stats for team="${input.teamSlug}"`
       );
       try {
         const stats = await getNhlSituationalStats(input.teamSlug);

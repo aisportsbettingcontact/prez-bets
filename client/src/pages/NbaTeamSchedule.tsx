@@ -259,9 +259,10 @@ export default function NbaTeamSchedule() {
 
   const team = NBA_BY_AN_SLUG.get(slug ?? "");
 
+  // SECURITY: only fire when appUser is confirmed — prevents unauthenticated API calls
   const scheduleQuery = trpc.nbaSchedule.getTeamSchedule.useQuery(
     { teamSlug: slug ?? "" },
-    { enabled: !!slug, staleTime: 5 * 60 * 1000, retry: 2 }
+    { enabled: !!slug && !appAuthLoading && Boolean(appUser), staleTime: 5 * 60 * 1000, retry: 2 }
   );
 
   const games = (scheduleQuery.data?.games ?? []) as ScheduleGame[];
