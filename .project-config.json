@@ -1,0 +1,58 @@
+{
+  "build_command": "pnpm run build",
+  "capabilities": [
+    "db",
+    "server",
+    "user"
+  ],
+  "dev_command": "pnpm run dev",
+  "env_vars": {
+    "DATABASE_URL": "mysql://3AW8r3RRauadYzS.root:FiNY0A931JHuYnrbc3l5@gateway04.us-east-1.prod.aws.tidbcloud.com:4000/MW3FicTy7ae3qrm8dx8Lua?ssl={\"rejectUnauthorized\":true}"
+  },
+  "experiments": null,
+  "git_remote": {
+    "repo_url": "s3://vida-prod-gitrepo/webdev-git/310519663397752079/MW3FicTy7ae3qrm8dx8Lua",
+    "access_key_id": "ASIAZV3A2ECZPUNXCDAA",
+    "secret_access_key": "0Kk4jwfHIJPTuJulnSN0bWyK7wuKKupBkcq+Dx/1",
+    "session_token": "IQoJb3JpZ2luX2VjEJv//////////wEaCXVzLWVhc3QtMSJGMEQCIE9/fcInftl42uSGMvE7xGaJZBUxxSH/1jToChQO7nZLAiBzY3LiWZif0m6LJSd9GLbe554uzgi1Xw8eRVIrfrsSEir2AwhkEAQaDDY2NTM4NjA5ODg2NiIM3/gYIEGGLVzjquVaKtMDSoEzaosMXR5gOfTuVUpiNoQav4t1upbwsa4q5Nygc+n6KXLv22cWONUqXknhhVSoSj1fbx0e3GeOWaWJvFfjjCCCZgcUoeFassHUBu2qtF21Y8I0Zfus3La2I+5j2ZeJvOwI+yk33k4AG0trykpXmnzsAfsbAZ4FLegcs1uU5He+AWjOOPltlDI1CHi7DVjyzer80TuJmhWQWN+sz8g+6ybo2JkygLUUQQDc2L1Z2Uvu1bKDT70ezU27U/oTSNATDDK56p+TvXb7J78chJzwEQgp6LOGk/J8UqF96sQWv8N8iD9cfOURae5BIiaTDtPR+94HQX+vSW+Jr+FDdPmGVRUAlC3Pjf47Lp3xhSLrXh/JPhZaYpQdGMyuDESWoiEbTrmG5dST0mEK1Du238v7mZ7M3uOqLWMkJaNxt7ih0lxs56lxR8x7jmmGWkgnxn4+dEvTRBn4jR7ftZeGPJ4WvOBjomTFgAOuS5+mvE9G23Dbt5QTtb9/00lJg1zmpLC3kkeCAZlCFN6M4l1eIxRMGM1YWrXxu+xOARtU86DFQ45F6p9WwzyX2JD+uJAjzldHUo1xGRQcN5tLh30NN8QsT3JSv8RPfOcSoJeUh2kH01TcaXsw3K+Y0AY6ngGQIgrSTn2QOc4mKEZIM93V1qWLJ5kJRu3WVSHr0BT4VKRjFVKRGPdQKaYgyANb8+zaKK2z0bvrnBXdYECoZKydXRAM4VeTBaLTHH9bdN8irWinD0zYqVGCKBXjk1wPWrJLlyS8HbcUGtmzue75YEAxYD2y8xPD30QA/59+/MC5GhJY04lJ4LMFwC4OwfuXS1juxqX1bnTlHzXK0hZzww==",
+    "expiration": "2026-05-15T06:43:40.000Z"
+  },
+  "name": "ai-sports-betting",
+  "path": "/home/ubuntu/ai-sports-betting",
+  "port": 3000,
+  "secrets": {
+    "BUILT_IN_FORGE_API_KEY": "miNquhzPUYHCLhWR7zGhtF",
+    "BUILT_IN_FORGE_API_URL": "https://forge.manus.ai",
+    "CF_API_TOKEN": "cfut_nTld033wR3ofRiQlk6qU2k9A6F7fGrd6vkWku6Kl06ceeb39",
+    "CF_ZONE_ID": "2f4f0d5ad9c0eff9e7850689a6934f9f",
+    "DISCORD_BOT_TOKEN": "MTQ4MzIyNjIyNzA1NjU3NDU5MA.GnXFHd.NrI0GuKeFLKgBOsDfnXwvArlG4q0_Z9dLJ00Kw",
+    "DISCORD_CLIENT_ID": "1483226227056574590",
+    "DISCORD_CLIENT_SECRET": "Od3h3vL9_fZV2W9Dd4SSfgUqRZmXuNxE",
+    "DISCORD_GUILD_ID": "1284016372359106621",
+    "DISCORD_PUBLIC_KEY": "d2e34bec17769bdb28313ce1da1efc82eee1394875bd3fa2b6295305b2f83b3a",
+    "DISCORD_ROLE_AI_MODEL_SUB": "1474938477664796672",
+    "JWT_SECRET": "e9BxTAUDcHheLq6JWBHevS",
+    "KENPOM_EMAIL": "taileredsportsbetting@gmail.com",
+    "KENPOM_PASSWORD": "3$mHnYuV8iLcYau",
+    "METABET_API_KEY": "219f64094f67ed781035f5f7a08840fc",
+    "NBA_SHEET_ID": "1MWNh0pMkFdUfldhXj60bq9blLPXCg5N5fKh7yYMI0gU",
+    "OAUTH_SERVER_URL": "https://api.manus.im",
+    "OWNER_NAME": "AI Sports Betting",
+    "OWNER_OPEN_ID": "nvWNY3xFdUDk6uV8oHQr99",
+    "PUBLIC_ORIGIN": "https://aisportsbettingmodels.com",
+    "ROTOGRINDERS_PASSWORD": "DegromRay",
+    "ROTOGRINDERS_USERNAME": "LucianoMLB",
+    "VITE_ANALYTICS_ENDPOINT": "https://manus-analytics.com",
+    "VITE_ANALYTICS_WEBSITE_ID": "92142ac5-3eb9-4b4a-a381-64e021b598b2",
+    "VITE_APP_ID": "MW3FicTy7ae3qrm8dx8Lua",
+    "VITE_APP_LOGO": "https://files.manuscdn.com/user_upload_by_module/web_dev_logo/310519663397752079/xVhpwlqobJaVgESE.png",
+    "VITE_APP_TITLE": "AI Sports Betting Models",
+    "VITE_FRONTEND_FORGE_API_KEY": "gmLiA3Rt3moxxq9AWDGbJn",
+    "VITE_FRONTEND_FORGE_API_URL": "https://forge.manus.ai",
+    "VITE_OAUTH_PORTAL_URL": "https://manus.im",
+    "VSIN_EMAIL": "trevorrobinson3@yahoo.com",
+    "VSIN_PASSWORD": "Hagwood2451!"
+  },
+  "template_id": "web-db-user",
+  "test_command": "pnpm test"
+}
