@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { formatMutationError } from "@/lib/errorUtils";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Shield, User, Crown, RefreshCw,
   Eye, EyeOff, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, X, LogOut, ShieldAlert, BarChart2,
@@ -500,7 +501,7 @@ export default function UserManagement() {
       setForm(defaultForm);
       toast.success(`Account created — @${form.username} has been added.`);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(formatMutationError(e)),
   });
 
   const updateMutation = trpc.appUsers.updateUser.useMutation({
@@ -510,7 +511,7 @@ export default function UserManagement() {
       setForm(defaultForm);
       toast.success("Account updated");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(formatMutationError(e)),
   });
 
   const deleteMutation = trpc.appUsers.deleteUser.useMutation({
@@ -519,14 +520,14 @@ export default function UserManagement() {
       setDeleteConfirm(null);
       toast.success("Account deleted");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(formatMutationError(e)),
   });
 
   const forceLogoutUserMutation = trpc.appUsers.forceLogoutUser.useMutation({
     onSuccess: (_, vars) => {
       toast.success(`Session invalidated — @${rawUsers.find(u => u.id === vars.id)?.username ?? vars.id} will be logged out on next request.`);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(formatMutationError(e)),
   });
 
   const disconnectDiscordMutation = trpc.appUsers.adminDisconnectDiscord.useMutation({
@@ -537,14 +538,14 @@ export default function UserManagement() {
     },
     onError: (err) => {
       console.error(`[UserMgmt] ADMIN_DISCORD_DISCONNECT.ERROR:`, err.message);
-      toast.error(err.message);
+      toast.error(formatMutationError(err));
     },
   });
   const forceLogoutAllMutation = trpc.appUsers.forceLogoutAll.useMutation({
     onSuccess: (data) => {
       toast.success(`Force logout complete — ${data.usersAffected} session(s) invalidated. Your session is unaffected.`);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(formatMutationError(e)),
   });
 
   const [forceLogoutAllConfirm, setForceLogoutAllConfirm] = useState(false);

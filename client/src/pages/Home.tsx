@@ -6,6 +6,7 @@ import { BarChart3, TrendingUp, Zap, Shield, Eye, EyeOff, LogIn, Loader2, Chevro
 import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { toast } from "sonner";
+import { formatMutationError } from "@/lib/errorUtils";
 import { ForgotPasswordModal } from "@/components/ForgotPasswordModal";
 
 const FEATURES = [
@@ -78,7 +79,7 @@ export default function Home() {
       setLocation("/feed");
     },
     onError: (e) => {
-      toast.error(e.message);
+      toast.error(formatMutationError(e));
     },
   });
 
