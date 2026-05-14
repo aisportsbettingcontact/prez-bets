@@ -287,17 +287,42 @@ async function startServer() {
   app.use("/api/trpc/auth.login", trpcAuthLimiter);
 
   // ─── Request timeout middleware ───────────────────────────────────────────
-  // Kill requests that take > 30s to prevent hanging connections from exhausting
+  // Kill requests that take > 25s to prevent hanging connections from exhausting
   // the server's connection pool under load.
+  //
+  // CRITICAL: For tRPC batch requests (/api/trpc/*), return a tRPC-formatted
+  // error envelope (HTTP 200 + error JSON array) so the client can parse it as
+  // a proper TRPCClientError. Returning a raw 503 with {error:".."} causes the
+  // tRPC client to throw a JSON parse error, which the frontend maps to the
+  // generic "Server temporarily unavailable" toast instead of a specific message.
   app.use((req, res, next) => {
     const timeout = setTimeout(() => {
       if (!res.headersSent) {
-        console.error(`[TIMEOUT] Request timed out: ${req.method} ${req.path}`);
-        res.status(503).json({ error: "Request timeout" });
+        const isTrpc = req.path.startsWith('/api/trpc');
+        console.error(`[TIMEOUT] Request timed out: ${req.method} ${req.path} isTrpc=${isTrpc}`);
+        if (isTrpc) {
+          // tRPC batch envelope: HTTP 200 with error in the result array
+          // The client will receive a TRPCClientError with code INTERNAL_SERVER_ERROR
+          res.status(200).json([{
+            error: {
+              json: {
+                message: 'Request timed out. Please try again in a moment.',
+                code: -32603,
+                data: {
+                  code: 'INTERNAL_SERVER_ERROR',
+                  httpStatus: 503,
+                  path: req.path.replace('/api/trpc/', ''),
+                },
+              },
+            },
+          }]);
+        } else {
+          res.status(503).json({ error: 'Request timeout' });
+        }
       }
-    }, 30_000);
-    res.on("finish", () => clearTimeout(timeout));
-    res.on("close", () => clearTimeout(timeout));
+    }, 25_000);
+    res.on('finish', () => clearTimeout(timeout));
+    res.on('close', () => clearTimeout(timeout));
     next();
   });
 
