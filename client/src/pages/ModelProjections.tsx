@@ -375,15 +375,11 @@ export default function ModelProjections() {
   const { user, isAuthenticated } = useAuth();
   const { appUser, isOwner, loading: appAuthLoading, refetch: refetchAppUser } = useAppAuth();
 
-  // Auth guard: unauthenticated users are redirected to the paywall landing page.
   // Age modal shown for logged-in users who haven't accepted terms.
+  // NOTE: No auth guard redirect — the feed is fully public. Unauthenticated users see the feed.
   useEffect(() => {
-    if (!appAuthLoading && !appUser) {
-      setLocation("/");
-      return;
-    }
     if (!appAuthLoading && appUser && !appUser.termsAccepted) setShowAgeModal(true);
-  }, [appAuthLoading, appUser, setLocation]);
+  }, [appAuthLoading, appUser]);
 
   // ── Discord OAuth callback handler ─────────────────────────────────────────
   // After Discord OAuth completes, the server redirects to /dashboard?discord_linked=1

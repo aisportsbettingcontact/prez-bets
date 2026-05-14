@@ -170,15 +170,11 @@ export default function BettingSplitsPage() {
   const { user } = useAuth();
   const { appUser, isOwner, loading: appAuthLoading, refetch: refetchAppUser } = useAppAuth();
 
-  // Auth guard: unauthenticated users are redirected to the paywall landing page.
   // Age modal shown for logged-in users who haven't accepted terms.
+  // NOTE: No auth guard redirect — the page is fully public. Unauthenticated users can view splits.
   useEffect(() => {
-    if (!appAuthLoading && !appUser) {
-      setLocation("/");
-      return;
-    }
     if (!appAuthLoading && appUser && !appUser.termsAccepted) setShowAgeModal(true);
-  }, [appAuthLoading, appUser, setLocation]);
+  }, [appAuthLoading, appUser]);
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchFocused(false);
