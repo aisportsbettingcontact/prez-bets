@@ -13,6 +13,7 @@ import { router } from "../_core/trpc";
 import {
   getSessionMetrics,
   getMemberMetrics,
+  getDurationHistogram,
   heartbeatUserSession,
   createUserSession,
   closeUserSessions,
@@ -25,6 +26,15 @@ export const metricsRouter = router({
     console.log(`${tag} [STEP] Fetching session metrics (DAU/WAU/MAU/avgDuration)`);
     const result = await getSessionMetrics();
     console.log(`${tag} [OUTPUT] dau=${result.dau} wau=${result.wau} mau=${result.mau} avgDurMs=${Math.round(result.avgSessionDurationMs)}`);
+    return result;
+  }),
+
+  /** Owner-only: session duration distribution histogram (last 30 days) */
+  getDurationHistogram: ownerProcedure.query(async () => {
+    const tag = "[tRPC][metrics.getDurationHistogram]";
+    console.log(`${tag} [STEP] Fetching session duration histogram`);
+    const result = await getDurationHistogram();
+    console.log(`${tag} [OUTPUT] under5m=${result.under5m} m5to30=${result.m5to30} m30to120=${result.m30to120} h2to4=${result.h2to4} total=${result.total}`);
     return result;
   }),
 

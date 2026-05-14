@@ -3,6 +3,7 @@ import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
+import { toast } from "sonner";
 import superjson from "superjson";
 import App from "./App";
 import { getLoginUrl } from "./const";
@@ -26,6 +27,11 @@ const queryClient = new QueryClient({
   },
 });
 
+// Deduplicate toast: only show the session-expired toast once per page load.
+// Multiple queries can fail simultaneously with UNAUTHORIZED (e.g. games.list +
+// strikeoutProps.getByGames), which would stack identical toasts without this guard.
+let _sessionExpiredToastShown = false;
+
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
@@ -47,7 +53,24 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   const onAdminPage = pathname.startsWith("/admin");
   if (onAdminPage) return;
 
-  window.location.href = getLoginUrl();
+  // [STEP] Show session-expired toast BEFORE redirecting so the user understands
+  // why they are being sent to the login page (e.g. after force-logout or token
+  // version bump). Toast is deduped — only one fires per page load.
+  if (!_sessionExpiredToastShown) {
+    _sessionExpiredToastShown = true;
+    console.log("[Auth] [OUTPUT] UNAUTHORIZED detected — showing session-expired toast before redirect");
+    toast.error("Your session has expired — please sign in again.", {
+      id: "session-expired",       // prevents duplicate toasts from stacking
+      duration: 5000,              // 5 s — enough to read before redirect
+      description: "You have been signed out. Redirecting to login...",
+    });
+  }
+
+  // [STEP] Delay redirect by 1.5 s so the toast is visible before navigation.
+  // The toast id "session-expired" ensures only one instance is shown.
+  setTimeout(() => {
+    window.location.href = getLoginUrl();
+  }, 1500);
 };
 
 // Procedure paths that are optional / auth-gated client-side — suppress UNAUTHORIZED noise for these.

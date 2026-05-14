@@ -3234,3 +3234,8 @@
 - [x] Fix closeIdleSessions: same lastHeartbeat-based duration fix
 - [x] Fix getSessionMetrics: cap outlier sessions at 4h (14_400_000ms) to exclude pre-fix corrupted rows
 - [x] TypeScript: 0 errors
+
+## Session: 2026-05-14 — Three UX Enhancements
+- [x] Session-expired toast: intercept UNAUTHORIZED in query/mutation cache, show toast before redirect
+- [x] durationMs histogram: server-side bucket query + MetricsPanel bar chart
+- [x] User table: default lastSignedIn DESC sort + clickable column header sort

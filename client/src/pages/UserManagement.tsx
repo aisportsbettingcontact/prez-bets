@@ -290,8 +290,11 @@ function MetricsPanel() {
   const { data: memberData, isLoading: membLoading } = trpc.metrics.getMemberMetrics.useQuery(undefined, {
     refetchInterval: 60_000,
   });
+  const { data: histData, isLoading: histLoading } = trpc.metrics.getDurationHistogram.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
 
-  const loading = sessLoading || membLoading;
+  const loading = sessLoading || membLoading || histLoading;
 
   const sessionKpis = [
     {
@@ -386,6 +389,72 @@ function MetricsPanel() {
           </div>
         ))}
       </div>
+
+      {/* Row 3 — Session Duration Histogram */}
+      {(() => {
+        // [STEP] Build histogram bars from getDurationHistogram data.
+        // Buckets: <5min | 5-30min | 30-120min | 2-4h
+        // Bar height is proportional to the bucket with the most sessions (max = 100%).
+        const total = histData?.total ?? 0;
+        const buckets: Array<{ label: string; sublabel: string; count: number; color: string; barColor: string }> = [
+          { label: "<5 min",    sublabel: "Quick visits",    count: histData?.under5m  ?? 0, color: "text-rose-400",    barColor: "bg-rose-500" },
+          { label: "5-30 min",  sublabel: "Short sessions",  count: histData?.m5to30   ?? 0, color: "text-amber-400",  barColor: "bg-amber-500" },
+          { label: "30-120 min",sublabel: "Active sessions", count: histData?.m30to120 ?? 0, color: "text-emerald-400",barColor: "bg-emerald-500" },
+          { label: "2-4 h",     sublabel: "Deep sessions",   count: histData?.h2to4    ?? 0, color: "text-blue-400",   barColor: "bg-blue-500" },
+        ];
+        const maxCount = Math.max(...buckets.map((b) => b.count), 1); // avoid div/0
+
+        return (
+          <div className="bg-white/3 border border-white/8 rounded-lg px-2.5 sm:px-4 py-2.5 sm:py-3">
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="text-[10px] sm:text-xs font-semibold tracking-wider text-zinc-300 uppercase leading-tight">
+                  Session Duration Distribution
+                </div>
+                <div className="text-[10px] sm:text-xs text-zinc-400 leading-tight">
+                  {histLoading ? "Loading..." : `${total} closed session${total !== 1 ? "s" : ""} in last 30 days`}
+                </div>
+              </div>
+              {histLoading && <RefreshCw className="w-3 h-3 text-zinc-400 animate-spin flex-shrink-0" />}
+            </div>
+
+            {/* Bar chart */}
+            <div className="flex items-end gap-2 sm:gap-3 h-16 sm:h-20">
+              {buckets.map((b) => {
+                // [STATE] barPct = count / maxCount * 100 (relative to tallest bar)
+                const barPct = maxCount > 0 ? (b.count / maxCount) * 100 : 0;
+                // [STATE] pct = count / total * 100 (absolute percentage of all sessions)
+                const pct = total > 0 ? Math.round((b.count / total) * 100) : 0;
+                return (
+                  <div key={b.label} className="flex-1 flex flex-col items-center gap-0.5 h-full min-w-0">
+                    {/* Bar container — full height, bar grows from bottom */}
+                    <div className="flex-1 w-full flex items-end">
+                      <div
+                        className={`w-full rounded-t transition-all duration-500 ${b.barColor} opacity-80`}
+                        style={{ height: histLoading ? "0%" : `${Math.max(barPct, barPct > 0 ? 4 : 0)}%` }}
+                        title={`${b.label}: ${b.count} sessions (${pct}%)`}
+                      />
+                    </div>
+                    {/* Count + percentage */}
+                    <div className={`text-[10px] sm:text-xs font-bold font-mono ${b.color} leading-none`}>
+                      {histLoading ? "—" : b.count}
+                    </div>
+                    {/* Bucket label */}
+                    <div className="text-[9px] sm:text-[10px] text-zinc-400 leading-none text-center truncate w-full">
+                      {b.label}
+                    </div>
+                    {/* Percentage */}
+                    <div className="text-[9px] sm:text-[10px] text-zinc-500 leading-none">
+                      {histLoading ? "" : `${pct}%`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -410,7 +479,9 @@ export default function UserManagement() {
     access: defaultColState(),
     expiry: defaultColState(),
     terms: defaultColState(),
-    lastSignIn: defaultColState(),
+    // [DEFAULT] Sort by last sign-in descending so most-recently-active users
+    // appear at the top of the table immediately on load — no manual sort needed.
+    lastSignIn: { sort: "desc", selected: new Set() },
   });
 
   function updateCol(key: ColKey, next: ColState) {

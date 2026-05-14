@@ -2417,3 +2417,71 @@ export async function getMemberMetrics(): Promise<{
     return fallback;
   }
 }
+
+/**
+ * Compute session duration distribution histogram for the last 30 days.
+ *
+ * Buckets (all in ms, matching the frontend labels):
+ *   under5m   = durationMs < 5 * 60 * 1000
+ *   m5to30    = 5 min ≤ durationMs < 30 min
+ *   m30to120  = 30 min ≤ durationMs < 120 min
+ *   h2to4     = 2 h ≤ durationMs ≤ 4 h
+ *
+ * Only includes closed sessions (durationMs IS NOT NULL AND durationMs > 0)
+ * capped at 4 h to exclude pre-fix outlier rows.
+ *
+ * [OUTPUT] { under5m, m5to30, m30to120, h2to4, total }
+ */
+export async function getDurationHistogram(): Promise<{
+  under5m: number;
+  m5to30: number;
+  m30to120: number;
+  h2to4: number;
+  total: number;
+}> {
+  const tag = "[DB][getDurationHistogram]";
+  const db = await getDb();
+  const fallback = { under5m: 0, m5to30: 0, m30to120: 0, h2to4: 0, total: 0 };
+  if (!db) { console.warn(`${tag} DB not available`); return fallback; }
+
+  const now = Date.now();
+  const since30d = now - 30 * 24 * 60 * 60 * 1000;
+
+  // Bucket boundaries in milliseconds
+  const B_5M   =   5 * 60 * 1000;   //   5 minutes
+  const B_30M  =  30 * 60 * 1000;   //  30 minutes
+  const B_120M = 120 * 60 * 1000;   // 120 minutes (2 hours)
+  const B_4H   = 240 * 60 * 1000;   // 240 minutes (4 hours) — cap
+
+  try {
+    // Fetch all qualifying session durations in last 30 days.
+    // Using application-level bucketing (vs SQL CASE WHEN) for full portability
+    // across MySQL / TiDB dialects and to keep the query simple and auditable.
+    const rows = await db
+      .select({ dur: userSessions.durationMs })
+      .from(userSessions)
+      .where(and(
+        isNotNull(userSessions.durationMs),
+        gte(userSessions.startedAt, since30d),
+        sql`${userSessions.durationMs} > 0`,
+        sql`${userSessions.durationMs} <= ${B_4H}`,
+      ));
+
+    let under5m = 0, m5to30 = 0, m30to120 = 0, h2to4 = 0;
+
+    for (const { dur } of rows) {
+      const d = Number(dur ?? 0);
+      if      (d < B_5M)   under5m++;
+      else if (d < B_30M)  m5to30++;
+      else if (d < B_120M) m30to120++;
+      else                  h2to4++;
+    }
+
+    const total = under5m + m5to30 + m30to120 + h2to4;
+    console.log(`${tag} [OUTPUT] under5m=${under5m} m5to30=${m5to30} m30to120=${m30to120} h2to4=${h2to4} total=${total}`);
+    return { under5m, m5to30, m30to120, h2to4, total };
+  } catch (err: unknown) {
+    console.error(`${tag} Failed | error=${err instanceof Error ? err.message : String(err)}`);
+    return fallback;
+  }
+}
