@@ -106,7 +106,8 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
               placeholder="@username or email"
               autoComplete="username"
               autoFocus
-              required
+              aria-required="true"
+              onInvalid={(e) => e.preventDefault()}
               className="w-full px-3 py-2.5 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-colors"
             />
           </div>
@@ -127,6 +128,8 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
+                aria-required="true"
+                onInvalid={(e) => e.preventDefault()}
                 className="w-full px-3 py-2.5 pr-10 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-colors"
               />
               <button
