@@ -43,7 +43,7 @@ const ESPN_LOGO_BASE = "https://a.espncdn.com/i/teamlogos/mlb/500";
 // JACK MAC whitelist: @prez, @sippi, @lucianobets
 const ALLOWED_USERNAMES = new Set(["prez", "lucianobets", "sippi"]);
 
-const PAGE_CONFIG: Record<string, { slug: string; title: string; type: "pitchers" | "hitters" }> = {
+export const PAGE_CONFIG: Record<string, { slug: string; title: string; type: "pitchers" | "hitters" }> = {
   "today-pitchers":    { slug: "/grids/standard-projections-the-bat-x-3372510",        title: "Standard Projections — THE BAT X Pitchers (Today)",  type: "pitchers" },
   "today-hitters":     { slug: "/grids/standard-projections-the-bat-x-hitters-3372512", title: "Standard Projections — THE BAT X Hitters (Today)",   type: "hitters"  },
   "tomorrow-pitchers": { slug: "/grids/tomorrow-projections-the-bat-x-3375509",         title: "Tomorrow Projections — THE BAT X Pitchers",          type: "pitchers" },
@@ -137,7 +137,7 @@ function parseCookieHeader(header: string): Record<string, string> {
   return result;
 }
 
-async function getRgSessionCookie(): Promise<string> {
+export async function getRgSessionCookie(): Promise<string> {
   const now = Date.now();
   if (cachedRgCookie && now - cookieFetchedAt < COOKIE_TTL_MS) {
     console.log("[RGProxy] [STATE] Using cached RG session cookie");
@@ -199,7 +199,7 @@ async function getRgSessionCookie(): Promise<string> {
 
 // ─── Fetch with Auto-Retry on 401/403 ────────────────────────────────────────
 
-async function fetchRgPage(pageUrl: string, cookie: string): Promise<string> {
+export async function fetchRgPage(pageUrl: string, cookie: string): Promise<string> {
   const res = await fetch(pageUrl, {
     headers: {
       "Cookie": cookie,
@@ -253,7 +253,7 @@ function extractRgPlayerId(href: string): string {
   return /^\d+$/.test(last) ? last : "";
 }
 
-async function parseRgTable(
+export async function parseRgTable(
   html: string,
   pageKey: string,
   title: string,
