@@ -371,16 +371,29 @@ export default function ModelProjections() {
   const canSeeJackMac = Boolean(appUser && JACK_MAC_WHITELIST.has(appUser.username));
   // Tabs: MODEL PROJECTIONS | BETTING SPLITS | LINEUPS (MLB only) | K PROPS (MLB only)
   //       F5/NRFI (MLB only) | HR PROPS (MLB only) | JACK MAC (MLB only, whitelist)
+  // For @lucianobets: JACK MAC is the FIRST tab (leftmost) in MLB.
+  // For @prez and @sippi: JACK MAC appears after HR PROPS (standard order).
+  const isLuciano = canSeeJackMac && appUser?.username === 'lucianobets';
+  const MLB_STANDARD_TABS: { id: FeedMobileTab; label: string }[] = [
+    { id: 'dual',    label: 'PROJECTIONS' },
+    { id: 'splits',  label: 'SPLITS' },
+    { id: 'lineups', label: 'LINEUPS' },
+    { id: 'props',   label: 'K PROPS' },
+    { id: 'f5nrfi',  label: 'CHEAT SHEETS' },
+    { id: 'hrprops', label: 'HR PROPS' },
+    ...(canSeeJackMac ? [{ id: 'jackmac' as FeedMobileTab, label: 'JACK MAC' }] : []),
+  ];
+  const MLB_LUCIANO_TABS: { id: FeedMobileTab; label: string }[] = [
+    { id: 'jackmac', label: 'JACK MAC' },
+    { id: 'dual',    label: 'PROJECTIONS' },
+    { id: 'splits',  label: 'SPLITS' },
+    { id: 'lineups', label: 'LINEUPS' },
+    { id: 'props',   label: 'K PROPS' },
+    { id: 'f5nrfi',  label: 'CHEAT SHEETS' },
+    { id: 'hrprops', label: 'HR PROPS' },
+  ];
   const FEED_TABS: { id: FeedMobileTab; label: string }[] = selectedSport === 'MLB'
-    ? [
-        { id: 'dual',    label: 'PROJECTIONS' },
-        { id: 'splits',  label: 'SPLITS' },
-        { id: 'lineups', label: 'LINEUPS' },
-        { id: 'props',   label: 'K PROPS' },
-        { id: 'f5nrfi',  label: 'CHEAT SHEETS' },
-        { id: 'hrprops', label: 'HR PROPS' },
-        ...(canSeeJackMac ? [{ id: 'jackmac' as FeedMobileTab, label: 'JACK MAC' }] : []),
-      ]
+    ? (isLuciano ? MLB_LUCIANO_TABS : MLB_STANDARD_TABS)
     : [
         { id: 'dual',   label: 'MODEL PROJECTIONS' },
         { id: 'splits', label: 'BETTING SPLITS' },

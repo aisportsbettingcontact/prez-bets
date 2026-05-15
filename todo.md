@@ -3288,3 +3288,12 @@
 - [x] rotogrinderProxy.ts: add 'sippi' to ALLOWED_USERNAMES
 - [x] Resources.tsx: add 'sippi' to ALLOWED set (fallback page still accessible)
 - [x] TypeScript: 0 errors | Tests: 655/655 passed
+
+## Session: 2026-05-15 — Google Sheets Sync + JACK MAC UX
+- [ ] Store GOOGLE_SERVICE_ACCOUNT_JSON secret
+- [ ] Install googleapis npm package
+- [ ] Create server/jackMacSheetsSync.ts — sync all 4 RG pages to Google Sheet tabs
+- [ ] Add jackMac.syncToSheets tRPC procedure (whitelist-gated)
+- [ ] Add REFRESH GOOGLE SHEETS button to JackMacView.tsx (#34A853, bold white, Sheets logo)
+- [ ] Reorder JACK MAC tab to leftmost position for @lucianobets only
+- [ ] TypeScript: 0 errors | Tests: pass

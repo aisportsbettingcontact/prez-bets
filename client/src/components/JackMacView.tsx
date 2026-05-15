@@ -25,6 +25,8 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -162,6 +164,27 @@ interface JackMacViewProps {
 export default function JackMacView({ appUser }: JackMacViewProps) {
   // ── Whitelist guard (client-side) ──────────────────────────────────────────
   const isAllowed = Boolean(appUser && JACK_MAC_WHITELIST.has(appUser.username));
+
+  // ── Google Sheets Sync mutation ───────────────────────────────────────────
+  const syncToSheets = trpc.jackMac.syncToSheets.useMutation({
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success(
+          `Google Sheets synced! ${result.totalRowsWritten.toLocaleString()} rows written across ${result.tabs.length} tabs in ${(result.elapsedMs / 1000).toFixed(1)}s`,
+          { duration: 6000 }
+        );
+        console.log(`[JACKMAC][SHEETS][OUTPUT] Sync success: totalRows=${result.totalRowsWritten} elapsed=${result.elapsedMs}ms`);
+      } else {
+        const failedTabs = result.tabs.filter(t => t.status === "error").map(t => t.sheetTab).join(", ");
+        toast.warning(`Partial sync — some tabs failed: ${failedTabs}`, { duration: 8000 });
+        console.warn(`[JACKMAC][SHEETS][VERIFY] PARTIAL — failed tabs: ${failedTabs}`);
+      }
+    },
+    onError: (err) => {
+      toast.error(`Google Sheets sync failed: ${err.message}`, { duration: 8000 });
+      console.error(`[JACKMAC][SHEETS][VERIFY] FAIL — ${err.message}`);
+    },
+  });
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabKey>("today-pitchers");
@@ -419,6 +442,36 @@ export default function JackMacView({ appUser }: JackMacViewProps) {
               <Download className="w-3 h-3" />
               <span className="hidden sm:inline">CSV</span>
             </Button>
+            {/* REFRESH GOOGLE SHEETS button */}
+            <button
+              type="button"
+              onClick={() => {
+                console.log("[JACKMAC][SHEETS][INPUT] REFRESH GOOGLE SHEETS triggered by user");
+                syncToSheets.mutate();
+              }}
+              disabled={syncToSheets.isPending}
+              style={{ backgroundColor: "#34A853", opacity: syncToSheets.isPending ? 0.7 : 1 }}
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded text-xs font-bold text-white whitespace-nowrap transition-opacity disabled:cursor-not-allowed"
+              title="Sync all 4 tabs to Google Sheets"
+            >
+              {syncToSheets.isPending ? (
+                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M19.5 3h-15A1.5 1.5 0 003 4.5v15A1.5 1.5 0 004.5 21h15a1.5 1.5 0 001.5-1.5v-15A1.5 1.5 0 0019.5 3z" fill="white" opacity="0.9"/>
+                  <rect x="6" y="8" width="12" height="1.5" rx="0.5" fill="#34A853"/>
+                  <rect x="6" y="11" width="12" height="1.5" rx="0.5" fill="#34A853"/>
+                  <rect x="6" y="14" width="8" height="1.5" rx="0.5" fill="#34A853"/>
+                  <path d="M14.5 1.5v5h5" fill="none" stroke="#34A853" strokeWidth="1.2"/>
+                  <path d="M14.5 1.5L19.5 6.5H14.5V1.5z" fill="#34A853" opacity="0.7"/>
+                </svg>
+              )}
+              <span className="hidden sm:inline">
+                {syncToSheets.isPending ? "Syncing..." : "REFRESH GOOGLE SHEETS"}
+              </span>
+            </button>
           </div>
         </div>
 
