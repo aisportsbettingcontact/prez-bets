@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
-import { User, LogOut, BarChart3, Loader2, Crown, Send, Search, X, Clock, TrendingUp, ShieldAlert } from "lucide-react";
+import { User, LogOut, LogIn, BarChart3, Loader2, Crown, Send, Search, X, Clock, TrendingUp, ShieldAlert } from "lucide-react";
 import { CalendarPicker, todayUTC } from "@/components/CalendarPicker";
 
 // CDN icon URLs
@@ -320,7 +320,7 @@ export default function BettingSplitsPage() {
   return (
     <div className="bg-background">
       {showAgeModal && <AgeModal onAccept={() => acceptTermsMutation.mutate()} onClose={appLogout} />}
-      {/* LoginModal hidden */}
+      {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} onSuccess={() => { setShowLoginModal(false); refetchAppUser(); }} />}
 
       {/* ── Sticky Header ── */}
       <header ref={headerRef} className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm">
@@ -397,7 +397,13 @@ export default function BettingSplitsPage() {
                       </button>
                     </>
                   ) : (
-                    null
+                    <button
+                      type="button"
+                      onClick={() => { setShowUserMenu(false); setShowLoginModal(true); }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                    >
+                      <LogIn className="w-3.5 h-3.5 text-emerald-400" /> Sign In
+                    </button>
                   )}
                 </div>
               </>
