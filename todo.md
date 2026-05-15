@@ -3268,3 +3268,7 @@
 - [x] Fix 3: Backend — export loginRateMap, LOGIN_RATE_MAX_FAILURES, LOGIN_RATE_WINDOW_MS; extend checkLoginRateLimit to return lockoutUntil; add getLoginStatus publicProcedure
 - [x] Fix 3: Frontend — create LoginAttemptBanner component with attempt counter + lockout countdown; wire into Home.tsx and LoginModal.tsx
 - [x] Fix 3: Tests — 11 new vitest tests in loginStatus.test.ts (all passing)
+## Session: 2026-05-15 — Login Button + Owner Dropdown Fix
+- [x] Fix: Restore login button (Sign In) for unauthenticated users in ModelProjections.tsx header dropdown
+- [x] Fix: Restore login button (Sign In) for unauthenticated users in BettingSplits.tsx header dropdown
+- [x] Fix: Ensure owner-exclusive dropdown pages are accessible to @prez after login
