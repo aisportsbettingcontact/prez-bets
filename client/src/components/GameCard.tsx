@@ -900,18 +900,33 @@ function DesktopMergedPanel({
   const mdlHomeMlNum = toNum(modelHomeML);
   const awayMlEdgePP = calculateEdge(bkAwayMlNum, mdlAwayMlNum);
   const homeMlEdgePP = calculateEdge(bkHomeMlNum, mdlHomeMlNum);
-  // ML edge exists when the model-favored side (matching spread edge direction) has positive pp
-  const mlEdgePP = spreadEdgeIsAway === true ? awayMlEdgePP
-    : spreadEdgeIsAway === false ? homeMlEdgePP
+  // ML edge: independent of spread edge direction.
+  // Show ML edge for whichever team has the larger positive pp.
+  // This handles cases where spread edge and ML edge are on different teams
+  // (e.g. PHI covers +1.5 but BOS wins outright -- both can be true simultaneously).
+  const EDGE_THRESHOLD_ML = 0.5;
+  const awayMlPositive = !isNaN(awayMlEdgePP) && awayMlEdgePP > EDGE_THRESHOLD_ML;
+  const homeMlPositive = !isNaN(homeMlEdgePP) && homeMlEdgePP > EDGE_THRESHOLD_ML;
+  // Pick the side with the larger positive edge; if tied, prefer the spread-edge side
+  const mlEdgeIsAway: boolean | null = (() => {
+    if (awayMlPositive && homeMlPositive) {
+      return awayMlEdgePP >= homeMlEdgePP ? true : false;
+    }
+    if (awayMlPositive) return true;
+    if (homeMlPositive) return false;
+    return null;
+  })();
+  const mlEdgePP = mlEdgeIsAway === true ? awayMlEdgePP
+    : mlEdgeIsAway === false ? homeMlEdgePP
     : NaN;
-  const hasMlEdge = !isNaN(mlEdgePP) && mlEdgePP > 0.5;
+  const hasMlEdge = !isNaN(mlEdgePP) && mlEdgePP > EDGE_THRESHOLD_ML;
   // ML edge display label: "TEAM ABBR ML" (e.g. "UTA ML" or "STL ML")
-  const mlEdgeLabel = spreadEdgeIsAway === true ? `${awayAbbr} ML`
-    : spreadEdgeIsAway === false ? `${homeAbbr} ML`
+  const mlEdgeLabel = mlEdgeIsAway === true ? `${awayAbbr} ML`
+    : mlEdgeIsAway === false ? `${homeAbbr} ML`
     : null;
-  const mlEdgeLogoUrl = spreadEdgeIsAway === true ? awayLogoUrl : homeLogoUrl;
-  const mlEdgeSlug    = spreadEdgeIsAway === true ? awaySlug : homeSlug;
-  const mlEdgeTeam    = spreadEdgeIsAway === true ? awayDisplayName : homeDisplayName;
+  const mlEdgeLogoUrl = mlEdgeIsAway === true ? awayLogoUrl : homeLogoUrl;
+  const mlEdgeSlug    = mlEdgeIsAway === true ? awaySlug : homeSlug;
+  const mlEdgeTeam    = mlEdgeIsAway === true ? awayDisplayName : homeDisplayName;
   if (process.env.NODE_ENV === 'development' && (!isNaN(awayMlEdgePP) || !isNaN(homeMlEdgePP))) {
     console.log(
       `%c[ML EDGE] ${game.awayTeam}@${game.homeTeam} spreadEdgeIsAway=${spreadEdgeIsAway} ` +
@@ -921,8 +936,8 @@ function DesktopMergedPanel({
       'color:#00BFFF;font-size:9px'
     );
   }
-  const awayMlModelStyle     = showModel ? (hasMlEdge && spreadEdgeIsAway === true  ? modelGreen : modelWhite) : dimCell;
-  const homeMlModelStyle     = showModel ? (hasMlEdge && spreadEdgeIsAway === false ? modelGreen : modelWhite) : dimCell;
+  const awayMlModelStyle     = showModel ? (hasMlEdge && mlEdgeIsAway === true  ? modelGreen : modelWhite) : dimCell;
+  const homeMlModelStyle     = showModel ? (hasMlEdge && mlEdgeIsAway === false ? modelGreen : modelWhite) : dimCell;
 
   // ── ROI % computations for EDGE column display ────────────────────────────
   // ROI = (modelWinProb / bookNoVigProb - 1) * 100
@@ -948,10 +963,10 @@ function DesktopMergedPanel({
   const totalRoi = totalEdgeIsOver === true ? totalRoiOver
     : totalEdgeIsOver === false ? totalRoiUnder
     : NaN;
-  // ML ROI — use model ML vs book ML
-  const mlRoi = spreadEdgeIsAway === true
+  // ML ROI — use mlEdgeIsAway (independent of spread edge direction)
+  const mlRoi = mlEdgeIsAway === true
     ? calculateRoi(mdlAwayMlNum, bkAwayMlNum, bkHomeMlNum)
-    : spreadEdgeIsAway === false
+    : mlEdgeIsAway === false
     ? calculateRoi(mdlHomeMlNum, bkHomeMlNum, bkAwayMlNum)
     : NaN;
 
@@ -1821,9 +1836,25 @@ function OddsLinesPanel({
   const homeSpreadModelStyle = showModel ? (hasSpreadEdge && !spreadEdgeIsAway ? modelGreen : modelWhite) : dimCell;
   const overTotalModelStyle  = showModel ? (hasTotalEdge  && totalEdgeIsOver   ? modelGreen : modelWhite) : dimCell;
   const underTotalModelStyle = showModel ? (hasTotalEdge  && !totalEdgeIsOver  ? modelGreen : modelWhite) : dimCell;
-  // ML edges: if spread edge is away → away ML is green; if home → home ML is green
-  const awayMlModelStyle     = showModel ? (hasSpreadEdge && spreadEdgeIsAway  ? modelGreen : modelWhite) : dimCell;
-  const homeMlModelStyle     = showModel ? (hasSpreadEdge && !spreadEdgeIsAway ? modelGreen : modelWhite) : dimCell;
+  // ML edges: independent of spread edge direction -- use team with larger positive ML edge pp
+  const bkAwayMlNumMob  = toNum(awayMl);
+  const bkHomeMlNumMob  = toNum(homeMl);
+  const mdlAwayMlNumMob = toNum(modelAwayML);
+  const mdlHomeMlNumMob = toNum(modelHomeML);
+  const awayMlEdgePPMob = calculateEdge(bkAwayMlNumMob, mdlAwayMlNumMob);
+  const homeMlEdgePPMob = calculateEdge(bkHomeMlNumMob, mdlHomeMlNumMob);
+  const EDGE_THRESHOLD_ML_MOB = 0.5;
+  const awayMlPosMob = !isNaN(awayMlEdgePPMob) && awayMlEdgePPMob > EDGE_THRESHOLD_ML_MOB;
+  const homeMlPosMob = !isNaN(homeMlEdgePPMob) && homeMlEdgePPMob > EDGE_THRESHOLD_ML_MOB;
+  const mlEdgeIsAwayMob: boolean | null = (() => {
+    if (awayMlPosMob && homeMlPosMob) return awayMlEdgePPMob >= homeMlEdgePPMob ? true : false;
+    if (awayMlPosMob) return true;
+    if (homeMlPosMob) return false;
+    return null;
+  })();
+  const hasMlEdgeMob = mlEdgeIsAwayMob !== null;
+  const awayMlModelStyle     = showModel ? (hasMlEdgeMob && mlEdgeIsAwayMob === true  ? modelGreen : modelWhite) : dimCell;
+  const homeMlModelStyle     = showModel ? (hasMlEdgeMob && mlEdgeIsAwayMob === false ? modelGreen : modelWhite) : dimCell;
 
   // Helper: cell value with style
   const Cell = ({ val, style }: { val: string; style: React.CSSProperties }) => (
