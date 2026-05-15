@@ -3,7 +3,7 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import compression from "compression";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import helmet from "helmet";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
@@ -153,9 +153,11 @@ const trpcAuthLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many login attempts. Please wait 15 minutes." },
   keyGenerator: (req) => {
-    // Key by IP + procedure path for precise per-procedure limiting
+    // Key by IP + procedure path for precise per-procedure limiting.
+    // MUST use ipKeyGenerator helper to normalize IPv6 addresses — express-rate-limit v8
+    // throws ERR_ERL_KEY_GEN_IPV6 (fatal ValidationError) if req.ip is used directly.
     const path = req.path.replace(/^\//, "");
-    return `${req.ip}:${path}`;
+    return `${ipKeyGenerator(req.ip ?? "")}:${path}`;
   },
   handler: (req, res, _next, options) => {
     const ip = (req.headers["x-forwarded-for"] as string | undefined)
