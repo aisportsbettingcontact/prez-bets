@@ -410,7 +410,8 @@ export async function getAvailableDates(sport: string): Promise<string[]> {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
 
-  const conditions: ReturnType<typeof eq>[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conditions: any[] = [];
   conditions.push(eq(games.sport, sport));
   conditions.push(ne(games.gameStatus, 'postponed'));
 
@@ -433,7 +434,7 @@ export async function getAvailableDates(sport: string): Promise<string[]> {
     conditions.push(lte(games.gameDate, plusSeven));
   } else {
     // Non-MLB: only include games that have live VSiN odds (same gate as listGames)
-    conditions.push(or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal))!);
+    conditions.push(or(isNotNull(games.awayBookSpread), isNotNull(games.bookTotal)));
   }
 
   const rows = await db
