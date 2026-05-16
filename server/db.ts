@@ -361,13 +361,13 @@ export async function listGames(opts?: { sport?: string; gameDate?: string; forc
     'spreadEdge', 'spreadDiff', 'totalEdge', 'totalDiff',
     'modelAwaySpreadOdds', 'modelHomeSpreadOdds', 'modelOverOdds', 'modelUnderOdds',
   ] as const;
-  const gated = rows.map((row: Game) => {
+  const gated: Game[] = rows.map((row: Game): Game => {
     // Only gate NCAAM games
     if (row.sport !== 'NCAAM') return row;
     if (row.publishedModel) return row;
     const copy = { ...row } as Record<string, unknown>;
     for (const field of MODEL_FIELDS) copy[field] = null;
-    return copy as typeof row;
+    return copy as Game;
   });
 
   // Sort by start time in Node.js: treat '00:00' as midnight (sort last within each date)
@@ -424,14 +424,35 @@ export async function listAppUsers(): Promise<AppUser[]> {
   }
 }
 
+// ─── AppUser by-ID cache ─────────────────────────────────────────────────────
+// PROBLEM: handicapperProcedure calls getAppUserById on EVERY tRPC request.
+// On initial BetTracker page load, 3 procedures fire simultaneously — each
+// calling getAppUserById for the same user. That's 3 identical DB reads.
+// SOLUTION: Cache by numeric ID with a 30s TTL. Same invalidation as the
+// openId cache — called in invalidateAppUserCache().
+const _appUserByIdCache = new Map<number, CacheEntry<AppUser | null>>();
+const APP_USER_CACHE_TTL_MS = 30_000; // 30 seconds
+
+export function invalidateAppUserByIdCache(id: number): void {
+  _appUserByIdCache.delete(id);
+}
+
 export async function getAppUserById(id: number) {
+  // Cache hit: skip DB round-trip
+  const cached = _appUserByIdCache.get(id);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
   const db = await getDb();
   if (!db) return null;
   try {
-    return await withCircuitBreaker(async () => {
+    const result = await withCircuitBreaker(async () => {
       const rows = await db.select().from(appUsers).where(eq(appUsers.id, id)).limit(1);
       return rows[0] ?? null;
     });
+    // Cache result (including null = user not found)
+    _appUserByIdCache.set(id, { data: result, expiresAt: Date.now() + APP_USER_CACHE_TTL_MS });
+    return result;
   } catch {
     return null;
   }
@@ -469,6 +490,8 @@ export async function updateAppUser(id: number, data: Partial<InsertAppUser>) {
   await withCircuitBreaker(async () => {
     await db.update(appUsers).set({ ...data, updatedAt: new Date() }).where(eq(appUsers.id, id));
   });
+  // Invalidate by-ID cache so role/access changes propagate immediately
+  invalidateAppUserByIdCache(id);
 }
 
 export async function deleteAppUser(id: number) {
@@ -477,6 +500,7 @@ export async function deleteAppUser(id: number) {
   await withCircuitBreaker(async () => {
     await db.delete(appUsers).where(eq(appUsers.id, id));
   });
+  invalidateAppUserByIdCache(id);
 }
 
 export async function updateAppUserLastSignedIn(id: number) {
@@ -492,7 +516,7 @@ export async function updateAppUserLastSignedIn(id: number) {
 export async function incrementTokenVersion(id: number): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return await withCircuitBreaker(async () => {
+  const result = await withCircuitBreaker(async () => {
     await db
       .update(appUsers)
       .set({ tokenVersion: sql`${appUsers.tokenVersion} + 1`, updatedAt: new Date() })
@@ -502,6 +526,9 @@ export async function incrementTokenVersion(id: number): Promise<number> {
     console.log(`[DB] incrementTokenVersion: userId=${id} newTokenVersion=${newTv}`);
     return newTv;
   });
+  // Invalidate by-ID cache — token version change must propagate immediately
+  invalidateAppUserByIdCache(id);
+  return result;
 }
 
 /**

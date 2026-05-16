@@ -77,7 +77,7 @@ async function signAppUserToken(userId: number, role: string, tokenVersion: numb
     .sign(secret);
 }
 
-// Helper: verify app user JWT from cookie — returns userId, role, and tv (tokenVersion)
+// Helper: verify app user JWT from cookie — returns userId, role, tv (tokenVersion), and exp (ms)
 export async function verifyAppUserToken(token: string) {
   try {
     const secret = new TextEncoder().encode(ENV.cookieSecret);
@@ -87,8 +87,9 @@ export async function verifyAppUserToken(token: string) {
       return null;
     }
     const tv = typeof payload.tv === "number" ? payload.tv : null;
-    console.log(`[AppAuth] verifyAppUserToken: userId=${payload.sub} role=${payload.role} tv=${tv}`);
-    return { userId: Number(payload.sub), role: payload.role as string, tv };
+    // Extract exp once here to avoid a second jwtVerify call in callers (e.g. appUsers.me)
+    const exp = typeof payload.exp === "number" ? payload.exp * 1000 : null; // convert s → ms
+    return { userId: Number(payload.sub), role: payload.role as string, tv, exp };
   } catch (e) {
     console.log(`[AppAuth] verifyAppUserToken: JWT verification failed — ${(e as Error).message}`);
     return null;
@@ -126,7 +127,6 @@ export const ownerProcedure = publicProcedure.use(async ({ ctx, next }) => {
     console.log(`[AppAuth] ownerProcedure: REJECTED — tokenVersion mismatch: jwt.tv=${payload.tv} db.tv=${user.tokenVersion} userId=${user.id}`);
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Session invalidated. Please log in again." });
   }
-  console.log(`[AppAuth] ownerProcedure: GRANTED — userId=${user.id} username=${user.username} tv=${user.tokenVersion} fromCache=${fromCache}`);
   return next({ ctx: { ...ctx, appUser: user } });
 });
 
@@ -161,7 +161,6 @@ export const handicapperProcedure = publicProcedure.use(async ({ ctx, next }) =>
     console.log(`[AppAuth] handicapperProcedure: REJECTED — role=${user.role} not in [owner, admin, handicapper]`);
     throw new TRPCError({ code: "FORBIDDEN", message: "Handicapper access required" });
   }
-  console.log(`[AppAuth] handicapperProcedure: GRANTED — userId=${user.id} username=${user.username} role=${user.role} fromCache=${fromCache}`);
   return next({ ctx: { ...ctx, appUser: user } });
 });
 
@@ -207,7 +206,6 @@ export const appUserProcedure = publicProcedure.use(async ({ ctx, next }) => {
     console.log(`[AppAuth] appUserProcedure: REJECTED — userId=${user.id} account expired`);
     throw new TRPCError({ code: "FORBIDDEN", message: "Account expired" });
   }
-  console.log(`[AppAuth] appUserProcedure: GRANTED — userId=${user.id} username=${user.username} tv=${user.tokenVersion} fromCache=${fromCache}`);
   return next({ ctx: { ...ctx, appUser: user } });
 });
 
@@ -439,18 +437,9 @@ export const appUsersRouter = router({
     }
 
     // [STEP] Extract JWT exp claim to surface session expiry to the frontend
-    // This allows the user menu to show "Session: X days remaining" badge
-    let sessionExpiresAt: number | null = null;
-    try {
-      const secret = new TextEncoder().encode(ENV.cookieSecret);
-      const { payload: jwtPayload } = await jwtVerify(token, secret);
-      if (typeof jwtPayload.exp === "number") {
-        sessionExpiresAt = jwtPayload.exp * 1000; // convert seconds to ms
-      }
-    } catch {
-      // JWT already verified above; this is a belt-and-suspenders read of exp
-      // If it fails for any reason, sessionExpiresAt stays null
-    }
+    // payload.exp is already extracted by verifyAppUserToken — no second jwtVerify needed.
+    // This eliminates a duplicate HMAC-SHA256 verification on every appUsers.me call.
+    const sessionExpiresAt: number | null = payload.exp ?? null;
 
     return {
       id: user.id,

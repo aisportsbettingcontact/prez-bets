@@ -1444,20 +1444,20 @@ export default function BetTracker() {
   // ── Tab state ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ActiveTab>("BETS");
 
-  // ── Handicapper selector: default to logged-in user ───────────────────────
-  // Initialize to appUser.id once loaded; owner/admin can change it
-  const [targetUserId, setTargetUserId] = useState<number | undefined>(undefined);
+    // ── Handicapper selector: default to logged-in user ───────────────────────
+  // Initialize directly from appUser.id — avoids the useEffect waterfall that caused
+  // a second query re-fire after auth resolved (appUser undefined → id set → re-query).
+  // appUser is null during authLoading (handled by skeleton above), so this is safe.
+  const [targetUserId, setTargetUserId] = useState<number | undefined>(() => appUser?.id);
   const [showAnalytics, setShowAnalytics] = useState(false);
   // All-Time ON by default
   const [filterAllTime, setFilterAllTime] = useState(true);
-
-  // Set default targetUserId to logged-in user once appUser loads
+  // Sync targetUserId if appUser loads after initial render (e.g. cache miss on first load)
   useEffect(() => {
     if (appUser && targetUserId === undefined) {
       setTargetUserId(appUser.id);
     }
   }, [appUser, targetUserId]);
-
   const effectiveUserId = isOwnerOrAdmin && targetUserId ? targetUserId : undefined;
 
   // ── Sport / filter state ──────────────────────────────────────────────────
@@ -1680,7 +1680,11 @@ export default function BetTracker() {
 
   const handicappersQuery = trpc.betTracker.listHandicappers.useQuery(
     undefined,
-    { enabled: canAccess && isOwnerOrAdmin }
+    {
+      enabled: canAccess && isOwnerOrAdmin,
+      staleTime: 5 * 60 * 1000, // 5 min — user list rarely changes
+      refetchOnWindowFocus: false,
+    }
   );
 
   // ── Linescore query (MLB only) ─────────────────────────────────────────────
@@ -2297,9 +2301,32 @@ export default function BetTracker() {
 
   // ── Access guard ──────────────────────────────────────────────────────────
   if (authLoading) {
+    // Show a page-structure skeleton instead of a blank full-screen spinner.
+    // Eliminates the perceived blank-screen delay during auth check (~200-400ms).
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-zinc-950 text-white">
+        <div className="sticky top-0 z-30 bg-zinc-950/95 backdrop-blur border-b border-zinc-800/60">
+          <div className="w-full px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-zinc-800 animate-pulse" />
+              <div className="h-5 w-28 rounded bg-zinc-800 animate-pulse" />
+            </div>
+            <div className="flex items-center gap-2">
+              {[1,2,3].map(i => <div key={i} className="h-8 w-16 rounded-full bg-zinc-800 animate-pulse" />)}
+            </div>
+          </div>
+        </div>
+        <div className="px-4 sm:px-6 lg:px-8 border-b border-zinc-800/60">
+          <div className="flex gap-6 h-11 items-end">
+            {[1,2,3,4,5].map(i => <div key={i} className="h-4 w-10 rounded bg-zinc-800 animate-pulse mb-2" />)}
+          </div>
+        </div>
+        <div className="px-4 sm:px-6 lg:px-8 py-3 flex gap-2">
+          {[1,2,3,4,5,6].map(i => <div key={i} className="h-8 w-16 rounded-full bg-zinc-800 animate-pulse" />)}
+        </div>
+        <div className="px-4 sm:px-6 lg:px-8 py-2 grid grid-cols-3 gap-3">
+          {[1,2,3,4,5,6].map(i => <div key={i} className="rounded-xl bg-zinc-900 border border-zinc-800 p-4 h-20 animate-pulse" />)}
+        </div>
       </div>
     );
   }
