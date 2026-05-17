@@ -86,7 +86,9 @@ export default function Home() {
   // Read returnPath from URL params — RequireAuth passes the original page URL here
   // so after Discord login, the user lands back on the page they were trying to visit.
   const returnPath = searchParams.get("returnPath") ?? "/feed";
-  const loginUrl = `/api/auth/discord-login/connect?returnPath=${encodeURIComponent(returnPath)}&prompt=none`;
+  // No prompt param — server defaults to "consent" which always shows the Discord screen.
+  // This ensures users with expired Discord sessions are not silently rejected.
+  const loginUrl = `/api/auth/discord-login/connect?returnPath=${encodeURIComponent(returnPath)}`;
 
   function handleDiscordClick(e: React.MouseEvent<HTMLAnchorElement>) {
     if (isRedirecting) {

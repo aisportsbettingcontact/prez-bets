@@ -291,7 +291,7 @@ export function registerDiscordLoginRoutes(app: Express): void {
     //                  in this browser session. Falls back to normal flow if not.
     //   prompt=consent (default) → always show consent screen (slower, but forces re-auth)
     // We forward whatever the client sends; default is Discord's standard behavior.
-    const discordPrompt = req.query.prompt === "consent" ? "consent" : "none";
+    const discordPrompt = req.query.prompt === "none" ? "none" : "consent";
 
     console.log(
       `[DiscordLogin][CONNECT] requestId=${requestId} returnPath="${returnPath}"`
