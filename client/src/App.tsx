@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, Redirect } from "wouter";
 import { lazy, Suspense } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { RequireAuth } from "./components/RequireAuth";
 import { ThemeProvider } from "./contexts/ThemeContext";
 // ── Critical path: ModelProjections is the main feed — loaded eagerly ────────
 import ModelProjections from "./pages/ModelProjections";
@@ -29,44 +30,39 @@ function Router() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen bg-background text-muted-foreground text-sm">Loading…</div>}>
     <Switch>
-      {/* Feed is the public default — / and /home both go directly to the feed */}
+      {/* ── Public routes (no auth required) ───────────────────────────────── */}
+      {/* / and /home → redirect to /feed (RequireAuth on /feed handles the gate) */}
       <Route path="/">{() => <Redirect to="/feed" />}</Route>
       <Route path="/home">{() => <Redirect to="/feed" />}</Route>
       {/* Legacy redirects */}
       <Route path="/dashboard">{() => <Redirect to="/feed" />}</Route>
       <Route path="/projections">{() => <Redirect to="/feed" />}</Route>
-      {/* /splits → redirect to feed (splits are in-card tabs) */}
       <Route path="/splits">{() => <Redirect to="/feed" />}</Route>
-      {/* Unified feed page (AI Model Projections) */}
-      <Route path="/feed" component={ModelProjections} />
-      {/* /login → feed (login is hidden) */}
+      {/* Login page — public, no auth required */}
       <Route path="/login" component={Home} />
-      <Route path="/admin/users" component={UserManagement} />
-      <Route path="/admin/publish" component={PublishProjections} />
-      <Route path="/admin/ingest-an" component={IngestAnOdds} />
-      {/* MLB Team Schedule — click team logo on MLB matchup cards to navigate here */}
-      <Route path="/mlb/team/:slug" component={MlbTeamSchedule} />
-      {/* NBA Team Schedule — click team logo on NBA matchup cards to navigate here */}
-      <Route path="/nba/team/:slug" component={NbaTeamSchedule} />
-      {/* NHL Team Schedule — click team logo on NHL matchup cards to navigate here */}
-      <Route path="/nhl/team/:slug" component={NhlTeamSchedule} />
-      {/* Owner-only: Unified model results dashboard (all 5 markets) */}
-      <Route path="/admin/model-results" component={TheModelResults} />
-      {/* Legacy redirect: old F5 edge board → unified model results */}
-      <Route path="/admin/f5-edge">{() => <Redirect to="/admin/model-results" />}</Route>
-      {/* Owner-only: Security Events dashboard */}
-      <Route path="/admin/security" component={SecurityEvents} />
-      <Route path="/bet-tracker" component={BetTracker} />
-      {/* Owner-only: Real-time model pipeline health dashboard (MLB + NHL) */}
-      <Route path="/admin/model-status" component={AdminModelStatus} />
-      {/* Owner-only: Postponed and suspended game audit view */}
-      <Route path="/admin/postponed-games" component={PostponedGames} />
-      {/* Private: Rotogrinders THE BAT X projections — @prez and @lucianobets only */}
-      <Route path="/resources" component={Resources} />
-      {/* Owner-only: Multi-market backtest dashboard — 2026 live data validation */}
-      <Route path="/admin/backtest" component={MlbBacktest} />
-      {/* Public: Password reset — accessed via reset link sent to Discord DM or owner */}
+      {/* Password reset — public, accessed via reset link */}
       <Route path="/reset-password" component={ResetPassword} />
+      {/* ── Protected routes (RequireAuth redirects to /login if not authed) ── */}
+      {/* Main feed */}
+      <Route path="/feed">{() => <RequireAuth><ModelProjections /></RequireAuth>}</Route>
+      {/* Admin pages */}
+      <Route path="/admin/users">{() => <RequireAuth><UserManagement /></RequireAuth>}</Route>
+      <Route path="/admin/publish">{() => <RequireAuth><PublishProjections /></RequireAuth>}</Route>
+      <Route path="/admin/ingest-an">{() => <RequireAuth><IngestAnOdds /></RequireAuth>}</Route>
+      <Route path="/admin/model-results">{() => <RequireAuth><TheModelResults /></RequireAuth>}</Route>
+      <Route path="/admin/f5-edge">{() => <Redirect to="/admin/model-results" />}</Route>
+      <Route path="/admin/security">{() => <RequireAuth><SecurityEvents /></RequireAuth>}</Route>
+      <Route path="/admin/model-status">{() => <RequireAuth><AdminModelStatus /></RequireAuth>}</Route>
+      <Route path="/admin/postponed-games">{() => <RequireAuth><PostponedGames /></RequireAuth>}</Route>
+      <Route path="/admin/backtest">{() => <RequireAuth><MlbBacktest /></RequireAuth>}</Route>
+      {/* Team schedules — params are read via useParams() inside each component */}
+      <Route path="/mlb/team/:slug">{() => <RequireAuth><MlbTeamSchedule /></RequireAuth>}</Route>
+      <Route path="/nba/team/:slug">{() => <RequireAuth><NbaTeamSchedule /></RequireAuth>}</Route>
+      <Route path="/nhl/team/:slug">{() => <RequireAuth><NhlTeamSchedule /></RequireAuth>}</Route>
+      {/* User pages */}
+      <Route path="/bet-tracker">{() => <RequireAuth><BetTracker /></RequireAuth>}</Route>
+      <Route path="/resources">{() => <RequireAuth><Resources /></RequireAuth>}</Route>
+      {/* 404 */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

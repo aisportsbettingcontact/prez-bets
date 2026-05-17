@@ -83,7 +83,10 @@ export default function Home() {
 
   // prompt=none: if the user is already authenticated with Discord in this browser,
   // Discord skips the consent screen entirely and redirects back immediately.
-  const loginUrl = `/api/auth/discord-login/connect?returnPath=${encodeURIComponent("/feed")}&prompt=none`;
+  // Read returnPath from URL params — RequireAuth passes the original page URL here
+  // so after Discord login, the user lands back on the page they were trying to visit.
+  const returnPath = searchParams.get("returnPath") ?? "/feed";
+  const loginUrl = `/api/auth/discord-login/connect?returnPath=${encodeURIComponent(returnPath)}&prompt=none`;
 
   function handleDiscordClick(e: React.MouseEvent<HTMLAnchorElement>) {
     if (isRedirecting) {
