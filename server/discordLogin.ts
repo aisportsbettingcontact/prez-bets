@@ -304,12 +304,32 @@ export function registerDiscordLoginRoutes(app: Express): void {
       const publicOrigin = buildPublicOrigin(req, requestId);
       const redirectUri  = `${publicOrigin}${ROUTE_PREFIX}/callback`;
 
+      // ── TOTAL CALLBACK DEADLINE ─────────────────────────────────────────────
+      // Guard against the entire callback exceeding 15s (platform proxy kills at ~120s).
+      // If we haven't redirected within 15s, force a clean error redirect.
+      const CALLBACK_DEADLINE_MS = 15_000;
+      const deadlineTimer = setTimeout(() => {
+        if (!res.headersSent) {
+          console.error(
+            `[DiscordLogin][CALLBACK][DEADLINE_EXCEEDED] requestId=${requestId}` +
+            ` totalMs=${Date.now() - t0} — forcing redirect to prevent Service Unavailable`
+          );
+          res.redirect(302, `/?discord_error=timeout`);
+        }
+      }, CALLBACK_DEADLINE_MS);
+      // Ensure the deadline timer never prevents Node from exiting
+      deadlineTimer.unref();
+
       let accessToken: string;
       try {
         const t1 = Date.now();
+        // AbortSignal.timeout(8000): hard 8-second timeout on the token exchange.
+        // Without this, a stalled Discord API connection hangs indefinitely (2+ min)
+        // until the platform proxy kills the request with "Service Unavailable".
         const tokenRes = await fetch(`${DISCORD_API}/oauth2/token`, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          signal: AbortSignal.timeout(8_000),
           body: new URLSearchParams({
             client_id:     ENV.discordClientId,
             client_secret: ENV.discordClientSecret,
@@ -344,8 +364,18 @@ export function registerDiscordLoginRoutes(app: Express): void {
           ` tokenMs=${Date.now() - t1}`
         );
       } catch (err) {
-        console.error(`[DiscordLogin][CALLBACK][TOKEN_EXCEPTION] requestId=${requestId}`, err);
-        res.redirect(302, `/?discord_error=token_exchange_failed`);
+        const isTimeout = err instanceof Error && err.name === "TimeoutError";
+        console.error(
+          `[DiscordLogin][CALLBACK][TOKEN_EXCEPTION] requestId=${requestId}` +
+          ` isTimeout=${isTimeout}`,
+          err
+        );
+        clearTimeout(deadlineTimer);
+        if (!res.headersSent) {
+          res.redirect(302, isTimeout
+            ? `/?discord_error=timeout`
+            : `/?discord_error=token_exchange_failed`);
+        }
         return;
       }
 
@@ -360,8 +390,10 @@ export function registerDiscordLoginRoutes(app: Express): void {
       };
 
       try {
+        // AbortSignal.timeout(8000): hard 8-second timeout on the profile fetch.
         const profileRes = await fetch(`${DISCORD_API}/users/@me`, {
           headers: { Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(8_000),
         });
 
         if (!profileRes.ok) {
@@ -376,8 +408,18 @@ export function registerDiscordLoginRoutes(app: Express): void {
 
         profile = await profileRes.json() as typeof profile;
       } catch (err) {
-        console.error(`[DiscordLogin][CALLBACK][PROFILE_EXCEPTION] requestId=${requestId}`, err);
-        res.redirect(302, `/?discord_error=profile_fetch_failed`);
+        const isTimeout = err instanceof Error && err.name === "TimeoutError";
+        console.error(
+          `[DiscordLogin][CALLBACK][PROFILE_EXCEPTION] requestId=${requestId}` +
+          ` isTimeout=${isTimeout}`,
+          err
+        );
+        clearTimeout(deadlineTimer);
+        if (!res.headersSent) {
+          res.redirect(302, isTimeout
+            ? `/?discord_error=timeout`
+            : `/?discord_error=profile_fetch_failed`);
+        }
         return;
       }
 
@@ -477,6 +519,7 @@ export function registerDiscordLoginRoutes(app: Express): void {
       );
 
       // Redirect immediately — do NOT await profile update or lastSignedIn
+      clearTimeout(deadlineTimer);
       res.redirect(302, returnPath);
 
       // ── Fire-and-forget — update Discord profile + lastSignedIn ──────────────

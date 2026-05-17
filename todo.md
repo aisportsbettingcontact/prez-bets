@@ -3495,3 +3495,10 @@
 - [x] discordLogin fix — added access_token presence validation after token exchange
 - [x] discordLogin.test.ts — updated tests to reflect new DB-level access control invariants (21/21 pass)
 - [x] TypeScript: 0 errors | discordLogin tests: 21/21 pass
+
+- [x] discordLogin fix — added AbortSignal.timeout(8000) to Discord token exchange fetch (was hanging indefinitely)
+- [x] discordLogin fix — added AbortSignal.timeout(8000) to Discord profile fetch (was hanging indefinitely)
+- [x] discordLogin fix — added 15s total callback deadline timer (clearTimeout on success/error)
+- [x] discordLogin fix — added isTimeout detection to distinguish timeout vs API error in catch blocks
+- [x] Home.tsx fix — added timeout, server_error, db_unavailable error message cases
+- [x] TypeScript: 0 errors | discordLogin tests: 21/21 pass | callback response: 3ms
