@@ -3511,3 +3511,21 @@
 - [x] discordInvite.test.ts — 24 tests covering token structure, security, error paths, success path
 
 - [x] Fix execSync blocking event loop in renderSplitsCard.ts — replaced with async execAsync (promisify exec) so Playwright install does not freeze all HTTP requests for 2 minutes at cold start
+
+## Session: 2026-05-17 - Bet Tracker Save Failure Fix + Past Date Slate Support
+
+- [ ] Fix: sanitize formDate on iOS Safari — strip time component from date input value (slice 0,10)
+- [ ] Fix: add Zod .transform() to normalize gameDate on server side (strip T and beyond)
+- [ ] Fix: add past date slate fallback for NHL, NBA, NCAAM (currently only MLB has fallback)
+- [ ] Fix: handle empty formDate (date picker cleared) with graceful validation message
+- [ ] Enhancement: add staleTime to getSlate query for past dates (immutable — use Infinity)
+- [ ] Enhancement: show "No games found for this date" with manual entry option for past dates
+
+## Session: 2026-05-17 - Bet Tracker Save Fix + Past Date Slates
+
+- [x] Fix Bet Tracker save failure — iOS Safari date format (Zod regex)
+- [x] Add server-side Zod transform for gameDate normalization (safety net)
+- [x] Add NHL fallback (api-web.nhle.com) for past date slates
+- [x] Add NBA fallback (ESPN API) for past date slates
+- [x] Add NCAAM fallback (ESPN API) for past date slates
+- [x] Add staleTime:Infinity for past-date slate queries (immutable cache)

@@ -1624,9 +1624,18 @@ export default function BetTracker() {
   }, [formGame, formMarket, formPickSide]);
 
   // ── tRPC ──────────────────────────────────────────────────────────────────
+  // [PERF] Past-date slates are immutable — once fetched they never change.
+  // Use staleTime:Infinity for past dates so React Query never refetches them.
+  // For today/future dates, use 4-minute staleTime to pick up live odds updates.
+  const isFormDatePast = formDate < todayEst();
   const slateQuery = trpc.betTracker.getSlate.useQuery(
     { sport: activeSport === "ALL" ? "MLB" : activeSport, gameDate: formDate },
-    { enabled: canAccess, staleTime: 4 * 60 * 1000, retry: 1 }
+    {
+      enabled:   canAccess && !!formDate,
+      staleTime: isFormDatePast ? Infinity : 4 * 60 * 1000,
+      gcTime:    isFormDatePast ? 30 * 60 * 1000 : 5 * 60 * 1000,  // keep past slates in cache 30min
+      retry:     1,
+    }
   );
 
   // ── OPTIMIZED: Paginated infinite-scroll query — 50 bets per page, cursor-based ──────────
@@ -2126,6 +2135,18 @@ export default function BetTracker() {
     setFormError("");
     // CRITICAL: always release the lock on validation failure — otherwise the
     // submit button is permanently disabled for the rest of the session.
+
+    // [FIX] Validate and normalize gameDate before sending to server.
+    // iOS Safari can return empty string or ISO datetime from date inputs.
+    const normalizedDate = (formDate || "").slice(0, 10);
+    if (!normalizedDate || !/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+      console.error(`[BetTracker][ERROR] handleSubmit: invalid gameDate="${formDate}" normalized="${normalizedDate}"`);
+      setFormError("Select a valid date (YYYY-MM-DD format required).");
+      isSubmittingRef.current = false;
+      return;
+    }
+    console.log(`[BetTracker][STATE] handleSubmit: gameDate validated — formDate="${formDate}" normalizedDate="${normalizedDate}"`);
+
     if (!formGame) {
       setFormError("Select a game from the slate.");
       isSubmittingRef.current = false;
@@ -2190,7 +2211,7 @@ export default function BetTracker() {
         anGameId:   formGame.id,
         gameNumber: formGame.gameNumber,  // 1 for G1/non-DH, 2 for G2 — critical for DH grading
         sport:      formSport,
-        gameDate:   formDate,
+        gameDate:   normalizedDate,  // [FIX] use normalized date (strips iOS Safari time component)
         awayTeam:   formGame.awayTeam,
         homeTeam:   formGame.homeTeam,
         timeframe:  formTimeframe,
@@ -2766,7 +2787,20 @@ export default function BetTracker() {
               <input
                 type="date"
                 value={formDate}
-                onChange={e => setFormDate(e.target.value)}
+                onChange={e => {
+                  // [FIX] iOS Safari <input type="date"> sometimes returns a full ISO datetime
+                  // string (e.g. "2026-05-16T12:00:00") instead of a plain date string.
+                  // Slice to first 10 chars to normalize to YYYY-MM-DD in all browsers.
+                  const raw = e.target.value || "";
+                  const normalized = raw.slice(0, 10);
+                  // Validate format before setting — reject malformed values
+                  if (normalized && !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+                    console.warn(`[BetTracker][WARN] date input rejected: raw="${raw}" normalized="${normalized}" — not YYYY-MM-DD`);
+                    return;
+                  }
+                  console.log(`[BetTracker][STATE] formDate changed: raw="${raw}" → normalized="${normalized}"`);
+                  setFormDate(normalized);
+                }}
                 className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
               />
             </div>

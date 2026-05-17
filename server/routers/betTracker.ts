@@ -336,7 +336,11 @@ export const betTrackerRouter = router({
       /** Doubleheader game number: 1 = G1, 2 = G2. Defaults to 1 for non-DH games. */
       gameNumber: z.number().int().min(1).max(2).default(1),
       sport:      z.enum(SPORTS).default("MLB"),
-      gameDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      // [FIX] Normalize gameDate: strip any time component (iOS Safari sends ISO datetime).
+      // Transform runs BEFORE regex validation, so "2026-05-16T12:00:00" → "2026-05-16" passes.
+      gameDate:   z.string()
+        .transform(v => (v || "").slice(0, 10))
+        .pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "gameDate must be YYYY-MM-DD")),
       awayTeam:   z.string().min(1).max(128),
       homeTeam:   z.string().min(1).max(128),
       // Bet structure
