@@ -1,15 +1,20 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
 import { Route, Switch, Redirect } from "wouter";
 import { lazy, Suspense } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { RequireAuth } from "./components/RequireAuth";
 import { ThemeProvider } from "./contexts/ThemeContext";
-// ── Critical path: ModelProjections is the main feed — loaded eagerly ────────
-import ModelProjections from "./pages/ModelProjections";
-// ── Non-critical pages: lazy-loaded on first navigation ──────────────────────
-// This eliminates ~60% of the initial JS bundle, reducing TTI from ~2.5s → ~0.8s
+import AppLoadingShell from "./components/AppLoadingShell";
+// [PERF] NotFound is lazy: it imports ui/button + ui/card which share clsx with recharts.
+// Making it lazy removes recharts (409KB) from the critical path.
+const NotFound = lazy(() => import("@/pages/NotFound"));
+// ── ALL routes are lazy-loaded — zero page code in the initial bundle ────────
+// [PERF] ModelProjections was previously eager — it pulled in 531KB of deps
+// (GameCard, BettingSplitsPanel, MlbLineupCard, MlbCheatSheetCard, JackMacView,
+// framer-motion, all MLB components). Now lazy: loads in parallel with auth check.
+const ModelProjections = lazy(() => import("./pages/ModelProjections"));
+const BettingSplits    = lazy(() => import("./pages/BettingSplits"));
 const Home = lazy(() => import("./pages/Home"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const PublishProjections = lazy(() => import("./pages/PublishProjections"));
@@ -28,7 +33,7 @@ const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 
 function Router() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen bg-background text-muted-foreground text-sm">Loading…</div>}>
+    <Suspense fallback={<AppLoadingShell />}>
     <Switch>
       {/* ── Public routes (no auth required) ───────────────────────────────── */}
       {/* / and /home → redirect to /feed (RequireAuth on /feed handles the gate) */}
@@ -45,6 +50,8 @@ function Router() {
       {/* ── Protected routes (RequireAuth redirects to /login if not authed) ── */}
       {/* Main feed */}
       <Route path="/feed">{() => <RequireAuth><ModelProjections /></RequireAuth>}</Route>
+      {/* Betting splits */}
+      <Route path="/betting-splits">{() => <RequireAuth><BettingSplits /></RequireAuth>}</Route>
       {/* Admin pages */}
       <Route path="/admin/users">{() => <RequireAuth><UserManagement /></RequireAuth>}</Route>
       <Route path="/admin/publish">{() => <RequireAuth><PublishProjections /></RequireAuth>}</Route>

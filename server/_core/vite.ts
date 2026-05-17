@@ -80,6 +80,23 @@ export function serveStatic(app: Express) {
     );
   }
 
+  // ── Hashed static assets: cache for 1 year (immutable) ──────────────────────
+  // Vite appends a content hash to every JS/CSS filename (e.g. index-BrGTUamC.js).
+  // These files NEVER change for a given hash — safe to cache for 1 year.
+  // [PERF] On repeat visits: 0 bytes downloaded for all JS/CSS chunks.
+  app.use(
+    "/assets",
+    express.static(path.resolve(distPath, "assets"), {
+      maxAge: "1y",
+      immutable: true,
+      setHeaders: (res: import('http').ServerResponse) => {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        res.setHeader("Vary", "Accept-Encoding");
+      },
+    })
+  );
+
+  // ── Other static files (favicon, robots.txt, etc.) ───────────────────────────
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist
