@@ -79,7 +79,21 @@ export default function Home() {
       : "You do not have the AI Model Sub role in the Prez Bets Discord server. Purchase a subscription to get access.",
   };
 
-  const loginUrl = `/api/auth/discord-login/connect?returnPath=${encodeURIComponent("/feed")}`;
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  // prompt=none: if the user is already authenticated with Discord in this browser,
+  // Discord skips the consent screen entirely and redirects back immediately.
+  const loginUrl = `/api/auth/discord-login/connect?returnPath=${encodeURIComponent("/feed")}&prompt=none`;
+
+  function handleDiscordClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (isRedirecting) {
+      e.preventDefault();
+      return;
+    }
+    setIsRedirecting(true);
+    // Safety reset after 15s in case user cancels or Discord returns an error
+    setTimeout(() => setIsRedirecting(false), 15_000);
+  }
 
   // Show spinner only while loading AND within the 4-second timeout window
   if (authLoading && !authTimedOut) {
@@ -146,15 +160,31 @@ export default function Home() {
         <div className="w-full max-w-xs space-y-3">
           <a
             href={loginUrl}
+            onClick={handleDiscordClick}
+            aria-disabled={isRedirecting}
             className="flex items-center justify-center gap-3 w-full px-5 py-3.5 rounded-xl font-bold text-sm text-white transition-all active:scale-[0.98] shadow-lg"
-            style={{ backgroundColor: "#5865F2" }}
+            style={{
+              backgroundColor: "#5865F2",
+              opacity: isRedirecting ? 0.75 : 1,
+              pointerEvents: isRedirecting ? "none" : "auto",
+              cursor: isRedirecting ? "default" : "pointer",
+            }}
           >
-            <DiscordIcon size={20} />
-            Sign in with Discord
+            {isRedirecting
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting to Discord…</>
+              : <><DiscordIcon size={20} /> Sign in with Discord</>
+            }
           </a>
-          <p className="text-center text-xs text-muted-foreground/50">
-            Access requires the AI Model Sub role in the Prez Bets Discord server.
-          </p>
+          {!isRedirecting && (
+            <p className="text-center text-xs text-muted-foreground/50">
+              Access requires the AI Model Sub role in the Prez Bets Discord server.
+            </p>
+          )}
+          {isRedirecting && (
+            <p className="text-center text-xs text-muted-foreground/50 animate-pulse">
+              Opening Discord authentication…
+            </p>
+          )}
         </div>
 
         <p className="mt-8 text-center text-xs text-muted-foreground/40">
