@@ -285,6 +285,14 @@ export function registerDiscordLoginRoutes(app: Express): void {
       ? req.query.returnPath
       : "/";
 
+    // prompt=none: if the client passes prompt=none, forward it to Discord.
+    // Discord behavior:
+    //   prompt=none  → skip consent screen if user is already authenticated with Discord
+    //                  in this browser session. Falls back to normal flow if not.
+    //   prompt=consent (default) → always show consent screen (slower, but forces re-auth)
+    // We forward whatever the client sends; default is Discord's standard behavior.
+    const discordPrompt = req.query.prompt === "none" ? "none" : undefined;
+
     console.log(
       `[DiscordLogin][CONNECT] requestId=${requestId} returnPath="${returnPath}"`
     );
@@ -311,11 +319,13 @@ export function registerDiscordLoginRoutes(app: Express): void {
       scope:         OAUTH_SCOPES,
       state,
     });
+    // Forward prompt=none if requested — skips Discord consent screen for returning users
+    if (discordPrompt) params.set("prompt", discordPrompt);
     const authorizeUrl = `https://discord.com/oauth2/authorize?${params.toString()}`;
 
     console.log(
       `[DiscordLogin][CONNECT][OK] requestId=${requestId}` +
-      ` redirectUri="${redirectUri}" totalMs=${Date.now() - t0}`
+      ` redirectUri="${redirectUri}" prompt=${discordPrompt ?? "default"} totalMs=${Date.now() - t0}`
     );
 
     res.redirect(302, authorizeUrl);

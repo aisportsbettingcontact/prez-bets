@@ -1,18 +1,25 @@
 /**
  * LoginModal — Discord-only sign-in modal
  *
- * Replaces the previous username/password form with a single
- * "Sign in with Discord" button. Clicking it redirects the user to
- * /api/auth/discord-login/connect?returnPath=<current path>.
+ * Clicking "Sign in with Discord":
+ *   1. Sets isRedirecting=true → button shows spinner + "Redirecting to Discord…"
+ *   2. Navigates to /api/auth/discord-login/connect?returnPath=<current path>
+ *      (server returns 302 → Discord consent screen)
+ *   3. While the browser is navigating away, the spinner remains visible.
+ *      The modal close button is disabled during redirect to prevent confusion.
  *
  * The server-side callback will:
- *   1. Exchange the Discord code for an access_token
- *   2. Look up the appUser by discordId
- *   3. Issue an app_session JWT cookie (90-day)
- *   4. Redirect back to returnPath
+ *   1. Validate CSRF state JWT (CPU-only, <1ms)
+ *   2. Exchange the Discord code for an access_token
+ *   3. Fetch Discord profile + guild member IN PARALLEL
+ *   4. Verify AI MODEL SUB role
+ *   5. Look up the appUser by discordId
+ *   6. Issue an app_session JWT cookie (90-day)
+ *   7. Redirect back to returnPath
  */
 
-import { X } from "lucide-react";
+import { useState } from "react";
+import { X, Loader2 } from "lucide-react";
 
 // Discord brand icon (inline SVG — no external dependency)
 function DiscordIcon({ size = 20 }: { size?: number }) {
@@ -35,14 +42,39 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ onClose }: LoginModalProps) {
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
   const returnPath = typeof window !== "undefined" ? window.location.pathname : "/";
-  const loginUrl   = `/api/auth/discord-login/connect?returnPath=${encodeURIComponent(returnPath)}`;
+  // prompt=none: if the user is already authenticated with Discord in this browser,
+  // Discord skips the consent screen entirely and redirects back immediately.
+  // If the user is NOT authenticated, Discord falls back to the normal consent screen.
+  const loginUrl = `/api/auth/discord-login/connect?returnPath=${encodeURIComponent(returnPath)}&prompt=none`;
+
+  function handleDiscordClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (isRedirecting) {
+      e.preventDefault();
+      return;
+    }
+    // Set redirecting state immediately on click — before the browser navigates.
+    // The spinner will be visible during the ~1-3s it takes for:
+    //   browser → /connect (server, <2ms) → Discord consent (1-3s) → callback
+    setIsRedirecting(true);
+    // Safety reset: if the page is still here after 15s (e.g. user cancelled in
+    // a new tab, or Discord returned an error), reset the button so they can retry.
+    setTimeout(() => setIsRedirecting(false), 15_000);
+  }
+
+  function handleClose() {
+    // Prevent closing while redirect is in flight — avoids confusing state
+    if (isRedirecting) return;
+    onClose();
+  }
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
     >
       <div
         className="relative w-full max-w-sm rounded-2xl border border-border bg-card shadow-2xl overflow-hidden"
@@ -50,24 +82,37 @@ export function LoginModal({ onClose }: LoginModalProps) {
         aria-modal="true"
         aria-label="Sign in"
       >
-        {/* Close button */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-3 right-3 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors z-10"
-          aria-label="Close"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        {/* Close button — hidden during redirect */}
+        {!isRedirecting && (
+          <button
+            type="button"
+            onClick={handleClose}
+            className="absolute top-3 right-3 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors z-10"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Header */}
         <div className="px-6 pt-8 pb-6 text-center">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: "rgba(88,101,242,0.15)" }}>
-            <DiscordIcon size={28} />
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: "rgba(88,101,242,0.15)" }}
+          >
+            {isRedirecting
+              ? <Loader2 className="w-7 h-7 animate-spin" style={{ color: "#5865F2" }} />
+              : <DiscordIcon size={28} />
+            }
           </div>
-          <h2 className="text-lg font-bold text-foreground mb-1">Sign in to Prez Bets</h2>
+          <h2 className="text-lg font-bold text-foreground mb-1">
+            {isRedirecting ? "Redirecting to Discord…" : "Sign in to Prez Bets"}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Use your Discord account to access the platform.
+            {isRedirecting
+              ? "Opening Discord authentication. Please wait…"
+              : "Use your Discord account to access the platform."
+            }
           </p>
         </div>
 
@@ -75,27 +120,40 @@ export function LoginModal({ onClose }: LoginModalProps) {
         <div className="px-6 pb-6 space-y-3">
           <a
             href={loginUrl}
+            onClick={handleDiscordClick}
+            aria-disabled={isRedirecting}
             className="flex items-center justify-center gap-3 w-full px-5 py-3 rounded-xl font-bold text-sm text-white transition-all active:scale-[0.98]"
-            style={{ backgroundColor: "#5865F2" }}
+            style={{
+              backgroundColor: "#5865F2",
+              opacity: isRedirecting ? 0.75 : 1,
+              pointerEvents: isRedirecting ? "none" : "auto",
+              cursor: isRedirecting ? "default" : "pointer",
+            }}
           >
-            <DiscordIcon size={20} />
-            Sign in with Discord
+            {isRedirecting
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting to Discord…</>
+              : <><DiscordIcon size={20} /> Sign in with Discord</>
+            }
           </a>
 
-          <p className="text-center text-xs text-muted-foreground/60 pt-1">
-            Access is by invitation only.{" "}
-            <span className="text-muted-foreground/40">
-              Your Discord account must be linked by the owner.
-            </span>
-          </p>
+          {!isRedirecting && (
+            <p className="text-center text-xs text-muted-foreground/60 pt-1">
+              Access is by invitation only.{" "}
+              <span className="text-muted-foreground/40">
+                Your Discord account must be linked by the owner.
+              </span>
+            </p>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 pb-5 text-center border-t border-border/50 pt-4">
-          <p className="text-xs text-muted-foreground/40">
-            This tool is for informational purposes only. Gamble responsibly.
-          </p>
-        </div>
+        {!isRedirecting && (
+          <div className="px-6 pb-5 text-center border-t border-border/50 pt-4">
+            <p className="text-xs text-muted-foreground/40">
+              This tool is for informational purposes only. Gamble responsibly.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
