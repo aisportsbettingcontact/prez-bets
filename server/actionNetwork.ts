@@ -24,6 +24,9 @@
  */
 
 import { MLB_BY_ABBREV, MLB_BY_ID } from "@shared/mlbTeams";
+import { NHL_TEAMS } from "@shared/nhlTeams";
+import { NBA_TEAMS } from "@shared/nbaTeams";
+import { getTeamColors } from "@shared/teamColors";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -525,14 +528,29 @@ export async function fetchAnSlate(sport: string, dateStr: string): Promise<Slat
   console.log(`[AN][CACHE] MISS key=${key} — initiating fetch`);
 
   const promise = fetchAnSlateRaw(sport, dateStr).then(async games => {
-    // ── MLB Stats API fallback ────────────────────────────────────────────────
-    // AN returns 0 games for past dates (HTTP 403). Fall back to MLB Stats API
-    // which has full historical schedules. Only applies to MLB.
+    // ── Per-sport fallback for past dates ────────────────────────────────────────────────────────────────────────────
+    // AN returns 0 games for past dates (HTTP 403).
+    // Each sport has a dedicated public API fallback for historical schedules.
     let finalGames = games;
-    if (games.length === 0 && sport.toUpperCase() === "MLB") {
-      console.log(`[AN][FALLBACK][STEP] AN returned 0 MLB games for date=${dateStr} — trying MLB Stats API fallback`);
-      finalGames = await fetchMlbStatsSlate(dateStr);
-      console.log(`[AN][FALLBACK][OUTPUT] MLB Stats API fallback: date=${dateStr} games=${finalGames.length}`);
+    if (games.length === 0) {
+      const sportUpper = sport.toUpperCase();
+      if (sportUpper === "MLB") {
+        console.log(`[AN][FALLBACK][STEP] AN returned 0 MLB games for date=${dateStr} — trying MLB Stats API fallback`);
+        finalGames = await fetchMlbStatsSlate(dateStr);
+        console.log(`[AN][FALLBACK][OUTPUT] MLB Stats API fallback: date=${dateStr} games=${finalGames.length}`);
+      } else if (sportUpper === "NHL") {
+        console.log(`[AN][FALLBACK][STEP] AN returned 0 NHL games for date=${dateStr} — trying NHL API fallback`);
+        finalGames = await fetchNhlStatsSlate(dateStr);
+        console.log(`[AN][FALLBACK][OUTPUT] NHL API fallback: date=${dateStr} games=${finalGames.length}`);
+      } else if (sportUpper === "NBA") {
+        console.log(`[AN][FALLBACK][STEP] AN returned 0 NBA games for date=${dateStr} — trying ESPN NBA fallback`);
+        finalGames = await fetchEspnSlate("NBA", dateStr);
+        console.log(`[AN][FALLBACK][OUTPUT] ESPN NBA fallback: date=${dateStr} games=${finalGames.length}`);
+      } else if (sportUpper === "NCAAM") {
+        console.log(`[AN][FALLBACK][STEP] AN returned 0 NCAAM games for date=${dateStr} — trying ESPN NCAAM fallback`);
+        finalGames = await fetchEspnSlate("NCAAM", dateStr);
+        console.log(`[AN][FALLBACK][OUTPUT] ESPN NCAAM fallback: date=${dateStr} games=${finalGames.length}`);
+      }
     }
     evictExpired();
     slateCache.set(key, { games: finalGames, fetchedAt: Date.now() });
@@ -721,6 +739,294 @@ async function fetchMlbStatsSlate(dateStr: string): Promise<SlateGame[]> {
   }
   console.log(`[AN][FALLBACK][OUTPUT] fetchMlbStatsSlate DONE: date=${dateStr} games=${result.length} skipped=${skipped} elapsed=${elapsed}ms`);
   console.log(`[AN][FALLBACK][VERIFY] ${result.length > 0 ? "PASS" : "WARN — 0 games"} | date=${dateStr}`);
+  return result;
+}
+
+// ─── NHL API Fallback ────────────────────────────────────────────────────────
+
+/**
+ * Build lookup maps for NHL teams by abbreviation and by dbSlug.
+ * Used by fetchNhlStatsSlate to resolve team data from NHL API responses.
+ */
+const NHL_BY_ABBREV = new Map(NHL_TEAMS.map(t => [t.abbrev, t]));
+
+/**
+ * Fetch NHL game slate from api-web.nhle.com as a fallback
+ * when Action Network returns 0 games for past dates.
+ * Returns SlateGame[] with empty odds — sufficient for bet entry and history display.
+ */
+async function fetchNhlStatsSlate(dateStr: string): Promise<SlateGame[]> {
+  const url = `https://api-web.nhle.com/v1/schedule/${dateStr}`;
+  console.log(`[AN][FALLBACK][INPUT] fetchNhlStatsSlate: date=${dateStr}`);
+  console.log(`[AN][FALLBACK][STEP]  URL=${url}`);
+  const fetchStart = Date.now();
+  let resp: Response;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8_000);
+    resp = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+  } catch (err) {
+    console.error(`[AN][FALLBACK][ERROR] fetchNhlStatsSlate: fetch failed date=${dateStr} err=${err}`);
+    return [];
+  }
+  const elapsed = Date.now() - fetchStart;
+  console.log(`[AN][FALLBACK][STATE] HTTP ${resp.status} date=${dateStr} elapsed=${elapsed}ms`);
+  if (!resp.ok) {
+    console.error(`[AN][FALLBACK][ERROR] fetchNhlStatsSlate: non-OK status=${resp.status} date=${dateStr}`);
+    return [];
+  }
+  let data: Record<string, unknown>;
+  try { data = (await resp.json()) as Record<string, unknown>; }
+  catch (err) {
+    console.error(`[AN][FALLBACK][ERROR] fetchNhlStatsSlate: JSON parse failed date=${dateStr} err=${err}`);
+    return [];
+  }
+  // NHL API returns gameWeek array — find the day matching dateStr
+  const gameWeek = (data.gameWeek as Array<Record<string, unknown>>) ?? [];
+  let apiGames: Array<Record<string, unknown>> = [];
+  for (const day of gameWeek) {
+    const dayDate = (day.date as string) ?? "";
+    if (dayDate === dateStr) {
+      apiGames = (day.games as Array<Record<string, unknown>>) ?? [];
+      break;
+    }
+  }
+  console.log(`[AN][FALLBACK][STATE] ${apiGames.length} raw NHL games for date=${dateStr}`);
+  if (apiGames.length === 0) {
+    console.log(`[AN][FALLBACK][OUTPUT] 0 NHL games for date=${dateStr}`);
+    return [];
+  }
+  const result: SlateGame[] = [];
+  let skipped = 0;
+  const emptyOdds: GameOdds = { awayMl: null, homeMl: null, awayRl: null, homeRl: null, over: null, under: null, bookId: 0 };
+  for (const g of apiGames) {
+    try {
+      const id = g.id as number;
+      const startUtc = g.startTimeUTC as string;
+      const awayObj = g.awayTeam as Record<string, unknown>;
+      const homeObj = g.homeTeam as Record<string, unknown>;
+      const awayAbbrev = (awayObj.abbrev as string) ?? "";
+      const homeAbbrev = (homeObj.abbrev as string) ?? "";
+      // Skip TBD teams (conference finals before opponent determined)
+      if (!awayAbbrev || awayAbbrev === "TBD" || !homeAbbrev || homeAbbrev === "TBD") {
+        console.log(`[AN][FALLBACK][STATE] SKIP NHL game id=${id}: TBD team away=${awayAbbrev} home=${homeAbbrev}`);
+        skipped++;
+        continue;
+      }
+      const awayTeam = NHL_BY_ABBREV.get(awayAbbrev);
+      const homeTeam = NHL_BY_ABBREV.get(homeAbbrev);
+      if (!awayTeam || !homeTeam) {
+        console.warn(`[AN][FALLBACK][STATE] SKIP NHL game id=${id}: unknown team away=${awayAbbrev} home=${homeAbbrev}`);
+        skipped++;
+        continue;
+      }
+      const gameState = (g.gameState as string) ?? "FUT";
+      let status: string;
+      if (gameState === "OFF" || gameState === "FINAL") status = "complete";
+      else if (gameState === "LIVE" || gameState === "CRIT") status = "in_progress";
+      else status = "scheduled";
+      const awayColors = getTeamColors(awayTeam.dbSlug, "NHL");
+      const homeColors = getTeamColors(homeTeam.dbSlug, "NHL");
+      result.push({
+        id,
+        awayTeam:     awayTeam.abbrev,
+        homeTeam:     homeTeam.abbrev,
+        awayFull:     awayTeam.name,
+        homeFull:     homeTeam.name,
+        awayNickname: awayTeam.nickname,
+        homeNickname: homeTeam.nickname,
+        awayLogo:     awayTeam.logoUrl,
+        homeLogo:     homeTeam.logoUrl,
+        awayColor:    awayColors?.primaryColor ?? "#888888",
+        homeColor:    homeColors?.primaryColor ?? "#888888",
+        gameTime:     utcToEstTime(startUtc),
+        startUtc,
+        sport:        "NHL",
+        gameDate:     utcToEstDate(startUtc),
+        status,
+        odds:         emptyOdds,
+        gameNumber:   1,
+      });
+      console.log(`[AN][FALLBACK][STATE] NHL mapped id=${id} ${awayAbbrev}@${homeAbbrev} status=${status}`);
+    } catch (err) {
+      console.error(`[AN][FALLBACK][ERROR] fetchNhlStatsSlate: parse error on game: ${err}`);
+      skipped++;
+    }
+  }
+  result.sort((a, b) => a.startUtc.localeCompare(b.startUtc));
+  console.log(`[AN][FALLBACK][OUTPUT] fetchNhlStatsSlate DONE: date=${dateStr} games=${result.length} skipped=${skipped} elapsed=${elapsed}ms`);
+  console.log(`[AN][FALLBACK][VERIFY] ${result.length > 0 ? "PASS" : "WARN — 0 games"} | date=${dateStr}`);
+  return result;
+}
+
+// ─── ESPN Fallback (NBA + NCAAM) ──────────────────────────────────────────────
+
+/**
+ * ESPN sport config for NBA and NCAAM.
+ * groups=50 for NCAAM returns only D1 games (avoids thousands of lower-division games).
+ */
+const ESPN_SPORT_CONFIG: Record<string, { path: string; sport: string }> = {
+  NBA:   { path: "basketball/nba",                          sport: "NBA" },
+  NCAAM: { path: "basketball/mens-college-basketball",       sport: "NCAAM" },
+};
+
+/** NBA team lookup by ESPN abbreviation */
+const NBA_BY_ABBREV = new Map(NBA_TEAMS.map(t => [t.abbrev, t]));
+
+/**
+ * ESPN abbreviation aliases — ESPN uses different abbreviations for some NBA teams.
+ * Maps ESPN abbrev → our canonical abbrev.
+ */
+const ESPN_NBA_ABBREV_ALIASES: Record<string, string> = {
+  "GS":  "GSW",  // Golden State Warriors
+  "NY":  "NYK",  // New York Knicks
+  "SA":  "SAS",  // San Antonio Spurs
+  "NO":  "NOP",  // New Orleans Pelicans
+  "OKC": "OKC",
+  "LAL": "LAL",
+  "LAC": "LAC",
+};
+
+/**
+ * Fetch NBA or NCAAM game slate from ESPN API as a fallback
+ * when Action Network returns 0 games for past dates.
+ * Returns SlateGame[] with empty odds — sufficient for bet entry and history display.
+ */
+async function fetchEspnSlate(sport: "NBA" | "NCAAM", dateStr: string): Promise<SlateGame[]> {
+  const cfg = ESPN_SPORT_CONFIG[sport];
+  const dateCompact = dateStr.replace(/-/g, ""); // YYYYMMDD
+  const groupsParam = sport === "NCAAM" ? "&groups=50" : "";
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${cfg.path}/scoreboard?dates=${dateCompact}${groupsParam}`;
+  console.log(`[AN][FALLBACK][INPUT] fetchEspnSlate: sport=${sport} date=${dateStr}`);
+  console.log(`[AN][FALLBACK][STEP]  URL=${url}`);
+  const fetchStart = Date.now();
+  let resp: Response;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8_000);
+    resp = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+  } catch (err) {
+    console.error(`[AN][FALLBACK][ERROR] fetchEspnSlate: fetch failed sport=${sport} date=${dateStr} err=${err}`);
+    return [];
+  }
+  const elapsed = Date.now() - fetchStart;
+  console.log(`[AN][FALLBACK][STATE] HTTP ${resp.status} sport=${sport} date=${dateStr} elapsed=${elapsed}ms`);
+  if (!resp.ok) {
+    console.error(`[AN][FALLBACK][ERROR] fetchEspnSlate: non-OK status=${resp.status} sport=${sport} date=${dateStr}`);
+    return [];
+  }
+  let data: Record<string, unknown>;
+  try { data = (await resp.json()) as Record<string, unknown>; }
+  catch (err) {
+    console.error(`[AN][FALLBACK][ERROR] fetchEspnSlate: JSON parse failed sport=${sport} date=${dateStr} err=${err}`);
+    return [];
+  }
+  const events = (data.events as Array<Record<string, unknown>>) ?? [];
+  console.log(`[AN][FALLBACK][STATE] ${events.length} raw ESPN ${sport} events for date=${dateStr}`);
+  if (events.length === 0) {
+    console.log(`[AN][FALLBACK][OUTPUT] 0 ${sport} games for date=${dateStr}`);
+    return [];
+  }
+  const result: SlateGame[] = [];
+  let skipped = 0;
+  const emptyOdds: GameOdds = { awayMl: null, homeMl: null, awayRl: null, homeRl: null, over: null, under: null, bookId: 0 };
+  for (const evt of events) {
+    try {
+      const id = parseInt(evt.id as string, 10);
+      const startUtc = evt.date as string; // ISO UTC
+      const competitions = (evt.competitions as Array<Record<string, unknown>>) ?? [];
+      const comp = competitions[0];
+      if (!comp) { skipped++; continue; }
+      const competitors = (comp.competitors as Array<Record<string, unknown>>) ?? [];
+      // ESPN: competitors[0] = home, competitors[1] = away (homeAway field)
+      let awayComp: Record<string, unknown> | undefined;
+      let homeComp: Record<string, unknown> | undefined;
+      for (const c of competitors) {
+        if ((c.homeAway as string) === "away") awayComp = c;
+        else homeComp = c;
+      }
+      if (!awayComp || !homeComp) { skipped++; continue; }
+      const awayTeamObj = awayComp.team as Record<string, unknown>;
+      const homeTeamObj = homeComp.team as Record<string, unknown>;
+      const awayEspnAbbrev = (awayTeamObj.abbreviation as string) ?? "";
+      const homeEspnAbbrev = (homeTeamObj.abbreviation as string) ?? "";
+      const awayAbbrev = ESPN_NBA_ABBREV_ALIASES[awayEspnAbbrev] ?? awayEspnAbbrev;
+      const homeAbbrev = ESPN_NBA_ABBREV_ALIASES[homeEspnAbbrev] ?? homeEspnAbbrev;
+      const statusObj = (comp.status as Record<string, unknown>) ?? {};
+      const statusType = (statusObj.type as Record<string, unknown>) ?? {};
+      const statusName = (statusType.name as string) ?? "STATUS_SCHEDULED";
+      let status: string;
+      if (statusName === "STATUS_FINAL") status = "complete";
+      else if (statusName === "STATUS_IN_PROGRESS") status = "in_progress";
+      else status = "scheduled";
+      const awayLogoEspn = (awayTeamObj.logo as string) ?? "";
+      const homeLogoEspn = (homeTeamObj.logo as string) ?? "";
+      const awayColorEspn = (awayTeamObj.color as string) ?? "";
+      const homeColorEspn = (homeTeamObj.color as string) ?? "";
+      // For NBA: resolve from our NBA_TEAMS registry for canonical logos/colors
+      let awayLogo = awayLogoEspn;
+      let homeLogo = homeLogoEspn;
+      let awayColor = awayColorEspn ? `#${awayColorEspn}` : "#888888";
+      let homeColor = homeColorEspn ? `#${homeColorEspn}` : "#888888";
+      let awayFull = (awayTeamObj.displayName as string) ?? awayAbbrev;
+      let homeFull = (homeTeamObj.displayName as string) ?? homeAbbrev;
+      let awayNickname = (awayTeamObj.shortDisplayName as string) ?? awayAbbrev;
+      let homeNickname = (homeTeamObj.shortDisplayName as string) ?? homeAbbrev;
+      if (sport === "NBA") {
+        const awayNba = NBA_BY_ABBREV.get(awayAbbrev);
+        const homeNba = NBA_BY_ABBREV.get(homeAbbrev);
+        if (awayNba) {
+          awayLogo     = awayNba.logoUrl;
+          awayFull     = awayNba.name;
+          awayNickname = awayNba.nickname;
+          const awayColors = getTeamColors(awayNba.dbSlug, "NBA");
+          if (awayColors?.primaryColor) awayColor = awayColors.primaryColor;
+        }
+        if (homeNba) {
+          homeLogo     = homeNba.logoUrl;
+          homeFull     = homeNba.name;
+          homeNickname = homeNba.nickname;
+          const homeColors = getTeamColors(homeNba.dbSlug, "NBA");
+          if (homeColors?.primaryColor) homeColor = homeColors.primaryColor;
+        }
+      }
+      result.push({
+        id,
+        awayTeam:     awayAbbrev,
+        homeTeam:     homeAbbrev,
+        awayFull,
+        homeFull,
+        awayNickname,
+        homeNickname,
+        awayLogo,
+        homeLogo,
+        awayColor,
+        homeColor,
+        gameTime:     utcToEstTime(startUtc),
+        startUtc,
+        sport,
+        gameDate:     utcToEstDate(startUtc),
+        status,
+        odds:         emptyOdds,
+        gameNumber:   1,
+      });
+      console.log(`[AN][FALLBACK][STATE] ESPN ${sport} mapped id=${id} ${awayAbbrev}@${homeAbbrev} status=${status}`);
+    } catch (err) {
+      console.error(`[AN][FALLBACK][ERROR] fetchEspnSlate: parse error on event: ${err}`);
+      skipped++;
+    }
+  }
+  result.sort((a, b) => a.startUtc.localeCompare(b.startUtc));
+  console.log(`[AN][FALLBACK][OUTPUT] fetchEspnSlate DONE: sport=${sport} date=${dateStr} games=${result.length} skipped=${skipped} elapsed=${elapsed}ms`);
+  console.log(`[AN][FALLBACK][VERIFY] ${result.length > 0 ? "PASS" : "WARN — 0 games"} | sport=${sport} date=${dateStr}`);
   return result;
 }
 
