@@ -49,7 +49,89 @@
     </style>
   </head>
   <body>
+    <!-- ═══════════════════════════════════════════════════════════════════
+         HTML LOADING SHELL — renders IMMEDIATELY before any JS executes.
+         Eliminates the black screen. React will replace #root content
+         once it hydrates. The AppLoadingShell React component matches
+         this exactly so there is zero visual jump.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <style>
+      #html-loading-shell {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #0a0a0f;
+        z-index: 9999;
+        transition: opacity 0.2s ease;
+      }
+      #html-loading-shell.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .html-shell-logo {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 16px;
+        box-shadow: 0 0 32px rgba(59,130,246,0.35);
+      }
+      .html-shell-spinner {
+        width: 24px;
+        height: 24px;
+        border: 2px solid rgba(255,255,255,0.1);
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: html-shell-spin 0.7s linear infinite;
+      }
+      @keyframes html-shell-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+    <div id="html-loading-shell">
+      <div class="html-shell-logo">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+             stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10"/>
+          <line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6" y1="20" x2="6" y2="14"/>
+        </svg>
+      </div>
+      <div class="html-shell-spinner"></div>
+    </div>
+    <!-- React mounts here. Once React renders, the loading shell fades out. -->
     <div id="root"></div>
+    <script>
+      // Hide the HTML loading shell as soon as React mounts its first content.
+      // We observe #root for child additions — the moment React renders anything,
+      // the shell fades out. This gives a seamless handoff.
+      (function() {
+        var shell = document.getElementById('html-loading-shell');
+        var root  = document.getElementById('root');
+        if (!shell || !root) return;
+        var obs = new MutationObserver(function() {
+          if (root.children.length > 0) {
+            shell.classList.add('hidden');
+            setTimeout(function() {
+              if (shell.parentNode) shell.parentNode.removeChild(shell);
+            }, 250);
+            obs.disconnect();
+          }
+        });
+        obs.observe(root, { childList: true });
+        // Safety: remove after 10s regardless
+        setTimeout(function() {
+          shell.classList.add('hidden');
+          obs.disconnect();
+        }, 10000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

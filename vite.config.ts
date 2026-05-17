@@ -175,11 +175,21 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // ── PERFORMANCE ARCHITECTURE ───────────────────────────────────────────────────────────────────────────────
+          // Critical path (loaded immediately):
+          //   vendor-react (386KB) + vendor-trpc (98KB) = 484KB gzip ~145KB
+          //   These are the ONLY chunks that block first render.
+          //
+          // Deferred path (loaded after route resolves):
+          //   vendor-radix, vendor-motion, recharts, mlb-panels, analytics
+          //   These are only needed AFTER the user is authenticated and on a page.
+          // ────────────────────────────────────────────────────────────────────────────────
+
           // ── Vendor: React core — always needed, cache-stable ──────────────
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
             return 'vendor-react';
           }
-          // ── Vendor: tRPC + React Query — always needed ────────────────────
+          // ── Vendor: tRPC + React Query — always needed for auth ────────────
           if (
             id.includes('@trpc/') ||
             id.includes('@tanstack/react-query') ||
@@ -187,7 +197,12 @@ export default defineConfig({
           ) {
             return 'vendor-trpc';
           }
-          // ── Vendor: Framer Motion — lazy animation lib ────────────────────
+          // ── Recharts — 406KB, only used in admin pages + BetTracker ─────────
+          // Isolated so it does NOT pull into the main feed bundle.
+          if (id.includes('recharts') || id.includes('node_modules/recharts')) {
+            return 'vendor-recharts';
+          }
+          // ── Vendor: Framer Motion — only needed after route loads ──────────
           if (id.includes('framer-motion')) {
             return 'vendor-motion';
           }
@@ -205,13 +220,18 @@ export default defineConfig({
           ) {
             return 'mlb-panels';
           }
-          // ── Admin/analytics pages — only loaded for admin users ───────────
-          if (
-            id.includes('pages/ModelResults') ||
-            id.includes('pages/SecurityEvents')
-          ) {
-            return 'analytics';
+          // ── Vendor: sonner + wouter — used by App.tsx critical path ──────────────
+          // These are tiny libs that must be in a stable, named chunk so they
+          // don't get merged into a large shared chunk that also contains
+          // page-level code (which would pull that page into the critical path).
+          if (id.includes('node_modules/sonner') || id.includes('node_modules/wouter')) {
+            return 'vendor-ui';
           }
+          // NOTE: pages/ModelResults and pages/SecurityEvents are NOT assigned here.
+          // Vite will auto-split them into their own chunks, keeping shared code
+          // (sonner, wouter) in vendor-ui and page code in page-specific chunks.
+          // This prevents shared code from being merged into a large 'analytics'
+          // chunk that gets pulled into the critical path.
         },
       },
     },
