@@ -3473,3 +3473,17 @@
 - [x] discordLoginStates DB table — CSRF state store for Discord-as-primary-login
 - [x] LoginModal rewritten — Discord-only, no password fields
 - [x] Home.tsx rewritten — Discord Sign In CTA, error banners for all OAuth failure paths
+- [x] Discord guild role check — verifies AI MODEL SUB role (ID: 1474938477664796672) via guilds.members.read scope
+- [x] JWT-based CSRF state in /connect — zero DB operations, <2ms
+- [x] Parallel Discord API calls in /callback — saves ~200ms
+- [x] Fire-and-forget profile update after redirect
+- [x] Loading spinner + "Redirecting to Discord..." state on login buttons (LoginModal + Home.tsx)
+- [x] prompt=consent as server default — prevents silent failures for users with expired Discord sessions
+- [x] RequireAuth component — auth gate on all protected routes
+- [x] Global force-logout — tokenVersion incremented for all 53 users
+- [x] Sign-out fix — cache invalidation + hard redirect to /login
+- [x] useAppAuth fix — staleTime:0, gcTime:0, refetchOnWindowFocus:true
+- [x] RequireAuth fix — added minWaitDone state + 800ms useEffect to prevent redirect race on OAuth callback
+- [x] RequireAuth fix — timeout increased from 5s to 10s
+- [x] LoginModal fix — removed prompt=none from loginUrl (server defaults to consent)
+- [x] TypeScript: 0 errors | Tests: 698/698 pass | Build: clean 7.00s

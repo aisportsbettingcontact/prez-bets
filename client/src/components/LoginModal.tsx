@@ -45,10 +45,9 @@ export function LoginModal({ onClose }: LoginModalProps) {
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   const returnPath = typeof window !== "undefined" ? window.location.pathname : "/";
-  // prompt=none: if the user is already authenticated with Discord in this browser,
-  // Discord skips the consent screen entirely and redirects back immediately.
-  // If the user is NOT authenticated, Discord falls back to the normal consent screen.
-  const loginUrl = `/api/auth/discord-login/connect?returnPath=${encodeURIComponent(returnPath)}&prompt=none`;
+  // No prompt param — server defaults to "consent" which always shows the Discord screen.
+  // This ensures users with expired Discord sessions are not silently rejected.
+  const loginUrl = `/api/auth/discord-login/connect?returnPath=${encodeURIComponent(returnPath)}`;
 
   function handleDiscordClick(e: React.MouseEvent<HTMLAnchorElement>) {
     if (isRedirecting) {

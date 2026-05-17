@@ -15,7 +15,10 @@
  * │  setLocation to ensure React Query cache is fully cleared on the        │
  * │  login page load. This prevents stale auth state from persisting.       │
  * │                                                                         │
- * │  A 5-second timeout prevents infinite loading if the auth check stalls. │
+ * │  A 10-second timeout prevents infinite loading if the auth check stalls.│
+ * │                                                                         │
+ * │  An 800ms minimum wait prevents a redirect race condition after OAuth   │
+ * │  callback — the browser navigates to /feed before appUsers.me resolves. │
  * └─────────────────────────────────────────────────────────────────────────┘
  *
  * Usage:
@@ -33,21 +36,32 @@ interface RequireAuthProps {
 
 export function RequireAuth({ children }: RequireAuthProps) {
   const { appUser, loading } = useAppAuth();
-  // Safety timeout: if auth check takes > 5s, treat as unauthenticated
-  const [timedOut, setTimedOut] = useState(false);
 
+  // Safety timeout: if auth check takes > 10s, treat as unauthenticated
+  const [timedOut, setTimedOut] = useState(false);
   useEffect(() => {
     if (!loading) return;
     const t = setTimeout(() => {
-      console.warn("[RequireAuth] Auth check timed out after 5s — redirecting to login");
+      console.warn("[RequireAuth] Auth check timed out after 10s — redirecting to login");
       setTimedOut(true);
-    }, 5000);
+    }, 10000);
     return () => clearTimeout(t);
   }, [loading]);
+
+  // Minimum wait (800ms) before redirecting — prevents race condition on OAuth callback.
+  // After Discord OAuth callback, browser does full page nav to /feed.
+  // React Query fires appUsers.me immediately but response takes ~100-300ms.
+  // Without this guard, RequireAuth could redirect to /login before auth check completes.
+  const [minWaitDone, setMinWaitDone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMinWaitDone(true), 800);
+    return () => clearTimeout(t);
+  }, []);
 
   // Redirect unauthenticated users to /login with returnPath preserved
   useEffect(() => {
     if (loading && !timedOut) return; // still loading — wait
+    if (!minWaitDone && !timedOut) return; // minimum wait not done — hold
     if (appUser) return; // authenticated — render children
 
     // [ACTION] Not authenticated — redirect to login
@@ -56,12 +70,12 @@ export function RequireAuth({ children }: RequireAuthProps) {
       ? "/login"
       : `/login?returnPath=${encodeURIComponent(returnPath)}`;
 
-    console.log(`[RequireAuth] Unauthenticated — redirecting to ${loginUrl} (timedOut=${timedOut})`);
+    console.log(`[RequireAuth] Unauthenticated — redirecting to ${loginUrl} (timedOut=${timedOut} minWaitDone=${minWaitDone})`);
     window.location.href = loginUrl;
-  }, [appUser, loading, timedOut]);
+  }, [appUser, loading, timedOut, minWaitDone]);
 
   // Loading state — full screen, matches app theme
-  if (loading && !timedOut) {
+  if ((loading || !minWaitDone) && !timedOut) {
     return (
       <div
         style={{
