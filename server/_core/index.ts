@@ -460,8 +460,32 @@ async function startServer() {
     // With this, the cache is hot before any user hits the server.
     // Non-fatal: if DB is unavailable, the first user request will populate the cache.
     setTimeout(() => {
+      // Compute the effective feed date using the same isBeforeCutoff logic as the client (todayUTC()).
+      // The client sends { sport, gameDate: todayUTC() } — we MUST pre-warm THAT exact cache key.
+      // Without this, the startup pre-warm populates MLB:ROLLING but the client requests MLB:2026-05-16,
+      // which is a different cache key → first user always pays full DB cost → loading delay + potential
+      // empty result if the DB is slow or temporarily unavailable.
+      const FEED_CUTOFF_UTC_HOUR = 11;
+      const nowMs = Date.now();
+      const nowUtc = new Date(nowMs);
+      const isBeforeCutoff = nowUtc.getUTCHours() < FEED_CUTOFF_UTC_HOUR;
+      const effectiveMs = isBeforeCutoff ? nowMs - 24 * 60 * 60 * 1000 : nowMs;
+      const effectiveDate = new Date(effectiveMs);
+      const todayStr = [
+        effectiveDate.getUTCFullYear(),
+        String(effectiveDate.getUTCMonth() + 1).padStart(2, '0'),
+        String(effectiveDate.getUTCDate()).padStart(2, '0'),
+      ].join('-');
+      // Also pre-warm yesterday and tomorrow to cover the 11:00 UTC boundary window.
+      const yesterdayStr = new Date(effectiveMs - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const tomorrowStr = new Date(effectiveMs + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      console.log(`[Startup] [GAMES_CACHE] Effective date=${todayStr} (utcHour=${nowUtc.getUTCHours()}, beforeCutoff=${isBeforeCutoff}) — pre-warming MLB:${yesterdayStr}, MLB:${todayStr}, MLB:${tomorrowStr}`);
       Promise.all([
-        listGames({ sport: 'MLB' }).then(r => console.log(`[Startup] [GAMES_CACHE] MLB pre-warmed: ${r.length} games`)),
+        // MLB: pre-warm today + yesterday + tomorrow (covers the 11:00 UTC boundary window)
+        listGames({ sport: 'MLB', gameDate: todayStr }).then(r => console.log(`[Startup] [GAMES_CACHE] MLB:${todayStr} pre-warmed: ${r.length} games`)),
+        listGames({ sport: 'MLB', gameDate: yesterdayStr }).then(r => console.log(`[Startup] [GAMES_CACHE] MLB:${yesterdayStr} pre-warmed: ${r.length} games`)),
+        listGames({ sport: 'MLB', gameDate: tomorrowStr }).then(r => console.log(`[Startup] [GAMES_CACHE] MLB:${tomorrowStr} pre-warmed: ${r.length} games`)),
+        // Non-MLB: no gameDate filter (VSiN-driven, small dataset, rolling window is correct)
         listGames({ sport: 'NHL' }).then(r => console.log(`[Startup] [GAMES_CACHE] NHL pre-warmed: ${r.length} games`)),
         listGames({ sport: 'NBA' }).then(r => console.log(`[Startup] [GAMES_CACHE] NBA pre-warmed: ${r.length} games`)),
         listGames({ sport: 'NCAAM' }).then(r => console.log(`[Startup] [GAMES_CACHE] NCAAM pre-warmed: ${r.length} games`)),

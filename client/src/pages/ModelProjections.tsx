@@ -245,6 +245,32 @@ export default function ModelProjections() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSports]);
+
+  // ── Server-authoritative date sync ────────────────────────────────────────
+  // The client computes selectedDate via todayUTC() which uses isBeforeCutoff.
+  // To eliminate any client/server date disagreement, we fetch the server's
+  // authoritative effective date and sync selectedDate to it on mount.
+  // Only syncs when no explicit ?date= param is in the URL (user hasn't navigated).
+  const { data: serverDateData } = trpc.games.getCurrentDate.useQuery(undefined, {
+    staleTime: 60 * 1000,         // date only changes at 11:00 UTC once per day
+    refetchOnWindowFocus: false,
+    refetchInterval: 5 * 60 * 1000, // re-check every 5 min in case of long sessions
+  });
+  // Track whether the user has explicitly set a date (via URL param)
+  const hasExplicitDate = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('date');
+  }, []); // only check on mount
+  useEffect(() => {
+    if (!serverDateData) return;
+    if (hasExplicitDate) return; // user navigated to a specific date — don't override
+    const serverDate = serverDateData.effectiveDate;
+    if (serverDate !== selectedDate) {
+      console.log(`[Feed] Syncing selectedDate from client=${selectedDate} to server=${serverDate} (utcHour=${serverDateData.utcHour}, beforeCutoff=${serverDateData.isBeforeCutoff})`);
+      setSelectedDate(serverDate);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverDateData]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -499,9 +525,15 @@ export default function ModelProjections() {
   // If the server cache was populated at a different UTC boundary (before vs after 11:00 UTC cutoff)
   // than when the client reads it, the dates don't match → all games filtered out → "No games found".
   // With explicit gameDate: server cache key is MLB:{date}, exact eq() match, zero boundary mismatch.
-  const { data: allGames, isLoading: gamesLoading } = trpc.games.list.useQuery(
+  const { data: allGames, isLoading: gamesLoading, isFetching: gamesFetching } = trpc.games.list.useQuery(
     { sport: selectedSport, gameDate: selectedDate },
-    { enabled: true, refetchOnWindowFocus: false, refetchInterval: 60 * 1000, staleTime: 30 * 1000 }
+    {
+      enabled: true,
+      refetchOnWindowFocus: false,
+      refetchInterval: 60 * 1000,
+      staleTime: 60 * 1000,       // matches server cache TTL — never refetch more often than server refreshes
+      placeholderData: (prev) => prev, // keep previous sport/date data while new query loads — eliminates loading flash
+    }
   );
 
   // Separate lightweight query for available dates (calendar picker).

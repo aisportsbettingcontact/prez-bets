@@ -366,6 +366,29 @@ export const appRouter = router({
       }),
 
     /**
+     * Returns the server-authoritative effective feed date.
+     * Uses the same isBeforeCutoff logic as todayUTC() on the client.
+     * The client should use this as the default selectedDate to eliminate
+     * any possibility of client/server date disagreement.
+     * Cached for 60s — the date only changes at 11:00 UTC once per day.
+     */
+    getCurrentDate: publicProcedure.query(() => {
+      const FEED_CUTOFF_UTC_HOUR = 11;
+      const nowMs = Date.now();
+      const nowUtc = new Date(nowMs);
+      const isBeforeCutoff = nowUtc.getUTCHours() < FEED_CUTOFF_UTC_HOUR;
+      const effectiveMs = isBeforeCutoff ? nowMs - 24 * 60 * 60 * 1000 : nowMs;
+      const d = new Date(effectiveMs);
+      const effectiveDate = [
+        d.getUTCFullYear(),
+        String(d.getUTCMonth() + 1).padStart(2, '0'),
+        String(d.getUTCDate()).padStart(2, '0'),
+      ].join('-');
+      console.log(`[tRPC][games.getCurrentDate] effectiveDate=${effectiveDate} utcHour=${nowUtc.getUTCHours()} beforeCutoff=${isBeforeCutoff}`);
+      return { effectiveDate, utcHour: nowUtc.getUTCHours(), isBeforeCutoff };
+    }),
+
+    /**
      * List all staging games for a given date.
      * Owner-only — used by the Publish Model Projections page.
      */

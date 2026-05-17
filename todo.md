@@ -3384,3 +3384,14 @@
 - [ ] TypeScript: 0 errors
 - [ ] Tests: all pass
 - [ ] Checkpoint saved
+
+## Session: 2026-05-17 — ModelProjections No-Games & Loading Overhaul
+
+- [x] BUG #1 CRITICAL: Fix startup pre-warm — was using MLB:ROLLING cache key, client requests MLB:{date} — now pre-warms yesterday/today/tomorrow with explicit gameDate
+- [x] BUG #2 CRITICAL: Add games.getCurrentDate server procedure — returns authoritative effective date
+- [x] BUG #2 CLIENT: Add server-authoritative date sync in ModelProjections — useEffect syncs selectedDate to server date on mount
+- [x] PERF #1: Increase games.list staleTime from 30s to 60s — matches server cache TTL, eliminates unnecessary refetches
+- [x] PERF #2: Add placeholderData: keepPreviousData to games.list — eliminates Loading projections flash on sport/date switch
+- [x] TypeScript: 0 errors
+- [x] Tests: 678/678 pass
+- [x] Checkpoint saved
