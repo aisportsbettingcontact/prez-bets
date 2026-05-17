@@ -71,6 +71,9 @@ export default function Home() {
     state_mismatch:   "Invalid login state. Please try again.",
     token_exchange_failed: "Discord authentication failed. Please try again.",
     profile_fetch_failed:  "Could not fetch your Discord profile. Please try again.",
+    timeout:               "Discord sign-in timed out. Please try again.",
+    server_error:          "A server error occurred during sign-in. Please try again.",
+    db_unavailable:        "Database unavailable. Please try again in a moment.",
     not_in_guild:     discordUser
       ? `@${discordUser} is not in the Prez Bets Discord server. Join the server first, then try again.`
       : "You are not in the Prez Bets Discord server. Join the server first, then try again.",
