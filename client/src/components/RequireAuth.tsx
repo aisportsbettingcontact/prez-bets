@@ -26,6 +26,12 @@
  * │                                                                         │
  * │  [PERF] No inline loading state — the HTML shell covers auth wait.      │
  * │  This eliminates the double loading screen (HTML shell → React spinner).│
+ * │                                                                         │
+ * │  [PERF] Feed data prefetch — the moment auth resolves, fire             │
+ * │  games.list, games.getCurrentDate, and games.activeSports in parallel.  │
+ * │  By the time ModelProjections lazy-chunk loads (~50-150ms), the data    │
+ * │  is already in the React Query cache. gamesLoading=false on first       │
+ * │  render → the in-page Loader2 spinner never appears.                    │
  * └─────────────────────────────────────────────────────────────────────────┘
  *
  * Usage:
@@ -34,11 +40,37 @@
  *   </Route>
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
+import { trpc } from "@/lib/trpc";
+import { todayUTC } from "@/components/CalendarPicker";
 
 interface RequireAuthProps {
   children: React.ReactNode;
+}
+
+// Feed data prefetch — fires once when auth resolves on /feed routes.
+// Populates React Query cache so ModelProjections renders with data immediately.
+function useFeedPrefetch(authenticated: boolean) {
+  const utils = trpc.useUtils();
+  const prefetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (!authenticated || prefetchedRef.current) return;
+    // Only prefetch on /feed route — other routes don't need games.list
+    if (!window.location.pathname.startsWith("/feed")) return;
+
+    prefetchedRef.current = true;
+    const today = todayUTC();
+
+    // Fire all three in parallel — they share the same server-side cache TTL (60s)
+    void utils.games.list.prefetch(
+      { sport: "MLB", gameDate: today },
+      { staleTime: 60 * 1000 }
+    );
+    void utils.games.getCurrentDate.prefetch(undefined, { staleTime: 5 * 60 * 1000 });
+    void utils.games.activeSports.prefetch(undefined, { staleTime: 5 * 60 * 1000 });
+  }, [authenticated, utils]);
 }
 
 export function RequireAuth({ children }: RequireAuthProps) {
@@ -66,6 +98,9 @@ export function RequireAuth({ children }: RequireAuthProps) {
     const t = setTimeout(() => setMinWaitDone(true), 300);
     return () => clearTimeout(t);
   }, []);
+
+  // [PERF] Prefetch feed data the moment auth resolves — eliminates in-page spinner
+  useFeedPrefetch(Boolean(appUser));
 
   // Redirect unauthenticated users to /login with returnPath preserved
   useEffect(() => {
