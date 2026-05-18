@@ -22,6 +22,7 @@ import {
   incrementTokenVersion,
   incrementAllTokenVersions,
   insertSecurityEvent,
+  invalidateAppUserByIdCache,
 } from "../db";
 import { getDiscordClient } from "../discord/bot";
 import { notifyOwner } from "../_core/notification";
@@ -114,6 +115,16 @@ export const ownerProcedure = publicProcedure.use(async ({ ctx, next }) => {
   // IMPORTANT: role is checked from DB, NOT from JWT claim.
   // Reason: JWT role is baked at login time. If an admin promotes a user to owner
   // after their last login, the JWT still carries the old role. DB is always current.
+  //
+  // CACHE INVALIDATION: Both caches (_appUserByIdCache in db.ts and the dbCircuitBreaker
+  // in-memory cache) have TTLs of 30s-5min. A stale cache entry could carry an old role
+  // (e.g. 'handicapper') even after the DB was updated to 'owner'. We invalidate both
+  // caches here to guarantee a fresh DB read for every ownerProcedure call.
+  // This adds one DB round-trip per owner action (~1-5ms) — acceptable for admin operations.
+  invalidateAppUserByIdCache(payload.userId);
+  invalidateCachedAppUser(payload.userId);
+  console.log(`[AppAuth] ownerProcedure: cache invalidated for userId=${payload.userId} — forcing fresh DB read`);
+
   let user = await getAppUserById(payload.userId);
   const fromCache = !user;
   if (!user) {

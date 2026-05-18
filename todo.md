@@ -3604,3 +3604,10 @@
 - [x] @prez and @sippi (role='owner' in DB) now pass ownerProcedure without re-login
 - [x] TypeScript check: 0 errors
 - [x] Test suite: 723/723 passed
+
+## Session: 2026-05-18 - Fix ownerProcedure stale cache causing permission denial
+- [x] Root cause 2 identified: _appUserByIdCache (30s TTL) + dbCircuitBreaker cache returned stale role
+- [x] Added invalidateAppUserByIdCache + invalidateCachedAppUser at top of ownerProcedure
+- [x] ownerProcedure now forces a fresh DB read on every call — zero stale role risk
+- [x] TypeScript check: 0 errors
+- [x] Test suite: 723/723 passed
