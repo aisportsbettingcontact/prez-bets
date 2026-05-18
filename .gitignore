@@ -14,6 +14,9 @@ build/
 .env.test.local
 .env.production.local
 
+# Manus project config — contains ALL project secrets in plaintext, MUST NEVER be committed
+.project-config.json
+
 # IDE and editor files
 .vscode/
 .idea/
