@@ -55,7 +55,7 @@ import type { Express, Request, Response } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import { ENV } from "./_core/env";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { getDb, getAppUserById, updateAppUserLastSignedIn } from "./db";
+import { getDb, getAppUserById, updateAppUser, updateAppUserLastSignedIn } from "./db";
 import { appUsers } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 
@@ -458,18 +458,70 @@ export function registerDiscordLoginRoutes(app: Express): void {
         .where(eq(appUsers.discordId, discordId))
         .limit(1);
 
-      if (userRows.length === 0) {
-        console.warn(
-          `[DiscordLogin][CALLBACK][NO_ACCOUNT] requestId=${requestId}` +
-          ` No appUser found with discordId="${discordId}" (@${discordUsername}).` +
-          ` dbMs=${Date.now() - t3}`
-        );
-        res.redirect(302, `/?discord_error=no_account&discord_user=${encodeURIComponent(discordUsername)}`);
-        return;
-      }
+      // ── CP-3b: Fallback — check manualDiscordId pre-registration ───────────
+      // Owner may have pre-registered this Discord ID in User Management before
+      // the user completed OAuth. If found, atomically promote manualDiscordId
+      // to discordId and clear it so it is never reused.
+      let userId: number;
+      let user: Awaited<ReturnType<typeof getAppUserById>>;
 
-      const userId = userRows[0]!.id;
-      const user   = await getAppUserById(userId);
+      if (userRows.length === 0) {
+        console.log(
+          `[DiscordLogin][CALLBACK][CP3B_FALLBACK] requestId=${requestId}` +
+          ` No live discordId match for "${discordId}" — checking manualDiscordId pre-registration`
+        );
+        const manualRows = await db
+          .select({ id: appUsers.id })
+          .from(appUsers)
+          .where(eq(appUsers.manualDiscordId, discordId))
+          .limit(1);
+
+        if (manualRows.length === 0) {
+          console.warn(
+            `[DiscordLogin][CALLBACK][NO_ACCOUNT] requestId=${requestId}` +
+            ` No appUser found with discordId="${discordId}" OR manualDiscordId="${discordId}"` +
+            ` (@${discordUsername}). dbMs=${Date.now() - t3}`
+          );
+          res.redirect(302, `/?discord_error=no_account&discord_user=${encodeURIComponent(discordUsername)}`);
+          return;
+        }
+
+        // Found via manualDiscordId — promote to live discordId atomically
+        const manualUserId = manualRows[0]!.id;
+        console.log(
+          `[DiscordLogin][CALLBACK][CP3B_MATCH] requestId=${requestId}` +
+          ` manualDiscordId match: userId=${manualUserId}` +
+          ` discordId="${discordId}" (@${discordUsername})` +
+          ` action=PROMOTE_manualDiscordId_to_discordId`
+        );
+        try {
+          await updateAppUser(manualUserId, {
+            discordId,
+            discordUsername,
+            discordAvatar: null,
+            discordConnectedAt: Date.now(),
+            manualDiscordId: null,
+          });
+          console.log(
+            `[DiscordLogin][CALLBACK][CP3B_PROMOTED] requestId=${requestId}` +
+            ` userId=${manualUserId} manualDiscordId promoted to live discordId="${discordId}"` +
+            ` manualDiscordId cleared. dbMs=${Date.now() - t3}`
+          );
+        } catch (promoteErr) {
+          const msg = (promoteErr as Error)?.message ?? String(promoteErr);
+          console.error(
+            `[DiscordLogin][CALLBACK][CP3B_PROMOTE_FAIL] requestId=${requestId}` +
+            ` userId=${manualUserId} error=${msg}`
+          );
+          res.redirect(302, `/?discord_error=server_error`);
+          return;
+        }
+        userId = manualUserId;
+        user = await getAppUserById(userId);
+      } else {
+        userId = userRows[0]!.id;
+        user = await getAppUserById(userId);
+      }
 
       if (!user) {
         console.error(

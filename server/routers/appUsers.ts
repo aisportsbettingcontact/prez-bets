@@ -27,8 +27,8 @@ import { getDiscordClient } from "../discord/bot";
 import { notifyOwner } from "../_core/notification";
 import { getCachedAppUser, setCachedAppUser, invalidateCachedAppUser } from "../dbCircuitBreaker";
 import { getDb } from "../db";
-import { discordInviteTokens } from "../../drizzle/schema";
-import { eq, and, isNull, gt } from "drizzle-orm";
+import { discordInviteTokens, appUsers as appUsersTable } from "../../drizzle/schema";
+import { eq, and, isNull, gt, or } from "drizzle-orm";
 
 const APP_USER_COOKIE = "app_session";
 
@@ -494,6 +494,7 @@ export const appUsersRouter = router({
       discordId: u.discordId ?? null,
       discordUsername: u.discordUsername ?? null,
       discordConnectedAt: u.discordConnectedAt ?? null,
+      manualDiscordId: u.manualDiscordId ?? null,
     }));
   }),
 
@@ -1030,6 +1031,157 @@ export const appUsersRouter = router({
       console.log(`[PasswordReset] [OUTPUT] success | uid=${input.uid} username=${user.username} sessionsInvalidated=true`);
       return { success: true };
     }),
+  // ─── Manual Discord ID Pre-Registration ─────────────────────────────────────
+  /**
+   * setManualDiscordId
+   *
+   * OWNER-ONLY: Pre-register a Discord snowflake ID against an app_users row
+   * that has not yet completed Discord OAuth.
+   *
+   * FLOW:
+   *   1. Owner pastes the user Discord ID (17-20 digit snowflake) in User Management.
+   *   2. This procedure validates the snowflake, checks uniqueness, writes to manualDiscordId.
+   *   3. On the user's next Discord login, discordLogin.ts CP-3b detects the match,
+   *      atomically promotes manualDiscordId -> discordId, and clears manualDiscordId.
+   *
+   * VALIDATION:
+   *   - Snowflake must be 17-20 digits (Discord spec)
+   *   - Must not already be live discordId on ANY user (prevents account takeover)
+   *   - Must not already be manualDiscordId on ANOTHER user (prevents duplicate pre-reg)
+   *   - Target user must not already have a live discordId (disconnect first)
+   *   - Pass empty string to CLEAR a previously set manualDiscordId
+   *
+   * [INPUT]  userId    - app_users.id to pre-register for
+   * [INPUT]  discordId - Discord snowflake string (17-20 digits), or empty string to clear
+   * [OUTPUT] { success: true, userId, manualDiscordId: string | null }
+   */
+  setManualDiscordId: ownerProcedure
+    .input(z.object({
+      userId: z.number().int().positive(),
+      discordId: z.string().max(20),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const requestId = crypto.randomBytes(4).toString("hex");
+      const { userId, discordId: rawInput } = input;
+      const trimmed = rawInput.trim();
+      const isClear = trimmed === "";
+
+      console.log(
+        `[ManualDiscordId][INPUT] requestId=${requestId}` +
+        ` owner=${ctx.appUser.username}(id=${ctx.appUser.id})` +
+        ` targetUserId=${userId} rawInput="${rawInput}" isClear=${isClear}`
+      );
+
+      // ── CP-1: Validate snowflake format (skip if clearing) ─────────────────
+      if (!isClear) {
+        const SNOWFLAKE_RE = /^\d{17,20}$/;
+        if (!SNOWFLAKE_RE.test(trimmed)) {
+          console.warn(
+            `[ManualDiscordId][VALIDATE_FAIL] requestId=${requestId}` +
+            ` value="${trimmed}" reason=NOT_A_SNOWFLAKE (must be 17-20 digits)`
+          );
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid Discord ID. Must be a 17-20 digit snowflake (e.g. 123456789012345678).",
+          });
+        }
+        console.log(
+          `[ManualDiscordId][VALIDATE_OK] requestId=${requestId}` +
+          ` snowflake="${trimmed}" length=${trimmed.length}`
+        );
+      }
+
+      // ── CP-2: Load target user ──────────────────────────────────────────────
+      const user = await getAppUserById(userId);
+      if (!user) {
+        console.error(
+          `[ManualDiscordId][USER_NOT_FOUND] requestId=${requestId} userId=${userId}`
+        );
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      }
+      console.log(
+        `[ManualDiscordId][STATE] requestId=${requestId}` +
+        ` username=${user.username} currentDiscordId=${user.discordId ?? "null"}` +
+        ` currentManualDiscordId=${(user as any).manualDiscordId ?? "null"}`
+      );
+
+      // ── CP-3: Guard — target user already has a live discordId ─────────────
+      if (!isClear && user.discordId) {
+        console.warn(
+          `[ManualDiscordId][ALREADY_LINKED] requestId=${requestId}` +
+          ` userId=${userId} username=${user.username}` +
+          ` existingDiscordId=${user.discordId}` +
+          ` action=REJECTED (use adminDisconnectDiscord first)`
+        );
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `User @${user.username} already has Discord @${user.discordUsername ?? user.discordId} linked. Disconnect it first.`,
+        });
+      }
+
+      // ── CP-4: Uniqueness check — snowflake must not exist on any other user ─
+      if (!isClear) {
+        const db = await getDb();
+        if (!db) {
+          console.error(`[ManualDiscordId][DB_FAIL] requestId=${requestId} DB unavailable`);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable." });
+        }
+        const conflicts = await db
+          .select({ id: appUsersTable.id, username: appUsersTable.username })
+          .from(appUsersTable)
+          .where(
+            or(
+              eq(appUsersTable.discordId, trimmed),
+              eq(appUsersTable.manualDiscordId, trimmed)
+            )
+          )
+          .limit(5);
+
+        const otherConflicts = conflicts.filter((r: { id: number; username: string }) => r.id !== userId);
+        if (otherConflicts.length > 0) {
+          const conflictUser = otherConflicts[0]!;
+          console.warn(
+            `[ManualDiscordId][CONFLICT] requestId=${requestId}` +
+            ` snowflake="${trimmed}" already exists on userId=${conflictUser.id}` +
+            ` username=${conflictUser.username}`
+          );
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `Discord ID ${trimmed} is already registered to another user.`,
+          });
+        }
+        console.log(
+          `[ManualDiscordId][UNIQUENESS_OK] requestId=${requestId}` +
+          ` snowflake="${trimmed}" no conflicts found`
+        );
+      }
+
+      // ── CP-5: Write to DB ───────────────────────────────────────────────────
+      const newValue = isClear ? null : trimmed;
+      try {
+        await updateAppUser(userId, { manualDiscordId: newValue });
+      } catch (err) {
+        const msg = (err as Error)?.message ?? String(err);
+        console.error(
+          `[ManualDiscordId][DB_WRITE_FAIL] requestId=${requestId}` +
+          ` userId=${userId} error=${msg}`
+        );
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to save Discord ID. Please try again.",
+        });
+      }
+
+      console.log(
+        `[ManualDiscordId][SUCCESS] requestId=${requestId}` +
+        ` userId=${userId} username=${user.username}` +
+        ` manualDiscordId=${newValue ?? "null"}` +
+        ` setBy=owner(${ctx.appUser.username})` +
+        ` timestamp=${new Date().toISOString()}`
+      );
+      return { success: true, userId, manualDiscordId: newValue };
+    }),
+
 });
 
 // ─── Password reset rate-limit map ────────────────────────────────────────────

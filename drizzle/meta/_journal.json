@@ -617,6 +617,13 @@
       "when": 1779038974987,
       "tag": "0087_grey_taskmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "5",
+      "when": 1779091576808,
+      "tag": "0088_gorgeous_tarantula",
+      "breakpoints": true
     }
   ]
 }
