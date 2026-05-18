@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAppAuth } from "@/_core/hooks/useAppAuth";
 import { useLocation } from "wouter";
@@ -49,6 +49,7 @@ type AppUserRow = {
   discordId: string | null;
   discordUsername: string | null;
   discordConnectedAt: number | null;
+  manualDiscordId: string | null;
 };
 
 const ROLE_ICONS = {
@@ -598,6 +599,52 @@ export default function UserManagement() {
     }
   }, [inviteModal]);
 
+  // ─── Manual Discord ID inline edit state ─────────────────────────────────
+  // editingDiscordId: userId currently being edited (null = none)
+  // discordIdDraft: current value in the input field
+  const [editingDiscordId, setEditingDiscordId] = React.useState<number | null>(null);
+  const [discordIdDraft, setDiscordIdDraft] = React.useState("");
+
+  const setManualDiscordIdMutation = trpc.appUsers.setManualDiscordId.useMutation({
+    onSuccess: (data) => {
+      const label = data.manualDiscordId ? `pre-registered as ${data.manualDiscordId}` : "cleared";
+      console.log(
+        `[UserMgmt][ManualDiscordId][SUCCESS] userId=${data.userId} manualDiscordId=${data.manualDiscordId ?? "null"}`
+      );
+      toast.success(`Discord ID ${label}. Will auto-link on next Discord login.`);
+      setEditingDiscordId(null);
+      setDiscordIdDraft("");
+      utils.appUsers.listUsers.invalidate();
+    },
+    onError: (err) => {
+      console.error(`[UserMgmt][ManualDiscordId][ERROR]`, err.message);
+      toast.error(formatMutationError(err));
+    },
+  });
+
+  function startEditDiscordId(user: AppUserRow) {
+    console.log(
+      `[UserMgmt][ManualDiscordId][EDIT_START] userId=${user.id} username=${user.username}` +
+      ` currentManualDiscordId=${user.manualDiscordId ?? "null"}`
+    );
+    setEditingDiscordId(user.id);
+    setDiscordIdDraft(user.manualDiscordId ?? "");
+  }
+
+  function cancelEditDiscordId() {
+    console.log(`[UserMgmt][ManualDiscordId][EDIT_CANCEL] userId=${editingDiscordId}`);
+    setEditingDiscordId(null);
+    setDiscordIdDraft("");
+  }
+
+  function submitDiscordId(userId: number) {
+    const trimmed = discordIdDraft.trim();
+    console.log(
+      `[UserMgmt][ManualDiscordId][SUBMIT] userId=${userId} value="${trimmed}"`
+    );
+    setManualDiscordIdMutation.mutate({ userId, discordId: trimmed });
+  }
+
   // Redirect if not owner — MUST be in useEffect, never in render body
   // Calling navigate() during render crashes React 19 silently (blank screen)
   useEffect(() => {
@@ -998,8 +1045,61 @@ export default function UserManagement() {
                     <TableCell className="text-sm">
                       {user.discordUsername ? (
                         <span className="text-[#7289da] font-medium">@{user.discordUsername}</span>
+                      ) : editingDiscordId === user.id ? (
+                        /* ── Inline Discord ID input ──────────────────────────── */
+                        <div className="flex items-center gap-1 min-w-0">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={discordIdDraft}
+                            onChange={(e) => setDiscordIdDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") submitDiscordId(user.id);
+                              if (e.key === "Escape") cancelEditDiscordId();
+                            }}
+                            placeholder="Discord ID (e.g. 123456789012345678)"
+                            className="w-44 px-2 py-0.5 text-xs rounded bg-zinc-800 border border-[#7289da]/60 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#7289da] focus:ring-1 focus:ring-[#7289da]/40"
+                            disabled={setManualDiscordIdMutation.isPending}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => submitDiscordId(user.id)}
+                            disabled={setManualDiscordIdMutation.isPending}
+                            className="p-1 rounded bg-[#7289da]/20 hover:bg-[#7289da]/40 text-[#7289da] transition-colors disabled:opacity-50"
+                            title="Save Discord ID"
+                          >
+                            {setManualDiscordIdMutation.isPending
+                              ? <span className="text-[10px]">…</span>
+                              : <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                            }
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditDiscordId}
+                            className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                            title="Cancel"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
                       ) : (
-                        <span className="text-zinc-300">—</span>
+                        /* ── Not editing: show pre-registered ID or clickable dash ── */
+                        <button
+                          type="button"
+                          onClick={() => startEditDiscordId(user)}
+                          className="group flex items-center gap-1 text-zinc-500 hover:text-zinc-200 transition-colors"
+                          title={user.manualDiscordId
+                            ? `Pre-registered ID: ${user.manualDiscordId} (pending Discord login) — click to edit`
+                            : "Click to pre-register Discord ID"
+                          }
+                        >
+                          {user.manualDiscordId ? (
+                            <span className="text-amber-400/80 font-mono text-xs">{user.manualDiscordId}<span className="ml-1 text-[10px] text-zinc-500">(pending)</span></span>
+                          ) : (
+                            <span className="text-zinc-600 group-hover:text-zinc-400">—</span>
+                          )}
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-0 group-hover:opacity-60 transition-opacity"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
                       )}
                     </TableCell>
                     <TableCell className="text-right">

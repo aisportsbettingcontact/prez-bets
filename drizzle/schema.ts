@@ -70,6 +70,8 @@ export const appUsers = mysqlTable("app_users", {
   discordAvatar: varchar("discordAvatar", { length: 128 }),
   /** UTC timestamp (ms) when the Discord account was linked */
   discordConnectedAt: bigint("discordConnectedAt", { mode: "number" }),
+  /** Manual Discord ID pre-registered by owner. On first Discord login, promoted to discordId and cleared. */
+  manualDiscordId: varchar("manualDiscordId", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn"),

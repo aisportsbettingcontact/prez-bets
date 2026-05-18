@@ -3561,3 +3561,15 @@
 - [x] Replace auto-retry Loader2 spinner with GameCardSkeleton for consistency
 - [x] TypeScript check: 0 errors
 - [x] Test suite: 723/723 passed
+
+## Session: 2026-05-18 - Manual Discord ID Pre-Registration in User Management
+- [x] Add manualDiscordId VARCHAR(32) column to app_users schema (migration 0088)
+- [x] Add manualDiscordId to listUsers return map in appUsers.ts router
+- [x] Add manualDiscordId to AppUserRow type in UserManagement.tsx
+- [x] Add setManualDiscordId ownerProcedure: snowflake validation, uniqueness check, DB write
+- [x] Inject CP-3b fallback in discordLogin.ts: lookup by manualDiscordId when discordId not found
+- [x] CP-3b: atomically promote manualDiscordId → discordId on first Discord login, clear manualDiscordId
+- [x] UserManagement DISCORD USERNAME cell: clickable "–" opens inline input for rows with no discordId
+- [x] Inline input: Enter to save, Escape to cancel, pending spinner, amber "pending" badge for pre-registered IDs
+- [x] TypeScript check: 0 errors
+- [x] Test suite: 723/723 passed
